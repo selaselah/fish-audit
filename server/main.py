@@ -15,12 +15,13 @@ if __name__ == "__main__":
     if local_python.is_file() and Path(sys.prefix).resolve() != local_env:
         os.execv(str(local_python), [str(local_python), *sys.argv])
 
-from flask import Flask, jsonify, request, send_file
+from flask import Blueprint, Flask, g, jsonify, request, send_file
 from waitress import serve
 from werkzeug.exceptions import HTTPException
 
 from config import (AUDITOR_MODEL, CaseError, DATA, FORMATS, FRONTEND, MAX_CASE_BYTES,
                     MAX_FILE_BYTES, MAX_FILES, MAX_PAGES, MODEL, PROFILE, PROFILES)
+from accounts_api import configure_access
 from controls import CATALOG, VERSION
 from documents import digest
 from evidence import export_bundle
@@ -38,7 +39,7 @@ def text_field(value, name, limit):
     return value.strip()
 
 
-def upload(store):
+def upload(store, workspace, user):
     title = text_field(request.form.get("title"), "任务名称", 100)
     profile = request.form.get("profile", PROFILE)
     if profile not in PROFILES:
@@ -49,6 +50,8 @@ def upload(store):
     key = request.headers.get("Idempotency-Key") or uuid.uuid4().hex
     if not re.fullmatch(r"[a-zA-Z0-9_-]{12,100}", key):
         raise CaseError("提交编号无效。", 400)
+    if workspace != "local":
+        key = f"{workspace}:{user['id']}:{key}"
     case_id = uuid.uuid4().hex
     folder = store.files / case_id
     folder.mkdir(mode=0o700)
@@ -81,7 +84,7 @@ def upload(store):
         if existing:
             return existing
         try:
-            store.create(case_id, title, docs, key, fingerprint, profile)
+            store.create(case_id, title, docs, key, fingerprint, profile, workspace, user)
         except sqlite3.IntegrityError:
             existing = store.existing(key, fingerprint)
             if existing:
@@ -109,12 +112,34 @@ def create_app(store, worker):
                       TRUSTED_HOSTS=["127.0.0.1", "localhost", "[::1]"])
     app.json.ensure_ascii = False
 
-    @app.before_request
-    def same_origin():
-        if request.method == "POST":
-            origin = request.headers.get("Origin")
-            if (origin is not None and origin != request.host_url.rstrip("/")) or request.headers.get("Sec-Fetch-Site") == "cross-site":
-                raise CaseError("请通过本机工作台提交资料。", 403)
+    directory = configure_access(app, store, json_body)
+    business = Blueprint("business", __name__)
+
+    @business.url_value_preprocessor
+    def select_workspace(endpoint, values):
+        g.workspace = values.pop("wid", None) if values else None
+
+    @business.before_request
+    def authorize_business():
+        action = request.endpoint.rsplit(".", 1)[-1]
+        if g.workspace is None:
+            if app.config["AUDIT_MODE"] != "local":
+                raise CaseError("请从企业工作区访问任务。", 404)
+            g.workspace, g.role, g.actor = "local", "admin", None
+        else:
+            if not g.user:
+                raise CaseError("请先登录企业工作区。", 401)
+            g.role = directory.member(g.user["id"], g.workspace)
+            g.actor = g.user
+        case_id = (request.view_args or {}).get("case_id")
+        if case_id:
+            owner = g.actor["id"] if g.role == "employee" else None
+            store.require_case(case_id, g.workspace, owner)
+        if g.role == "employee" and action not in {"cases","submit","detail","original","page_image"}:
+            raise CaseError("此操作需要审计人员或管理员权限。", 403)
+
+    def signer(data):
+        return g.actor["name"] if g.actor else text_field(data.get("reviewer"), "审计人员姓名", 50)
 
     @app.after_request
     def headers(response):
@@ -139,7 +164,7 @@ def create_app(store, worker):
 
     @app.get("/<filename>")
     def asset(filename):
-        if filename not in {"app.js", "style.css"}:
+        if filename not in {"app.js", "team.js", "style.css"}:
             raise CaseError("资源不存在。", 404)
         return send_file(FRONTEND / filename)
 
@@ -151,6 +176,8 @@ def create_app(store, worker):
 
     @app.post("/api/reviews")
     def legacy():
+        if app.config["AUDIT_MODE"] != "local":
+            raise CaseError("资源不存在。", 404)
         text = text_field(json_body().get("text"), "待审核文本", 5000)
         try:
             return jsonify(review_text(text, os.getenv("OLLAMA_MODEL"), os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")))
@@ -162,29 +189,33 @@ def create_app(store, worker):
         return jsonify(**VERSION, profiles=PROFILES, fields=FIELDS, rules=[{"id": key, "name": value[0], "basis": value[1]}
                                         for key, value in CATALOG.items()])
 
-    @app.get("/api/cases")
+    @business.get("/cases")
     def cases():
-        return jsonify(cases=store.summary())
+        return jsonify(cases=store.summary(g.workspace, g.actor["id"] if g.role == "employee" else None))
 
-    @app.post("/api/cases")
+    @business.post("/cases")
     def submit():
         if request.mimetype != "multipart/form-data":
             raise CaseError("请以 multipart/form-data 上传资料。", 415)
         if not os.getenv("OPENAI_API_KEY"):
             raise CaseError("请配置 server/.env 中的 OPENAI_API_KEY 并重启服务。", 503)
-        case_id = upload(store)
+        case_id = upload(store, g.workspace, g.actor)
         worker.wakeup.set()
         return jsonify(id=case_id), 202
 
-    @app.get("/api/cases/<case_id>")
+    @business.get("/cases/<case_id>")
     def detail(case_id):
-        return jsonify(store.detail(case_id))
+        data = store.detail(case_id)
+        if g.role == "employee":
+            data["revisions"] = []
+        data["can_review"] = g.role != "employee"
+        return jsonify(data)
 
-    @app.get("/api/cases/<case_id>/reports/<int:rev>")
+    @business.get("/cases/<case_id>/reports/<int:rev>")
     def report(case_id, rev):
         return jsonify(store.report(case_id, rev))
 
-    @app.get("/api/cases/<case_id>/reports/<int:rev>/methods/<name>")
+    @business.get("/cases/<case_id>/reports/<int:rev>/methods/<name>")
     def method_source(case_id, rev, name):
         policy = store.report(case_id, rev)["report"]["policy"]
         checksum = policy.get("code_sha256", {}).get(name)
@@ -195,7 +226,7 @@ def create_app(store, worker):
             raise CaseError("程序源码与底稿摘要不一致。", 409)
         return app.response_class(source, mimetype="text/plain")
 
-    @app.get("/api/cases/<case_id>/reports/<int:rev>/bundle")
+    @business.get("/cases/<case_id>/reports/<int:rev>/bundle")
     def export(case_id, rev):
         stream = tempfile.SpooledTemporaryFile(max_size=4 * 1024**2)
         try:
@@ -206,7 +237,7 @@ def create_app(store, worker):
             stream.close()
             raise
 
-    @app.get("/api/cases/<case_id>/documents/<doc>/original")
+    @business.get("/cases/<case_id>/documents/<doc>/original")
     def original(case_id, doc):
         match = next((item for item in store.documents(case_id) if item["id"] == doc), None)
         if not match:
@@ -214,7 +245,7 @@ def create_app(store, worker):
         return send_file(store.files / case_id / doc / ("original" + match["ext"]), as_attachment=True,
                          download_name=match["name"], mimetype="application/octet-stream")
 
-    @app.get("/api/cases/<case_id>/documents/<doc>/pages/<int:number>")
+    @business.get("/cases/<case_id>/documents/<doc>/pages/<int:number>")
     def page_image(case_id, doc, number):
         with store.connect() as db:
             exists = db.execute("SELECT 1 FROM pages WHERE case_id=? AND doc=? AND number=?", (case_id, doc, number)).fetchone()
@@ -222,29 +253,29 @@ def create_app(store, worker):
             raise CaseError("页图不存在。", 404)
         return send_file(store.files / case_id / doc / f"{number}.jpg", mimetype="image/jpeg")
 
-    @app.post("/api/cases/<case_id>/retry")
+    @business.post("/cases/<case_id>/retry")
     def retry(case_id):
-        store.retry(case_id)
+        store.retry(case_id, g.actor and g.actor["id"])
         worker.wakeup.set()
         return jsonify(id=case_id), 202
 
-    @app.post("/api/cases/<case_id>/rerun")
+    @business.post("/cases/<case_id>/rerun")
     def rerun(case_id):
         revision = json_body().get("rev")
         if type(revision) != int or revision <= 0:
             raise CaseError("请选择有效底稿版本。", 400)
-        store.rerun(case_id, revision)
+        store.rerun(case_id, revision, g.actor and g.actor["id"])
         worker.wakeup.set()
         return jsonify(id=case_id), 202
 
-    @app.post("/api/cases/<case_id>/attest")
-    @app.post("/api/cases/<case_id>/signoff")
+    @business.post("/cases/<case_id>/attest")
+    @business.post("/cases/<case_id>/signoff")
     def review(case_id):
         data = json_body()
         revision = data.get("rev")
         if type(revision) is not int or revision < 1:
             raise CaseError("请选择有效底稿版本。", 400)
-        reviewer = text_field(data.get("reviewer"), "审计人员姓名", 50)
+        reviewer = signer(data)
         note = text_field(data.get("note"), "核验意见", 2000)
         facts = None
         if request.path.endswith("/attest"):
@@ -257,11 +288,11 @@ def create_app(store, worker):
         decision = data.get("decision")
         if decision not in choices:
             raise CaseError("无效的核验决定。", 400)
-        store.review(case_id, revision, reviewer, note, decision, facts)
+        store.review(case_id, revision, reviewer, note, decision, facts, g.actor and g.actor["id"])
         worker.wakeup.set()
         return jsonify(id=case_id), 202 if facts is not None else 200
 
-    @app.post("/api/cases/<case_id>/amend")
+    @business.post("/cases/<case_id>/amend")
     def amend(case_id):
         data = json_body()
         doc, page, revision = data.get("doc"), data.get("page"), data.get("rev")
@@ -276,12 +307,14 @@ def create_app(store, worker):
         value = text_field(data.get("value"), "原文取值", 500)
         if compact(value) not in compact(quote):
             raise CaseError("取值须完整出现在所引原文中。")
-        reviewer = text_field(data.get("reviewer"), "审计人员姓名", 50)
+        reviewer = signer(data)
         note = text_field(data.get("note"), "核验意见", 2000)
-        fact_id = store.amend(case_id, revision, reviewer, note, target, doc, page, field, value, quote, region)
+        fact_id = store.amend(case_id, revision, reviewer, note, target, doc, page, field, value, quote, region, g.actor and g.actor["id"])
         worker.wakeup.set()
         return jsonify(id=case_id, fact=fact_id), 202
 
+    app.register_blueprint(business, url_prefix="/api", name="local_cases")
+    app.register_blueprint(business, url_prefix="/api/w/<wid>", name="team_cases")
     return app
 
 
@@ -292,5 +325,9 @@ if __name__ == "__main__":
     worker.start()
     port = int(os.getenv("PORT", "8000"))
     print(f"Fish Audit http://127.0.0.1:{port}", flush=True)
-    serve(create_app(store, worker), host="127.0.0.1", port=port, threads=8,
+    app = create_app(store, worker)
+    host = os.getenv("AUDIT_BIND", "127.0.0.1")
+    if host not in ("127.0.0.1", "localhost", "::1") and (app.config["AUDIT_MODE"] != "saas" or not app.config["AUDIT_ORIGIN"]):
+        raise SystemExit("对外监听需要 SaaS 模式与 AUDIT_PUBLIC_ORIGIN。")
+    serve(app, host=host, port=port, threads=8,
           max_request_body_size=MAX_CASE_BYTES + 256*1024, channel_timeout=120)

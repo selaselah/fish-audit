@@ -15,7 +15,7 @@ const profileName = profile => profile === travelProfile ? '差旅报销' : '采
 const tone = {ready: 'risk', closed: 'ok', failed: 'issue', pass: 'ok', review: 'risk', reject: 'issue',
   visual: 'risk', unsupported: 'issue', disputed: 'issue', confirmed: 'ok', anchored: 'ok'};
 const statusName = value => labels[value] || value;
-const base = () => '/api/cases/' + state.detail.id;
+const base = () => Team.cases() + '/' + state.detail.id;
 const time = value => new Date(value).toLocaleString('zh-CN', {hour12: false, month: '2-digit',
   day: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Shanghai'});
 
@@ -53,13 +53,18 @@ function alertText(error) {
 }
 async function api(url, options = {}) {
   let response;
-  try { response = await fetch(url, {cache: 'no-store', ...options}); }
+  const headers = new Headers(options.headers || {});
+  if (options.method && options.method !== 'GET' && Team.session?.csrf) headers.set('X-CSRF-Token', Team.session.csrf);
+  try { response = await fetch(url, {cache: 'no-store', ...options, headers}); }
   catch {
     $('#connection').textContent = '连接中断';
     throw new Error('暂时无法连接本机审计服务。服务恢复后可查看已提交任务。');
   }
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || '服务请求失败。');
+  if (!response.ok) {
+    const problem = new Error(data.error || '服务请求失败。');
+    problem.status = response.status; throw problem;
+  }
   return data;
 }
 function post(url, body) {
@@ -72,7 +77,7 @@ function renderList() {
   const header = box('ledger-header ledger-row', ...['任务名称','处理状态','审计建议','提交时间'].map(label => el('span', label)));
   list.replaceChildren(header);
   for (const row of visible) {
-    const title = link(row.title, '#case/' + row.id, 'case-link');
+    const title = link(row.title, Team.hash('case/' + row.id), 'case-link');
     const metadata = el('span', profileName(row.profile) + ' · ' + row.files + ' 份资料' + (row.rev ? ' · 底稿 R' + row.rev : ''), 'small');
     const status = box('', tag(row.status));
     if (row.status === 'running') status.append(el('small', row.progress + '%', 'small'));
@@ -180,7 +185,7 @@ function openPage(docId, pageNumber, highlight) {
 function citation(ref) {
   const prior = state.bundle?.report.graph.prior_invoices?.find(row => row.id === ref);
   if (prior) {
-    const target = '/api/cases/' + prior.case_id + '/documents/' + prior.doc + '/pages/' + prior.page;
+    const target = Team.cases() + '/' + prior.case_id + '/documents/' + prior.doc + '/pages/' + prior.page;
     const source = link('已归档 · ' + prior.title + ' · R' + prior.rev + ' p.' + prior.page, target, 'button ref');
     source.target = '_blank'; source.rel = 'noopener';
     return source;
@@ -273,7 +278,7 @@ function graphPanel() {
   }
   if (!groups.length) panel.append(el('p', '请在原件与引文中核对待确认记录，核图后系统会重建关系。'));
   if (graph.prior_invoices?.length) panel.append(fold('跨案同号记录', ...graph.prior_invoices.map(row =>
-    box('line', link(row.title, '#case/' + row.case_id), el('p', '历史人工决定 · ' + statusName(row.decision) + ' · ' +
+    box('line', link(row.title, Team.hash('case/' + row.case_id)), el('p', '历史人工决定 · ' + statusName(row.decision) + ' · ' +
       (row.document_kind === 'unclassified' ? '原资料类型待核' : '发票')),
       el('blockquote', row.quote), citation(row.id), el('small', '历史底稿 SHA-256 · ' + row.report_hash, 'small')))));
   const procedures = graph.edges.filter(edge => edge.type === 'procedure_result');
@@ -341,14 +346,18 @@ function renderCase() {
   const meter = el('progress'); meter.max = 100; meter.value = data.progress; meter.setAttribute('aria-label','审计任务进度');
   progress.append(meter, el('p', data.message, 'muted'));
   if (data.error) {
-    progress.append(el('p', data.error), action('从检查点重试', async () => {
+    progress.append(el('p', data.error));
+    if (data.can_review !== false) progress.append(action('从检查点重试', async () => {
       try { await post(base() + '/retry', {}); await refresh(); } catch (error) { alertText(error); }
     }));
   }
   const bundle = state.bundle;
   $('#report-tools').hidden = !bundle;
   if (!bundle) {
-    $('#case-panel').replaceChildren(sourceList(), activityPanel()); return;
+    const content = [sourceList(), activityPanel()];
+    const decision = data.decisions?.at(-1);
+    if (decision) content.unshift(box('panel',el('h2','验收决定'),tag(decision.decision),el('p',decision.note)));
+    $('#case-panel').replaceChildren(...content); return;
   }
   const nav = $('#tabs'); nav.replaceChildren();
   for (const [id, label] of Object.entries(tabs)) {
@@ -360,27 +369,50 @@ function renderCase() {
   const panel = {report: reportPanel, evidence: sourceList, graph: graphPanel, activity: activityPanel}[state.tab]();
   $('#case-panel').replaceChildren(panel);
 }
+function clearCaseView() {
+  state.detail = null; state.bundle = null;
+  for (const id of ['case-panel','case-title','case-meta','case-status','progress-panel','page-content'])
+    $('#'+id).replaceChildren();
+  $('#report-tools').hidden = true;
+}
 async function refresh() {
   const epoch = ++state.epoch;
   clearTimeout(state.timer);
-  const hash = location.hash.slice(1);
-  const match = /^case\/([a-f0-9]{32})$/.exec(hash);
-  const view = match ? 'case' : (hash === 'rules' ? 'rules' : 'desk');
-  for (const id of ['desk','rules','case']) $('#' + id).hidden = id !== view;
-  for (const id of ['desk','rules']) {
-    const nav = $('#nav-' + id);
-    if (id === (view === 'rules' ? 'rules' : 'desk')) nav.setAttribute('aria-current','page');
-    else nav.removeAttribute('aria-current');
-  }
+  const route = Team.route();
   let interval = 0;
   try {
+    if (!Team.session) await Team.load();
+    if (epoch !== state.epoch) return;
+    const session = Team.session;
+    Team.current = session.workspaces.find(w => w.id === route.id) || null;
+    const match = /^case\/([a-f0-9]{32})$/.exec(route.page);
+    const invite = /^invite\/([A-Za-z0-9_-]{20,128})$/.exec(route.page)?.[1];
+    let view = match ? 'case' : (['rules','account','team'].includes(route.page) ? route.page : 'desk');
+    if (invite) view = 'account';
+    if (route.id && !Team.current) {
+      if (!session.user) Team.returnTo = location.hash;
+      view = 'account';
+    } else if (!route.id && session.mode === 'saas' && view !== 'account') {
+      if (session.workspaces.length) { location.replace(Team.hash('w/'+session.workspaces[0].id+'/'+route.page)); return; }
+      view = 'account';
+    }
+    if (view === 'team' && Team.current?.role !== 'admin') view = 'account';
+    Team.syncNav();
+    for (const id of ['desk','rules','case','account','team']) $('#'+id).hidden = id !== view;
+    for (const id of ['desk','rules','team','account']) {
+      const nav = $('#nav-' + id);
+      if (id === (view === 'case' ? 'desk' : view)) nav.setAttribute('aria-current','page');
+      else nav.removeAttribute('aria-current');
+    }
+    if (view === 'account') { Team.account(invite); $('#network-error').hidden=true; return; }
+    if (view === 'team') { await Team.team(epoch); if (epoch === state.epoch) $('#network-error').hidden=true; return; }
     if (view === 'case') {
-      const data = await api('/api/cases/' + match[1]);
+      const data = await api(Team.cases() + '/' + match[1]);
       if (epoch !== state.epoch) return;
-      const rev = state.pinned || data.rev;
+      const rev = data.can_review === false ? 0 : (state.pinned || data.rev);
       let bundle = state.bundle;
       if (rev && (bundle?.rev !== rev || bundle.report.case_id !== data.id))
-        bundle = await api('/api/cases/' + data.id + '/reports/' + rev);
+        bundle = await api(Team.cases() + '/' + data.id + '/reports/' + rev);
       if (epoch !== state.epoch) return;
       state.detail = data; state.bundle = rev ? bundle : null;
       renderCase();
@@ -388,13 +420,21 @@ async function refresh() {
     } else if (view === 'rules') {
       const data = await api('/api/controls'); if (epoch !== state.epoch) return; renderCatalog(data);
     } else {
-      const data = await api('/api/cases'); if (epoch !== state.epoch) return;
+      const data = await api(Team.cases()); if (epoch !== state.epoch) return;
       state.cases = data.cases; renderList(); interval = 5000;
     }
     $('#network-error').hidden = true;
     if ($('#connection').textContent === '连接中断') checkConnection();
   } catch (error) {
     if (epoch !== state.epoch) return;
+    if ([401,403,404].includes(error.status)) {
+      clearCaseView(); state.cases=[];
+      for (const id of ['case-panel','case-list','team-panel']) $('#'+id).replaceChildren();
+      if (error.status === 401 || error.status === 403) {
+        Team.session=null;
+        for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close();
+      }
+    }
     alertText(error); interval = 5000;
   }
   if (interval && epoch === state.epoch) state.timer = setTimeout(refresh, interval);
@@ -410,6 +450,7 @@ function openReview(facts) {
     {approve:'通过', return:'退回补件', escalate:'提交复核'};
   select.add(new Option('请选择决定', '', true, true)); select.required = true;
   for (const [value, label] of Object.entries(choices)) select.add(new Option(label, value));
+  $('#reviewer').value=Team.current ? Team.session.user.name : ''; $('#reviewer').readOnly=!!Team.current;
   $('#review-note').value = '';
   $('#review-dialog').showModal();
 }
@@ -419,6 +460,7 @@ async function openAmend(doc, page, fact) {
     const current = state.detail;
     state.amend = {id:current.id, rev:state.bundle.rev, doc, page, target:fact?.id || null};
     $('#amend-form').reset();
+    $('#amend-reviewer').value=Team.current ? Team.session.user.name : ''; $('#amend-reviewer').readOnly=!!Team.current;
     $('#amend-error').textContent = '';
     $('#amend-title').textContent = fact ? '核图更正字段' : '核图补录字段';
     $('#amend-image').src = base() + '/documents/' + doc + '/pages/' + page;
@@ -439,7 +481,7 @@ $('#amend-form').addEventListener('submit', async event => {
   const {id, ...source} = state.amend;
   const button = $('#amend-submit'); button.disabled = true;
   try {
-    await post('/api/cases/' + id + '/amend', {...source, field:$('#amend-field').value,
+    await post(Team.cases() + '/' + id + '/amend', {...source, field:$('#amend-field').value,
       quote:$('#amend-quote').value, value:$('#amend-value').value, region:$('#amend-region').value,
       reviewer:$('#amend-reviewer').value, note:$('#amend-note').value});
     $('#amend-dialog').close(); state.pinned = 0; await refresh();
@@ -451,7 +493,7 @@ $('#review-form').addEventListener('submit', async event => {
   const pending = state.review; if (!pending) return;
   const button = $('#submit-review'); button.disabled = true;
   try {
-    await post('/api/cases/' + pending.id + (pending.facts ? '/attest' : '/signoff'), {rev: pending.rev,
+    await post(Team.cases() + '/' + pending.id + (pending.facts ? '/attest' : '/signoff'), {rev: pending.rev,
       reviewer: $('#reviewer').value, note: $('#review-note').value, decision: $('#review-decision').value,
       facts: pending.facts});
     $('#review-dialog').close(); state.pinned = 0; await refresh();
@@ -472,6 +514,7 @@ function profileChanged() {
 $('#upload-profile').addEventListener('change', profileChanged);
 $('#upload-form').addEventListener('submit', async event => {
   event.preventDefault();
+  const workspace=Team.current?.id;
   const files = [...$('#upload-files').files]; const data = new FormData();
   data.append('title', $('#upload-title').value);
   data.append('profile', $('#upload-profile').value);
@@ -481,9 +524,10 @@ $('#upload-form').addEventListener('submit', async event => {
       throw new Error('所选资料超出文件数或大小限制。');
     for (const file of files) data.append('files', file);
     state.key ||= crypto.randomUUID();
-    const {id} = await api('/api/cases', {method:'POST', headers:{'Idempotency-Key':state.key}, body:data});
+    const {id} = await api(Team.cases(), {method:'POST', headers:{'Idempotency-Key':state.key}, body:data});
+    if (workspace !== Team.current?.id) return;
     $('#upload-dialog').close(); $('#upload-form').reset(); $('#chosen-files').replaceChildren();
-    profileChanged(); $('#upload-error').textContent = ''; location.hash = 'case/' + id;
+    profileChanged(); $('#upload-error').textContent = ''; location.hash = Team.hash('case/' + id);
   } catch (error) { $('#upload-error').textContent = error.message; }
   finally { button.disabled = false; button.textContent = '提交并开始审计'; }
 });
@@ -492,14 +536,18 @@ for (const button of document.querySelectorAll('[data-filter]')) button.addEvent
 $('#version').addEventListener('change', () => { state.pinned = Number($('#version').value); refresh(); });
 window.addEventListener('hashchange', () => {
   state.bundle = null; state.detail = null; state.pinned = 0; state.tab = 'report';
+  if ((Team.current?.id || null) !== Team.route().id) {
+    state.key=null; state.cases=[]; $('#case-list').replaceChildren(); $('#team-panel').replaceChildren();
+    $('#upload-form').reset(); $('#chosen-files').replaceChildren(); profileChanged();
+  }
   for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close();
-  $('#case-panel').replaceChildren(); $('#case-title').textContent = ''; $('#report-tools').hidden = true;
+  clearCaseView();
   refresh();
 });
 async function checkConnection() {
   try {
     const data = await api('/api/health');
-    $('#connection').textContent = data.audit.configured ? '本机工作区' : '模型密钥待配置';
+    $('#connection').textContent = data.audit.configured ? (Team.current ? '服务已连接' : '服务在线') : '模型密钥待配置';
   } catch { $('#connection').textContent = '连接中断'; }
 }
 document.addEventListener('visibilitychange', () => {

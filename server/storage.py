@@ -22,6 +22,21 @@ def event(db, case_id, stage, message):
                (case_id, stamp(), stage, message))
 
 
+def authorize_write(db, workspace, actor, *, review=False):
+    if workspace == "local":
+        return
+    member = db.execute("SELECT role FROM members WHERE workspace=? AND account=?", (workspace, actor)).fetchone()
+    if not member or (review and member["role"] == "employee"):
+        raise CaseError("当前账号无权执行此次操作。", 403)
+
+
+def authorize_case_write(db, case_id, actor):
+    case = db.execute("SELECT workspace FROM cases WHERE id=?", (case_id,)).fetchone()
+    if not case:
+        raise CaseError("未找到该审计任务。", 404)
+    authorize_write(db, case["workspace"], actor, review=True)
+
+
 class Store:
     def __init__(self, root):
         self.root = root
@@ -77,6 +92,15 @@ class Store:
                 db.execute("ALTER TABLE pages ADD COLUMN layer TEXT")
             if "profile" not in {row["name"] for row in db.execute("PRAGMA table_info(cases)")}:
                 db.execute("ALTER TABLE cases ADD COLUMN profile TEXT NOT NULL DEFAULT 'cn-procurement-full-settlement/v1'")
+            case_columns = {row["name"] for row in db.execute("PRAGMA table_info(cases)")}
+            for column, definition in (("workspace", "TEXT NOT NULL DEFAULT 'local'"), ("submitter", "TEXT"),
+                                       ("submitter_name", "TEXT")):
+                if column not in case_columns:
+                    db.execute(f"ALTER TABLE cases ADD COLUMN {column} {definition}")
+            db.execute("CREATE INDEX IF NOT EXISTS cases_space ON cases(workspace,created DESC,id)")
+            for table in ("attestations", "amendments", "signoffs"):
+                if "actor" not in {row["name"] for row in db.execute(f"PRAGMA table_info({table})")}:
+                    db.execute(f"ALTER TABLE {table} ADD COLUMN actor TEXT")
             if db.execute("PRAGMA user_version").fetchone()[0] < 1:
                 rows = db.execute("""SELECT c.id,c.rev,r.content FROM cases c
                                   JOIN reports r ON r.case_id=c.id AND r.rev=c.rev""")
@@ -109,12 +133,14 @@ class Store:
                 raise CaseError("同一提交编号对应了不同资料，请重新提交。", 409)
             return row["id"] if row else None
 
-    def create(self, case_id, title, docs, request_key, fingerprint, profile=PROFILE):
+    def create(self, case_id, title, docs, request_key, fingerprint, profile=PROFILE, workspace="local", user=None):
         with self.connect(True) as db:
             now = stamp()
-            db.execute("""INSERT INTO cases(id,title,created,updated,status,stage,progress,message,request_key,fingerprint,profile)
-                       VALUES(?,?,?,?,'queued','queued',0,'等待审计',?,?,?)""",
-                       (case_id, title, now, now, request_key, fingerprint, profile))
+            user = user or {}
+            authorize_write(db, workspace, user.get("id"))
+            db.execute("""INSERT INTO cases(id,title,created,updated,status,stage,progress,message,request_key,fingerprint,profile,workspace,submitter,submitter_name)
+                       VALUES(?,?,?,?,'queued','queued',0,'等待审计',?,?,?,?,?,?)""",
+                       (case_id, title, now, now, request_key, fingerprint, profile, workspace,user.get("id"),user.get("name")))
             db.executemany("INSERT INTO docs(case_id,id,name,ext,size,sha256) VALUES(?,?,?,?,?,?)",
                            [(case_id, doc["id"], doc["name"], doc["ext"], doc["size"], doc["sha256"]) for doc in docs])
             event(db, case_id, "queued", f"收到 {len(docs)} 份原件。")
@@ -147,8 +173,9 @@ class Store:
                        (message, "任务中断", stamp(), case_id))
             event(db, case_id, "failed", message)
 
-    def retry(self, case_id):
+    def retry(self, case_id, actor=None):
         with self.connect(True) as db:
+            authorize_case_write(db, case_id, actor)
             if db.execute("""UPDATE cases SET status='queued',stage='queued',progress=0,error=NULL,
                           message='等待重试',updated=? WHERE id=? AND status='failed'""",
                           (stamp(), case_id)).rowcount != 1:
@@ -236,12 +263,14 @@ class Store:
                               JOIN cases c ON c.id=i.case_id AND c.rev=i.rev
                               JOIN signoffs s ON s.case_id=i.case_id AND s.rev=i.rev
                               JOIN reports r ON r.case_id=i.case_id AND r.rev=i.rev
-                              WHERE c.status='closed' AND c.id<>? AND i.number_key IN ({placeholders})
-                              ORDER BY i.case_id,i.rev,i.fact""", (case_id, *keys))
+                              WHERE c.workspace=(SELECT workspace FROM cases WHERE id=?) AND c.status='closed'
+                              AND c.id<>? AND i.number_key IN ({placeholders})
+                              ORDER BY i.case_id,i.rev,i.fact""", (case_id, case_id, *keys))
             return [dict(row) for row in rows]
 
-    def rerun(self, case_id, revision):
+    def rerun(self, case_id, revision, actor=None):
         with self.connect(True) as db:
+            authorize_case_write(db, case_id, actor)
             result = db.execute("""UPDATE cases SET status='queued',stage='queued',progress=0,error=NULL,
                                 message='等待重新执行审计',updated=? WHERE id=? AND status='ready' AND rev=?""",
                                 (stamp(), case_id, revision))
@@ -249,26 +278,34 @@ class Store:
                 raise CaseError("仅可对当前待验收底稿重新执行程序。", 409)
             event(db, case_id, "queued", f"基于 R{revision} 的已保存提取记录重新建图并审计。")
 
-    def summary(self):
+    def require_case(self, case_id, workspace, submitter=None):
+        with self.connect() as db:
+            row = db.execute("SELECT submitter FROM cases WHERE id=? AND workspace=?", (case_id, workspace)).fetchone()
+        if not row or (submitter is not None and row["submitter"] != submitter):
+            raise CaseError("未找到该审计任务。", 404)
+
+    def summary(self, workspace="local", submitter=None):
         with self.connect() as db:
             rows = db.execute("""SELECT c.id,c.title,c.profile,c.created,c.updated,c.status,c.stage,c.progress,c.message,c.rev,
                               (SELECT count(*) FROM docs WHERE case_id=c.id) AS files,
-                              json_extract(r.content,'$.result.verdict') AS verdict, s.decision AS decision
+                              json_extract(r.content,'$.result.verdict') AS verdict, s.decision AS decision, c.submitter_name
                               FROM cases c LEFT JOIN reports r ON r.case_id=c.id AND r.rev=c.rev
-                              LEFT JOIN signoffs s ON s.case_id=c.id AND s.rev=c.rev ORDER BY c.created DESC""")
+                              LEFT JOIN signoffs s ON s.case_id=c.id AND s.rev=c.rev
+                              WHERE c.workspace=? AND (? IS NULL OR c.submitter=?) ORDER BY c.created DESC,c.id""",
+                              (workspace,submitter,submitter))
             return [dict(row) for row in rows]
 
     def detail(self, case_id):
         with self.connect() as db:
             db.execute("BEGIN")
-            case = db.execute("SELECT id,title,profile,created,updated,status,stage,progress,message,error,rev FROM cases WHERE id=?", (case_id,)).fetchone()
+            case = db.execute("SELECT id,title,profile,workspace,submitter,submitter_name,created,updated,status,stage,progress,message,error,rev FROM cases WHERE id=?", (case_id,)).fetchone()
             if not case:
                 raise CaseError("未找到该审计任务。", 404)
             detail = dict(case)
             detail["documents"] = [dict(row) for row in db.execute("SELECT id,name,ext,size,sha256,pages FROM docs WHERE case_id=? ORDER BY id", (case_id,))]
             detail["events"] = [dict(row) for row in db.execute("SELECT seq,time,stage,message FROM events WHERE case_id=? ORDER BY seq", (case_id,))]
             detail["revisions"] = [dict(row) for row in db.execute("SELECT rev,created,hash FROM reports WHERE case_id=? ORDER BY rev DESC", (case_id,))]
-            detail["decisions"] = [dict(row) for row in db.execute("SELECT rev,decision,reviewer,note,time FROM signoffs WHERE case_id=? ORDER BY rev", (case_id,))]
+            detail["decisions"] = [dict(row) for row in db.execute("SELECT rev,decision,reviewer,actor,note,time FROM signoffs WHERE case_id=? ORDER BY rev", (case_id,))]
             return detail
 
     def report(self, case_id, rev):
@@ -280,15 +317,16 @@ class Store:
 
     def attestations(self, case_id):
         with self.connect() as db:
-            return {row["fact"]: dict(row) for row in db.execute("SELECT fact,decision,reviewer,note,time,rev FROM attestations WHERE case_id=? ORDER BY seq", (case_id,))}
+            return {row["fact"]: dict(row) for row in db.execute("SELECT fact,decision,reviewer,actor,note,time,rev FROM attestations WHERE case_id=? ORDER BY seq", (case_id,))}
 
     def amendments(self, case_id):
         with self.connect() as db:
             return [dict(row) for row in db.execute("""SELECT target,doc,page,page_hash,field,value,quote,region,
-                    reviewer,note,time,rev FROM amendments WHERE case_id=? ORDER BY seq""", (case_id,))]
+                    reviewer,actor,note,time,rev FROM amendments WHERE case_id=? ORDER BY seq""", (case_id,))]
 
-    def amend(self, case_id, revision, reviewer, note, target, doc, page, field, value, quote, region):
+    def amend(self, case_id, revision, reviewer, note, target, doc, page, field, value, quote, region, actor=None):
         with self.connect(True) as db:
+            authorize_case_write(db, case_id, actor)
             case = db.execute("SELECT status,rev FROM cases WHERE id=?", (case_id,)).fetchone()
             if not case or case["status"] != "ready" or case["rev"] != revision:
                 raise CaseError("请对当前待验收底稿进行更正或补录。", 409)
@@ -303,18 +341,19 @@ class Store:
             else:
                 target = f"{doc}/p{page}/h{uuid.uuid4().hex[:12]}"
             now = stamp()
-            db.execute("""INSERT INTO amendments(case_id,rev,target,doc,page,page_hash,field,value,quote,region,reviewer,note,time)
-                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                       (case_id, revision, target, doc, page, source["sha256"], field, value, quote, region, reviewer, note, now))
-            db.execute("INSERT INTO attestations(case_id,rev,fact,decision,reviewer,note,time) VALUES(?,?,?,'confirm',?,?,?)",
-                       (case_id, revision, target, reviewer, note, now))
+            db.execute("""INSERT INTO amendments(case_id,rev,target,doc,page,page_hash,field,value,quote,region,reviewer,note,time,actor)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       (case_id, revision, target, doc, page, source["sha256"], field, value, quote, region, reviewer, note, now,actor))
+            db.execute("INSERT INTO attestations(case_id,rev,fact,decision,reviewer,note,time,actor) VALUES(?,?,?,'confirm',?,?,?,?)",
+                       (case_id, revision, target, reviewer, note, now,actor))
             db.execute("""UPDATE cases SET status='queued',stage='queued',progress=0,
                        message='人工更正已留存，等待重算',updated=? WHERE id=?""", (now, case_id))
             event(db, case_id, "attestation", f"{reviewer} 新增了原页 {doc}/p{page} 的核验记录。")
             return target
 
-    def review(self, case_id, revision, reviewer, note, decision, fact_ids=None):
+    def review(self, case_id, revision, reviewer, note, decision, fact_ids=None, actor=None):
         with self.connect(True) as db:
+            authorize_case_write(db, case_id, actor)
             case = db.execute("SELECT status,rev FROM cases WHERE id=?", (case_id,)).fetchone()
             if not case:
                 raise CaseError("未找到该审计任务。", 404)
@@ -328,12 +367,12 @@ class Store:
                     raise CaseError("待核记录不属于当前底稿。", 400)
                 if decision == "confirm" and any(compact(facts[ref]["value"]) not in compact(facts[ref]["quote"]) for ref in fact_ids):
                     raise CaseError("取值与引文不符，请对照原页更正字段。")
-                db.executemany("INSERT INTO attestations(case_id,rev,fact,decision,reviewer,note,time) VALUES(?,?,?,?,?,?,?)",
-                               [(case_id, revision, ref, decision, reviewer, note, now) for ref in fact_ids])
+                db.executemany("INSERT INTO attestations(case_id,rev,fact,decision,reviewer,note,time,actor) VALUES(?,?,?,?,?,?,?,?)",
+                               [(case_id, revision, ref, decision, reviewer, note, now, actor) for ref in fact_ids])
                 db.execute("""UPDATE cases SET status='queued',stage='queued',progress=0,
                            message='人工核图已保存，等待重算',updated=? WHERE id=?""", (now, case_id))
                 event(db, case_id, "attestation", f"{reviewer} 核对 {len(fact_ids)} 条引文，已保存意见并提交重算。")
             else:
-                db.execute("INSERT INTO signoffs VALUES(?,?,?,?,?,?)", (case_id, revision, decision, reviewer, note, now))
+                db.execute("INSERT INTO signoffs(case_id,rev,decision,reviewer,note,time,actor) VALUES(?,?,?,?,?,?,?)", (case_id, revision, decision, reviewer, note, now,actor))
                 db.execute("UPDATE cases SET status='closed',message='人工验收已归档',updated=? WHERE id=?", (now, case_id))
                 event(db, case_id, "closed", f"{reviewer} 已验收底稿 R{revision}。")

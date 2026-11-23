@@ -13,7 +13,7 @@
 
 ## 本机服务
 
-此机已使用用户级 macOS LaunchAgent，监听 `127.0.0.1:8000`，登录后启动并在进程退出后恢复。密钥从 `server/.env` 加载。当前阶段是一台电脑、一个审计工作区，验收姓名由操作人填写。
+此机已使用用户级 macOS LaunchAgent，监听 `127.0.0.1:8000`，登录后启动并在进程退出后恢复。密钥从 `server/.env` 加载。本机台账支持手填验收姓名。企业工作区支持企业隔离、账户签收及成员权限。参见[企业开通与部署](saas.md)。
 
 ```sh
 server/.venv/bin/python server/service.py status

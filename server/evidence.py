@@ -8,9 +8,10 @@ from storage import encode
 def journal(store, case_id):
     case = store.detail(case_id)
     with store.connect() as db:
-        attestations = [dict(row) for row in db.execute("""SELECT seq,rev,fact,decision,reviewer,note,time
+        attestations = [dict(row) for row in db.execute("""SELECT seq,rev,fact,decision,reviewer,actor,note,time
                          FROM attestations WHERE case_id=? ORDER BY seq""", (case_id,))]
-    return {"id": case_id, "title": case["title"], "status": case["status"], "created": case["created"],
+    return {"id": case_id, "title": case["title"], "workspace":case["workspace"], "submitter":case["submitter"],
+            "status": case["status"], "created": case["created"],
             "events": case["events"], "revisions": case["revisions"], "decisions": case["decisions"],
             "attestations": attestations, "amendments": store.amendments(case_id)}
 

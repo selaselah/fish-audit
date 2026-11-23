@@ -8,6 +8,7 @@
   <meta name="site-kind" content="software">
   <title>Fish Audit · 财会审计工作台</title>
   <link rel="stylesheet" href="/style.css">
+  <script src="/team.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -15,12 +16,18 @@
   <header class="bar">
     <div class="wrap header-inner">
       <a class="brand" href="#desk" aria-label="Fish Audit 工作台"><span class="ledger" aria-hidden="true"></span>Fish Audit</a>
-      <nav class="primary-nav" aria-label="主导航"><a href="#desk" id="nav-desk">审计工作台</a><a href="#rules" id="nav-rules">规则依据</a></nav>
+      <nav class="primary-nav" aria-label="主导航"><a href="#desk" id="nav-desk">审计工作台</a><a href="#rules" id="nav-rules">规则依据</a><a href="#team" id="nav-team" hidden>企业成员</a></nav>
       <span class="connection" id="connection">正在连接</span>
+      <a class="account-link" id="nav-account" href="#account">企业登录</a>
     </div>
   </header>
   <main class="wrap" id="content" tabindex="-1">
-    <section id="desk">
+    <section id="account" hidden>
+      <div class="heading"><h1 id="account-title">企业工作区</h1></div>
+      <div id="account-panel"></div>
+    </section>
+    <section id="team" hidden><div class="heading"><h1>企业成员</h1></div><div id="team-panel"></div></section>
+    <section id="desk" hidden>
       <div class="heading"><div><h1>审计工作台</h1></div>
         <button class="primary" id="new-case">新建审计</button></div>
       <section class="board" aria-labelledby="queue-title">
