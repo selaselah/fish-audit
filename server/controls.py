@@ -1,7 +1,7 @@
 import re
 from collections import defaultdict
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from calculations import CalculationEvidence, in_yuan, money
 
 from config import PROFILE, RULE_VERSION, TRAVEL
 from graph import KINDS, audit_documents, compact, entity_id
@@ -15,7 +15,7 @@ CATALOG = {
     "P02": ("合同编号关联", "沿各份资料的合同编号关系，验证三份资料是否指向同一合同。"),
     "P03": ("交易双方一致性", "从合同、发票和验收单的采购方和供应方关系核对交易主体全称。"),
     "I01": ("发票号码重叠", "在本案提交的发票间比较号码，重号需区分副本和重复申请。"),
-    "I02": ("本机已归档票号比对", "按本案发票号码精确查找已归档资料中的已核原文，区分历史资料类型和验收决定，再核对报销或补件记录。"),
+    "I02": ("本工作区已归档票号比对", "按本案发票号码精确查找已归档资料中的已核原文，区分历史资料类型和验收决定，再核对报销或补件记录。"),
     "M01": ("发票价税勾稽", "同一发票、相同人民币元口径下，不含税合计加税额合计应等于价税合计，精确到分。"),
     "C01": ("全额结算适用性", "从合同核对是否明确一次结清，分期、质保、红冲或变更转人工核对。"),
     "M02": ("合同、发票与验收金额", "相同合同、人民币元、一次全额结算范围内，比较合同、发票及验收含税总额。"),
@@ -41,19 +41,6 @@ def ids(*groups):
     return list(dict.fromkeys(fact["id"] for group in groups for fact in group))
 
 
-def money(fact):
-    value = compact(fact["value"])
-    quote = compact(fact["quote"])
-    if any(unit in quote for unit in ("万", "亿", "千元", "美元", "港元", "欧元", "%", "折合")):
-        return None
-    if not re.fullmatch(r"-?(?:[0-9]{1,17}|[0-9]{1,3}(?:,[0-9]{3}){1,5})(?:\.[0-9]{1,2})?", value):
-        return None
-    try:
-        return Decimal(value.replace(",", ""))
-    except InvalidOperation:
-        return None
-
-
 def parsed_date(fact):
     value = compact(fact["value"])
     match = re.fullmatch(r"(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})日?", value)
@@ -65,12 +52,9 @@ def parsed_date(fact):
         return None
 
 
-def in_yuan(fact):
-    return compact(fact["value"]).upper() in {"人民币", "CNY", "RMB", "人民币元"}
-
-
 def execute(graph, profile=PROFILE):
     findings = []
+    evidence = CalculationEvidence(graph)
     docs = audit_documents(graph)
     kinds = graph["documents_by_kind"]
     facts = {fact["id"]: fact for fact in graph["facts"]}
@@ -83,6 +67,9 @@ def execute(graph, profile=PROFILE):
         findings.append({"id": f"{rule}-{len(findings)+1}", "rule": rule, "version": RULE_VERSION,
                          "title": CATALOG[rule][0], "basis": CATALOG[rule][1], "status": status,
                          "detail": observation, "evidence": list(dict.fromkeys(refs)), "scope": scope or []})
+        calculations = evidence.formulas(findings[-1])
+        if calculations:
+            findings[-1]["calculations"] = calculations
         return status
 
     def single(doc, field):
@@ -138,7 +125,7 @@ def execute(graph, profile=PROFILE):
                     record("I02", "risk", f"号码 {number} 同时出现在 {count} 项已归档任务。{scope_note}"
                            "请查看原案的验收决定，核实副本、补件或重复报销情况。", refs)
                 else:
-                    record("I02", "ok", f"号码 {number} 在本机当时已归档的发票证据中未发现相同号码。", refs)
+                    record("I02", "ok", f"号码 {number} 在本工作区当时已归档的发票证据中未发现相同号码。", refs)
 
     if profile == TRAVEL:
         check_travel(graph, linked, numbers, values, record)

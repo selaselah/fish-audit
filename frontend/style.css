@@ -133,3 +133,10 @@ dialog::backdrop { background: #15282377; }
  .auth-aside { padding: 12px 16px; }
  .account-link { font-size: .9rem; }
 }
+
+.formula { margin: 10px 0; padding: 14px 16px; border: 1px solid var(--line); border-radius: 6px; background: #f7faf8; }
+.formula-operand { display: grid; grid-template-columns: 16px minmax(0,1fr) auto; gap: 8px; padding-block: 9px; align-items: baseline; border-bottom: 1px solid var(--line); }
+.formula-operand .ref { margin: 2px 4px; }
+.formula-operand details { font-size: .83rem; }
+.formula-sign, .amount { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.formula-result { display: flex; align-items: baseline; justify-content: space-between; color: var(--green); padding-top: 9px; }

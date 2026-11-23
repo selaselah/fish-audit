@@ -89,6 +89,23 @@ def entity_id(kind, value):
     return kind + "-" + hashlib.sha256(compact(value).encode()).hexdigest()[:18]
 
 
+def heading_candidates(page):
+    """Offer a unique, visible native title to the independent visual reader after an omission."""
+    layer = page.get("layer") or {}
+    output = page["extraction"]["output"]
+    if layer.get("type") != "text" or output["quality"] != "readable" or len(output["facts"]) >= 140:
+        return []
+    if any(item["field"] in TITLE_FIELDS for item in output["facts"]):
+        return []
+    candidates = []
+    for number, line in enumerate(page["text"].splitlines(), 1):
+        kind = PRINTED_TITLES.get(compact(line))
+        rects = layer["lines"].get(str(number), [])
+        if kind and rects and max(rect[3] for rect in rects) <= .36:
+            candidates.append({"index": "t"+str(number), "field": FIELDS[kind], "value": line.strip(), "quote": line})
+    return candidates if len(candidates) == 1 else []
+
+
 def build_graph(docs, pages, attestations, amendments=()):
     nodes = {}
     edges, evidence, gaps, cautions = [], [], [], []
@@ -106,13 +123,20 @@ def build_graph(docs, pages, attestations, amendments=()):
         page_id = f"{doc}/p{number}"
         output = page["extraction"]["output"]
         observations = {f"{page_id}/f{index}": item for index, item in enumerate(output["facts"], 1)}
+        check = page["extraction"].get("check")
+        supports = {row["index"]: row["support"] for row in check["output"]["checks"]} if check else {}
+        headings = {}
+        for candidate in heading_candidates(page):
+            index = candidate["index"]
+            if supports.get(index) == "clear" and candidate in check.get("input", []):
+                headings[index] = {"field": PRINTED_TITLES[compact(candidate["quote"])], "value": candidate["value"],
+                                   "quote": candidate["quote"], "region": "top"}
+                observations[f"{page_id}/{index}"] = headings[index]
         page_edits = edits[doc, number]
         for target, edit in page_edits.items():
             if edit["page_hash"] != page["sha256"]:
                 raise ValueError("amendment source mismatch")
             observations[target] = {key: edit[key] for key in ("field", "value", "quote", "region")}
-        check = page["extraction"].get("check")
-        supports = {row["index"]: row["support"] for row in check["output"]["checks"]} if check else {}
         lines = index_lines(page["text"])
         layer = page.get("layer") or {"type": "unknown", "lines": {}}
         nodes[page_id] = {"id": page_id, "type": "page", "label": f"第 {number} 页", "sha256": page["sha256"],
@@ -147,7 +171,7 @@ def build_graph(docs, pages, attestations, amendments=()):
                 status = "unsupported"
             elif position and layer["type"] == "text" and rects and labelled(field, value, quote):
                 status = "anchored"
-            support = supports.get(index) if not edit else None
+            support = supports.get(origin if origin in headings else index) if not edit else None
             if support in ("conflict", "unreadable") and status != "unsupported":
                 status = "visual"
             signoff = attestations.get(fact_id)
@@ -162,9 +186,11 @@ def build_graph(docs, pages, attestations, amendments=()):
                     "field": field, "label": FIELDS[field], "value": value, "quote": quote,
                     "region": item["region"], "status": status, "attestation": signoff,
                     "source_line": {"number": position[0], "text": position[1], "rects": rects} if position else None}
+            if origin in headings:
+                fact["origin"] = "verified_printed_heading"
             if edit:
                 fact["amendment"] = edit
-                fact["original_candidate"] = output["facts"][int(index) - 1] if index else None
+                fact["original_candidate"] = output["facts"][int(index) - 1] if index else headings.get(origin)
             evidence.append(fact)
             nodes[fact_id] = {"id": fact_id, "type": "observation", "label": fact["label"], "status": status}
             edges.append({"from": page_id, "to": fact_id, "type": "records", "evidence": [fact_id]})

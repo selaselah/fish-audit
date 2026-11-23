@@ -1,7 +1,7 @@
 // Exercise the real registration, invitation and workspace navigation in an isolated browser and database.
 import assert from 'node:assert/strict';
-import {spawn} from 'node:child_process';
-import {mkdtemp, readFile, rm} from 'node:fs/promises';
+import {spawn, execFileSync} from 'node:child_process';
+import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {createServer} from 'node:net';
@@ -120,12 +120,28 @@ try {
     await wait('location.hash.endsWith("/desk")','reviewer login');
     await evaluate('location.hash='+JSON.stringify(detail));
     await wait('!document.querySelector("#report-tools").hidden && !!document.querySelector("#case-panel .panel")','reviewer report');
-    assert.ok(await evaluate('document.querySelector("#case-panel").innerText.includes("建议通过")'),'golden case verdict');
     const path = await evaluate('location.hash.slice(1).split("/")');
     const report = await evaluate('fetch("/api/w/'+path[1]+'/cases/'+path[3]+'/reports/1").then(r=>r.json())');
     console.log(JSON.stringify({verdict:report.report.result.verdict,pages:report.report.graph.nodes.filter(n=>n.type==='page').length,
       findings:report.report.findings.length, calculations:report.report.findings.flatMap(f=>f.calculations||[]).length}));
-    console.log('PASS · Employee upload, live multimodal processing, role-specific views and auditor report');
+    if (report.report.result.verdict !== 'pass') {
+      console.log(JSON.stringify({gaps:report.report.graph.gaps, pending:report.report.graph.facts.filter(f=>!['anchored','confirmed'].includes(f.status)).map(f=>[f.page,f.field,f.status]), rules:report.report.findings.filter(f=>f.status!=='ok').map(f=>[f.rule,f.detail])}));
+      throw new Error('Golden procurement packet needs review');
+    }
+    const calcCount = report.report.findings.flatMap(f=>f.calculations || []).length;
+    assert.ok(calcCount >= 3, 'operand-linked audit');
+    await evaluate('const detailEl = document.querySelector("#case-panel .formula .ref"); for (let a=detailEl.parentElement; a; a=a.parentElement) if(a.tagName==="DETAILS") a.open=true; detailEl.click()');
+    await wait('document.querySelector("#page-dialog").open && !!document.querySelector(".evidence-row.located")','operand citation');
+    await evaluate('document.querySelector("#page-dialog").close()');
+    await click('填写验收意见');
+    await evaluate('document.querySelector("#review-decision").value="approve";document.querySelector("#review-note").value="已核合成演练三份原页及金额复算。";document.querySelector("#review-form").requestSubmit()');
+    await wait('document.querySelector("#case-status").textContent==="已归档"','auditor signoff');
+    const bundleUrl = '/api/w/'+path[1]+'/cases/'+path[3]+'/reports/1/bundle';
+    const b64 = await evaluate('fetch('+JSON.stringify(bundleUrl)+').then(r=>r.blob()).then(b=>new Promise(res=>{const f=new FileReader(); f.onload=()=>res(f.result.split(",")[1]);f.readAsDataURL(b)}))');
+    const zip = join(scratch,'signed.zip');
+    await writeFile(zip,Buffer.from(b64,'base64'));
+    console.log(execFileSync(process.env.AUDIT_PYTHON || 'server/.venv/bin/python',['server/verify.py',zip],{encoding:'utf8'}).trim());
+    console.log('PASS · Employee upload, live multimodal audit, operand citation, auditor signoff and offline replay');
   }
   assert.deepEqual(faults,[]);
 } finally {

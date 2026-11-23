@@ -154,6 +154,7 @@ function openPage(docId, pageNumber, highlight) {
       el('small', fact.id + ' · ' + (fact.source_line ? '文字层第 ' + fact.source_line.number + ' 行' :
         '模型定位：页' + statusName(fact.region)), 'small'));
     if (fact.source_line) row.append(fold('对照本机文字层', el('blockquote', fact.source_line.text)));
+    if (fact.origin === 'verified_printed_heading') row.append(el('small','标题来自可定位文字层，经模型对照页图复检。','small'));
     if (fact.visual_check) row.append(el('small', '模型二次读图 · ' +
       ({clear:'可辨认', conflict:'存在差异', unreadable:'无法核实'}[fact.visual_check] || fact.visual_check), 'small'));
     if (fact.source_line?.rects?.length) row.append(action('定位原文', () => locate(fact), 'ref'));
@@ -215,6 +216,15 @@ function sourceList() {
   }
   return panel;
 }
+function calculationPanel(calculation) {
+  const operands = calculation.operands.map(operand => {
+    const refs = fold('币种与计量单位', citation(operand.currency_fact), citation(operand.unit_fact));
+    return box('formula-operand', el('span', operand.sign < 0 ? '−' : '+', 'formula-sign'),
+      box('', el('strong', operand.label), citation(operand.amount_fact), refs), el('span', operand.decimal, 'amount'));
+  });
+  return box('formula', el('h4', calculation.label), ...operands,
+    box('formula-result', el('strong', '复算结果'), el('strong', calculation.result + ' 元', 'amount')));
+}
 function finding(item) {
   const sources = box('chips', ...item.evidence.map(citation));
   const node = box('finding', box('flow', tag(item.status), el('h3', item.title), el('span', item.rule, 'mono')),
@@ -222,7 +232,9 @@ function finding(item) {
   if (item.scope.length) node.append(el('small', '检查范围 · ' + item.scope.map(id =>
     state.bundle.report.graph.audit_documents?.find(doc => doc.id === id)?.name ||
     state.detail.documents.find(doc => doc.id === id)?.name || id).join('、'), 'small'));
-  node.append(sources);
+  if (item.calculations?.length) node.append(fold('查看金额算式与取数依据',
+    ...item.calculations.map(calculationPanel)));
+  if (sources.childElementCount) node.append(fold('查看本项全部引文（'+sources.childElementCount+'）', sources));
   const policy = state.bundle.report.policy;
   const refs = policy.rule_sources?.[item.rule] || [];
   if (refs.length) node.append(fold('核对制度出处与适用范围', ...refs.map(id => sourceEntry(policy.sources[id]))));

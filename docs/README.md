@@ -62,3 +62,4 @@ server/.venv/bin/python server/main.py
 - [合成演练](samples/README.md) 说明采购、差旅及核图归档案例、数据生成及真实模型验收。
 - [本机演练验收记录](acceptance.md) 提供八个可打开的案例、已核实的金额差异及核图记录。
 - [接口约定](api.md) 列出上传、进度、原件、核图和归档接口。
+- [金额复算与研究依据](research.md) 说明如何逐项核对取数、币种、单位和引用。

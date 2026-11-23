@@ -2,17 +2,18 @@ import fcntl
 import logging
 import threading
 
+from calculations import FORMAT
 from config import CaseError, MAX_PAGES, RECHECK_EVIDENCE, SERVER
 from controls import additional, conclusion, execute, VERSION
 from documents import digest, prepare
-from graph import attach_prior_invoices, build_graph, invoice_number_edges, link_procedures
+from graph import attach_prior_invoices, build_graph, heading_candidates, invoice_number_edges, link_procedures
 from model import AUDIT, EXTRACT, VISUAL_CHECK, attach_check, audit_graph, extract_page
 from policy import link_sources
 from storage import encode
 
 
 METHODS = {name: (SERVER / name).read_bytes() for name in
-           ("config.py", "controls.py", "documents.py", "graph.py", "jobs.py", "model.py", "policy.py", "protocol.py", "storage.py")}
+           ("calculations.py", "config.py", "controls.py", "documents.py", "graph.py", "jobs.py", "model.py", "policy.py", "protocol.py", "storage.py")}
 CODE_DIGESTS = {name: digest(source) for name, source in METHODS.items()}
 
 
@@ -85,9 +86,12 @@ class Worker:
                 _, trace = self.extract(path)
                 store.save_extraction(case_id, page, trace)
                 page["extraction"] = trace
-            if RECHECK_EVIDENCE and trace["output"]["facts"] and not trace.get("check"):
+            candidates = heading_candidates(page) if RECHECK_EVIDENCE and not trace.get("check") else []
+            if RECHECK_EVIDENCE and (trace["output"]["facts"] or candidates) and not trace.get("check"):
                 store.progress(case_id, "extract", 18 + 54 * index // page_count, f"第 {index+1}/{page_count} 页逐字段视觉复检。")
+                trace["heading_candidates"] = candidates
                 self.check(path, trace)
+                trace.pop("heading_candidates", None)
                 store.save_check(case_id, page, trace["check"])
         store.progress(case_id, "graph", 74, f"已读取 {page_count} 页，正在校验引文并建立关系。")
         graph = build_graph(docs, pages, store.attestations(case_id), store.amendments(case_id))
@@ -112,7 +116,7 @@ class Worker:
         calls = {"pages": traces, "expert": trace, "instructions": {key: value for key, value in instructions.items() if key in used}}
         link_procedures(graph, findings, calls)
         link_sources(graph)
-        policy = {**VERSION, "profile": profile, "code_sha256": CODE_DIGESTS, "archived_methods": True}
+        policy = {**VERSION, "profile": profile, "code_sha256": CODE_DIGESTS, "archived_methods": True, "calculations": FORMAT}
         report = {"case_id": case_id, "policy": policy, "graph": graph, "findings": findings,
                   "result": result, "calls": calls}
         store.save_report(case_id, report, digest(encode(report).encode()), METHODS)

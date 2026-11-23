@@ -205,6 +205,7 @@ def attach_check(path, trace):
     facts = trace["output"]["facts"]
     candidates = [{"index": str(index), "field": FIELDS[item["field"]], "value": item["value"], "quote": item["quote"]}
                   for index, item in enumerate(facts, 1)]
+    candidates.extend(trace.get("heading_candidates", []))
     schema = object_schema({"checks": array(object_schema({"index": choice([item["index"] for item in candidates]),
                            "support": choice(["clear", "conflict", "unreadable"])}))})
     image = base64.b64encode(path.read_bytes()).decode("ascii")

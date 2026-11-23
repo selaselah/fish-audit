@@ -5,6 +5,7 @@ import json
 import zipfile
 from pathlib import Path
 
+from calculations import CalculationEvidence, FORMAT
 from protocol import canonical, response_request
 
 
@@ -79,10 +80,19 @@ def verify(source):
         for match in graph.get("prior_invoices", []):
             path = f"prior/{match['case_id']}/r{match['rev']}/{match['doc']}/{match['page']}.jpg"
             require(hashes[path] == match["page_hash"] and match["id"] in nodes, "历史票号证据不符")
+        page_checks = {(t["doc"],t["page"]): t.get("check") for t in report["calls"]["pages"]}
         texts = {}
         for fact in graph["facts"]:
             require(fact["source_sha256"] == nodes[fact["doc"]]["sha256"] and
                     fact["page_sha256"] == nodes[f"{fact['doc']}/p{fact['page']}"]["sha256"], "取值与来源不符")
+            if fact.get("origin") == "verified_printed_heading":
+                check = page_checks.get((fact["doc"],fact["page"])) or {}
+                key = fact["id"].rsplit("/", 1)[-1]
+                candidate = fact.get("original_candidate") or fact
+                inputs = [row for row in check.get("input", []) if row["index"] == key]
+                votes = [row["support"] for row in check.get("output", {}).get("checks", []) if row["index"] == key]
+                require(len(inputs) == 1 and inputs[0]["quote"] == candidate["quote"] and
+                        inputs[0]["value"] == candidate["value"] and votes == ["clear"], "印刷标题缺少对应的视觉复检")
             if "unit" in fact:
                 section = nodes[fact["unit"]]
                 require(section["type"] == "document_section" and section["source"] == fact["doc"]
@@ -99,6 +109,9 @@ def verify(source):
                     set(item["evidence"]) <= nodes.keys(), "图谱存在未登记引用")
         for finding in report["findings"]:
             require(set(finding["evidence"]) <= nodes.keys(), "程序引用不存在")
+        if "calculations" in report["policy"]:
+            require(report["policy"]["calculations"] == FORMAT, "未知的金额复算格式")
+            CalculationEvidence(graph).verify(report["findings"])
         for checksum, instruction in report["calls"].get("instructions", {}).items():
             require(sha(instruction.encode()) == checksum, "提示词摘要不符")
         return case_id, revision, len(entries)

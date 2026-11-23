@@ -76,6 +76,48 @@ class ControlsTests(unittest.TestCase):
         self.assertEqual(conclusion(findings)["verdict"], "reject")
         self.assertIn("0.01", next(item for item in findings if item["rule"] == "M01")["detail"])
 
+    def test_omitted_heading_requires_visual_and_native_agreement(self):
+        from graph import heading_candidates
+        doc = {"id":"d01", "name":"合成发票", "sha256":"demo"}
+        page = {"doc":"d01", "number":1, "sha256":"page", "text":"采购发票",
+                "layer":{"type":"text", "lines":{"1":[[0,.1,.3,.2]]}},
+                "extraction":{"output":{"facts":[], "quality":"readable"}}}
+        candidate, = heading_candidates(page)
+        for support, inputs, eligible in [("clear", [candidate], True), ("conflict", [candidate], False),
+                                          ("unreadable", [candidate], False), ("clear", [], False)]:
+            with self.subTest(support=support, inputs=inputs):
+                page["extraction"]["check"] = {"input":inputs, "output":{"checks":[{"index":"t1", "support":support}]}}
+                graph = build_graph([doc], [page], {})
+                self.assertEqual(bool(graph["documents_by_kind"].get("invoice")), eligible)
+                if eligible:
+                    self.assertEqual(graph["facts"][0]["origin"], "verified_printed_heading")
+        page["layer"]["type"] = "image_overlay"
+        self.assertEqual(heading_candidates(page), [])
+
+    def test_operand_sources_and_offline_replay(self):
+        from copy import deepcopy
+        from calculations import CalculationEvidence
+        graph = case_graph(packet=True)
+        findings = execute(graph)
+        evidence = CalculationEvidence(graph)
+        evidence.verify(findings)
+        m02 = next(row for row in findings if row["rule"] == "M02")
+        invoice, contract = m02["calculations"][0]["operands"]
+        self.assertEqual(invoice["decimal"], contract["decimal"])
+        self.assertNotEqual(invoice["scope"], contract["scope"])
+        for key in ("amount_fact", "currency_fact", "unit_fact", "scope"):
+            with self.subTest(source=key):
+                wrong = deepcopy(m02)
+                wrong["calculations"][0]["operands"][0][key] = contract[key]
+                with self.assertRaises(ValueError):
+                    evidence.verify([wrong])
+        for wrong in ({**m02, "calculations": []}, {**m02, "status": "issue"},
+                      {**m02, "evidence": [ref for ref in m02["evidence"] if ref != invoice["amount_fact"]]}):
+            with self.assertRaises(ValueError):
+                evidence.verify([wrong])
+        unverified = execute(case_graph(no_text=True))
+        self.assertFalse(any(f.get("calculations") for f in unverified))
+
     def test_invented_truncated_or_misclassified_values_stay_unlinked(self):
         for invalid in [fact("total", "13", "含税总额：113.00"), fact("total", "113", "含税总额：113.00"),
                         fact("total", "113.00", "不含税合计：113.00"), fact("unit", "元", "金额单位：万元"),
