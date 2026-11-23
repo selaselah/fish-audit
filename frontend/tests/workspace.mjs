@@ -88,6 +88,12 @@ try {
     await wait('document.querySelector("#case-title")?.textContent.includes("超付") && !!document.querySelector(".formula")','direct paper URL');
     await evaluate('const amount=document.querySelector(".formula .ref");for(let p=amount;p;p=p.parentElement) if(p.tagName==="DETAILS") p.open=true; amount.click()');
     await wait('document.querySelector("#page-dialog").open && !!document.querySelector(".located")','mobile operand source');
+    await evaluate('document.querySelector("#page-dialog").close();const accountFinding=[...document.querySelectorAll(".finding")].find(f=>f.querySelector(".mono")?.textContent==="B03");[...accountFinding.querySelectorAll("button")].find(b=>b.textContent==="查看证据路径").click()');
+    await wait('document.querySelector("#trace-select")?.value.startsWith("B03-") && document.querySelector(".trace-result").textContent.includes("0092")','selected finding path');
+    await evaluate('for(const d of document.querySelectorAll(".trace-sources > details")) d.open=true');
+    await wait('[...document.querySelectorAll(".trace-quote button")].some(b=>b.textContent.includes("实际收款账号"))','account operand path');
+    await evaluate('[...document.querySelectorAll(".trace-quote button")].find(b=>b.textContent.includes("实际收款账号")).click()');
+    await wait('document.querySelector("#page-dialog").open && document.querySelector(".located").textContent.includes("000000000000000092")','matching printed account');
     await evaluate('document.querySelector("#page-dialog").close();document.querySelector("#nav-library").click()');
     await wait('!document.querySelector("#library").hidden','evidence search');
     await evaluate('document.querySelector("#library-query").value="YL-BANK-092";document.querySelector("#library-form").requestSubmit()');
@@ -95,7 +101,7 @@ try {
     const cited = await evaluate('document.querySelector(".source-jump").href');
     await call('Page.navigate',{url:cited});
     await wait('document.querySelector("#page-dialog")?.open && !!document.querySelector(".located")','permanent revision and fact URL');
-    console.log('PASS · Six viewports from 320 to 1440 px, live inbox search, permanent case and exact revision/source links');
+    console.log('PASS · Six viewports, inbox search, finding-to-account provenance and permanent revision/source links');
   } else {
     await wait('document.querySelector("#account input[name=password]") !== null', 'login');
     await click('创建企业账号');

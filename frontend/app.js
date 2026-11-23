@@ -196,7 +196,8 @@ function openPage(docId, pageNumber, highlight) {
   }
 }
 function citation(ref) {
-  const prior = state.bundle?.report.graph.prior_invoices?.find(row => row.id === ref);
+  const index = state.bundle && graphIndex(state.bundle.report.graph);
+  const prior = index?.prior.get(ref);
   if (prior) {
     const target = Team.cases() + '/' + prior.case_id + '/documents/' + prior.doc + '/pages/' + prior.page;
     const source = link('已归档 · ' + prior.title + ' · R' + prior.rev + ' p.' + prior.page, target, 'button ref');
@@ -205,8 +206,8 @@ function citation(ref) {
   }
   const [doc, rawPage] = ref.split('/');
   const page = Number((rawPage || '').slice(1));
-  const item = state.detail.documents.find(document => document.id === doc);
-  const fact = state.bundle?.report.graph.facts.find(source => source.id === ref);
+  const item = index?.documents.get(doc) || state.detail.documents.find(document => document.id === doc);
+  const fact = index?.facts.get(ref);
   return action((item?.name || doc) + ' p.' + page + (fact ? ' · ' + fact.label : ''),
     () => openPage(doc, page, ref), 'ref');
 }
@@ -238,7 +239,6 @@ function calculationPanel(calculation) {
     box('formula-result', el('strong', '复算结果'), el('strong', calculation.result + ' 元', 'amount')));
 }
 function finding(item) {
-  const sources = box('chips', ...item.evidence.map(citation));
   const node = box('finding', box('flow', tag(item.status), el('h3', item.title), el('span', item.rule, 'mono')),
     el('p', item.detail), el('p', '执行依据 · ' + item.basis, 'muted'));
   if (item.scope.length) node.append(el('small', '检查范围 · ' + item.scope.map(id =>
@@ -246,7 +246,11 @@ function finding(item) {
     state.detail.documents.find(doc => doc.id === id)?.name || id).join('、'), 'small'));
   if (item.calculations?.length) node.append(fold('查看金额算式与取数依据',
     ...item.calculations.map(calculationPanel)));
-  if (sources.childElementCount) node.append(fold('查看本项全部引文（'+sources.childElementCount+'）', sources));
+  if (item.evidence.length) node.append(lazyFold('查看本项全部引文（'+item.evidence.length+'）',()=>[box('chips',...item.evidence.map(citation))]));
+  if (graphIndex(state.bundle.report.graph).nodes.has('finding/'+item.id)) node.append(action('查看证据路径',()=>{
+    state.traceKey=state.detail.id+'@'+state.bundle.rev; state.traceId=item.id;
+    state.tab='graph'; renderCase(); $('#trace-select')?.focus();
+  },'text-button'));
   const policy = state.bundle.report.policy;
   const refs = policy.rule_sources?.[item.rule] || [];
   if (refs.length) node.append(fold('核对制度出处与适用范围', ...refs.map(id => sourceEntry(policy.sources[id]))));
@@ -280,7 +284,7 @@ function reportPanel() {
 }
 function graphPanel() {
   const graph = state.bundle.report.graph;
-  const nodes = new Map(graph.nodes.map(node => [node.id, node]));
+  const {nodes,facts} = graphIndex(graph);
   const docIds = new Set((graph.audit_documents || graph.documents).map(doc => doc.id));
   const relations = graph.edges.filter(edge => docIds.has(edge.from) && !['contains','section_page'].includes(edge.type));
   const panel = box('panel', el('h2', '本案证据关系'), el('p', graph.nodes.length + ' 个节点 · ' +
@@ -293,36 +297,25 @@ function graphPanel() {
     grouped.get(edge.to).push(edge);
   }
   const groups = [...grouped].sort((left, right) => right[1].length - left[1].length);
-  for (const [target, edges] of groups) {
-    const group = fold(nodes.get(target).label + ' · ' + edges.length + ' 条关联',
-      ...edges.map(edge => box('line', el('strong', nodes.get(edge.from).label),
-        el('span', '记载' + (graph.facts.find(fact => fact.id === edge.evidence[0])?.label || edge.type)),
-        box('chips', ...edge.evidence.map(citation)))));
-    panel.append(group);
-  }
+  if (groups.length) panel.append(lazyFold('查看实体与单据关联（'+groups.length+'）',()=>groups.map(([target, edges])=>
+    lazyFold(nodes.get(target).label+' · '+edges.length+' 条关联',()=>edges.map(edge=>box('line',
+      el('strong',nodes.get(edge.from).label),el('span','记载'+(facts.get(edge.evidence[0])?.label || edge.type)),
+      box('chips',...edge.evidence.map(citation))))))));
   if (!groups.length) panel.append(el('p', '请在原件与引文中核对待确认记录，核图后系统会重建关系。'));
   if (graph.prior_invoices?.length) panel.append(fold('跨案同号记录', ...graph.prior_invoices.map(row =>
     box('line', link(row.title, Team.hash('case/' + row.case_id)), el('p', '历史人工决定 · ' + statusName(row.decision) + ' · ' +
       (row.document_kind === 'unclassified' ? '原资料类型待核' : '发票')),
       el('blockquote', row.quote), citation(row.id), el('small', '历史底稿 SHA-256 · ' + row.report_hash, 'small')))));
-  const procedures = graph.edges.filter(edge => edge.type === 'procedure_result');
-  if (procedures.length) panel.append(fold('审计依据与结论关系', ...procedures.map(edge => {
-    const result = nodes.get(edge.to);
-    const rule = nodes.get(edge.from);
-    const references = edge.evidence.map(ref => ref.includes('/p') && ref.startsWith('d') ? citation(ref) :
-      el('span', nodes.get(ref)?.label || ref, 'small'));
-    return box('line', box('flow', el('strong', rule.label + ' · ' + result.label), tag(result.status)),
-      el('p', rule.basis, 'muted'), el('p', result.detail), box('chips', ...references));
-  })));
   if (graph.cautions?.length) panel.append(fold('原文中的结算及变更线索', ...graph.cautions.map(item =>
     box('line', el('blockquote', item.quote), el('span', '文字层第 ' + item.line + ' 行'), citation(item.page_id)))));
   if (graph.gaps.length) panel.append(fold('辨读与覆盖缺口', ...graph.gaps.map(item =>
     box('line', el('span', item.quality === 'uncovered_title' ? '页首标题尚待核图补录' : item.quote ? '文字层第 ' + item.line + ' 行尚缺完整取值' :
       (item.quality === 'section_unresolved' ? '本页的单据归属待核对' : '页图存在辨读或提取缺口')),
       el('blockquote', item.quote || '请查看原件或补传清晰资料。'), citation(item.id)))));
-  panel.append(fold('资料、页与观察记录的溯源关系', ...graph.edges.filter(edge => ['contains','records'].includes(edge.type))
+  panel.append(lazyFold('资料、页与观察记录的溯源关系', ()=>graph.edges.filter(edge => ['contains','records'].includes(edge.type))
     .map(edge => box('line', el('code', edge.from + ' → ' + edge.to), box('chips', ...edge.evidence.map(citation))))));
-  return panel;
+  const path = provenancePanel(state.bundle.report);
+  return path ? box('graph-stack',path,panel) : panel;
 }
 function activityPanel() {
   const log = box('panel', el('h2', '处理进度记录'));
@@ -586,7 +579,7 @@ for (const button of document.querySelectorAll('[data-close]')) button.addEventL
 Desk.bind();
 $('#version').addEventListener('change', () => { chooseRevision(Number($('#version').value)); refresh(); });
 window.addEventListener('hashchange', () => {
-  state.openedCitation=null; state.bundle = null; state.detail = null; state.pinned = 0; state.tab = 'report';
+  state.openedCitation=null; state.traceId=null; state.traceKey=null; state.bundle = null; state.detail = null; state.pinned = 0; state.tab = 'report';
   if ((Team.current?.id || null) !== Team.route().id) {
     Desk.reset(); state.key=null; state.cases=[]; $('#case-list').replaceChildren(); $('#team-panel').replaceChildren();
     $('#upload-form').reset(); $('#chosen-files').replaceChildren(); profileChanged();
