@@ -6,14 +6,15 @@ from collections import defaultdict
 from decimal import Decimal
 
 
-FORMAT = "cny-evidence-v1"
+FORMAT = "cny-evidence-v2"
+SUPPORTED = {"cny-evidence-v1", FORMAT}
 AMOUNT = re.compile(r"-?(?:[0-9]{1,17}|[0-9]{1,3}(?:,[0-9]{3}){1,5})(?:\.[0-9]{1,2})?")
 INCOMPATIBLE = ("万", "亿", "千元", "美元", "港元", "欧元", "%", "折合")
-NAMES = {"vat_balance": "不含税额加税额与票面总额的差额", "accepted_minus_contract": "验收与合同差额",
+NAMES = {"paid_minus_contract":"回单与合同差额", "vat_balance": "不含税额加税额与票面总额的差额", "accepted_minus_contract": "验收与合同差额",
          "invoice_minus_contract": "发票与合同差额", "invoice_minus_acceptance": "发票与验收差额",
          "invoice_sum": "发票合计", "claim_minus_invoices": "申请与凭证差额"}
-FIELDS = {"net":"不含税合计", "tax":"税额合计", "total":"含税总额", "claim_total":"申请金额"}
-KINDS = {"invoice":"发票", "contract":"合同", "acceptance":"验收单", "claim":"报销单"}
+FIELDS = {"transfer_amount":"付款金额", "net":"不含税合计", "tax":"税额合计", "total":"含税总额", "claim_total":"申请金额"}
+KINDS = {"bank_receipt":"银行回单", "invoice":"发票", "contract":"合同", "acceptance":"验收单", "claim":"报销单"}
 
 
 def normalized(value):
@@ -65,7 +66,7 @@ class CalculationEvidence:
 
     def formulas(self, finding):
         rule, status = finding["rule"], finding["status"]
-        if rule not in {"M01", "M02", "T03"} or status == "missing" or (rule == "M01" and status == "risk"):
+        if rule not in {"M01", "M02", "T03", "B04"} or status == "missing" or (rule == "M01" and status == "risk"):
             return []
         allowed = set(finding["evidence"])
         invoices = self.kinds.get("invoice", [])
@@ -83,7 +84,7 @@ class CalculationEvidence:
             return {"operation": operation, "label": NAMES[operation], "currency": "CNY", "unit": "元",
                     "operands": operands, "result": format(result, ".2f")}
 
-        if not invoices or len(invoices) != len(set(invoices)):
+        if rule != "B04" and (not invoices or len(invoices) != len(set(invoices))):
             raise ValueError("算式的发票范围为空或重复")
         if rule == "M01":
             scopes = {self.facts[ref].get("unit", self.facts[ref]["doc"]) for ref in allowed
@@ -93,6 +94,11 @@ class CalculationEvidence:
             doc = scopes.pop()
             result = formula("vat_balance", [self.operand(allowed, "invoice", doc, field, sign)
                                              for field, sign in (("net", 1), ("tax", 1), ("total", -1))])
+            calculations = [result]
+            expected = "issue" if Decimal(result["result"]) else "ok"
+        elif rule == "B04":
+            result = formula("paid_minus_contract", terms("bank_receipt", [one("bank_receipt")], "transfer_amount")
+                             + terms("contract", [one("contract")], sign=-1))
             calculations = [result]
             expected = "issue" if Decimal(result["result"]) else "ok"
         elif rule == "T03":

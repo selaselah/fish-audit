@@ -11,7 +11,8 @@ const labels = {
 };
 const tabs = {report: '审计结论', evidence: '原件与引文', graph: '知识图谱', activity: '执行记录'};
 const travelProfile = 'cn-travel-reimbursement/v1';
-const profileName = profile => profile === travelProfile ? '差旅报销' : '采购与付款';
+const bankProfile = 'cn-bank-contract-payment/v1';
+const profileName = profile => ({[travelProfile]:'差旅报销',[bankProfile]:'付款回单核对','cn-procurement-full-settlement/v1':'采购与付款'}[profile] || profile);
 const tone = {ready: 'risk', closed: 'ok', failed: 'issue', pass: 'ok', review: 'risk', reject: 'issue',
   visual: 'risk', unsupported: 'issue', disputed: 'issue', confirmed: 'ok', anchored: 'ok'};
 const statusName = value => labels[value] || value;
@@ -76,7 +77,7 @@ function renderList() {
   const header = box('ledger-header ledger-row', ...['任务名称','处理状态','审计建议', $('#desk-sort').value === 'updated' ? '最近更新' : '提交时间'].map(label => el('span', label)));
   list.replaceChildren(header);
   for (const row of visible) {
-    const title = link(row.title, Team.hash('case/' + row.id), 'case-link');
+    const title = Team.paperLink(row.title, row.id, 'case-link');
     const metadata = el('span', profileName(row.profile) + ' · ' + row.files + ' 份资料' + (row.rev ? ' · 底稿 R' + row.rev : ''), 'small');
     const status = box('', tag(row.status));
     if (row.status === 'running') status.append(el('small', row.progress + '%', 'small'));
@@ -92,7 +93,7 @@ function renderList() {
   }
 }
 function renderCatalog(data) {
-  const panel = box('panel', el('h2', '资料检查程序'), el('p', '采购与付款、差旅凭票报销 · 版本 ' + data.version, 'muted'));
+  const panel = box('panel', el('h2', '资料检查程序'), el('p', Object.values(data.profiles).join('、')+' · 版本 ' + data.version, 'muted'));
   for (const rule of data.rules) {
     panel.append(box('line', el('strong', rule.id, 'mono'), el('strong', rule.name), el('p', rule.basis)));
   }
@@ -167,6 +168,17 @@ function openPage(docId, pageNumber, highlight) {
     if (editable) row.append(action('更正字段', () => openAmend(docId, pageNumber, fact), 'ref'));
     if (fact.id === highlight) focusRow = row;
     right.append(row);
+  }
+  const gaps = (state.bundle?.report.graph.gaps || []).filter(g => g.doc === docId && g.page === pageNumber && g.quote);
+  for (const gap of gaps) {
+    const section = box('evidence-row',el('h4','待核的原文字层 · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
+    const field = gap.field || gap.title_hint;
+    if (editable && field) {
+      const candidates = pageFacts.filter(f => f.field===field && !['anchored','confirmed'].includes(f.status));
+      if (candidates.length <= 1) section.append(action(candidates.length ? '据此行更正候选' : '据此行补录',
+        ()=>openAmend(docId,pageNumber,candidates[0],{field,quote:gap.quote}),'ref'));
+    }
+    right.append(section);
   }
   if (!pageFacts.length) right.append(el('p', '本页尚无可展示的提取记录。', 'muted'));
   const submit = action('记录所选引文的核图意见', () => {
@@ -342,7 +354,7 @@ function activityPanel() {
   if (state.detail.status === 'ready' && state.detail.rev === bundle.rev) {
     panel.append(action('保留此版并重新审计', async event => {
       event.currentTarget.disabled = true;
-      try { await post(base() + '/rerun', {rev: bundle.rev}); state.pinned = 0; await refresh(); }
+      try { await post(base() + '/rerun', {rev: bundle.rev}); chooseRevision(); await refresh(); }
       catch (error) { alertText(error); await refresh(); }
     }));
   }
@@ -416,7 +428,7 @@ async function refresh() {
     if (route.id && !Team.current) {
       if (!session.user) Team.returnTo = location.hash;
       view = 'account';
-    } else if (!route.id && session.mode === 'saas' && view !== 'account') {
+    } else if (!route.id && session.mode === 'saas' && view !== 'account' && (view !== 'rules' || session.user)) {
       if (session.workspaces.length) { location.replace(Team.hash('w/'+session.workspaces[0].id+'/'+route.page)); return; }
       view = 'account';
     }
@@ -470,6 +482,10 @@ async function refresh() {
   }
   if (interval && epoch === state.epoch) state.timer = setTimeout(refresh, interval);
 }
+function chooseRevision(rev = 0) {
+  state.pinned = rev;
+  history.replaceState(null,'',Team.hash('case/'+state.detail.id+(rev ? '?rev='+rev : '')));
+}
 function openReview(facts) {
   state.review = {id: state.detail.id, rev: state.bundle.rev, facts};
   $('#review-error').textContent = '';
@@ -485,7 +501,7 @@ function openReview(facts) {
   $('#review-note').value = '';
   $('#review-dialog').showModal();
 }
-async function openAmend(doc, page, fact) {
+async function openAmend(doc, page, fact, printed) {
   try {
     state.fields ||= (await api('/api/controls')).fields;
     const current = state.detail;
@@ -499,9 +515,9 @@ async function openAmend(doc, page, fact) {
     $('#amend-context').textContent = item.name + ' · 第 ' + page + ' 页 · 底稿 R' + state.bundle.rev;
     const select = $('#amend-field'); select.replaceChildren(new Option('请选择字段', ''));
     for (const [key, label] of Object.entries(state.fields)) select.add(new Option(label, key));
-    select.value = fact?.field || '';
-    $('#amend-quote').value = fact?.quote || '';
-    $('#amend-value').value = fact?.value || '';
+    select.value = printed?.field || fact?.field || '';
+    $('#amend-quote').value = printed?.quote || fact?.quote || '';
+    $('#amend-value').value = printed ? '' : (fact?.value || '');
     $('#amend-region').value = fact?.region || 'top';
     $('#page-dialog').close();
     $('#amend-dialog').showModal();
@@ -515,7 +531,7 @@ $('#amend-form').addEventListener('submit', async event => {
     await post(Team.cases() + '/' + id + '/amend', {...source, field:$('#amend-field').value,
       quote:$('#amend-quote').value, value:$('#amend-value').value, region:$('#amend-region').value,
       reviewer:$('#amend-reviewer').value, note:$('#amend-note').value});
-    $('#amend-dialog').close(); state.pinned = 0; await refresh();
+    $('#amend-dialog').close(); chooseRevision(); await refresh();
   } catch (error) { $('#amend-error').textContent = error.message; }
   finally { button.disabled = false; }
 });
@@ -527,7 +543,7 @@ $('#review-form').addEventListener('submit', async event => {
     await post(Team.cases() + '/' + pending.id + (pending.facts ? '/attest' : '/signoff'), {rev: pending.rev,
       reviewer: $('#reviewer').value, note: $('#review-note').value, decision: $('#review-decision').value,
       facts: pending.facts});
-    $('#review-dialog').close(); state.pinned = 0; await refresh();
+    $('#review-dialog').close(); chooseRevision(); await refresh();
   } catch (error) { $('#review-error').textContent = error.message; }
   finally { button.disabled = false; }
 });
@@ -539,6 +555,10 @@ $('#upload-files').addEventListener('change', () => {
 $('#upload-title').addEventListener('input', () => { state.key = null; });
 function profileChanged() {
   state.key = null;
+  if ($('#upload-profile').value === bankProfile) {
+    $('#profile-note').textContent = '按一份合同及一张银行回单核对付款主体、收款账号、流水状态和单笔全额差额。';
+    return;
+  }
   $('#profile-note').textContent = $('#upload-profile').value === travelProfile ?
     '按一份差旅报销单和所附具名发票勾稽，检查票号、实际发生日期和申请金额。' : '按单合同、一次全额结算核对。';
 }
@@ -564,7 +584,7 @@ $('#upload-form').addEventListener('submit', async event => {
 });
 for (const button of document.querySelectorAll('[data-close]')) button.addEventListener('click', () => button.closest('dialog').close());
 Desk.bind();
-$('#version').addEventListener('change', () => { state.pinned = Number($('#version').value); refresh(); });
+$('#version').addEventListener('change', () => { chooseRevision(Number($('#version').value)); refresh(); });
 window.addEventListener('hashchange', () => {
   state.openedCitation=null; state.bundle = null; state.detail = null; state.pinned = 0; state.tab = 'report';
   if ((Team.current?.id || null) !== Team.route().id) {

@@ -6,7 +6,7 @@ import sys
 import tempfile
 import uuid
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 
 if __name__ == "__main__":
@@ -15,7 +15,7 @@ if __name__ == "__main__":
     if local_python.is_file() and Path(sys.prefix).resolve() != local_env:
         os.execv(str(local_python), [str(local_python), *sys.argv])
 
-from flask import Blueprint, Flask, g, jsonify, request, send_file
+from flask import Blueprint, Flask, g, jsonify, redirect, request, send_file
 from waitress import serve
 from werkzeug.exceptions import HTTPException
 
@@ -153,6 +153,26 @@ def create_app(store, worker):
     @app.get("/")
     def index():
         return send_file(FRONTEND / "index.html")
+
+    @app.get("/workpaper/<case_id>")
+    @app.get("/w/<wid>/workpaper/<case_id>")
+    def workpaper(case_id, wid=None):
+        if (not re.fullmatch(r"[a-f0-9]{32}", case_id) or (wid and not re.fullmatch(r"[a-f0-9]{32}", wid))
+                or (wid is None and app.config["AUDIT_MODE"] != "local")):
+            raise CaseError("未找到该底稿入口。",404)
+        args = {}
+        if "rev" in request.args:
+            version = request.args["rev"]
+            if not re.fullmatch(r"[1-9][0-9]{0,8}",version):
+                raise CaseError("底稿版本无效。",400)
+            args["rev"] = version
+        if "fact" in request.args:
+            ref = request.args["fact"]
+            if not re.fullmatch(r"d[0-9]{2}/p[1-9][0-9]*/(?:[ft][1-9][0-9]*|h[a-f0-9]{12})",ref) or "rev" not in args:
+                raise CaseError("请选择有效的版本和证据编号。",400)
+            args["fact"] = ref
+        route = ("w/"+wid+"/" if wid else "")+"case/"+case_id
+        return redirect("/#"+route+("?" + urlencode(args) if args else ""))
 
     @app.get("/<filename>")
     def asset(filename):

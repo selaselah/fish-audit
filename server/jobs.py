@@ -14,7 +14,7 @@ from storage import encode
 
 
 METHODS = {name: (SERVER / name).read_bytes() for name in
-           ("calculations.py", "capacity.py", "config.py", "controls.py", "documents.py", "graph.py", "jobs.py", "model.py", "policy.py", "protocol.py", "storage.py")}
+           ("calculations.py", "capacity.py", "config.py", "controls.py", "documents.py", "graph.py", "jobs.py", "model.py", "policy.py", "protocol.py", "storage.py", "transfers.py")}
 CODE_DIGESTS = {name: digest(source) for name, source in METHODS.items()}
 
 

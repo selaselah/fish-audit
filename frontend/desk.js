@@ -51,10 +51,9 @@ const Desk = {
     this.libraryPage = data.page;
     const nodes = data.hits.map(hit=>{
       const params = new URLSearchParams({rev:String(hit.rev),fact:hit.fact});
-      const target = Team.hash('case/'+hit.case_id+'?'+params);
       return box('evidence-hit', box('panel-head',el('strong',hit.label+' · '+hit.value),tag(hit.status)),
         el('blockquote',hit.quote),box('hit-foot',el('small',hit.title+' · R'+hit.rev,'small'),
-        link(hit.name+' · 第 '+hit.page+' 页', target,'source-jump')));
+        Team.paperLink(hit.name+' · 第 '+hit.page+' 页',hit.case_id,'source-jump',params)));
     });
     if (!nodes.length) nodes.push(el('p','当前范围没有匹配引文。可调整关键词或核验状态。','empty'));
     results.replaceChildren(...nodes);

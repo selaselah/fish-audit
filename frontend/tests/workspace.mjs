@@ -13,7 +13,8 @@ const socket = createServer().listen(0, '127.0.0.1');
 await once(socket, 'listening');
 const port = socket.address().port;
 await new Promise(resolve => socket.close(resolve));
-const root = 'http://127.0.0.1:' + port;
+const sampleDesk = process.argv.includes('--sample-desk');
+const root = 'http://127.0.0.1:' + (sampleDesk ? 8000 : port);
 const children = [];
 const faults = [];
 function start(binary, args, env = process.env) {
@@ -33,7 +34,7 @@ async function until(read, label, timeout = 15000) {
 }
 let ws;
 try {
-  start(process.env.AUDIT_PYTHON || 'server/.venv/bin/python', ['server/main.py'], {...process.env,
+  if (!sampleDesk) start(process.env.AUDIT_PYTHON || 'server/.venv/bin/python', ['server/main.py'], {...process.env,
     PORT:String(port), AUDIT_BIND:'127.0.0.1', AUDIT_ACCESS_MODE:'saas', AUDIT_PUBLIC_ORIGIN:root,
     AUDIT_DATA_DIR:join(scratch, 'data')});
   await until(async () => (await fetch(root+'/api/health')).ok,'service');
@@ -73,81 +74,110 @@ try {
   const click = (label, container='document') => evaluate('[...'+container+'.querySelectorAll("button,a")].find(b=>b.textContent==='+JSON.stringify(label)+' && b.getClientRects().length).click()');
   await call('Runtime.enable');
   await call('Page.navigate',{url:root});
-  await wait('document.querySelector("#account input[name=password]") !== null', 'login');
-  await click('创建企业账号');
-  const password = 'synthetic-ui-only-123';
-  await entry({workspace:'合成演练 · 青岚商贸', name:'林审计', login:'ui.owner',password});
-  await wait('!!document.querySelector("#nav-team")?.getClientRects().length && location.hash.endsWith("/desk")','admin workspace');
-  const first = await evaluate('location.hash');
-  await click('企业成员');
-  await wait('!!document.querySelector("#team form select")','team');
-  await click('生成邀请链接');
-  const invite = await wait('document.querySelector("#team input[readonly]")?.value','invitation');
-  await evaluate('document.querySelector("#nav-account").click()');
-  await wait('document.querySelector("#account-panel details") !== null','account switcher');
-  await evaluate('document.querySelector("#account-panel details").open=true; const org=document.querySelector("#account-panel input[name=name]"); org.value="合成演练 · 乙企业"; org.form.requestSubmit()');
-  await wait('location.hash.endsWith("/desk") && location.hash!=='+JSON.stringify(first),'second enterprise');
-  await evaluate('document.querySelector("#nav-account").click()');
-  await wait('document.querySelectorAll("#account-panel .line a").length===2','two companies');
-  await click('退出登录');
-  await wait('!!document.querySelector("#account-panel input[name=password]")','logout');
-  await call('Page.navigate',{url:invite});
-  await wait('document.querySelector("#account-title")?.textContent==="加入企业"','invited account');
-  if (!await evaluate('!!document.querySelector("#account input[name=name]")')) await click('创建账号并接受邀请');
-  await entry({name:'余经办',login:'ui.employee',password});
-  await wait('location.hash==='+JSON.stringify(first)+' && !document.querySelector("#desk").hidden && document.querySelector("#nav-team").hidden','employee workspace');
-  await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
-  await evaluate('document.querySelector("#new-case").click()');
-  await wait('document.querySelector("#upload-dialog").open && document.querySelector("#upload-files").multiple','mobile intake');
-  assert.ok(await evaluate('document.documentElement.scrollWidth<=window.innerWidth+1'), 'mobile overflow');
-  console.log('PASS · Admin registration, enterprise switching, one-use invitation, employee login and mobile intake');
-  if (process.argv.includes('--live')) {
-    const file = resolve('docs/samples/generated/07-采购三单合订/采购业务合订件.pdf');
-    const {root:dom} = await call('DOM.getDocument');
-    const {nodeId} = await call('DOM.querySelector',{nodeId:dom.nodeId,selector:'#upload-files'});
-    await call('DOM.setFileInputFiles',{nodeId,files:[file]});
-    await evaluate('document.querySelector("#upload-title").value="合成演练 · 三单合订"; document.querySelector("#upload-form").requestSubmit()');
-    await wait('location.hash.includes("/case/") && !!document.querySelector("#progress-panel progress")','submitted');
-    await wait('document.querySelector("#case-status")?.textContent==="待验收"','multimodal audit', 540000);
-    assert.ok(await evaluate('document.querySelector("#report-tools").hidden'),'employee scope');
-    const detail = await evaluate('location.hash');
-    await evaluate('document.querySelector("#nav-account").click()');
-    await wait('!!document.querySelector("#account-panel details")','account');
-    await click('退出登录');
-    await wait('!!document.querySelector("#account-panel input[name=password]")','sign in');
-    if (await evaluate('!!document.querySelector("#account input[name=name]")')) await click('已有账号，去登录');
-    await entry({login:'ui.owner',password});
-    await wait('location.hash.endsWith("/desk")','reviewer login');
-    await evaluate('location.hash='+JSON.stringify(detail));
-    await wait('!document.querySelector("#report-tools").hidden && !!document.querySelector("#case-panel .panel")','reviewer report');
-    const path = await evaluate('location.hash.slice(1).split("/")');
-    const report = await evaluate('fetch("/api/w/'+path[1]+'/cases/'+path[3]+'/reports/1").then(r=>r.json())');
-    console.log(JSON.stringify({verdict:report.report.result.verdict,pages:report.report.graph.nodes.filter(n=>n.type==='page').length,
-      findings:report.report.findings.length, calculations:report.report.findings.flatMap(f=>f.calculations||[]).length}));
-    if (report.report.result.verdict !== 'pass') {
-      console.log(JSON.stringify({gaps:report.report.graph.gaps, pending:report.report.graph.facts.filter(f=>!['anchored','confirmed'].includes(f.status)).map(f=>[f.page,f.field,f.status]), rules:report.report.findings.filter(f=>f.status!=='ok').map(f=>[f.rule,f.detail])}));
-      throw new Error('Golden procurement packet needs review');
+  if (sampleDesk) {
+    await wait('!!document.querySelector(".case-link")','seeded workbench');
+    for (const width of [1440,1024,820,768,390,320]) {
+      await call('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      const layout = await evaluate('({width:innerWidth,content:document.documentElement.scrollWidth,brand:document.querySelector(".brand").getBoundingClientRect().right,rail:document.querySelector(".bar").getBoundingClientRect().right})');
+      assert.ok(layout.content<=layout.width+1 && layout.brand<=layout.rail+1,'workbench layout at '+width);
     }
-    const calcCount = report.report.findings.flatMap(f=>f.calculations || []).length;
-    assert.ok(calcCount >= 3, 'operand-linked audit');
-    await evaluate('const detailEl = document.querySelector("#case-panel .formula .ref"); for (let a=detailEl.parentElement; a; a=a.parentElement) if(a.tagName==="DETAILS") a.open=true; detailEl.click()');
-    await wait('document.querySelector("#page-dialog").open && !!document.querySelector(".evidence-row.located")','operand citation');
-    await evaluate('document.querySelector("#page-dialog").close()');
-    await click('填写验收意见');
-    await evaluate('document.querySelector("#review-decision").value="approve";document.querySelector("#review-note").value="已核合成演练三份原页及金额复算。";document.querySelector("#review-form").requestSubmit()');
-    await wait('document.querySelector("#case-status").textContent==="已归档"','auditor signoff');
-    const bundleUrl = '/api/w/'+path[1]+'/cases/'+path[3]+'/reports/1/bundle';
-    const b64 = await evaluate('fetch('+JSON.stringify(bundleUrl)+').then(r=>r.blob()).then(b=>new Promise(res=>{const f=new FileReader(); f.onload=()=>res(f.result.split(",")[1]);f.readAsDataURL(b)}))');
-    const zip = join(scratch,'signed.zip');
-    await writeFile(zip,Buffer.from(b64,'base64'));
-    console.log(execFileSync(process.env.AUDIT_PYTHON || 'server/.venv/bin/python',['server/verify.py',zip],{encoding:'utf8'}).trim());
-    await evaluate('document.querySelector("#nav-library").click()');
-    await wait('!document.querySelector("#library").hidden','evidence library');
-    await evaluate('document.querySelector("#library-query").value="YL-FP-071";document.querySelector("#library-form").requestSubmit()');
-    await wait('!!document.querySelector(".source-jump")','indexed invoice number');
-    await evaluate('document.querySelector(".source-jump").click()');
-    await wait('document.querySelector("#page-dialog").open && !!document.querySelector(".evidence-row.located") && location.hash.includes("rev=1")','source opened on its indexed revision');
-    console.log('PASS · Employee upload, live audit, operand citation, signoff, offline replay and cross-case source retrieval');
+    await evaluate('const search=document.querySelector("#case-search");search.value="收款账户变更与超付";search.dispatchEvent(new Event("input"))');
+    await wait('document.querySelectorAll(".case-link").length===1 && document.querySelector(".case-link").textContent.includes("超付")','case search');
+    const permanent = await evaluate('document.querySelector(".case-link").href');
+    await call('Page.navigate',{url:permanent});
+    await wait('document.querySelector("#case-title")?.textContent.includes("超付") && !!document.querySelector(".formula")','direct paper URL');
+    await evaluate('const amount=document.querySelector(".formula .ref");for(let p=amount;p;p=p.parentElement) if(p.tagName==="DETAILS") p.open=true; amount.click()');
+    await wait('document.querySelector("#page-dialog").open && !!document.querySelector(".located")','mobile operand source');
+    await evaluate('document.querySelector("#page-dialog").close();document.querySelector("#nav-library").click()');
+    await wait('!document.querySelector("#library").hidden','evidence search');
+    await evaluate('document.querySelector("#library-query").value="YL-BANK-092";document.querySelector("#library-form").requestSubmit()');
+    await wait('!!document.querySelector(".source-jump")','evidence hit');
+    const cited = await evaluate('document.querySelector(".source-jump").href');
+    await call('Page.navigate',{url:cited});
+    await wait('document.querySelector("#page-dialog")?.open && !!document.querySelector(".located")','permanent revision and fact URL');
+    console.log('PASS · Six viewports from 320 to 1440 px, live inbox search, permanent case and exact revision/source links');
+  } else {
+    await wait('document.querySelector("#account input[name=password]") !== null', 'login');
+    await click('创建企业账号');
+    const password = 'synthetic-ui-only-123';
+    await entry({workspace:'合成演练 · 青岚商贸', name:'林审计', login:'ui.owner',password});
+    await wait('!!document.querySelector("#nav-team")?.getClientRects().length && location.hash.endsWith("/desk")','admin workspace');
+    const first = await evaluate('location.hash');
+    await click('企业成员');
+    await wait('!!document.querySelector("#team form select")','team');
+    await click('生成邀请链接');
+    const invite = await wait('document.querySelector("#team input[readonly]")?.value','invitation');
+    await evaluate('document.querySelector("#nav-account").click()');
+    await wait('document.querySelector("#account-panel details") !== null','account switcher');
+    await evaluate('document.querySelector("#account-panel details").open=true; const org=document.querySelector("#account-panel input[name=name]"); org.value="合成演练 · 乙企业"; org.form.requestSubmit()');
+    await wait('location.hash.endsWith("/desk") && location.hash!=='+JSON.stringify(first),'second enterprise');
+    await evaluate('document.querySelector("#nav-account").click()');
+    await wait('document.querySelectorAll("#account-panel .line a").length===2','two companies');
+    await click('退出登录');
+    await wait('!!document.querySelector("#account-panel input[name=password]")','logout');
+    await call('Page.navigate',{url:invite});
+    await wait('document.querySelector("#account-title")?.textContent==="加入企业"','invited account');
+    if (!await evaluate('!!document.querySelector("#account input[name=name]")')) await click('创建账号并接受邀请');
+    await entry({name:'余经办',login:'ui.employee',password});
+    await wait('location.hash==='+JSON.stringify(first)+' && !document.querySelector("#desk").hidden && document.querySelector("#nav-team").hidden','employee workspace');
+    await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+    await evaluate('document.querySelector("#new-case").click()');
+    await wait('document.querySelector("#upload-dialog").open && document.querySelector("#upload-files").multiple','mobile intake');
+    assert.ok(await evaluate('document.documentElement.scrollWidth<=window.innerWidth+1'), 'mobile overflow');
+    console.log('PASS · Admin registration, enterprise switching, one-use invitation, employee login and mobile intake');
+    if (process.argv.includes('--live')) {
+      const file = resolve('docs/samples/generated/07-采购三单合订/采购业务合订件.pdf');
+      const {root:dom} = await call('DOM.getDocument');
+      const {nodeId} = await call('DOM.querySelector',{nodeId:dom.nodeId,selector:'#upload-files'});
+      await call('DOM.setFileInputFiles',{nodeId,files:[file]});
+      await evaluate('document.querySelector("#upload-title").value="合成演练 · 三单合订"; document.querySelector("#upload-form").requestSubmit()');
+      await wait('location.hash.includes("/case/") && !!document.querySelector("#progress-panel progress")','submitted');
+      await wait('document.querySelector("#case-status")?.textContent==="待验收"','multimodal audit', 540000);
+      assert.ok(await evaluate('document.querySelector("#report-tools").hidden'),'employee scope');
+      const detail = await evaluate('location.hash');
+      await evaluate('document.querySelector("#nav-account").click()');
+      await wait('!!document.querySelector("#account-panel details")','account');
+      await click('退出登录');
+      await wait('!!document.querySelector("#account-panel input[name=password]")','sign in');
+      if (await evaluate('!!document.querySelector("#account input[name=name]")')) await click('已有账号，去登录');
+      await entry({login:'ui.owner',password});
+      await wait('location.hash.endsWith("/desk")','reviewer login');
+      await evaluate('location.hash='+JSON.stringify(detail));
+      await wait('!document.querySelector("#report-tools").hidden && !!document.querySelector("#case-panel .panel")','reviewer report');
+      const path = await evaluate('location.hash.slice(1).split("/")');
+      const report = await evaluate('fetch("/api/w/'+path[1]+'/cases/'+path[3]+'/reports/1").then(r=>r.json())');
+      console.log(JSON.stringify({verdict:report.report.result.verdict,pages:report.report.graph.nodes.filter(n=>n.type==='page').length,
+        findings:report.report.findings.length, calculations:report.report.findings.flatMap(f=>f.calculations||[]).length}));
+      if (report.report.result.verdict !== 'pass') {
+        console.log(JSON.stringify({gaps:report.report.graph.gaps, pending:report.report.graph.facts.filter(f=>!['anchored','confirmed'].includes(f.status)).map(f=>[f.page,f.field,f.status]), rules:report.report.findings.filter(f=>f.status!=='ok').map(f=>[f.rule,f.detail])}));
+        throw new Error('Golden procurement packet needs review');
+      }
+      const calcCount = report.report.findings.flatMap(f=>f.calculations || []).length;
+      assert.ok(calcCount >= 3, 'operand-linked audit');
+      await evaluate('const detailEl = document.querySelector("#case-panel .formula .ref"); for (let a=detailEl.parentElement; a; a=a.parentElement) if(a.tagName==="DETAILS") a.open=true; detailEl.click()');
+      await wait('document.querySelector("#page-dialog").open && !!document.querySelector(".evidence-row.located")','operand citation');
+      await evaluate('document.querySelector("#page-dialog").close()');
+      await click('填写验收意见');
+      await evaluate('document.querySelector("#review-decision").value="approve";document.querySelector("#review-note").value="已核合成演练三份原页及金额复算。";document.querySelector("#review-form").requestSubmit()');
+      await wait('document.querySelector("#case-status").textContent==="已归档"','auditor signoff');
+      const bundleUrl = '/api/w/'+path[1]+'/cases/'+path[3]+'/reports/1/bundle';
+      const b64 = await evaluate('fetch('+JSON.stringify(bundleUrl)+').then(r=>r.blob()).then(b=>new Promise(res=>{const f=new FileReader(); f.onload=()=>res(f.result.split(",")[1]);f.readAsDataURL(b)}))');
+      const zip = join(scratch,'signed.zip');
+      await writeFile(zip,Buffer.from(b64,'base64'));
+      console.log(execFileSync(process.env.AUDIT_PYTHON || 'server/.venv/bin/python',['server/verify.py','--rules',zip],{encoding:'utf8'}).trim());
+      await evaluate('document.querySelector("#nav-library").click()');
+      await wait('!document.querySelector("#library").hidden','evidence library');
+      await evaluate('document.querySelector("#library-query").value="YL-FP-071";document.querySelector("#library-form").requestSubmit()');
+      await wait('!!document.querySelector(".source-jump")','indexed invoice number');
+      await evaluate('document.querySelector(".source-jump").click()');
+      await wait('document.querySelector("#page-dialog").open && !!document.querySelector(".evidence-row.located") && location.hash.includes("rev=1")','source opened on its indexed revision');
+      await evaluate('document.querySelector("#page-dialog").close(); document.querySelector("#nav-team").click()');
+      await wait('document.querySelector(".usage-list")','workspace usage');
+      const usage = await evaluate('fetch("/api/workspaces/'+path[1]+'/team").then(r=>r.json()).then(d=>d.usage)');
+      assert.ok(usage.requests >= 4 && usage.input_tokens > 0 && usage.output_tokens > 0,'provider usage recorded');
+      console.log(JSON.stringify({requests:usage.requests,input_tokens:usage.input_tokens,output_tokens:usage.output_tokens}));
+      console.log('PASS · Employee upload, live audit, operand citation, signoff, offline replay and cross-case source retrieval');
+    }
   }
   assert.deepEqual(faults,[]);
 } finally {

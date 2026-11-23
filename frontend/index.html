@@ -54,7 +54,7 @@
           <button type="button" data-filter="ready" aria-pressed="false">待验收</button>
           <button type="button" data-filter="closed" aria-pressed="false">已归档</button>
           <button type="button" data-filter="failed" aria-pressed="false" hidden>已中断</button>
-        </div><div class="selects"><label>审计范围<select id="desk-profile" aria-label="审计范围"><option value="">全部范围</option><option value="cn-procurement-full-settlement/v1">采购与付款</option><option value="cn-travel-reimbursement/v1">差旅报销</option></select></label>
+        </div><div class="selects"><label>审计范围<select id="desk-profile" aria-label="审计范围"><option value="">全部范围</option><option value="cn-procurement-full-settlement/v1">采购与付款</option><option value="cn-travel-reimbursement/v1">差旅报销</option><option value="cn-bank-contract-payment/v1">付款回单核对</option></select></label>
           <label>排序<select id="desk-sort" aria-label="排序"><option value="updated">最近更新</option><option value="created">最近提交</option></select></label></div>
         </div>
         <div id="case-list" aria-live="polite"></div>
@@ -87,7 +87,7 @@
     <form id="upload-form">
       <div class="dialog-head"><h2>新建审计</h2><button class="plain" type="button" data-close>关闭</button></div>
       <label>任务名称<input id="upload-title" required maxlength="100" placeholder="例如：档案柜采购 · 十月验收"></label>
-      <label>审计范围<select id="upload-profile"><option value="cn-procurement-full-settlement/v1">采购与付款 · 合同、发票及验收</option><option value="cn-travel-reimbursement/v1">差旅报销 · 全凭票报销</option></select></label>
+      <label>审计范围<select id="upload-profile"><option value="cn-procurement-full-settlement/v1">采购与付款 · 合同、发票及验收</option><option value="cn-travel-reimbursement/v1">差旅报销 · 全凭票报销</option><option value="cn-bank-contract-payment/v1">付款回单核对 · 合同及银行回单</option></select></label>
       <label>待审资料<input id="upload-files" type="file" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,.tif,.tiff,.heic,.heif" required></label>
       <p class="muted">可一次选择多份 PDF、Word 或图片。单份 16 MiB，整案最多 12 份、48 MiB、60 页。</p>
       <ul id="chosen-files" class="compact"></ul>

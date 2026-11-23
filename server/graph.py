@@ -7,15 +7,20 @@ from model import FIELDS
 
 
 KINDS = {"invoice": "发票", "contract": "合同", "acceptance": "验收单"}
-TITLE_FIELDS = {**KINDS, "claim": "报销"}
+TITLE_FIELDS = {**KINDS, "claim": "报销", "bank_receipt":"回单"}
 PRINTED_TITLES = {label: field for field, labels in {
     "invoice": ("发票", "采购发票", "住宿服务发票", "增值税专用发票", "增值税普通发票", "增值税电子普通发票",
                 "电子发票(普通发票)", "电子发票(增值税专用发票)"),
     "contract": ("采购合同", "设备采购合同", "购销合同", "采购协议"),
     "acceptance": ("验收单", "到货验收单", "验收报告", "采购验收单", "设备验收单"),
+    "bank_receipt": ("银行付款回单", "银行转账回单", "电子银行回单", "银行电子回单", "转账回单"),
     "claim": ("报销单", "差旅报销单", "差旅费报销单", "费用报销单"),
 }.items() for label in labels}
 LABELS = {
+    "payer": ("付款户名","付款人名称","付款人户名"), "payee": ("收款户名","收款人名称","收款人户名"),
+    "contract_account": ("约定收款账号","合同收款账号"), "payee_account": ("收款账号","收款人账号"),
+    "transfer_amount": ("付款金额","转账金额","交易金额"), "paid_on": ("付款日期","转账日期","交易日期"),
+    "transfer_ref": ("交易流水号","银行流水号"), "transfer_status": ("交易状态","转账状态"),
     "buyer": ("采购方", "购方", "购买方", "甲方", "买方", "需方", "采购单位", "验收单位"),
     "seller": ("供应方", "销方", "销售方", "乙方", "卖方", "供方", "供应商", "供货单位"),
     "contract_id": ("合同编号", "合同号"), "invoice_id": ("发票号码", "票据号码", "发票号"),
@@ -37,7 +42,8 @@ LABELS = {
 }
 SCALAR = {"contract_id", "invoice_id", "net", "tax", "total", "buyer", "seller", "signed_on",
           "accepted_on", "issued_on", "acceptance_result", "subject", "currency", "unit", "payment_term",
-          "claim_total", "traveler", "trip_start", "trip_end", "service_on", "claim_ref"}
+          "claim_total", "traveler", "trip_start", "trip_end", "service_on", "claim_ref","payer","payee","contract_account","payee_account",
+          "transfer_amount","paid_on","transfer_ref","transfer_status"}
 FIELD_START = {field: re.compile(r"^(?:" + "|".join(sorted(LABELS[field], key=len, reverse=True)) + r")[:(（]")
                for field in SCALAR}
 TERMS = re.compile(r"分期|预付|质保金|保留款|分批|定金|订金|尾款|部分交付|红字|冲销|红冲|变更单|补充协议")
@@ -77,7 +83,7 @@ def labelled(field, value, quote):
         if prefix:
             continue
         suffix = suffix.strip(":").rstrip("。;；")
-        if field in {"total", "net", "tax", "claim_total"}:
+        if field in {"total", "net", "tax", "claim_total","transfer_amount"}:
             suffix = re.sub(r"^(?:\(小写\)|小写|合计|:|人民币|CNY|[￥¥])+", "", suffix)
             suffix = suffix.removesuffix("元")
         if suffix == value:
@@ -154,11 +160,12 @@ def build_graph(docs, pages, attestations, amendments=()):
                                  "line":index, "quote":line, "title_hint":title_hint})
             if TERMS.search(compact(line)):
                 cautions.append({"page_id": page_id, "line": index, "quote": line, "doc": doc})
-            if layer["type"] == "text" and any(pattern.match(compact(line)) and not any(
-                    item["field"] == field and compact(item["quote"]) == compact(line) for item in observations.values())
-                    for field, pattern in FIELD_START.items()):
-                gaps.append({"doc": doc, "page": number, "id": page_id, "quality": "uncovered",
-                             "line": index, "quote": line})
+            if layer["type"] == "text":
+                missing = [field for field, pattern in FIELD_START.items() if pattern.match(compact(line)) and not any(
+                    item["field"] == field and compact(item["quote"]) == compact(line) for item in observations.values())]
+                if missing:
+                    gaps.append({"doc": doc, "page": number, "id": page_id, "quality": "uncovered", "line": index,
+                                 "quote": line, "field": missing[0] if len(missing) == 1 else None})
         for fact_id, item in observations.items():
             field, value, quote = item["field"], item["value"].strip(), item["quote"].strip()
             origin = fact_id.rsplit("/", 1)[1]
@@ -199,7 +206,8 @@ def build_graph(docs, pages, attestations, amendments=()):
             if field in TITLE_FIELDS:
                 if doc not in by_kind[field]:
                     by_kind[field].append(doc)
-            kind = {"buyer": "party", "seller": "party", "contract_id": "contract_number",
+            kind = {"buyer": "party", "seller": "party", "payer":"party", "payee":"party",
+                    "payee_account":"bank_account", "contract_account":"bank_account", "contract_id": "contract_number",
                     "invoice_id": "invoice_number", "claim_ref": "invoice_number"}.get(field, field)
             target = entity_id(kind, value)
             nodes[target] = {"id": target, "type": kind, "label": value}

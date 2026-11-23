@@ -11,10 +11,24 @@ const Team = {
     return match ? {id:match[1], page:match[2] || 'desk',params} : {id:null,page:raw || 'desk',params};
   },
   hash(page) { return '#' + (this.current ? 'w/' + this.current.id + '/' : '') + page; },
+  paperLink(label, caseId, className, params) {
+    const suffix = params ? '?'+params : '';
+    const path = (this.current ? '/w/'+this.current.id : '')+'/workpaper/'+caseId+suffix;
+    const target = this.hash('case/'+caseId+suffix);
+    const anchor = link(label,path,className);
+    anchor.addEventListener('click',event=>{
+      if (event.button===0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+        event.preventDefault(); location.hash = target;
+      }
+    });
+    return anchor;
+  },
   cases() { return (this.current ? '/api/w/' + this.current.id : '/api') + '/cases'; },
   async load() { this.session = await api('/api/session'); return this.session; },
   syncNav() {
     const signed = this.session.user;
+    const guest = !signed && this.session.mode === 'saas';
+    $('#nav-desk').hidden = guest;
     $('#nav-account').textContent = this.current?.name || signed?.name || '企业登录';
     $('#nav-team').hidden = this.current?.role !== 'admin';
     $('#nav-library').hidden = this.current?.role === 'employee' || (!signed && this.session.mode === 'saas');
@@ -25,8 +39,9 @@ const Team = {
     $('#nav-team').href = this.hash('team');
     $('#nav-desk').href = this.hash('desk');
     $('#nav-rules').href = this.hash('rules');
-    $('.brand').href = this.hash('desk');
-    for (const back of document.querySelectorAll('.back')) back.href = this.hash('desk');
+    $('.brand').href = guest ? '#account' : this.hash('desk');
+    for (const back of document.querySelectorAll('.back')) back.href = guest ? '#account' : this.hash('desk');
+    $('#rules .back').textContent = guest ? '返回企业登录' : '返回工作台';
   },
   field(form, title, key, options = {}) {
     const field = el('input');

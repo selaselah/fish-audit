@@ -28,23 +28,23 @@ def fields(kind, contract, total, tax="1,300.00", net="10,000.00", number="YL-FP
             ("采购标的", "档案柜"), ("币种", "人民币"), ("金额单位", "元"), ("含税总额", total)] + values[kind]
 
 
-def draw_pdf_page(printout, title, rows, duplicate=False):
-    printout.setFont("STSong-Light", 14)
+def draw_pdf_page(printout, title, rows, duplicate=False, font="STSong-Light"):
+    printout.setFont(font, 14)
     printout.drawString(48, 780, WATERMARK)
-    printout.setFont("STSong-Light", 27)
+    printout.setFont(font, 27)
     printout.drawString(48, 709, title)
     printout.line(48, 690, 540, 690)
-    printout.setFont("STSong-Light", 15)
+    printout.setFont(font, 15)
     for index, (label, value) in enumerate(rows):
         printout.drawString(48, 649 - 34 * index, f"{label}：{value}")
     if duplicate:
         printout.drawString(48, 166, "附件为提交人整理的副本。")
 
 
-def pdf(path, title, rows, duplicate=False):
+def pdf(path, title, rows, duplicate=False, font="STSong-Light"):
     printout = canvas.Canvas(str(path), pagesize=(595, 842), invariant=1)
     printout.setTitle(title)
-    draw_pdf_page(printout, title, rows, duplicate)
+    draw_pdf_page(printout, title, rows, duplicate, font)
     printout.save()
 
 

@@ -17,9 +17,10 @@ MAX_PAGES = 60
 FORMATS = {".pdf", ".docx", ".doc", ".png", ".jpg", ".jpeg", ".webp", ".tif", ".tiff", ".heic", ".heif"}
 PROFILE = "cn-procurement-full-settlement/v1"
 TRAVEL = "cn-travel-reimbursement/v1"
-PROFILES = {PROFILE: "采购与付款", TRAVEL: "差旅报销"}
-RULE_VERSION = "2026.11.23.8"
-PROMPT_VERSION = "2026.11.23.5"
+BANK = "cn-bank-contract-payment/v1"
+PROFILES = {PROFILE: "采购与付款", TRAVEL: "差旅报销", BANK: "付款回单核对"}
+RULE_VERSION = "2026.11.23.9"
+PROMPT_VERSION = "2026.11.23.6"
 RECHECK_EVIDENCE = os.getenv("OPENAI_RECHECK_EVIDENCE", "1").strip().lower() in {"1", "true", "yes"}
 
 

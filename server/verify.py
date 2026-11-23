@@ -5,7 +5,7 @@ import json
 import zipfile
 from pathlib import Path
 
-from calculations import CalculationEvidence, FORMAT
+from calculations import CalculationEvidence, SUPPORTED
 from protocol import canonical, response_request
 
 
@@ -34,7 +34,26 @@ def verify_request(trace, instructions, page_image=None):
     require(sha(body) == trace["request_sha256"], "模型请求与归档的输入、指令或输出约束不符")
 
 
-def verify(source):
+def replay_rules(report):
+    """Only import the operator's local rule implementation after checking its recorded version."""
+    local = Path(__file__).resolve().parent
+    digests = report["policy"].get("code_sha256", {})
+    modules = ("config.py","controls.py","graph.py","calculations.py","model.py","policy.py","transfers.py")
+    for name in modules:
+        require(digests.get(name) == sha((local / name).read_bytes()), "严格复算需要与底稿一致的本机规则版本："+name)
+    from controls import VERSION, additional, conclusion, execute
+    graph = report["graph"]
+    policy = report["policy"]
+    require(all(policy.get(key) == VERSION[key] for key in ("version","sources","rule_sources")), "制度与程序目录不符")
+    require(graph.get("profile") == policy["profile"], "程序执行范围不符")
+    findings = execute(graph, policy["profile"])
+    proposals = report["calls"]["expert"]["output"]["followups"]
+    findings += additional(graph, [p for p in proposals if p["procedure"] != "no_trigger"])
+    require(findings == report["findings"], "用归档图谱复算的程序结果与已存底稿不符")
+    require(conclusion(findings) == report["result"], "审计建议与复算结果不符")
+
+
+def verify(source, strict_rules=False):
     with zipfile.ZipFile(source) as bundle:
         names = bundle.namelist()
         require(len(names) == len(set(names)), "包内出现同名文件")
@@ -110,19 +129,22 @@ def verify(source):
         for finding in report["findings"]:
             require(set(finding["evidence"]) <= nodes.keys(), "程序引用不存在")
         if "calculations" in report["policy"]:
-            require(report["policy"]["calculations"] == FORMAT, "未知的金额复算格式")
+            require(report["policy"]["calculations"] in SUPPORTED, "未知的金额复算格式")
             CalculationEvidence(graph).verify(report["findings"])
         for checksum, instruction in report["calls"].get("instructions", {}).items():
             require(sha(instruction.encode()) == checksum, "提示词摘要不符")
+        if strict_rules:
+            replay_rules(report)
         return case_id, revision, len(entries)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="离线核对 Fish Audit 导出包的文件与引用。")
     parser.add_argument("bundle", type=Path)
+    parser.add_argument("--rules", action="store_true", help="使用与底稿一致的本机程序，从图谱完整复算规则、追加程序及总建议")
     args = parser.parse_args()
     try:
-        case_id, revision, files = verify(args.bundle)
+        case_id, revision, files = verify(args.bundle, args.rules)
         print(f"校验成功：{case_id} R{revision}，{files} 个文件。")
     except (KeyError, TypeError, ValueError, OSError, zipfile.BadZipFile) as error:
         parser.exit(1, f"校验失败：{error}\n")

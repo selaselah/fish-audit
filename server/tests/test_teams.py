@@ -69,6 +69,9 @@ class EnterpriseFlow(unittest.TestCase):
             self.assertEqual(other.get("/api/w/"+b+"/cases/"+emp_case+tail).status_code,404)
         self.assertEqual(employee.get("/api/w/"+a+"/cases/"+administrator_case).status_code,404)
         self.assertEqual(employee.get("/api/w/"+a+"/cases/"+emp_case+"/reports/1").status_code,403)
+        source_link = "/w/"+a+"/workpaper/"+emp_case+"?rev=1&fact=d01%2Fp1%2Ff1"
+        self.assertEqual(admin.get(source_link).headers["Location"],"/#w/"+a+"/case/"+emp_case+"?rev=1&fact=d01%2Fp1%2Ff1")
+        self.assertEqual(admin.get("/workpaper/"+emp_case).status_code,404)
         base="/api/w/"+a+"/cases/"+emp_case
         payload={"rev":1,"decision":"confirm","facts":["d01/p1/f1","d01/p1/f2"],"note":"核对演练原图","reviewer":"客户端姓名"}
         self.assertEqual(employee.post(base+"/attest",headers=eh,json=payload).status_code,403)

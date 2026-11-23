@@ -3,13 +3,15 @@ from collections import defaultdict
 from datetime import date
 from calculations import CalculationEvidence, in_yuan, money
 
-from config import PROFILE, RULE_VERSION, TRAVEL
+from config import BANK, PROFILE, RULE_VERSION, TRAVEL
 from graph import KINDS, audit_documents, compact, entity_id
 from model import FIELDS, SIGNALS, expert_candidates
 from policy import ACCOUNTING, MAPPING, SOURCES
+from transfers import RULES as TRANSFER_RULES, check_transfers
 
 
 CATALOG = {
+    **TRANSFER_RULES,
     "E01": ("原件与证据覆盖", "每页均可辨读，关键字段具备可定位文字或人工核图记录。"),
     "P01": ("采购资料完整性", "单合同、一次全额验收结算范围内需要一份合同、一份发票和一份验收资料。"),
     "P02": ("合同编号关联", "沿各份资料的合同编号关系，验证三份资料是否指向同一合同。"),
@@ -94,6 +96,9 @@ def execute(graph, profile=PROFILE):
     record("E01", "missing" if gaps or unverified else "ok",
            f"共 {len(facts)} 条提取记录，{len(unverified)} 条待核或有异议，{len(set(gaps))} 页存在辨读或覆盖缺口。",
            gaps + ids(unverified), doc_ids)
+    if profile == BANK:
+        check_transfers(graph, docs, values, record, parsed_date)
+        return findings
     numbers = defaultdict(list)
     amounts_valid = {}
     for doc in kinds.get("invoice", []):
@@ -133,7 +138,7 @@ def execute(graph, profile=PROFILE):
     titles = [fact for fact in facts.values() if fact["field"] in KINDS and fact["status"] in ("anchored", "confirmed")]
     assignment = [doc for kind in KINDS for doc in kinds.get(kind, [])]
     complete = (all(len(kinds.get(kind, [])) == 1 for kind in KINDS) and
-                len(assignment) == len(set(assignment)) and set(assignment) == set(doc_ids) and not kinds.get("claim"))
+                len(assignment) == len(set(assignment)) and set(assignment) == set(doc_ids) and not (kinds.get("claim") or kinds.get("bank_receipt")))
     count_text = "、".join(f"{label} {len(kinds.get(kind, []))} 份" for kind, label in KINDS.items())
     record("P01", "ok" if complete else "missing", f"按已核标题识别到{count_text}。"
            + ("" if complete else "请核对缺件、多单或未识别资料。"), ids(titles), doc_ids)
@@ -254,7 +259,7 @@ def check_travel(graph, linked, numbers, values, record):
     docs = [doc["id"] for doc in audit_documents(graph)]
     titles = [fact for fact in graph["facts"] if fact["field"] in ("claim", "invoice") and fact["status"] in ("anchored", "confirmed")]
     valid = len(claims) == 1 and bool(invoices) and len(set(claims + invoices)) == len(docs) == len(claims+invoices)
-    valid = valid and not (kinds.get("contract") or kinds.get("acceptance"))
+    valid = valid and not (kinds.get("contract") or kinds.get("acceptance") or kinds.get("bank_receipt"))
     record("T01", "ok" if valid else "missing", f"已识别报销申请 {len(claims)} 份、发票 {len(invoices)} 份，本案共核对 {len(docs)} 份单据范围。",
            ids(titles), docs)
     if not valid:

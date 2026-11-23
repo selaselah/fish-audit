@@ -25,6 +25,9 @@ FIELDS = {
     "claim": "报销单标题", "claim_total": "申请报销金额", "traveler": "出差人员",
     "trip_start": "出差开始日期", "trip_end": "出差结束日期", "service_on": "费用发生日期",
     "claim_ref": "随附发票号码",
+    "bank_receipt":"银行回单标题", "payer":"付款户名", "payee":"收款户名", "contract_account":"合同约定收款账号",
+    "payee_account":"实际收款账号", "transfer_amount":"回单付款金额", "paid_on":"付款日期",
+    "transfer_ref":"交易流水号", "transfer_status":"回单交易状态",
 }
 SIGNALS = {
     "installments": ("payment_term", "核对分期、预付款或质保金与本次结算的对应关系。"),
@@ -61,6 +64,7 @@ EXTRACT = """你为中国大陆采购与费用报销审计逐页抄录原始资�
 quality：主体信息可读则 readable；有裁切、涂抹、模糊或关键文字不可读则 partial；无法辨认则 unreadable。
 facts 只收录明确的记载。quote 逐字抄录同一位置连续的字段标签及值。保留标点、币种、单位和格式，不拼接相隔的内容。
 value 必须是 quote 的连续子串。每页如有明确印刷的单据抬头，先单列一条标题事实，完整抄下抬头本身，包括没有“标题”标签的居中大字。发票、合同、验收单的标题分别用 invoice/contract/acceptance。
+银行付款回单/转账回单的明确抬头归 bank_receipt。银行回单上的付款户名/收款户名是 payer/payee；完整收款账号是 payee_account，付款金额是 transfer_amount，交易流水号、交易状态、付款日期分别是 transfer_ref/transfer_status/paid_on。采购合同上标明的约定收款账号用 contract_account。照抄账户的前导零与掩码，不推测隐藏位。不要把交易状态、流水号或金额解释成银行验真结果。
 contract_id 是资料明确记载的合同编号（包括在发票、验收单中的合同编号）；invoice_id 仅为发票号码。
 buyer/seller 抄全称。total 是整张单据的含税总额，net/tax 是整票不含税合计与税额合计；禁止以单价、行金额、执行进度代替合计。
 金额 value 抄印刷的小写数字（含小数、千位符）；quote 保留量纲。currency 需看到确切币种（人民币、CNY等），不要从地域推断。
