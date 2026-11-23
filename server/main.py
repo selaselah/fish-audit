@@ -30,6 +30,7 @@ from jobs import Worker
 from model import FIELDS
 from review import review_text
 from storage import Store, encode
+from workbench import inbox, search_evidence
 
 
 def text_field(value, name, limit):
@@ -135,7 +136,7 @@ def create_app(store, worker):
         if case_id:
             owner = g.actor["id"] if g.role == "employee" else None
             store.require_case(case_id, g.workspace, owner)
-        if g.role == "employee" and action not in {"cases","submit","detail","original","page_image"}:
+        if g.role == "employee" and action not in {"cases","ledger","submit","detail","original","page_image"}:
             raise CaseError("此操作需要审计人员或管理员权限。", 403)
 
     def signer(data):
@@ -164,7 +165,7 @@ def create_app(store, worker):
 
     @app.get("/<filename>")
     def asset(filename):
-        if filename not in {"app.js", "team.js", "style.css"}:
+        if filename not in {"app.js", "team.js", "desk.js", "style.css"}:
             raise CaseError("资源不存在。", 404)
         return send_file(FRONTEND / filename)
 
@@ -192,6 +193,14 @@ def create_app(store, worker):
     @business.get("/cases")
     def cases():
         return jsonify(cases=store.summary(g.workspace, g.actor["id"] if g.role == "employee" else None))
+
+    @business.get("/inbox")
+    def ledger():
+        return jsonify(inbox(store, g.workspace, g.actor["id"] if g.role == "employee" else None, request.args))
+
+    @business.get("/evidence")
+    def library():
+        return jsonify(search_evidence(store, g.workspace, request.args))
 
     @business.post("/cases")
     def submit():

@@ -97,7 +97,7 @@ try {
   await entry({name:'余经办',login:'ui.employee',password});
   await wait('location.hash==='+JSON.stringify(first)+' && !document.querySelector("#desk").hidden && document.querySelector("#nav-team").hidden','employee workspace');
   await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
-  await click('新建审计');
+  await evaluate('document.querySelector("#new-case").click()');
   await wait('document.querySelector("#upload-dialog").open && document.querySelector("#upload-files").multiple','mobile intake');
   assert.ok(await evaluate('document.documentElement.scrollWidth<=window.innerWidth+1'), 'mobile overflow');
   console.log('PASS · Admin registration, enterprise switching, one-use invitation, employee login and mobile intake');
@@ -141,7 +141,13 @@ try {
     const zip = join(scratch,'signed.zip');
     await writeFile(zip,Buffer.from(b64,'base64'));
     console.log(execFileSync(process.env.AUDIT_PYTHON || 'server/.venv/bin/python',['server/verify.py',zip],{encoding:'utf8'}).trim());
-    console.log('PASS · Employee upload, live multimodal audit, operand citation, auditor signoff and offline replay');
+    await evaluate('document.querySelector("#nav-library").click()');
+    await wait('!document.querySelector("#library").hidden','evidence library');
+    await evaluate('document.querySelector("#library-query").value="YL-FP-071";document.querySelector("#library-form").requestSubmit()');
+    await wait('!!document.querySelector(".source-jump")','indexed invoice number');
+    await evaluate('document.querySelector(".source-jump").click()');
+    await wait('document.querySelector("#page-dialog").open && !!document.querySelector(".evidence-row.located") && location.hash.includes("rev=1")','source opened on its indexed revision');
+    console.log('PASS · Employee upload, live audit, operand citation, signoff, offline replay and cross-case source retrieval');
   }
   assert.deepEqual(faults,[]);
 } finally {

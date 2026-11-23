@@ -5,9 +5,10 @@ const Team = {
   authMode: 'login',
   roles: {admin:'管理员', auditor:'审计人员', employee:'员工'},
   route() {
-    const raw = location.hash.slice(1);
+    const [raw, query] = location.hash.slice(1).split("?");
+    const params = new URLSearchParams(query);
     const match = /^w\/([a-f0-9]{32})(?:\/(.*))?$/.exec(raw);
-    return match ? {id:match[1], page:match[2] || 'desk'} : {id:null,page:raw || 'desk'};
+    return match ? {id:match[1], page:match[2] || 'desk',params} : {id:null,page:raw || 'desk',params};
   },
   hash(page) { return '#' + (this.current ? 'w/' + this.current.id + '/' : '') + page; },
   cases() { return (this.current ? '/api/w/' + this.current.id : '/api') + '/cases'; },
@@ -16,6 +17,11 @@ const Team = {
     const signed = this.session.user;
     $('#nav-account').textContent = this.current?.name || signed?.name || '企业登录';
     $('#nav-team').hidden = this.current?.role !== 'admin';
+    $('#nav-library').hidden = this.current?.role === 'employee' || (!signed && this.session.mode === 'saas');
+    $('#nav-library').href = this.hash('library');
+    const name = this.current?.name || '本机工作区';
+    $('#workspace-name').textContent = name;
+    $('#library-scope').textContent = name;
     $('#nav-team').href = this.hash('team');
     $('#nav-desk').href = this.hash('desk');
     $('#nav-rules').href = this.hash('rules');
@@ -42,6 +48,7 @@ const Team = {
   },
   async logout() {
     await post('/api/auth/logout',{});
+    Desk.reset(); this.authMode = 'login'; this.freshInvite = null;
     this.session = null; this.current = null; state.bundle = null; state.detail = null; state.cases = [];
     for (const id of ['case-panel','case-list','team-panel']) $('#'+id).replaceChildren();
     location.hash = 'account'; await refresh();

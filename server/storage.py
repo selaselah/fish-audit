@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from config import CaseError, PROFILE
 from graph import compact, invoice_number_edges
+from workbench import prepare_index, project
 
 
 def stamp():
@@ -108,6 +109,7 @@ class Store:
                     db.executemany("INSERT OR REPLACE INTO invoice_index VALUES(?,?,?,?,?,?,?,?,?,?)",
                                    self.index_rows(row["id"], row["rev"], json.loads(row["content"])))
                 db.execute("PRAGMA user_version=1")
+            self.fts_enabled = prepare_index(db)
         os.chmod(self.path, 0o600)
 
     @contextmanager
@@ -227,6 +229,7 @@ class Store:
             db.executemany("INSERT OR IGNORE INTO method_sources VALUES(?,?)",
                            [(report["policy"]["code_sha256"][name], contents) for name, contents in methods.items()])
             db.execute("INSERT INTO reports VALUES(?,?,?,?,?)", (case_id, revision, now, digest, encode(report)))
+            project(db, case_id, revision, report)
             invoice_rows = self.index_rows(case_id, revision, report)
             db.executemany("INSERT INTO invoice_index VALUES(?,?,?,?,?,?,?,?,?,?)", invoice_rows)
             db.execute("""UPDATE cases SET rev=?,status='ready',stage='ready',progress=100,

@@ -42,3 +42,12 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 更正或补录时提交 `rev`、`doc`、`page`、`field`、`quote`、`value`、`region`、`reviewer`、`note`。更正须携带本页的 `target` 证据编号，补录时设为 null。`field` 取自 `GET /api/controls` 的 `fields`，`region` 为 top、middle 或 bottom。新记录与该页 SHA-256 一起保存。
 
 任务状态依次为 `queued`、`running`、`ready`（可验收）、`closed`（已归档）。`failed` 保留阶段、原因与已完成页面。同号提示既查本案已核票据，也查询本工作区运行审计时已归档的底稿。旧原型的 `POST /api/reviews` 继续支持文本审核。
+
+## 企业与工作台
+
+企业登录流程及岗位权限见[企业工作区](saas.md)。下表的业务路径可接在本机 `/api` 或登录后的 `/api/w/{企业编号}` 之后。企业请求从 `GET /api/session` 获取会话信息，所有写请求携带 `X-CSRF-Token`。
+
+| 路径 | 参数与返回 |
+| --- | --- |
+| `GET /inbox` | `q`、`profile`、`sort=updated/created`、`status=all/ready/active/attention/closed/failed`、`page`。返回 `cases`、`counts`、总数及页数 |
+| `GET /evidence` | `q`、`status=verified/pending/all`、`page`。返回本企业最新版本中命中的原文、证据编号、任务、文件、页码、核验状态及版本。需审计或管理权限 |

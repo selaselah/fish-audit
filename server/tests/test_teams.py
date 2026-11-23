@@ -83,6 +83,16 @@ class EnterpriseFlow(unittest.TestCase):
         key=entity_id("invoice_number","DEMO-537")
         self.assertEqual(self.store.prior_invoices(other_case,[key]),[])
         self.assertEqual(self.store.prior_invoices(administrator_case,[key])[0]["case_id"],emp_case)
+        ledger = "/api/w/"+a+"/inbox"
+        self.assertEqual(employee.get(ledger).json["counts"]["all"], 1)
+        self.assertEqual(admin.get(ledger+"?status=closed").json["cases"][0]["id"], emp_case)
+        self.assertEqual(other.get("/api/w/"+b+"/inbox").json["counts"]["closed"], 0)
+        search = "/api/w/"+a+"/evidence"
+        self.assertEqual(employee.get(search+"?q=DEMO").status_code, 403)
+        self.assertEqual(other.get(search+"?q=DEMO").status_code, 404)
+        hits = admin.get(search+"?q=DEMO-537").json["hits"]
+        self.assertEqual([(r["case_id"], r["rev"]) for r in hits], [(emp_case,2)])
+        self.assertEqual(other.get("/api/w/"+b+"/evidence?q=DEMO").json["hits"], [])
         self.assertEqual(self.store.summary(),[])
 
     def test_revoke_and_logout(self):

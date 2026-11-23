@@ -57,7 +57,7 @@ async function api(url, options = {}) {
   if (options.method && options.method !== 'GET' && Team.session?.csrf) headers.set('X-CSRF-Token', Team.session.csrf);
   try { response = await fetch(url, {cache: 'no-store', ...options, headers}); }
   catch {
-    $('#connection').textContent = '连接中断';
+    $('#connection').textContent = '连接中断'; $('#connection').dataset.offline='true';
     throw new Error('暂时无法连接本机审计服务。服务恢复后可查看已提交任务。');
   }
   const data = await response.json();
@@ -72,9 +72,8 @@ function post(url, body) {
 }
 function renderList() {
   const list = $('#case-list');
-  const visible = state.cases.filter(row => state.filter === 'all' || row.status === state.filter ||
-    (state.filter === 'active' && ['queued','running'].includes(row.status)));
-  const header = box('ledger-header ledger-row', ...['任务名称','处理状态','审计建议','提交时间'].map(label => el('span', label)));
+  const visible = state.cases;
+  const header = box('ledger-header ledger-row', ...['任务名称','处理状态','审计建议', $('#desk-sort').value === 'updated' ? '最近更新' : '提交时间'].map(label => el('span', label)));
   list.replaceChildren(header);
   for (const row of visible) {
     const title = link(row.title, Team.hash('case/' + row.id), 'case-link');
@@ -83,10 +82,11 @@ function renderList() {
     if (row.status === 'running') status.append(el('small', row.progress + '%', 'small'));
     const result = row.decision ? '人工' + statusName(row.decision) :
       (row.verdict ? statusName(row.verdict) : '等待结果');
-    list.append(box('ledger-row', box('', title, metadata), status, el('span', result, 'row-result'),
-      el('span', time(row.created), 'small row-date')));
+    list.append(box('ledger-row', box('case-name',el('span','',row.profile===travelProfile?'doc-icon travel':'doc-icon'),box('',title,metadata)), status,
+      box('row-result',el('span',result), ...(row.issues || row.risks ? [el('small',[(row.issues ? row.issues+' 项问题' : ''),(row.risks ? row.risks+' 项风险' : '')].filter(Boolean).join(' · '),'small')] : [])),
+      el('span', time($('#desk-sort').value==='updated' ? row.updated : row.created), 'small row-date')));
   }
-  if (!visible.length) list.append(el('p', state.filter === 'all' ? '还没有任务，选择「新建审计」上传资料。' : '此状态下暂无任务。', 'empty'));
+  if (!visible.length) list.append(el('p', state.filter === 'all' && !$('#case-search').value && !$('#desk-profile').value ? '还没有任务，选择「新建审计」上传资料。' : '当前筛选条件下没有任务。', 'empty'));
   for (const button of document.querySelectorAll('[data-filter]')) {
     button.setAttribute('aria-pressed', String(button.dataset.filter === state.filter));
   }
@@ -357,6 +357,18 @@ function renderCase() {
   progress.replaceChildren(box('panel-head', el('strong', statusName(data.stage)), el('span', data.progress + '%', 'mono')));
   const meter = el('progress'); meter.max = 100; meter.value = data.progress; meter.setAttribute('aria-label','审计任务进度');
   progress.append(meter, el('p', data.message, 'muted'));
+  if (data.status === 'queued' || data.status === 'running') {
+    const steps = ['prepare','extract','graph','controls','expert'];
+    const position = steps.indexOf(data.stage);
+    const timeline = el('ol','','stage-track');
+    timeline.setAttribute('aria-label','审计执行阶段');
+    for (const [index,key] of steps.entries()) {
+      const step = el('li', statusName(key), index < position ? 'done' : '');
+      if (index === position) step.setAttribute('aria-current','step');
+      timeline.append(step);
+    }
+    progress.append(timeline);
+  }
   if (data.error) {
     progress.append(el('p', data.error));
     if (data.can_review !== false) progress.append(action('从检查点重试', async () => {
@@ -399,7 +411,7 @@ async function refresh() {
     Team.current = session.workspaces.find(w => w.id === route.id) || null;
     const match = /^case\/([a-f0-9]{32})$/.exec(route.page);
     const invite = /^invite\/([A-Za-z0-9_-]{20,128})$/.exec(route.page)?.[1];
-    let view = match ? 'case' : (['rules','account','team'].includes(route.page) ? route.page : 'desk');
+    let view = match ? 'case' : (['rules','account','team','library'].includes(route.page) ? route.page : 'desk');
     if (invite) view = 'account';
     if (route.id && !Team.current) {
       if (!session.user) Team.returnTo = location.hash;
@@ -409,38 +421,45 @@ async function refresh() {
       view = 'account';
     }
     if (view === 'team' && Team.current?.role !== 'admin') view = 'account';
+    if (view === 'library' && Team.current?.role === 'employee') view = 'desk';
     Team.syncNav();
-    for (const id of ['desk','rules','case','account','team']) $('#'+id).hidden = id !== view;
-    for (const id of ['desk','rules','team','account']) {
+    for (const id of ['desk','rules','case','account','team','library']) $('#'+id).hidden = id !== view;
+    for (const id of ['desk','rules','team','account','library']) {
       const nav = $('#nav-' + id);
       if (id === (view === 'case' ? 'desk' : view)) nav.setAttribute('aria-current','page');
       else nav.removeAttribute('aria-current');
     }
     if (view === 'account') { Team.account(invite); $('#network-error').hidden=true; return; }
+    if (view === 'library') { await Desk.library(epoch); if (epoch === state.epoch) $('#network-error').hidden=true; return; }
     if (view === 'team') { await Team.team(epoch); if (epoch === state.epoch) $('#network-error').hidden=true; return; }
     if (view === 'case') {
       const data = await api(Team.cases() + '/' + match[1]);
       if (epoch !== state.epoch) return;
-      const rev = data.can_review === false ? 0 : (state.pinned || data.rev);
+      const requested = Number(route.params.get('rev'));
+      const rev = data.can_review === false ? 0 : (state.pinned || (Number.isSafeInteger(requested) && requested>0 ? requested : data.rev));
       let bundle = state.bundle;
       if (rev && (bundle?.rev !== rev || bundle.report.case_id !== data.id))
         bundle = await api(Team.cases() + '/' + data.id + '/reports/' + rev);
       if (epoch !== state.epoch) return;
       state.detail = data; state.bundle = rev ? bundle : null;
       renderCase();
+      const target = route.params.get('fact');
+      if (target && state.openedCitation !== location.hash && state.bundle) {
+        const fact = state.bundle.report.graph.facts.find(f => f.id === target);
+        if (fact) { state.openedCitation = location.hash; openPage(fact.doc,fact.page,fact.id); }
+      }
       if (['queued','running'].includes(data.status)) interval = 1600;
     } else if (view === 'rules') {
       const data = await api('/api/controls'); if (epoch !== state.epoch) return; renderCatalog(data);
     } else {
-      const data = await api(Team.cases()); if (epoch !== state.epoch) return;
-      state.cases = data.cases; renderList(); interval = 5000;
+      await Desk.load(epoch); if (epoch !== state.epoch) return; interval = 5000;
     }
     $('#network-error').hidden = true;
     if ($('#connection').textContent === '连接中断') checkConnection();
   } catch (error) {
     if (epoch !== state.epoch) return;
     if ([401,403,404].includes(error.status)) {
-      clearCaseView(); state.cases=[];
+      clearCaseView(); Desk.reset(); state.cases=[];
       for (const id of ['case-panel','case-list','team-panel']) $('#'+id).replaceChildren();
       if (error.status === 401 || error.status === 403) {
         Team.session=null;
@@ -544,12 +563,12 @@ $('#upload-form').addEventListener('submit', async event => {
   finally { button.disabled = false; button.textContent = '提交并开始审计'; }
 });
 for (const button of document.querySelectorAll('[data-close]')) button.addEventListener('click', () => button.closest('dialog').close());
-for (const button of document.querySelectorAll('[data-filter]')) button.addEventListener('click', () => { state.filter = button.dataset.filter; renderList(); });
+Desk.bind();
 $('#version').addEventListener('change', () => { state.pinned = Number($('#version').value); refresh(); });
 window.addEventListener('hashchange', () => {
-  state.bundle = null; state.detail = null; state.pinned = 0; state.tab = 'report';
+  state.openedCitation=null; state.bundle = null; state.detail = null; state.pinned = 0; state.tab = 'report';
   if ((Team.current?.id || null) !== Team.route().id) {
-    state.key=null; state.cases=[]; $('#case-list').replaceChildren(); $('#team-panel').replaceChildren();
+    Desk.reset(); state.key=null; state.cases=[]; $('#case-list').replaceChildren(); $('#team-panel').replaceChildren();
     $('#upload-form').reset(); $('#chosen-files').replaceChildren(); profileChanged();
   }
   for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close();
@@ -559,8 +578,9 @@ window.addEventListener('hashchange', () => {
 async function checkConnection() {
   try {
     const data = await api('/api/health');
+    $('#connection').dataset.offline=String(!data.audit.configured);
     $('#connection').textContent = data.audit.configured ? (Team.current ? '服务已连接' : '服务在线') : '模型密钥待配置';
-  } catch { $('#connection').textContent = '连接中断'; }
+  } catch { $('#connection').textContent = '连接中断'; $('#connection').dataset.offline='true'; }
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {

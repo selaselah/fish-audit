@@ -9,6 +9,7 @@
   <title>Fish Audit · 财会审计工作台</title>
   <link rel="stylesheet" href="/style.css">
   <script src="/team.js" defer></script>
+  <script src="/desk.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -16,9 +17,16 @@
   <header class="bar">
     <div class="wrap header-inner">
       <a class="brand" href="#desk" aria-label="Fish Audit 工作台"><span class="ledger" aria-hidden="true"></span>Fish Audit</a>
-      <nav class="primary-nav" aria-label="主导航"><a href="#desk" id="nav-desk">审计工作台</a><a href="#rules" id="nav-rules">规则依据</a><a href="#team" id="nav-team" hidden>企业成员</a></nav>
-      <span class="connection" id="connection">正在连接</span>
-      <a class="account-link" id="nav-account" href="#account">企业登录</a>
+      <nav class="primary-nav" aria-label="主导航">
+        <a href="#desk" id="nav-desk">审计工作台</a>
+        <a href="#library" id="nav-library">证据检索</a>
+        <a href="#rules" id="nav-rules">规则依据</a>
+        <a href="#team" id="nav-team" hidden>企业成员</a>
+      </nav>
+      <div class="rail-footer">
+        <span class="connection" id="connection" role="status">正在连接</span>
+        <a class="account-link" id="nav-account" href="#account">企业登录</a>
+      </div>
     </div>
   </header>
   <main class="wrap" id="content" tabindex="-1">
@@ -28,17 +36,41 @@
     </section>
     <section id="team" hidden><div class="heading"><h1>企业成员</h1></div><div id="team-panel"></div></section>
     <section id="desk" hidden>
-      <div class="heading"><div><h1>审计工作台</h1></div>
-        <button class="primary" id="new-case">新建审计</button></div>
+      <div class="heading"><div><p class="eyebrow" id="workspace-name"></p><h1>审计工作台</h1></div>
+        <button class="primary" id="new-case"><span aria-hidden="true">＋</span> 新建审计</button></div>
+      <div id="desk-metrics" class="metrics" aria-label="当前检索范围内的任务概况">
+        <button type="button" data-metric="ready"><span>待验收</span><strong>—</strong></button>
+        <button type="button" data-metric="attention"><span>待验收且有疑点</span><strong>—</strong></button>
+        <button type="button" data-metric="active"><span>处理中</span><strong>—</strong></button>
+        <button type="button" data-metric="closed"><span>已归档</span><strong>—</strong></button>
+      </div>
       <section class="board" aria-labelledby="queue-title">
-        <div class="board-head"><h2 id="queue-title">任务台账</h2><div class="filters" aria-label="筛选任务">
+        <div class="board-head"><h2 id="queue-title">任务台账</h2>
+          <label class="search-field"><span class="visually-hidden">搜索任务、提交人或编号</span><input type="search" id="case-search" maxlength="100" placeholder="搜索任务或提交人"></label>
+        </div>
+        <div class="toolbar"><div class="filters" aria-label="筛选任务">
           <button type="button" data-filter="all" aria-pressed="true">全部</button>
           <button type="button" data-filter="active" aria-pressed="false">进行中</button>
           <button type="button" data-filter="ready" aria-pressed="false">待验收</button>
           <button type="button" data-filter="closed" aria-pressed="false">已归档</button>
-        </div></div>
+          <button type="button" data-filter="failed" aria-pressed="false" hidden>已中断</button>
+        </div><div class="selects"><select id="desk-profile" aria-label="审计范围"><option value="">全部范围</option><option value="cn-procurement-full-settlement/v1">采购与付款</option><option value="cn-travel-reimbursement/v1">差旅报销</option></select>
+          <select id="desk-sort" aria-label="排序"><option value="updated">最近更新</option><option value="created">最近提交</option></select></div>
+        </div>
         <div id="case-list" aria-live="polite"></div>
+        <div class="pager" id="desk-pager"></div>
       </section>
+    </section>
+    <section id="library" hidden>
+      <div class="heading"><div><p class="eyebrow" id="library-scope"></p><h1>证据检索</h1></div></div>
+      <div class="board">
+        <form id="library-form" class="library-form">
+          <label>原文、票号或字段<input id="library-query" type="search" maxlength="120" placeholder="例如 采购方、合同号或票面金额"></label>
+          <label>核验状态<select id="library-status"><option value="verified">已核证据</option><option value="pending">待核及有异议</option><option value="all">全部状态</option></select></label>
+          <button class="primary">检索</button>
+        </form>
+        <div id="library-results" aria-live="polite"></div><div class="pager" id="library-pager"></div>
+      </div>
     </section>
     <section id="rules" hidden><a class="back" href="#desk">返回工作台</a><div class="heading"><div><h1>规则依据</h1></div></div><div id="catalog"></div></section>
     <section id="case" hidden>
