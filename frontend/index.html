@@ -54,8 +54,8 @@
           <button type="button" data-filter="ready" aria-pressed="false">待验收</button>
           <button type="button" data-filter="closed" aria-pressed="false">已归档</button>
           <button type="button" data-filter="failed" aria-pressed="false" hidden>已中断</button>
-        </div><div class="selects"><select id="desk-profile" aria-label="审计范围"><option value="">全部范围</option><option value="cn-procurement-full-settlement/v1">采购与付款</option><option value="cn-travel-reimbursement/v1">差旅报销</option></select>
-          <select id="desk-sort" aria-label="排序"><option value="updated">最近更新</option><option value="created">最近提交</option></select></div>
+        </div><div class="selects"><label>审计范围<select id="desk-profile" aria-label="审计范围"><option value="">全部范围</option><option value="cn-procurement-full-settlement/v1">采购与付款</option><option value="cn-travel-reimbursement/v1">差旅报销</option></select></label>
+          <label>排序<select id="desk-sort" aria-label="排序"><option value="updated">最近更新</option><option value="created">最近提交</option></select></label></div>
         </div>
         <div id="case-list" aria-live="polite"></div>
         <div class="pager" id="desk-pager"></div>

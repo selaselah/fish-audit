@@ -3,6 +3,7 @@ import logging
 import threading
 
 from calculations import FORMAT
+from capacity import job_scope
 from config import CaseError, MAX_PAGES, RECHECK_EVIDENCE, SERVER
 from controls import additional, conclusion, execute, VERSION
 from documents import digest, prepare
@@ -13,7 +14,7 @@ from storage import encode
 
 
 METHODS = {name: (SERVER / name).read_bytes() for name in
-           ("calculations.py", "config.py", "controls.py", "documents.py", "graph.py", "jobs.py", "model.py", "policy.py", "protocol.py", "storage.py")}
+           ("calculations.py", "capacity.py", "config.py", "controls.py", "documents.py", "graph.py", "jobs.py", "model.py", "policy.py", "protocol.py", "storage.py")}
 CODE_DIGESTS = {name: digest(source) for name, source in METHODS.items()}
 
 
@@ -52,6 +53,10 @@ class Worker:
                 self.store.fail(case_id, "处理遇到内部错误，已保存已完成的检查点。")
 
     def run(self, case_id):
+        with job_scope(self.store, case_id):
+            self.process(case_id)
+
+    def process(self, case_id):
         store = self.store
         profile = store.detail(case_id)["profile"]
         folder = store.files / case_id

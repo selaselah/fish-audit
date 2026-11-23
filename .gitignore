@@ -6,3 +6,4 @@ server/data/
 server/.runtime/
 docs/samples/generated/
 .taste-skill/
+server/data-enterprise/

@@ -15,7 +15,7 @@
 现有服务保留原来的单机台账。企业台账使用独立的企业编号；企业成员只能在获得授权的空间内操作。已有本机案例归属于本机工作区。下列命令另起一个仅开放企业入口的实例，使用独立的持久化资料目录。
 
 ```sh
-AUDIT_ACCESS_MODE=saas AUDIT_DATA_DIR="$PWD/server/data/enterprise" \
+AUDIT_ACCESS_MODE=saas AUDIT_DATA_DIR="$PWD/server/data-enterprise" \
   PORT=8010 server/.venv/bin/python server/main.py
 ```
 
@@ -39,3 +39,38 @@ node frontend/tests/workspace.mjs
 管理员与审计人员可从「证据检索」按中文原文、票号、文件名或字段查找企业内最新底稿。默认检索已匹配文字层或经人工确认的引文，也可选择尚待核图或有异议的记录。结果同时列出逐字引文、原文件名、页码和底稿版本。打开结果直接进入相应版本与原页，即使该案后来重算，已有引用仍指向原版本。
 
 服务将索引与新版本底稿在同一数据库事务内更新。支持 FTS5 trigram 的 SQLite 对三个字符以上的关键词使用全文索引；单字、双字及可用环境中的普通表扫描保留字面匹配。查询的企业范围也作用于计数和翻页。[SQLite FTS5](https://www.sqlite.org/fts5.html#the_trigram_tokenizer)
+
+## 本机两个实例
+
+本机演练台账在 8000。独立企业服务在 [8010 企业入口](http://127.0.0.1:8010/)，要求注册或登录，使用 `server/data-enterprise`。macOS 登录会话可通过以下命令独立管理企业服务。
+
+```sh
+server/.venv/bin/python server/service.py --enterprise install
+server/.venv/bin/python server/service.py --enterprise status
+server/.venv/bin/python server/service.py --enterprise restart
+```
+
+## 企业资源与执行
+
+企业管理员在「企业成员」可查看用量。以下为单机试点默认值，部署者可在环境变量中调整。按北京时间自然月统计。额度为应用服务的工作量计量，模型供应商的账单以其回执和合同为准。
+
+| 环境变量 | 默认值 | 统计口径 |
+| --- | ---: | --- |
+| `AUDIT_MONTHLY_CASES` | 150 | 每企业当月新建任务数；同一提交编号、同一资料重复提交只占一案 |
+| `AUDIT_ACTIVE_CASES` | 4 | 每企业正在排队和处理的任务数，含重试与重新核图 |
+| `AUDIT_STORAGE_MIB` | 2048 | 已保存的上传原件，计量单位 MiB；数据库、页图、备份另占磁盘 |
+| `AUDIT_MONTHLY_REQUESTS` | 3000 | 每企业当月向模型发送的请求尝试；网络重试也占用一次，多数成功请求会有 token 回执 |
+
+任务入队与额度核对在同一事务完成。待处理企业依次轮转，同一企业内按入队顺序执行。每次准备发送模型请求时登记用量，收到回执再记录实际输入、输出 token。异常断连后留下无回执记录。额度耗尽时任务保存检查点，调整环境需重启后再重试。当前本机部署共用一个工作进程，并发吞吐需在具体客户负载下评估。
+
+## 在线备份与恢复
+
+```sh
+server/.venv/bin/python server/backup.py snapshot server/data-enterprise /备份目录/企业-20261123
+server/.venv/bin/python server/backup.py verify /备份目录/企业-20261123
+server/.venv/bin/python server/backup.py restore /备份目录/企业-20261123 /恢复目录/企业-20261123
+```
+
+父目录须存在，目标须为新的目录。快照先冻结 SQLite，再从该时间点的清单复制原件和页图，逐文件核对摘要，同时检查数据库与外键。恢复成功后以该新目录作为 `AUDIT_DATA_DIR` 启动服务。副本保留账户、权限、历史底稿和签收记录；恢复后的用户需重新登录，管理员可重新签发待用邀请。密钥通过部署环境配置。备份目录包含业务原件与账户资料，应保存在有相应访问控制的介质上。
+
+在本机八案演练库上实际执行过在线备份及独立恢复，核对了 42 份原件与页图。从恢复目录重新导出采购合订案 R4，包内 18 个文件通过离线验证。

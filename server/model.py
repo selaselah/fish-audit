@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from capacity import request_attempt
 from config import AUDITOR_MODEL, CaseError, MODEL, PROMPT_VERSION
 from policy import MAPPING, SOURCES
 from protocol import canonical, response_request
@@ -99,9 +100,11 @@ def structured(model, instruction, content, schema, name):
     start = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
     for attempt in range(3):
         try:
-            with urlopen(request, timeout=120) as response:
-                envelope = json.load(response)
-                request_id = response.headers.get("x-request-id")
+            with request_attempt(model, name) as received:
+                with urlopen(request, timeout=120) as response:
+                    envelope = json.load(response)
+                    request_id = response.headers.get("x-request-id")
+                received(envelope)
             break
         except HTTPError as error:
             status = error.code

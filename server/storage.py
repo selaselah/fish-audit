@@ -5,6 +5,8 @@ import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
+from backup import MARKER
+from capacity import admit, install as install_capacity, settings
 from config import CaseError, PROFILE
 from graph import compact, invoice_number_edges
 from workbench import prepare_index, project
@@ -36,10 +38,14 @@ def authorize_case_write(db, case_id, actor):
     if not case:
         raise CaseError("未找到该审计任务。", 404)
     authorize_write(db, case["workspace"], actor, review=True)
+    return case["workspace"]
 
 
 class Store:
     def __init__(self, root):
+        if (root/MARKER).exists():
+            raise RuntimeError("资料目录仍在复制中，请使用已完成恢复的目录。")
+        self.limits = settings()
         self.root = root
         self.files = root / "cases"
         self.files.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -110,6 +116,7 @@ class Store:
                                    self.index_rows(row["id"], row["rev"], json.loads(row["content"])))
                 db.execute("PRAGMA user_version=1")
             self.fts_enabled = prepare_index(db)
+            install_capacity(db)
         os.chmod(self.path, 0o600)
 
     @contextmanager
@@ -128,24 +135,24 @@ class Store:
         finally:
             db.close()
 
-    def existing(self, key, fingerprint):
-        with self.connect() as db:
-            row = db.execute("SELECT id,fingerprint FROM cases WHERE request_key=?", (key,)).fetchone()
-            if row and row["fingerprint"] != fingerprint:
-                raise CaseError("同一提交编号对应了不同资料，请重新提交。", 409)
-            return row["id"] if row else None
-
     def create(self, case_id, title, docs, request_key, fingerprint, profile=PROFILE, workspace="local", user=None):
         with self.connect(True) as db:
             now = stamp()
             user = user or {}
             authorize_write(db, workspace, user.get("id"))
+            previous = db.execute("SELECT id,fingerprint FROM cases WHERE request_key=?", (request_key,)).fetchone()
+            if previous:
+                if previous["fingerprint"] != fingerprint:
+                    raise CaseError("同一提交编号对应了不同资料，请重新提交。",409)
+                return previous["id"]
+            admit(db, workspace, self.limits, sum(doc["size"] for doc in docs))
             db.execute("""INSERT INTO cases(id,title,created,updated,status,stage,progress,message,request_key,fingerprint,profile,workspace,submitter,submitter_name)
                        VALUES(?,?,?,?,'queued','queued',0,'等待审计',?,?,?,?,?,?)""",
                        (case_id, title, now, now, request_key, fingerprint, profile, workspace,user.get("id"),user.get("name")))
             db.executemany("INSERT INTO docs(case_id,id,name,ext,size,sha256) VALUES(?,?,?,?,?,?)",
                            [(case_id, doc["id"], doc["name"], doc["ext"], doc["size"], doc["sha256"]) for doc in docs])
             event(db, case_id, "queued", f"收到 {len(docs)} 份原件。")
+            return case_id
 
     def recover(self):
         with self.connect(True) as db:
@@ -157,8 +164,11 @@ class Store:
 
     def claim(self):
         with self.connect(True) as db:
-            row = db.execute("SELECT id FROM cases WHERE status='queued' ORDER BY updated,id LIMIT 1").fetchone()
+            row = db.execute("""SELECT c.id,c.workspace FROM cases c LEFT JOIN worker_turn w ON w.workspace=c.workspace
+                             WHERE c.status='queued' ORDER BY coalesce(w.turn,0),c.updated,c.id LIMIT 1""").fetchone()
             if row:
+                db.execute("""INSERT OR REPLACE INTO worker_turn(workspace,turn)
+                           SELECT ?,coalesce(max(turn),0)+1 FROM worker_turn""",(row["workspace"],))
                 db.execute("UPDATE cases SET status='running',updated=? WHERE id=?", (stamp(), row["id"]))
                 return row["id"]
         return None
@@ -177,7 +187,8 @@ class Store:
 
     def retry(self, case_id, actor=None):
         with self.connect(True) as db:
-            authorize_case_write(db, case_id, actor)
+            workspace = authorize_case_write(db, case_id, actor)
+            admit(db, workspace, self.limits)
             if db.execute("""UPDATE cases SET status='queued',stage='queued',progress=0,error=NULL,
                           message='等待重试',updated=? WHERE id=? AND status='failed'""",
                           (stamp(), case_id)).rowcount != 1:
@@ -273,7 +284,8 @@ class Store:
 
     def rerun(self, case_id, revision, actor=None):
         with self.connect(True) as db:
-            authorize_case_write(db, case_id, actor)
+            workspace = authorize_case_write(db, case_id, actor)
+            admit(db, workspace, self.limits)
             result = db.execute("""UPDATE cases SET status='queued',stage='queued',progress=0,error=NULL,
                                 message='等待重新执行审计',updated=? WHERE id=? AND status='ready' AND rev=?""",
                                 (stamp(), case_id, revision))
@@ -329,7 +341,8 @@ class Store:
 
     def amend(self, case_id, revision, reviewer, note, target, doc, page, field, value, quote, region, actor=None):
         with self.connect(True) as db:
-            authorize_case_write(db, case_id, actor)
+            workspace = authorize_case_write(db, case_id, actor)
+            admit(db, workspace, self.limits)
             case = db.execute("SELECT status,rev FROM cases WHERE id=?", (case_id,)).fetchone()
             if not case or case["status"] != "ready" or case["rev"] != revision:
                 raise CaseError("请对当前待验收底稿进行更正或补录。", 409)
@@ -356,7 +369,9 @@ class Store:
 
     def review(self, case_id, revision, reviewer, note, decision, fact_ids=None, actor=None):
         with self.connect(True) as db:
-            authorize_case_write(db, case_id, actor)
+            workspace = authorize_case_write(db, case_id, actor)
+            if fact_ids is not None:
+                admit(db, workspace, self.limits)
             case = db.execute("SELECT status,rev FROM cases WHERE id=?", (case_id,)).fetchone()
             if not case:
                 raise CaseError("未找到该审计任务。", 404)

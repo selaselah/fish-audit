@@ -2,11 +2,11 @@ import hashlib
 import os
 import re
 import shutil
-import sqlite3
 import sys
 import tempfile
 import uuid
 from pathlib import Path
+from urllib.parse import urlsplit
 
 
 if __name__ == "__main__":
@@ -81,18 +81,9 @@ def upload(store, workspace, user):
                 raise CaseError("资料为空，请重新选择文件。", 400)
             docs.append({"id": doc, "name": name, "ext": ext, "sha256": hasher.hexdigest(), "size": size})
         fingerprint = digest(encode([title, docs] if profile == PROFILE else [title, docs, profile]).encode())
-        existing = store.existing(key, fingerprint)
-        if existing:
-            return existing
-        try:
-            store.create(case_id, title, docs, key, fingerprint, profile, workspace, user)
-        except sqlite3.IntegrityError:
-            existing = store.existing(key, fingerprint)
-            if existing:
-                return existing
-            raise
-        keep = True
-        return case_id
+        accepted = store.create(case_id, title, docs, key, fingerprint, profile, workspace, user)
+        keep = accepted == case_id
+        return accepted
     finally:
         if not keep:
             shutil.rmtree(folder, ignore_errors=True)
@@ -331,12 +322,14 @@ if __name__ == "__main__":
     os.umask(0o077)
     store = Store(DATA)
     worker = Worker(store)
-    worker.start()
     port = int(os.getenv("PORT", "8000"))
     print(f"Fish Audit http://127.0.0.1:{port}", flush=True)
     app = create_app(store, worker)
     host = os.getenv("AUDIT_BIND", "127.0.0.1")
-    if host not in ("127.0.0.1", "localhost", "::1") and (app.config["AUDIT_MODE"] != "saas" or not app.config["AUDIT_ORIGIN"]):
-        raise SystemExit("对外监听需要 SaaS 模式与 AUDIT_PUBLIC_ORIGIN。")
+    origin = urlsplit(app.config["AUDIT_ORIGIN"])
+    loopback = ("127.0.0.1","localhost","::1")
+    if host not in loopback and (app.config["AUDIT_MODE"] != "saas" or origin.scheme != "https" or origin.hostname in loopback):
+        raise SystemExit("对外监听需要 SaaS 模式与企业 HTTPS 来源。")
+    worker.start()
     serve(app, host=host, port=port, threads=8,
           max_request_body_size=MAX_CASE_BYTES + 256*1024, channel_timeout=120)

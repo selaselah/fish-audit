@@ -4,6 +4,7 @@ from urllib.parse import urlsplit
 
 from flask import g, jsonify, request
 
+from capacity import usage
 from config import CaseError
 from identity import COOKIE, SESSION_SECONDS, Directory, csrf_for, login_name
 
@@ -104,7 +105,8 @@ def configure_access(app, store, json_body):
 
     @app.get("/api/workspaces/<wid>/team")
     def team(wid):
-        return jsonify(directory.team(wid, signed_in()))
+        data = directory.team(wid, signed_in())
+        return jsonify(**data, usage=usage(store, wid))
 
     @app.post("/api/workspaces/<wid>/invites")
     def invite(wid):

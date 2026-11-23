@@ -95,6 +95,62 @@ class EnterpriseFlow(unittest.TestCase):
         self.assertEqual(other.get("/api/w/"+b+"/evidence?q=DEMO").json["hits"], [])
         self.assertEqual(self.store.summary(),[])
 
+    def test_atomic_admission_and_accounted_requests(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from capacity import job_scope, request_attempt, usage
+        from config import CaseError
+        admin,w,headers=self.register("quota-owner")
+        _,other,_=self.register("quota-second")
+        uid=admin.get("/api/session").json["user"]
+        self.store.limits.update(active_cases=1, monthly_cases=1, monthly_requests=1)
+        def submit(i):
+            try:
+                return self.store.create("case"+str(i), "合成", [], "key"+str(i), "payload", workspace=w, user=uid)
+            except CaseError as error:
+                return error.status
+        with ThreadPoolExecutor(2) as pool:
+            results=list(pool.map(submit,[1,2]))
+        self.assertIn(429,results)
+        cid=next(r for r in results if r!=429)
+        self.assertEqual(self.store.create("duplicate","合成",[],"key"+cid[-1],"payload",workspace=w,user=uid),cid)
+        with job_scope(self.store,cid):
+            with request_attempt("model","source_page") as received:
+                received({"id":"synthetic-request","status":"completed","usage":{"input_tokens":15,"output_tokens":3}})
+            with self.assertRaises(CaseError) as stop:
+                with request_attempt("model","page_check"):
+                    self.fail("额度耗尽后的请求不应发出")
+            self.assertEqual(stop.exception.status,429)
+        stats=admin.get("/api/workspaces/"+w+"/team").json["usage"]
+        self.assertEqual((stats["requests"], stats["input_tokens"], stats["output_tokens"]),(1,15,3))
+        self.assertEqual(usage(self.store,other)["requests"],0)
+
+    def test_rotating_worker_and_restored_credentials(self):
+        from backup import snapshot, restore
+        from config import CaseError
+        a,w,h=self.register("fair-a")
+        b,v,k=self.register("fair-b")
+        ua,ub=(client.get("/api/session").json["user"] for client in (a,b))
+        self.store.create("a1","演练",[],"a1","a1",workspace=w,user=ua)
+        self.store.create("a2","演练",[],"a2","a2",workspace=w,user=ua)
+        self.assertEqual(self.store.claim(),"a1")
+        self.store.create("b1","演练",[],"b1","b1",workspace=v,user=ub)
+        self.assertEqual(self.store.claim(),"b1")
+        original=self.submit(a,w,h)
+        invite=a.post("/api/workspaces/"+w+"/invites",headers=h,json={"role":"employee"}).json
+        with tempfile.TemporaryDirectory() as d:
+            out, fresh=Path(d)/"copy",Path(d)/"restored"
+            snapshot(self.store.root,out)
+            restore(out,fresh)
+            copy=Store(fresh)
+            directory=create_app(copy,Worker(copy)).extensions["directory"]
+            self.assertIsNone(directory.user(a.get_cookie("fish_session").value))
+            with self.assertRaises(CaseError):
+                directory.accept(ub["id"],invite["token"])
+            self.assertEqual(directory.spaces(ua["id"])[0]["id"],w)
+            self.assertEqual((fresh/"cases"/original/"d01"/"original.jpg").read_bytes(),self.source)
+            with self.assertRaises(FileExistsError):
+                restore(out,fresh)
+
     def test_revoke_and_logout(self):
         admin,w,headers=self.register("owner")
         url="/api/workspaces/"+w

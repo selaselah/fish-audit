@@ -23,7 +23,7 @@ def launch(*arguments, check=True, quiet=False):
                           stderr=subprocess.DEVNULL if quiet else None)
 
 
-def install():
+def install(enterprise=False):
     python = ROOT / ".venv" / "bin" / "python"
     if not python.is_file():
         raise SystemExit("请先在 server/.venv 安装 Python 环境。")
@@ -31,9 +31,12 @@ def install():
         existing = plistlib.loads(PLIST.read_bytes())
         if existing.get("WorkingDirectory") != str(ROOT):
             raise SystemExit("同名服务来自其他目录。")
-    runtime = ROOT / ".runtime"
-    runtime.mkdir(exist_ok=True, mode=0o700)
+    runtime = ROOT / ".runtime" / ("enterprise" if enterprise else "")
+    runtime.mkdir(exist_ok=True, parents=True, mode=0o700)
     env = {"PATH": "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin", "PYTHONUNBUFFERED": "1"}
+    if enterprise:
+        env.update(AUDIT_ACCESS_MODE="saas", AUDIT_BIND="127.0.0.1", AUDIT_PUBLIC_ORIGIN="http://127.0.0.1:8010",
+                   AUDIT_DATA_DIR=str(ROOT / "data-enterprise"), PORT="8010")
     office = os.getenv("SOFFICE_BIN") or shutil.which("soffice")
     if office:
         env["SOFFICE_BIN"] = office
@@ -64,11 +67,17 @@ def install():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["install", "status", "restart", "stop"])
-    command = parser.parse_args().command
+    parser.add_argument("--enterprise", action="store_true", help="管理 8010 端口的独立企业实例")
+    args = parser.parse_args()
+    command = args.command
+    if args.enterprise:
+        LABEL = "local.fish-audit.enterprise"
+        TARGET = f"{DOMAIN}/{LABEL}"
+        PLIST = Path.home() / "Library" / "LaunchAgents" / (LABEL + ".plist")
     if sys.platform != "darwin":
         raise SystemExit("该脚本适用于 macOS 用户登录会话。")
     if command == "install":
-        install()
+        install(args.enterprise)
     elif command == "restart":
         launch("kickstart", "-k", TARGET)
     elif command == "stop":
