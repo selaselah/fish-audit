@@ -1,0 +1,356 @@
+import re
+from collections import defaultdict
+from datetime import date
+from decimal import Decimal, InvalidOperation
+
+from config import PROFILE, RULE_VERSION, TRAVEL
+from graph import KINDS, audit_documents, compact, entity_id
+from model import FIELDS, SIGNALS, expert_candidates
+from policy import ACCOUNTING, MAPPING, SOURCES
+
+
+CATALOG = {
+    "E01": ("原件与证据覆盖", "每页均可辨读，关键字段具备可定位文字或人工核图记录。"),
+    "P01": ("采购资料完整性", "单合同、一次全额验收结算范围内需要一份合同、一份发票和一份验收资料。"),
+    "P02": ("合同编号关联", "沿各份资料的合同编号关系，验证三份资料是否指向同一合同。"),
+    "P03": ("交易双方一致性", "从合同、发票和验收单的采购方和供应方关系核对交易主体全称。"),
+    "I01": ("发票号码重叠", "在本案提交的发票间比较号码，重号需区分副本和重复申请。"),
+    "I02": ("本机已归档票号比对", "按本案发票号码精确查找已归档资料中的已核原文，区分历史资料类型和验收决定，再核对报销或补件记录。"),
+    "M01": ("发票价税勾稽", "同一发票、相同人民币元口径下，不含税合计加税额合计应等于价税合计，精确到分。"),
+    "C01": ("全额结算适用性", "从合同核对是否明确一次结清，分期、质保、红冲或变更转人工核对。"),
+    "M02": ("合同、发票与验收金额", "相同合同、人民币元、一次全额结算范围内，比较合同、发票及验收含税总额。"),
+    "D01": ("采购业务日期", "查验签约、开票和验收日期。发票或验收早于签约需了解背景。"),
+    "A01": ("验收结论", "本程序要求全额结算具有明确无保留的验收合格记录。"),
+    "S01": ("采购标的核对", "逐份比对标的名称，简称、规格差异或多行明细交由人工检查。"),
+    "X01": ("专家追加程序", "模型仅从已登记的追加程序中选择，需引用本案对应字段的证据。"),
+    "T01": ("报销资料组成", "单份差旅报销申请，附可识别的发票资料。"),
+    "T02": ("随附票号关联", "报销申请列示的票号集合与本案提交的发票号码逐一勾稽。"),
+    "T03": ("报销额与凭证合计", "按本案全凭票报销口径，申请金额与已关联、未重号的人民币元票据合计比较。"),
+    "T04": ("差旅期间核对", "逐张检查费用实际发生日期是否落入申报行程的起止期间。"),
+    "T05": ("出差人员关联", "对照报销单与具名票据中的出差人，缺姓名、别名和不一致均交人工。"),
+}
+STATUS = {"ok": "相符", "issue": "发现问题", "risk": "风险待核", "missing": "证据不足"}
+VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING,
+           "sources": SOURCES, "rule_sources": MAPPING}
+FULL_TERMS = {"验收后一次性全额结算", "验收后一次性付清", "一次性全额结算", "一次性付清",
+              "验收合格后一次性支付全款", "一次性全额付款", "一次结清", "一次性结清", "一次付清"}
+FULL_ACCEPTANCE = {"合格", "验收合格", "通过", "验收通过", "全部合格"}
+
+
+def ids(*groups):
+    return list(dict.fromkeys(fact["id"] for group in groups for fact in group))
+
+
+def money(fact):
+    value = compact(fact["value"])
+    quote = compact(fact["quote"])
+    if any(unit in quote for unit in ("万", "亿", "千元", "美元", "港元", "欧元", "%", "折合")):
+        return None
+    if not re.fullmatch(r"-?(?:[0-9]{1,17}|[0-9]{1,3}(?:,[0-9]{3}){1,5})(?:\.[0-9]{1,2})?", value):
+        return None
+    try:
+        return Decimal(value.replace(",", ""))
+    except InvalidOperation:
+        return None
+
+
+def parsed_date(fact):
+    value = compact(fact["value"])
+    match = re.fullmatch(r"(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})日?", value)
+    if not match:
+        return None
+    try:
+        return date(*map(int, match.groups()))
+    except ValueError:
+        return None
+
+
+def in_yuan(fact):
+    return compact(fact["value"]).upper() in {"人民币", "CNY", "RMB", "人民币元"}
+
+
+def execute(graph, profile=PROFILE):
+    findings = []
+    docs = audit_documents(graph)
+    kinds = graph["documents_by_kind"]
+    facts = {fact["id"]: fact for fact in graph["facts"]}
+    linked = defaultdict(list)
+    for edge in graph["edges"]:
+        if edge["type"] in FIELDS:
+            linked[(edge["from"], edge["type"])].extend(facts[ref] for ref in edge["evidence"])
+
+    def record(rule, status, observation, refs, scope=None):
+        findings.append({"id": f"{rule}-{len(findings)+1}", "rule": rule, "version": RULE_VERSION,
+                         "title": CATALOG[rule][0], "basis": CATALOG[rule][1], "status": status,
+                         "detail": observation, "evidence": list(dict.fromkeys(refs)), "scope": scope or []})
+        return status
+
+    def single(doc, field):
+        values = linked[doc, field]
+        distinct = {compact(fact["value"]) for fact in values}
+        return values[0] if len(distinct) == 1 else None
+
+    def values(rule, pairs):
+        found = [single(doc, field) for doc, field in pairs]
+        if None not in found:
+            return found
+        absent = [f"{names[doc]} · {FIELDS[field]}" for (doc, field), value in zip(pairs, found) if value is None]
+        references = [fact["id"] for doc, field in pairs for fact in graph["facts"]
+                      if fact.get("unit", fact["doc"]) == doc and fact["field"] == field]
+        record(rule, "missing", "待补证或消除歧义：" + "、".join(absent), references, list(dict.fromkeys(doc for doc, field in pairs)))
+        return None
+
+    names = {doc["id"]: doc["name"] for doc in docs}
+    doc_ids = list(names)
+    gaps = [gap["id"] for gap in graph["gaps"]]
+    unverified = [fact for fact in graph["facts"] if fact["status"] not in ("anchored", "confirmed")]
+    record("E01", "missing" if gaps or unverified else "ok",
+           f"共 {len(facts)} 条提取记录，{len(unverified)} 条待核或有异议，{len(set(gaps))} 页存在辨读或覆盖缺口。",
+           gaps + ids(unverified), doc_ids)
+    numbers = defaultdict(list)
+    amounts_valid = {}
+    for doc in kinds.get("invoice", []):
+        found = values("I01", [(doc, "invoice_id")])
+        if found:
+            numbers[compact(found[0]["value"])].extend(found)
+    if not kinds.get("invoice"):
+        record("I01", "missing", "缺少可核发票，无法比较票号。", [], doc_ids)
+    for number, group in numbers.items():
+        duplicated = len(group) > 1
+        record("I01", "risk" if duplicated else "ok",
+               f"号码 {number} 出现在本案 {len(group)} 份已识别发票中。"
+               + ("请核对原票、副本及实际报销次数。" if duplicated else ""), ids(group))
+    if "prior_invoices" in graph:
+        prior = graph["prior_invoices"]
+        if not numbers:
+            record("I02", "missing", "缺少可比对的本案发票号码。", [], doc_ids)
+        else:
+            by_number = defaultdict(list)
+            for row in prior:
+                by_number[row["number_key"]].append(row)
+            for number, group in numbers.items():
+                matches = by_number[entity_id("invoice_number", number)]
+                refs = ids(group) + [row["id"] for row in matches]
+                if matches:
+                    count = len({row["case_id"] for row in matches})
+                    scope_note = "部分历史资料的单据类型尚待核实。" if any(
+                        row["document_kind"] == "unclassified" for row in matches) else ""
+                    record("I02", "risk", f"号码 {number} 同时出现在 {count} 项已归档任务。{scope_note}"
+                           "请查看原案的验收决定，核实副本、补件或重复报销情况。", refs)
+                else:
+                    record("I02", "ok", f"号码 {number} 在本机当时已归档的发票证据中未发现相同号码。", refs)
+
+    if profile == TRAVEL:
+        check_travel(graph, linked, numbers, values, record)
+        return findings
+    titles = [fact for fact in facts.values() if fact["field"] in KINDS and fact["status"] in ("anchored", "confirmed")]
+    assignment = [doc for kind in KINDS for doc in kinds.get(kind, [])]
+    complete = (all(len(kinds.get(kind, [])) == 1 for kind in KINDS) and
+                len(assignment) == len(set(assignment)) and set(assignment) == set(doc_ids) and not kinds.get("claim"))
+    count_text = "、".join(f"{label} {len(kinds.get(kind, []))} 份" for kind, label in KINDS.items())
+    record("P01", "ok" if complete else "missing", f"按已核标题识别到{count_text}。"
+           + ("" if complete else "请核对缺件、多单或未识别资料。"), ids(titles), doc_ids)
+
+    for doc in kinds.get("invoice", []):
+        found = values("M01", [(doc, field) for field in ("net", "tax", "total", "currency", "unit")])
+        if not found:
+            continue
+        amounts = [money(fact) for fact in found[:3]]
+        if not in_yuan(found[3]) or compact(found[4]["value"]) not in ("元", "人民币元") or None in amounts or any(value < 0 for value in amounts):
+            record("M01", "risk", "币种、单位、金额格式或红字方向需人工确认。", ids(found))
+            continue
+        net, tax, total = amounts
+        difference = net + tax - total
+        record("M01", "ok" if difference == 0 else "issue",
+               f"不含税 {net:,.2f} + 税额 {tax:,.2f} − 价税合计 {total:,.2f} = {difference:,.2f} 元。", ids(found))
+        amounts_valid[doc] = difference == 0
+    if not kinds.get("invoice"):
+        record("M01", "missing", "缺少可归属的发票，价税尚无法复算。", [], doc_ids)
+
+    if not complete:
+        multi = False
+        if len(kinds.get("contract", [])) == 1 and len(kinds.get("acceptance", [])) == 1 and len(kinds.get("invoice", [])) > 1:
+            multi = check_multi_invoice(graph, kinds, linked, numbers, amounts_valid, values, record)
+        for rule in ("P02", "P03", "C01", "M02", "D01", "A01", "S01"):
+            if rule == "M02" and multi:
+                continue
+            record(rule, "missing", "单合同、单发票、单验收单的资料集合尚未建立。", ids(titles), doc_ids)
+        return findings
+
+    contract, invoice, acceptance = (kinds[kind][0] for kind in ("contract", "invoice", "acceptance"))
+    ordered = [contract, invoice, acceptance]
+    matches = {}
+    for rule, field in (("P02", "contract_id"), ("P03", "buyer"), ("P03", "seller"), ("S01", "subject")):
+        found = values(rule, [(doc, field) for doc in ordered])
+        matches[field] = False
+        if found:
+            matched = len({compact(fact["value"]) for fact in found}) == 1
+            matches[field] = matched
+            record(rule, "ok" if matched else "risk", FIELDS[field] + "（合同 / 发票 / 验收）：" +
+                   " / ".join(fact["value"] for fact in found), ids(found))
+
+    terms = values("C01", [(contract, "payment_term")])
+    changed = [fact for fact in facts.values() if fact["field"] == "adjustment"]
+    cautions = graph.get("cautions", [])
+    full = False
+    if terms:
+        term = compact(terms[0]["value"]).rstrip("。")
+        full = term in FULL_TERMS and not (changed or cautions)
+        record("C01", "ok" if full else "risk", "合同记载的结算条件：" + terms[0]["quote"]
+               + ("。另有变更或分批结算线索，需核对上下文。" if changed or cautions else ""),
+               ids(terms, changed) + [row["page_id"] for row in cautions])
+
+    totals = values("M02", [(doc, field) for field in ("total", "currency", "unit") for doc in ordered])
+    if totals:
+        amounts = [money(fact) for fact in totals[:3]]
+        preconditions = [fact for doc in ordered for field in ("contract_id", "buyer", "seller", "subject")
+                         for fact in linked[doc, field]]
+        accept = single(acceptance, "acceptance_result")
+        accepted_in_full = accept and compact(accept["value"]).rstrip("。") in FULL_ACCEPTANCE
+        refs = ids(totals, terms or [], changed, preconditions, linked[acceptance, "acceptance_result"])
+        refs.extend(row["page_id"] for row in cautions)
+        if not (all(matches.values()) and full and accepted_in_full and
+                all(in_yuan(fact) for fact in totals[3:6]) and
+                all(compact(fact["value"]) in ("元", "人民币元") for fact in totals[6:]) and None not in amounts and min(amounts) >= 0):
+            record("M02", "missing", "合同、主体、标的、金额口径、全额结算或无保留验收的可比条件尚未齐备。", refs)
+        else:
+            record("M02", "ok" if len(set(amounts)) == 1 else "issue",
+                   f"含税金额（元）：合同 {amounts[0]:,.2f}，发票 {amounts[1]:,.2f}，验收 {amounts[2]:,.2f}。", refs)
+    dates = values("D01", [(contract, "signed_on"), (invoice, "issued_on"), (acceptance, "accepted_on")])
+    if dates:
+        signed, issued, accepted = map(parsed_date, dates)
+        if None in (signed, issued, accepted):
+            record("D01", "risk", "日期格式或日历日期需要核实。", ids(dates))
+        else:
+            record("D01", "ok" if min(issued, accepted) >= signed else "risk",
+                   f"签约 {signed}，开票 {issued}，验收 {accepted}。", ids(dates))
+    result = values("A01", [(acceptance, "acceptance_result")])
+    if result:
+        accepted = compact(result[0]["value"]).rstrip("。") in FULL_ACCEPTANCE
+        record("A01", "ok" if accepted else "risk", "验收结论记载为“" + result[0]["value"] + "”。", ids(result))
+    return findings
+
+
+def check_multi_invoice(graph, kinds, linked, numbers, amounts_valid, values, record):
+    contract = kinds["contract"][0]
+    acceptance = kinds["acceptance"][0]
+    invoices = kinds["invoice"]
+    docs = [contract, acceptance, *invoices]
+    if len(set(docs)) != len(docs) or set(docs) != {doc["id"] for doc in audit_documents(graph)}:
+        return False
+    pairs = [(doc, field) for field in ("contract_id", "buyer", "seller", "subject", "currency", "unit", "total") for doc in docs]
+    facts = values("M02", pairs)
+    if not facts:
+        return True
+    by_field = defaultdict(list)
+    for fact in facts:
+        by_field[fact["field"]].append(fact)
+    unique = all(len({compact(fact["value"]) for fact in by_field[field]}) == 1
+                 for field in ("contract_id", "buyer", "seller", "subject"))
+    units = all(in_yuan(fact) for fact in by_field["currency"]) and all(
+        compact(fact["value"]) in ("元", "人民币元") for fact in by_field["unit"])
+    amounts = [money(fact) for fact in by_field["total"]]
+    refs = ids(facts, *(linked[doc, "invoice_id"] for doc in invoices))
+    if (not unique or not units or None in amounts or min(amounts) < 0 or
+            len(numbers) != len(invoices) or not all(amounts_valid.get(doc) for doc in invoices)):
+        record("M02", "missing", "多票汇总缺少一致的关联、币种、计量单位、唯一票号或正确价税数据，暂不累计。", refs)
+        return True
+    invoiced = sum(amounts[2:])
+    detail = f"同合同 {len(invoices)} 张不同号码发票合计 {invoiced:,.2f} 元，合同 {amounts[0]:,.2f} 元，验收 {amounts[1]:,.2f} 元。"
+    record("M02", "risk", detail + "请核对分票分摊、付款批次与合同变更。", refs)
+    return True
+
+
+def check_travel(graph, linked, numbers, values, record):
+    kinds = graph["documents_by_kind"]
+    claims, invoices = kinds.get("claim", []), kinds.get("invoice", [])
+    docs = [doc["id"] for doc in audit_documents(graph)]
+    titles = [fact for fact in graph["facts"] if fact["field"] in ("claim", "invoice") and fact["status"] in ("anchored", "confirmed")]
+    valid = len(claims) == 1 and bool(invoices) and len(set(claims + invoices)) == len(docs) == len(claims+invoices)
+    valid = valid and not (kinds.get("contract") or kinds.get("acceptance"))
+    record("T01", "ok" if valid else "missing", f"已识别报销申请 {len(claims)} 份、发票 {len(invoices)} 份，本案共核对 {len(docs)} 份单据范围。",
+           ids(titles), docs)
+    if not valid:
+        for rule in ("T02", "T03", "T04", "T05"):
+            record(rule, "missing", "尚未建立单份报销申请与所附发票的资料集合。", ids(titles), docs)
+        return
+    claim = claims[0]
+    listed = linked[claim, "claim_ref"]
+    keys = {compact(fact["value"]) for fact in listed}
+    invoice_evidence = [fact for group in numbers.values() for fact in group]
+    matching = bool(keys) and keys == set(numbers) and len(numbers) == len(invoices)
+    number_refs = ids(listed, invoice_evidence)
+    record("T02", "ok" if matching else "missing",
+           "申请列示：" + ("、".join(sorted(keys)) or "缺少票号") + "。附件发票：" +
+           ("、".join(sorted(numbers)) or "缺少票号") + "。", number_refs, docs)
+    amount_pairs = [(claim, "claim_total")] + [(doc, "total") for doc in invoices]
+    fields = values("T03", amount_pairs + [(doc, field) for field in ("currency", "unit") for doc in docs])
+    if fields:
+        n_docs = len(docs)
+        amounts = [money(fact) for fact in fields[:n_docs]]
+        valid = matching and all(in_yuan(fact) for fact in fields[n_docs:2*n_docs]) and all(
+            compact(fact["value"]) in ("元", "人民币元") for fact in fields[2*n_docs:]) and None not in amounts and min(amounts) >= 0
+        refs = ids(fields) + number_refs
+        if valid:
+            total = sum(amounts[1:])
+            difference = amounts[0] - total
+            status = "issue" if difference > 0 else ("risk" if difference < 0 else "ok")
+            detail = (f"申请 {amounts[0]:,.2f} 元，已关联发票合计 {total:,.2f} 元，"
+                      f"申请与凭证差额 {difference:,.2f} 元。")
+            if difference < 0:
+                detail += "申请低于票面金额，请核对个人承担、费用分摊或部分报销记录。"
+            record("T03", status, detail, refs)
+        else:
+            record("T03", "missing", "票号、币种、金额单位、负数方向或金额格式不满足可比条件。", refs, docs)
+    trip = values("T04", [(claim, "trip_start"), (claim,"trip_end")])
+    for doc in invoices:
+        incurred = values("T04", [(doc, "service_on")])
+        if trip and incurred:
+            start, end, incurred_on = map(parsed_date, trip + incurred)
+            if None in (start, end, incurred_on) or start > end:
+                record("T04", "risk", "行程起止或费用发生日期无效，需核实。", ids(trip, incurred))
+            else:
+                record("T04", "ok" if start <= incurred_on <= end else "risk",
+                       f"申报行程 {start} 至 {end}，此笔费用发生于 {incurred_on}。", ids(trip, incurred))
+        people = values("T05", [(claim,"traveler"), (doc,"traveler")])
+        if people:
+            same = compact(people[0]["value"]) == compact(people[1]["value"])
+            record("T05", "ok" if same else "risk", "申请与票据所列人员：" +
+                   " / ".join(fact["value"] for fact in people), ids(people))
+
+
+def additional(graph, proposals):
+    facts = {fact["id"]: fact for fact in graph["facts"]}
+    candidates, subject_paths = expert_candidates(graph)
+    eligible = {fact["id"] for fact in candidates}
+    findings, invalid = [], 0
+    seen = set()
+    for item in proposals:
+        field, procedure = SIGNALS[item["procedure"]]
+        refs = list(dict.fromkeys(item["facts"]))
+        if not refs or any(ref not in eligible or facts[ref]["field"] != field for ref in refs):
+            invalid += 1
+            continue
+        if item["procedure"] == "subject_scope" and (len({subject_paths[ref][0] for ref in refs}) != 1 or
+                len({subject_paths[ref][1] for ref in refs}) < 2):
+            invalid += 1
+            continue
+        signature = (item["procedure"], tuple(sorted(refs)))
+        if signature not in seen:
+            seen.add(signature)
+            findings.append({"id": f"X01-{len(findings)+1}", "rule": "X01", "version": RULE_VERSION,
+                             "title": "专家建议追加核对", "basis": CATALOG["X01"][1], "status": "risk",
+                             "detail": procedure, "evidence": refs, "scope": []})
+    if invalid:
+        findings.append({"id": "X01-invalid", "rule": "X01", "version": RULE_VERSION, "title": "专家引用待核",
+                         "basis": CATALOG["X01"][1], "status": "missing", "detail":
+                         f"{invalid} 条建议引用与本案证据不匹配，已隔离。请核阅模型调用记录。",
+                         "evidence": [], "scope": [doc["id"] for doc in graph["documents"]]})
+    return findings
+
+
+def conclusion(findings):
+    status = {finding["status"] for finding in findings}
+    verdict = "reject" if "issue" in status else ("review" if status - {"ok"} or not status else "pass")
+    return {"verdict": verdict, "human_required": verdict != "pass", "signoff_required": True,
+            "counts": {key: sum(finding["status"] == key for finding in findings) for key in STATUS}}

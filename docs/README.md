@@ -1,0 +1,64 @@
+# Fish Audit 本机财会审计工作台
+
+打开 [本机工作台](http://127.0.0.1:8000/)。审计人员可以核对同一笔采购的发票、合同及验收资料，也可以选择差旅报销单及所附具名票据。在任务台账查看进度，对照原件核实风险与问题，最后填写验收决定。标有「合成演练」的任务可以用来熟悉流程。
+
+## 使用工作台
+
+1. 选择「新建审计」，填写任务名，选择采购与付款或差旅报销，并同时上传同一事项的资料。支持电子 PDF、扫描 PDF、Word（DOC、DOCX）、JPEG、PNG、WebP、多页 TIFF 和本机可解码的单张 HEIC/HEIF 照片。每案最多 12 份、60 页，单份 16 MiB，整案 48 MiB。
+2. 提交后可关闭或刷新页面。台账记录已收件、分页、逐页多模态解析、建图、执行规则、专家复核及生成底稿。百分比按阶段及已处理页数计算。服务重启会从已落盘的页面继续。
+3. 「审计结论」列出建议通过、需要人工校验或建议不通过，并区分已发现的问题、风险和证据不足。展开相符程序也能看到检查依据和引用。点击引用可查看提取值、逐字引文及整张原页。
+4. 「原件与引文」可下载原文件。对于可定位的电子文档，可在页图上高亮文字层对应位置。扫描件、照片、含大幅底图或不可见字层的页面进入核图流程。勾选已检查的引文，记录确认或异议。有错读可用「更正字段」，有漏项可用「补录本页字段」，对照页图逐字填写引文、取值、姓名和理由。系统保留原候选、人工记录和旧版结论，用新版本重新建图和计算。
+5. 「知识图谱」展示资料、页、观察记录、主体、合同号、票号、金额与规则结论的关系。「执行记录」可查模型版本、调用编号、结构化输出、模型指令及本版本的审计程序源码。旧版底稿可从版本下拉框打开。
+6. 核验完成后填写人工决定（通过、退回补件、提交复核）。系统将姓名、时间、意见与指定底稿版本一并归档。同一版本支持一次最终验收。需要新增或更换原件时，使用完整材料新建一案。
+
+## 本机服务
+
+此机已使用用户级 macOS LaunchAgent，监听 `127.0.0.1:8000`，登录后启动并在进程退出后恢复。密钥从 `server/.env` 加载。当前阶段是一台电脑、一个审计工作区，验收姓名由操作人填写。
+
+```sh
+server/.venv/bin/python server/service.py status
+server/.venv/bin/python server/service.py restart
+server/.venv/bin/python server/service.py stop
+server/.venv/bin/python server/service.py install
+```
+
+`stop` 卸载本次登录会话中的服务，`install` 重新加载。前台运行时先停止后台实例。同一资料目录只允许运行一个工作进程。
+
+### 在新环境安装
+
+需要 Python 3.11+（本机使用 3.12）、带中文字体的 LibreOffice 及可联网的 OpenAI 项目。macOS 的 HEIC 通过系统 `sips` 转换。
+
+```sh
+python3 -m venv server/.venv
+server/.venv/bin/python -m pip install -r server/requirements.txt
+server/.venv/bin/python server/main.py
+```
+
+在启动前配置 `server/.env`。已有密钥的机器直接使用现有文件。
+
+| 变量 | 用途 |
+| --- | --- |
+| `OPENAI_API_KEY` | OpenAI 项目密钥，调用仅来自服务端 |
+| `OPENAI_MODEL` | 支持图像输入与 Structured Outputs 的识别模型，默认 `gpt-4.1-mini-2025-04-14` |
+| `OPENAI_AUDITOR_MODEL` | 专家追加检查模型，默认与识别模型相同 |
+| `OPENAI_RECHECK_EVIDENCE` | 默认 `1`，对含候选字段的页图追加一次模型视觉复检。设为 `0` 时保留文字层核验、缺口检查及人工核图 |
+| `SOFFICE_BIN`、`AUDIT_CJK_FONT` | 可选的 LibreOffice 命令和中文字体文件 |
+| `AUDIT_DATA_DIR`、`PORT` | 本地资料目录与监听端口，默认 `server/data` 与 `8000` |
+
+浏览器把原件传给本机 Python。服务把渲染后的页图发送至 OpenAI Responses API，再把本案相关证据与程序状态交给专家模型。请求设置 `store: false`。供应商端的数据保留还取决于项目设置与适用政策。[图像输入](https://developers.openai.com/api/docs/guides/images-vision) · [结构化输出](https://developers.openai.com/api/docs/guides/structured-outputs) · [OpenAI 数据控制](https://developers.openai.com/api/docs/guides/your-data)
+
+## 证据留存
+
+- `server/data/cases/` 保存原件及模型实际读取的页图，SQLite 保存检查点、资料关系、版本化底稿和验收记录。备份时先停止服务，整体复制数据目录后再启动。
+- 「下载底稿及证据包」导出选择的报告版本、原件、页图、独立文字层和导出时的处理日志。新版本另含当次执行的程序源码。涉及跨案重号时，包内还附历史引文所在页图。文件清单含 SHA-256，`report.json` 对应数据库保存的底稿原始字节。
+- 运行 `python3 server/verify.py 证据包.zip` 可离线验证文件摘要、底稿版本、来源和关系引用。校验检查包内一致性。独立归档时可另存底稿摘要并保管备份。
+- 模型生成的引文可能遗漏或误读。原文定位、规则计算和人工核图分别留痕。资料验真、交易实际发生情况、签章效力、适用税率及正式审计意见仍需审计人员取得相应证据。
+
+## 目录与进一步说明
+
+- `server/` 为 HTTP 服务、持久化任务、OpenAI 调用、图谱和审计程序。
+- `frontend/` 为浏览器工作台，与接口同源部署。
+- [审计范围与规则](audit-method.md) 解释通过条件、证据等级和规则版本。
+- [合成演练](samples/README.md) 说明采购、差旅及核图归档案例、数据生成及真实模型验收。
+- [本机演练验收记录](acceptance.md) 提供八个可打开的案例、已核实的金额差异及核图记录。
+- [接口约定](api.md) 列出上传、进度、原件、核图和归档接口。

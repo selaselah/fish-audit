@@ -1,0 +1,44 @@
+"""Curated methodological references. Rule applicability is defined separately."""
+
+ACCOUNTING = {"title": "《中华人民共和国会计法》（2024年修正）第十四条",
+              "url": "https://kjs.mof.gov.cn/zhengcefabu/202408/t20240812_3941615.htm",
+              "scope": "原始凭证审核的一般背景。各项勾稽条件为本系统采购检查程序。"}
+PROCUREMENT = {"title": "财政部会计司解读《企业内部控制应用指引第7号——采购业务》",
+               "url": "https://kjs.mof.gov.cn/zhengcejiedu/201006/t20100611_322435.htm",
+               "edition": "2010-06-11", "scope": "企业采购业务内控参考，适用性需结合本单位制度。"}
+EVIDENCE = {"title": "《中国注册会计师审计准则第1301号——审计证据》",
+            "url": "https://www.cicpa.org.cn/ztzl1/Professional_standards/xxzztx/zyzz/sjzz/202105/P020240412542695263912.pdf",
+            "edition": "2022-12-22 修订", "scope": "注册会计师审计的方法参考，用于说明证据评估与追加程序思路。"}
+SOURCES = {
+    "voucher": {**ACCOUNTING, "edition": "2024年修正", "locator": "第十四条",
+                "summary": "核查原始凭证的准确性和完整性，遇有欠缺可要求补正。"},
+    "purchase-records": {**PROCUREMENT, "locator": "第二部分（五）合同、（九）会计控制",
+                         "summary": "采购合同、验收和付款环节的记录应能相互核对。"},
+    "receipt": {**PROCUREMENT, "locator": "第二部分（七）验收",
+                "summary": "对照约定检查收到的物资，记录验收结论并处理异常。"},
+    "payment": {**PROCUREMENT, "locator": "第二部分（八）付款",
+                "summary": "审核付款申请时应关注合同约定、凭证、审批及预付款项。"},
+    "evidence-quality": {**EVIDENCE, "locator": "第三、十、十一及十三条",
+                         "summary": "证据的来源、准确性、完整性和与检查目标的关系影响其证明力。"},
+    "follow-up": {**EVIDENCE, "locator": "第十五条",
+                  "summary": "不同来源的材料相互矛盾或可靠性存疑时，应考虑调整检查或追加程序。"},
+}
+MAPPING = {"E01": ["voucher", "evidence-quality"], "P01": ["purchase-records"], "P02": ["purchase-records"],
+           "P03": ["purchase-records"], "I01": ["voucher", "follow-up"], "M01": ["voucher"],
+           "C01": ["payment"], "M02": ["purchase-records", "payment"], "D01": ["purchase-records"],
+           "A01": ["receipt"], "S01": ["receipt"], "X01": ["follow-up"],
+           "T01": ["voucher"], "T02": ["evidence-quality"], "T03": ["voucher"],
+           "T04": ["evidence-quality"], "T05": ["evidence-quality"], "I02": ["voucher", "follow-up"]}
+
+
+def link_sources(graph):
+    used = {node["label"]: node["id"] for node in graph["nodes"] if node["type"] == "control"}
+    keys = {key for rule in used for key in MAPPING[rule]}
+    for key in sorted(keys):
+        source = SOURCES[key]
+        graph["nodes"].append({"id": "source/" + key, "type": "method_reference",
+                               "label": source["title"], **source})
+    for rule, node_id in used.items():
+        for key in MAPPING[rule]:
+            source_id = "source/" + key
+            graph["edges"].append({"from": source_id, "to": node_id, "type": "method_reference", "evidence": [source_id]})

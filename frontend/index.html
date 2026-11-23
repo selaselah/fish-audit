@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN" data-type="software">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="采购财会资料的核验、证据勾稽与审计底稿验收。">
+  <meta name="page-type" content="software">
+  <meta name="site-kind" content="software">
+  <title>Fish Audit · 财会审计工作台</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#content">跳到工作区</a>
+  <header class="bar">
+    <div class="wrap header-inner">
+      <a class="brand" href="#desk" aria-label="Fish Audit 工作台"><span class="ledger" aria-hidden="true"></span>Fish Audit</a>
+      <nav class="primary-nav" aria-label="主导航"><a href="#desk" id="nav-desk">审计工作台</a><a href="#rules" id="nav-rules">规则依据</a></nav>
+      <span class="connection" id="connection">正在连接</span>
+    </div>
+  </header>
+  <main class="wrap" id="content" tabindex="-1">
+    <section id="desk">
+      <div class="heading"><div><h1>审计工作台</h1></div>
+        <button class="primary" id="new-case">新建审计</button></div>
+      <section class="board" aria-labelledby="queue-title">
+        <div class="board-head"><h2 id="queue-title">任务台账</h2><div class="filters" aria-label="筛选任务">
+          <button type="button" data-filter="all" aria-pressed="true">全部</button>
+          <button type="button" data-filter="active" aria-pressed="false">进行中</button>
+          <button type="button" data-filter="ready" aria-pressed="false">待验收</button>
+          <button type="button" data-filter="closed" aria-pressed="false">已归档</button>
+        </div></div>
+        <div id="case-list" aria-live="polite"></div>
+      </section>
+    </section>
+    <section id="rules" hidden><a class="back" href="#desk">返回工作台</a><div class="heading"><div><h1>规则依据</h1></div></div><div id="catalog"></div></section>
+    <section id="case" hidden>
+      <a class="back" href="#desk">返回任务台账</a>
+      <div class="heading"><div><p class="eyebrow" id="case-meta"></p><h1 id="case-title"></h1></div><span id="case-status"></span></div>
+      <div id="progress-panel" class="board progress-panel" aria-live="polite"></div>
+      <div id="report-tools" hidden><nav class="tabs" aria-label="底稿视图" id="tabs"></nav>
+        <label class="version">底稿版本 <select id="version"></select></label></div>
+      <div id="case-panel"></div>
+    </section>
+    <p id="network-error" role="alert" hidden></p>
+  </main>
+  <dialog id="upload-dialog">
+    <form id="upload-form">
+      <div class="dialog-head"><h2>新建审计</h2><button class="plain" type="button" data-close>关闭</button></div>
+      <label>任务名称<input id="upload-title" required maxlength="100" placeholder="例如：档案柜采购 · 十月验收"></label>
+      <label>审计范围<select id="upload-profile"><option value="cn-procurement-full-settlement/v1">采购与付款 · 合同、发票及验收</option><option value="cn-travel-reimbursement/v1">差旅报销 · 全凭票报销</option></select></label>
+      <label>待审资料<input id="upload-files" type="file" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,.tif,.tiff,.heic,.heif" required></label>
+      <p class="muted">可一次选择多份 PDF、Word 或图片。单份 16 MiB，整案最多 12 份、48 MiB、60 页。</p>
+      <ul id="chosen-files" class="compact"></ul>
+      <div class="note"><span id="profile-note">按单合同、一次全额结算核对。</span>提交后，系统将资料页图及证据内容发送至 OpenAI。</div>
+      <p id="upload-error" role="alert"></p>
+      <div class="actions"><button class="primary" id="submit-files">提交并开始审计</button></div>
+    </form>
+  </dialog>
+  <dialog id="page-dialog" class="wide-dialog">
+    <div class="dialog-head"><h2 id="page-title">资料原页</h2><button class="plain" type="button" data-close>关闭</button></div>
+    <div id="page-content"></div>
+  </dialog>
+  <dialog id="review-dialog">
+    <form id="review-form">
+      <div class="dialog-head"><h2 id="review-title">人工验收</h2><button class="plain" type="button" data-close>关闭</button></div>
+      <div id="review-context" class="note"></div>
+      <label>核验决定<select id="review-decision"></select></label>
+      <label>审计人员<input id="reviewer" required maxlength="50" autocomplete="name"></label>
+      <label>核验依据与处理意见<textarea id="review-note" rows="4" required maxlength="2000"></textarea></label>
+      <p id="review-error" role="alert"></p>
+      <div class="actions"><button class="primary" id="submit-review">保存核验记录</button></div>
+    </form>
+  </dialog>
+  <dialog id="amend-dialog" class="wide-dialog">
+    <div class="dialog-head"><h2 id="amend-title">补录原文</h2><button class="plain" type="button" data-close>关闭</button></div>
+    <div class="page-view">
+      <div><img id="amend-image" class="page-image" alt="本次核对的原页"></div>
+      <form id="amend-form">
+        <p id="amend-context" class="muted"></p>
+        <label>字段<select id="amend-field" required></select></label>
+        <label>原页逐字引文<textarea id="amend-quote" rows="2" maxlength="1500" required></textarea></label>
+        <label>引文中的取值<input id="amend-value" maxlength="500" required></label>
+        <label>页内位置<select id="amend-region"><option value="top">上部</option><option value="middle">中部</option><option value="bottom">下部</option></select></label>
+        <label>审计人员<input id="amend-reviewer" required maxlength="50" autocomplete="name"></label>
+        <label>核图意见<textarea id="amend-note" maxlength="2000" rows="2" required></textarea></label>
+        <p id="amend-error" role="alert"></p>
+        <button class="primary" id="amend-submit">留存更正并重算</button>
+      </form>
+    </div>
+  </dialog>
+  <noscript>请启用 JavaScript 以使用审计工作台。</noscript>
+</body>
+</html>
