@@ -12,7 +12,7 @@ from installments import LIMIT as INSTALLMENT_LIMIT, calculate as calculate_inst
 from payment_history import LIMIT, cited_facts, payment_record
 from peer_review import journal_decision, verify_referrals, verify_review
 from protocol import canonical, response_request
-from rule_replay import check_receipt, compare_rules, replay_from_git
+from rule_replay import check_receipt, replay_from_git, replay_installed
 from supplements import compare_return
 
 
@@ -42,18 +42,8 @@ def verify_request(trace, instructions, page_image=None):
 
 
 def replay_rules(report):
-    """Only import the operator's local rule implementation after checking its recorded version."""
-    local = Path(__file__).resolve().parent
-    digests = report["policy"].get("code_sha256", {})
-    modules = ("config.py","controls.py","graph.py","calculations.py","model.py","payment_history.py","policy.py","transfers.py")
-    if "installments.py" in digests:
-        modules += ("installments.py",)
-    if "supplement" in report:
-        modules += ("supplements.py",)
-    for name in modules:
-        require(digests.get(name) == sha((local / name).read_bytes()), "严格复算需要与底稿一致的本机规则版本："+name)
-    import controls
-    compare_rules(report,controls)
+    outcome = replay_installed(report)
+    require(outcome["state"]=="verified",outcome.get("message","本机程序复算结果与底稿不符。"))
 
 
 def verify_payment_history(bundle, hashes, report, journal):
@@ -323,17 +313,21 @@ if __name__ == "__main__":
     if args.rules and args.replay_receipt:
         parser.error("复算记录使用本地 Git 发布历史，请选择 --rules-from-git 或省略 --rules。")
     try:
-        def historical(report,revision,report_hash,created):
+        def check_selected_rules(report,revision,report_hash,created):
             ref = args.rules_from_git or "HEAD"
-            if args.replay_receipt:
+            if args.rules:
+                outcome = replay_installed(report)
+            elif args.replay_receipt:
                 receipt = json.loads(args.replay_receipt.read_bytes())
                 require(isinstance(receipt,dict),"复算记录须为 JSON 对象")
                 outcome = check_receipt(receipt,report,revision,report_hash,created,ref)
             else:
                 outcome = replay_from_git(report,ref)
             require(outcome["state"]=="verified",outcome.get("message","规则与底稿不符"))
-            print(f"规则复算一致：{outcome['finding_count']} 项发现，规则源码来自本地提交 {outcome['commit']}。")
-        case_id, revision, files = verify(args.bundle,args.rules,rule_checker=historical if args.rules_from_git or args.replay_receipt else None)
+            source = f"本地提交 {outcome['commit']}" if "commit" in outcome else "本机部署目录"
+            print(f"规则复算一致，{outcome['finding_count']} 项发现。规则来自{source}，共核对 {len(outcome['modules'])} 份源码。")
+        selected = args.rules or args.rules_from_git or args.replay_receipt
+        case_id, revision, files = verify(args.bundle,rule_checker=check_selected_rules if selected else None)
         print(f"校验成功：{case_id} R{revision}，{files} 个文件。")
     except (KeyError, TypeError, ValueError, OSError, zipfile.BadZipFile) as error:
         parser.exit(1, f"校验失败：{error}\n")

@@ -63,6 +63,10 @@ class ReceiptControls(unittest.TestCase):
             replay_rules({**report, "result":{**report["result"],"verdict":"reject"}})
         with self.assertRaises(ValueError):
             replay_rules({**report, "findings":[*findings[:-1],{**findings[-1],"detail":"无依据的结论"}]})
+        for name in ("capacity.py","protocol.py"):
+            changed = {**report["policy"],"code_sha256":{**CODE_DIGESTS,name:"0"*64}}
+            with self.subTest(name=name),self.assertRaisesRegex(ValueError,name):
+                replay_rules({**report,"policy":changed})
 
     def test_masked_pending_changes_and_noncomparable_currency(self):
         for field,value in (("transfer_status","已受理"),("payee","另一供应方"),("paid_on","2026-10-01"),

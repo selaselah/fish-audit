@@ -3,10 +3,12 @@ from datetime import datetime, timezone
 import hashlib
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
-from rule_replay import RuleMismatch, RulesUnavailable, check_receipt, replay_from_git
+from rule_replay import RuleMismatch, RulesUnavailable, check_receipt, replay_from_git, replay_installed
 
 
 class HistoricalRules(unittest.TestCase):
@@ -82,6 +84,40 @@ def conclusion(findings):
         mixed["policy"]["code_sha256"]["config.py"]=hashlib.sha256(config.read_bytes()).hexdigest()
         with self.assertRaisesRegex(RulesUnavailable,"全部依赖摘要"):
             replay_from_git(mixed,"main",self.repo)
+
+    def test_installed_replay_checks_every_dependency_and_uses_the_verified_bytes(self):
+        import rule_replay
+        folder = self.repo/"server"
+        with self.assertRaisesRegex(RulesUnavailable,"rule_values.py"):
+            replay_installed(self.report,folder)
+        self.value.write_text("value='first release'\n")
+        original = replay_from_git(self.report,"main",self.repo)
+        # An unrelated module with the same name in the calling interpreter cannot supply the rules.
+        with patch.dict(sys.modules,{"controls":object()}):
+            outcome = replay_installed(self.report,folder)
+        self.assertEqual(outcome,{k:v for k,v in original.items() if k not in {"commit","trusted_tip"}})
+        runner = rule_replay.run_matching_sources
+        def change_after_check(report,modules):
+            self.value.write_text("value='changed after verification'\n")
+            return runner(report,modules)
+        with patch.object(rule_replay,"run_matching_sources",side_effect=change_after_check):
+            self.assertEqual(replay_installed(self.report,folder),outcome)
+        moved = self.value.rename(folder/"kept-source")
+        with self.assertRaisesRegex(RulesUnavailable,"rule_values.py"):
+            replay_installed(self.report,folder)
+        self.value.symlink_to(moved)
+        with self.assertRaisesRegex(RulesUnavailable,"普通文件"):
+            replay_installed(self.report,folder)
+
+    def test_history_crosses_release_without_server_and_skips_missing_recorded_import(self):
+        # Match the first release even though newer commits lack either a recorded import or the server directory.
+        self.git("rm","-q","server/rule_values.py")
+        self.git("commit","-qm","remove rule dependency")
+        latest = replay_from_git(self.report,"main",self.repo)
+        self.assertEqual(latest["commit"],self.first)
+        self.git("rm","-qr","server")
+        self.git("commit","-qm","remove server")
+        self.assertEqual(replay_from_git(self.report,"main",self.repo)["commit"],self.first)
 
     def test_receipt_binds_case_revision_source_and_computed_result(self):
         outcome=replay_from_git(self.report,"main",self.repo)

@@ -175,22 +175,21 @@ class PaymentHistoryTests(unittest.TestCase):
             self.assertCountEqual(executor.map(approve,("thread-a","thread-b")),[200,409])
 
     def test_installment_index_migration_limit_and_wrong_historical_scope(self):
-        from unittest.mock import patch
-        for n in range(3):
+        from installments import LIMIT
+        for n in range(LIMIT+1):
             self.installment("history-"+str(n),"100.00","YL-HIST-"+str(n))
             self.sign("history-"+str(n))
         with self.store.connect(True) as db:
             db.execute("DROP TABLE contract_payments")
             db.execute("PRAGMA user_version=3")
         self.store=Store(self.root)
-        with patch("storage.INSTALLMENT_LIMIT",2),patch("verify.INSTALLMENT_LIMIT",2),patch("installments.LIMIT",2):
-            report=self.installment("over-limit","10.00","YL-NEXT")
-            window=report["graph"]["payment_history"]["installments"]
-            self.assertEqual((window["count"],len(window["matches"]),window["calculation"]["state"]),(3,2,"incomplete"))
-            self.assertNotIn("paid_total",window["calculation"])
-            bundle=io.BytesIO()
-            export_bundle(self.store,"over-limit",1,bundle)
-            self.assertEqual(verify(bundle,True)[:2],("over-limit",1))
+        report=self.installment("over-limit","10.00","YL-NEXT")
+        window=report["graph"]["payment_history"]["installments"]
+        self.assertEqual((window["count"],len(window["matches"]),window["calculation"]["state"]),(LIMIT+1,LIMIT,"incomplete"))
+        self.assertNotIn("paid_total",window["calculation"])
+        bundle=io.BytesIO()
+        export_bundle(self.store,"over-limit",1,bundle)
+        self.assertEqual(verify(bundle,True)[:2],("over-limit",1))
         self.installment("other-contract",contract_id="OTHER-CONTRACT")
         self.sign("other-contract")
         with self.store.connect(True) as db:

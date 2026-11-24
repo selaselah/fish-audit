@@ -1,4 +1,4 @@
-"""Replay a saved graph using byte-matched rule modules from an operator's local Git history."""
+"""Replay a saved graph using byte-matched rule modules from a trusted checkout or its Git history."""
 
 import ast
 import hashlib
@@ -14,6 +14,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
+CORE_MODULES = {"controls.py","config.py","model.py","graph.py","policy.py"}
 
 
 class RulesUnavailable(ValueError):
@@ -69,12 +70,13 @@ def history(repo, tip):
 
 @lru_cache(maxsize=150)
 def tree(repo, commit):
-    listing = git(repo,"ls-tree","-z",commit+":server")
+    listing = git(repo,"ls-tree","-z",commit,"--","server/")
     modules = {}
     for row in listing.split(b"\0"):
         if not row:
             continue
         metadata,filename = row.split(b"\t",1)
+        filename = filename.removeprefix(b"server/")
         mode,kind,oid = metadata.split()
         if kind==b"blob" and mode in {b"100644",b"100755"} and re.fullmatch(rb"[A-Za-z_]\w*\.py",filename):
             modules[filename.decode("ascii")] = oid.decode("ascii")
@@ -88,10 +90,13 @@ def blob(repo, oid):
 
 
 @lru_cache(maxsize=400)
-def local_imports(repo, oid):
-    source,_ = blob(repo,oid)
+def module_imports(source):
     imports = set()
-    for node in ast.walk(ast.parse(source)):
+    try:
+        syntax = ast.parse(source)
+    except (SyntaxError,ValueError) as exc:
+        raise RulesUnavailable("本机 Python 无法解析匹配到的规则源码。") from exc
+    for node in ast.walk(syntax):
         if isinstance(node,ast.Import):
             imports.update(alias.name.split(".",1)[0]+".py" for alias in node.names)
         elif isinstance(node,ast.ImportFrom) and node.module:
@@ -99,29 +104,33 @@ def local_imports(repo, oid):
     return imports
 
 
-def matching_modules(repo, commit, hashes):
-    available = tree(repo,commit)
-    if "controls.py" not in available:
-        return None
-    pending,matched = ["controls.py"],{}
+def matching_modules(available, hashes, read, roots):
+    # A recorded import that disappeared from this release must still be accounted for.
+    candidates = available.keys() | hashes.keys()
+    pending,matched = list(roots),{}
     while pending:
         name = pending.pop()
         if name in matched:
             continue
-        oid = available[name]
-        _,checksum = blob(repo,oid)
+        if name not in available:
+            return None,name
+        source,checksum = read(available[name])
         if hashes.get(name) != checksum:
-            return None
-        matched[name] = oid
-        pending.extend(sorted(local_imports(repo,oid) & available.keys()))
-    return matched
+            return None,name
+        matched[name] = source,checksum
+        pending.extend(sorted(module_imports(source) & candidates))
+    return matched,None
+
+
+def recorded_hashes(report):
+    hashes = report["policy"].get("code_sha256",{})
+    if not isinstance(hashes,dict) or not CORE_MODULES.issubset(hashes):
+        raise RulesUnavailable("这版底稿保存的规则源码摘要不完整，无法确认当时使用的程序。")
+    return hashes
 
 
 def trusted_engine(report, ref, repo, pinned=None, issued_tip=None):
-    hashes = report["policy"].get("code_sha256",{})
-    required = {"controls.py","config.py","model.py","graph.py","policy.py"}
-    if not required.issubset(hashes):
-        raise RulesUnavailable("这版底稿保存的规则源码摘要不完整，无法确认当时使用的程序。")
+    hashes = recorded_hashes(report)
     tip = git(repo,"rev-parse","--verify","--end-of-options",ref+"^{commit}").decode("ascii").strip()
     if issued_tip is not None:
         if not isinstance(issued_tip,str) or not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})",issued_tip):
@@ -136,22 +145,17 @@ def trusted_engine(report, ref, repo, pinned=None, issued_tip=None):
             raise RulesUnavailable("复算记录所列提交不在指定的本地发布历史中。")
         commits = [pinned]
     for commit in commits:
-        modules = matching_modules(repo,commit,hashes)
+        modules,_ = matching_modules(tree(repo,commit),hashes,lambda oid: blob(repo,oid),["controls.py"])
         if modules:
             return tip,commit,modules
     raise RulesUnavailable("在指定的本地发布历史中没有找到全部依赖摘要相符的规则版本。")
 
 
-def replay_from_git(report, ref="HEAD", repo=ROOT, *, pinned=None, issued_tip=None):
-    repo = Path(repo).resolve()
-    tip,commit,modules = trusted_engine(report,ref,repo,pinned,issued_tip)
+def run_matching_sources(report, modules):
     with tempfile.TemporaryDirectory(prefix="fish-rule-replay-") as folder:
         directory = Path(folder)
-        checksums = {}
-        for name,oid in modules.items():
-            data,checksum = blob(repo,oid)
+        for name,(data,_) in modules.items():
             (directory/name).write_bytes(data)
-            checksums[name] = checksum
         cmd = [sys.executable,"-I","-B",str(Path(__file__).resolve()),str(directory)]
         # The isolated process sees just the selected source modules and the saved report on stdin.
         try:
@@ -162,7 +166,30 @@ def replay_from_git(report, ref="HEAD", repo=ROOT, *, pinned=None, issued_tip=No
             raise RulesUnavailable("本机未能运行所选规则。请使用项目的 Python 环境检查依赖。") from exc
     if outcome["state"]=="unavailable":
         raise RulesUnavailable(outcome["message"])
-    return {**outcome,"commit":commit,"trusted_tip":tip,"modules":dict(sorted(checksums.items()))}
+    return {**outcome,"modules":{name:checksum for name,(_,checksum) in sorted(modules.items())}}
+
+
+def replay_from_git(report, ref="HEAD", repo=ROOT, *, pinned=None, issued_tip=None):
+    repo = Path(repo).resolve()
+    tip,commit,modules = trusted_engine(report,ref,repo,pinned,issued_tip)
+    return {**run_matching_sources(report,modules),"commit":commit,"trusted_tip":tip}
+
+
+def replay_installed(report, folder=ROOT/"server"):
+    hashes = recorded_hashes(report)
+    def read(path):
+        if path.is_symlink() or not path.is_file():
+            raise RulesUnavailable("本机规则源码须为普通文件："+path.name)
+        source = path.read_bytes()
+        return source,hashlib.sha256(source).hexdigest()
+    available = {path.name:path for path in Path(folder).glob("*.py") if re.fullmatch(r"[A-Za-z_]\w*\.py",path.name)}
+    roots = sorted(CORE_MODULES)
+    if "supplement" in report:
+        roots.append("supplements.py")
+    modules,unmatched = matching_modules(available,hashes,read,roots)
+    if unmatched:
+        raise RulesUnavailable("严格复算需要与底稿一致的本机规则版本："+unmatched)
+    return run_matching_sources(report,modules)
 
 
 def check_receipt(receipt, report, revision, report_hash, created, ref, repo=ROOT):
