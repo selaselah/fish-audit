@@ -80,6 +80,10 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 
 提交付款任务的 `approve` 决定时，若出现新增的匹配归档，签收接口返回 HTTP 409。审计人员可基于当前版本请求 `rerun`，取得新版证据后再签收。原版本及当时的历史查询结果可继续读取。
 
+自规则集 `2026.11.24.2` 起，有分期条款线索的底稿还提供 `graph.payment_history.installments`。其中 `count` 为同企业、同合同号与同收付双方已通过的历史任务数，`matches` 保存至多 32 份历史任务的版本、签收摘要、引用原文和取数。审核通过或独立复核通过前，会在同一写事务中重查历史列表。
+
+`calculation.state` 为 `calculated` 时，`payments` 逐笔给出日期、完整流水、人民币元金额、原文字段及 `copies` 中的副本引用。`paid_total`、`contract_total` 和 `difference` 均为精确到分的十进制字符串，差额为累计减合同。遇到证据不足、记载冲突、命中过多时，分别返回 `missing`、`conflict`、`incomplete` 与原因，省略金额。证据包内的历史签收底稿、所引原件、页图和文字层可离线复查。
+
 ## 企业与工作台
 
 企业登录流程及岗位权限见[企业工作区](saas.md)。下表的业务路径可接在本机 `/api` 或登录后的 `/api/w/{企业编号}` 之后。企业请求从 `GET /api/session` 获取会话信息，所有写请求携带 `X-CSRF-Token`。

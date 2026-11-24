@@ -10,8 +10,9 @@ from backup import MARKER
 from capacity import admit, install as install_capacity, settings
 from config import BANK, CaseError, PROFILE
 from field_receipts import field_actions, validate_field_actions
-from field_sources import FieldSources, check_archived_files, source_row
+from field_sources import FieldSources, check_archived_files, check_cited_files, source_row
 from graph import compact, invoice_number_edges
+from installments import LIMIT as INSTALLMENT_LIMIT, calculate as calculate_installments
 from payment_history import LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_facts, payment_record
 from peer_review import different_reviewers, review_record, valid_findings, verify_review
 from supplements import compare_return
@@ -171,12 +172,18 @@ class Store:
                 settlement TEXT, FOREIGN KEY(case_id,rev) REFERENCES reports(case_id,rev))""")
             db.execute("CREATE INDEX IF NOT EXISTS payment_reference ON payment_index(payer,reference)")
             db.execute("CREATE INDEX IF NOT EXISTS payment_settlement ON payment_index(settlement) WHERE settlement IS NOT NULL")
-            if db.execute("PRAGMA user_version").fetchone()[0] < 3:
-                rows = db.execute("""SELECT c.id,c.rev,r.content FROM cases c JOIN reports r ON r.case_id=c.id
+            db.execute("""CREATE TABLE IF NOT EXISTS contract_payments(
+                       case_id TEXT PRIMARY KEY, rev INTEGER NOT NULL, contract_key TEXT NOT NULL,
+                       FOREIGN KEY(case_id,rev) REFERENCES reports(case_id,rev))""")
+            db.execute("CREATE INDEX IF NOT EXISTS contract_payment_key ON contract_payments(contract_key)")
+            if db.execute("PRAGMA user_version").fetchone()[0] < 4:
+                rows = db.execute("""SELECT c.id,c.rev,r.content,r.hash FROM cases c JOIN reports r ON r.case_id=c.id
                                    AND r.rev=c.rev WHERE c.profile=?""", (BANK,))
                 for row in rows:
+                    if hashlib.sha256(row["content"].encode()).hexdigest() != row["hash"]:
+                        raise CaseError("已有付款底稿摘要不符，无法重建合同付款索引。",409)
                     self.index_payment(db, row["id"], row["rev"], json.loads(row["content"]))
-                db.execute("PRAGMA user_version=3")
+                db.execute("PRAGMA user_version=4")
             install_capacity(db)
         os.chmod(self.path, 0o600)
 
@@ -399,6 +406,10 @@ class Store:
         if signature["reference"]:
             db.execute("INSERT INTO payment_index(case_id,rev,payer,reference,settlement) VALUES(?,?,?,?,?)",
                        (case_id, revision, signature["payer"], signature["reference"], signature["settlement"]))
+        db.execute("DELETE FROM contract_payments WHERE case_id=?",(case_id,))
+        if signature["installment"]["key"]:
+            db.execute("INSERT INTO contract_payments(case_id,rev,contract_key) VALUES(?,?,?)",
+                       (case_id,revision,signature["installment"]["key"]))
 
     @staticmethod
     def payment_matches(db, case_id, signature, as_of):
@@ -476,18 +487,59 @@ class Store:
                 verified = self.check_graph_field_history(prior,rev,report["graph"],set(refs))
                 check_archived_files(db,prior,self.files/prior,verified)
                 match["evidence"] = cited_facts(report["graph"], prior, rev, refs)
+            current = signature["installment"]
+            if current["requested"]:
+                window = self.installment_matches(db,case_id,current["key"],history["as_of"])
+                for match in window["matches"]:
+                    prior,rev = match["case_id"],match["rev"]
+                    content,signoff = self.signed_source(db,case_id,prior,rev)
+                    paper = json.loads(content)
+                    source = payment_record(paper["graph"],paper["findings"])["installment"]
+                    if source["key"] != current["key"]:
+                        raise CaseError("累计付款索引与历史合同及收付主体的原文不一致。",409)
+                    self.check_graph_field_history(prior,rev,paper["graph"],set(source["refs"]))
+                    match["entry"] = source["entry"]
+                    match["signoff_hash"] = hashlib.sha256(canonical(signoff)).hexdigest()
+                    match["evidence"] = cited_facts(paper["graph"],prior,rev,source["refs"])
+                    check_cited_files(db,prior,self.files/prior,paper["graph"],match["evidence"])
+                window["calculation"] = calculate_installments(current,window)
+                history["installments"] = window
             return history
+
+    @staticmethod
+    def installment_matches(db, case_id, key, as_of):
+        rows = [dict(r) for r in db.execute("""SELECT i.case_id,i.rev,c.title,r.hash AS report_hash,s.decision,
+                    s.time AS signed_at,COUNT(*) OVER() AS total FROM contract_payments i
+                    JOIN cases c ON c.id=i.case_id AND c.rev=i.rev
+                    JOIN reports r ON r.case_id=i.case_id AND r.rev=i.rev
+                    JOIN signoffs s ON s.case_id=i.case_id AND s.rev=i.rev
+                    WHERE c.workspace=(SELECT workspace FROM cases WHERE id=?) AND i.contract_key=? AND i.case_id<>?
+                      AND c.status='closed' AND s.decision='approve' AND s.time<=?
+                    ORDER BY s.time DESC,i.case_id LIMIT ?""",(case_id,key,case_id,as_of,INSTALLMENT_LIMIT))]
+        count = rows[0]["total"] if rows else 0
+        for row in rows:
+            del row["total"]
+        return {"count":count,"matches":rows}
 
     def recheck_payment_approval(self, db, case_id, revision, *, peer=False):
         row = db.execute("SELECT * FROM payment_index WHERE case_id=? AND rev=?", (case_id, revision)).fetchone()
-        if not row:
+        contract = db.execute("SELECT contract_key FROM contract_payments WHERE case_id=? AND rev=?",(case_id,revision)).fetchone()
+        if not row and not contract:
             return
-        previous = json.loads(db.execute("SELECT content FROM reports WHERE case_id=? AND rev=?",
-                                         (case_id, revision)).fetchone()[0])["graph"].get("payment_history", {})
-        current = self.payment_matches(db, case_id, row, stamp())
+        paper = json.loads(db.execute("SELECT content FROM reports WHERE case_id=? AND rev=?",(case_id,revision)).fetchone()[0])
+        previous = paper["graph"].get("payment_history", {})
+        now = stamp()
+        current = self.payment_matches(db,case_id,row,now) if row else {"counts":{"same":0,"full":0},"matches":[]}
         def keys(history):
             return [(m["kind"], m["case_id"], m["rev"]) for m in history.get("matches", [])]
-        if previous.get("counts", {"same": 0, "full": 0}) != current["counts"] or keys(previous) != keys(current):
+        changed = previous.get("counts", {"same":0,"full":0}) != current["counts"] or keys(previous) != keys(current)
+        if contract and payment_record(paper["graph"],paper["findings"])["installment"]["requested"]:
+            prior = previous.get("installments",{"count":0,"matches":[]})
+            latest = self.installment_matches(db,case_id,contract["contract_key"],now)
+            def pins(window):
+                return [(m["case_id"],m["rev"],m["report_hash"],m["signed_at"]) for m in window["matches"]]
+            changed = changed or latest["count"]!=prior["count"] or pins(latest)!=pins(prior)
+        if changed:
             if peer:
                 raise CaseError("底稿生成后出现了新的已签收付款线索。请退回补件，沿用原件提交重审并核对最新付款记录。", 409)
             raise CaseError("底稿生成后出现了新的已签收付款线索。请在执行记录中选择「保留此版并重新审计」，核对最新凭证后再通过。", 409)

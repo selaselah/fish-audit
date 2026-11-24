@@ -5,6 +5,7 @@ import json
 import re
 
 from calculations import money, normalized
+from installments import RULE as INSTALLMENT_RULE, finding as installment_finding, installment_record
 
 
 LIMIT = 8
@@ -12,6 +13,7 @@ BASE_RULES = {"E01", "B01", "B02", "B03", "B04", "B05"}
 HISTORY_RULES = {
     "B06": ("已签收底稿中的相同流水", "以银行回单上已核付款户名及完整流水号，在本工作区的已签收付款任务中精确查找。"),
     "B07": ("同合同多笔全额付款线索", "以合同号、收付双方和人民币元全额核对已人工通过的底稿，查找交易成功且流水号不同的另一笔全额付款。"),
+    "B08": INSTALLMENT_RULE,
 }
 
 
@@ -24,6 +26,12 @@ def unmasked(value):
 
 
 def payment_record(graph, findings):
+    record = receipt_keys(graph,findings)
+    record["installment"] = installment_record(graph,findings,record["payer"],record["reference"])
+    return record
+
+
+def receipt_keys(graph, findings):
     """Both keys are optional. A reused reference can be checked without assuming settlement."""
     record = {"payer": None, "reference": None, "settlement": None, "same_refs": [], "full_refs": []}
     receipts = graph["documents_by_kind"].get("bank_receipt", [])
@@ -80,11 +88,18 @@ def cited_facts(graph, case_id, revision, refs):
     return citations
 
 
+def payment_matches_with_evidence(history):
+    return [*history["matches"],*history.get("installments",{}).get("matches",[])]
+
+
 def attach_history(graph, history):
     graph["payment_history"] = history
-    for match in history["matches"]:
+    known = {node["id"] for node in graph["nodes"]}
+    for match in payment_matches_with_evidence(history):
         for fact in match["evidence"]:
-            graph["nodes"].append({"id": fact["id"], "type": "archived_observation", "label": fact["label"]})
+            if fact["id"] not in known:
+                graph["nodes"].append({"id": fact["id"], "type": "archived_observation", "label": fact["label"]})
+                known.add(fact["id"])
 
 
 def check_history(signature, history, record, scope):
@@ -108,3 +123,6 @@ def check_history(signature, history, record, scope):
         if count > len(matches):
             detail += f"列示最近签收的 {len(matches)} 份。"
         record(rule, "risk" if count else "ok", detail + " 核查时点 " + history["as_of"], refs, scope)
+    if "installments" in history:
+        status,detail,refs = installment_finding(signature["installment"],history["installments"],history["as_of"])
+        record("B08",status,detail,refs,scope)

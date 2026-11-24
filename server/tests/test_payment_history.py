@@ -31,12 +31,13 @@ class PaymentHistoryTests(unittest.TestCase):
         self.root = Path(temp.name)
         self.store = Store(self.root)
 
-    def workpaper(self, case_id, *, fresh=True, history=True, workspace="local", user=None, **fields):
+    def workpaper(self, case_id, *, fresh=True, history=True, workspace="local", user=None, contract_variant=0, **fields):
         docs, pages = receipt_material(**fields)
         for doc, page in zip(docs, pages):
             # The controlled extractor supplies the text layer. The bundle still carries real image bytes.
             photo = io.BytesIO()
-            Image.new("RGB", (24, 20), color=(12, 34, int(doc["id"][1:]))).save(photo, format="JPEG")
+            variant = contract_variant if doc["id"]=="d01" else 0
+            Image.new("RGB", (24, 20), color=(12+variant, 34, int(doc["id"][1:]))).save(photo, format="JPEG")
             data = photo.getvalue()
             doc.update(ext=".jpg", size=len(data), sha256=sha(data))
             page.update(sha256=sha(data), width=24, height=20)
@@ -67,6 +68,135 @@ class PaymentHistoryTests(unittest.TestCase):
     def assert_controls(self, report, same, full):
         self.assertEqual({f["rule"]: f["status"] for f in report["findings"] if f["rule"] in {"B06", "B07"}},
                          {"B06": same, "B07": full})
+
+    def installment(self,case,amount="4200.00",reference="YL-FIRST",**fields):
+        return self.workpaper(case,payment_term="分期付款",transfer_amount=amount,transfer_ref=reference,**fields)
+
+    def test_installment_totals_use_unique_approved_receipts_and_pinned_sources(self):
+        first = self.installment("first")
+        self.sign("first")
+        duplicate = self.installment("same-receipt")
+        duplicate_calc = duplicate["graph"]["payment_history"]["installments"]["calculation"]
+        self.assertEqual((duplicate_calc["paid_total"],len(duplicate_calc["payments"][0]["copies"])),("4200.00",1))
+        self.sign("same-receipt")
+        self.installment("returned",amount="2700.00",reference="YL-RETURN")
+        self.sign("returned","return")
+        self.installment("pending",amount="1800.00",reference="YL-ESCALATED")
+        self.sign("pending","escalate")
+        next_payment = self.installment("second","4350.01","YL-SECOND",paid_on="2026-10-22")
+        window = next_payment["graph"]["payment_history"]["installments"]
+        self.assertEqual({m["case_id"] for m in window["matches"]},{"first","same-receipt"})
+        calc = window["calculation"]
+        self.assertEqual((len(calc["payments"]),calc["paid_total"],calc["difference"]),(2,"8550.01","150.01"))
+        self.assertEqual(len(calc["payments"][0]["copies"]),1)
+        self.assertTrue(calc["payments"][0]["amount_fact"].startswith("prior/"))
+        self.assertEqual([f["status"] for f in next_payment["findings"] if f["rule"]=="B08"],["risk"])
+        first_calc = first["graph"]["payment_history"]["installments"]["calculation"]
+        self.assertEqual(first_calc["difference"],"-4200.00")
+        buf=io.BytesIO()
+        export_bundle(self.store,"second",1,buf)
+        self.assertEqual(verify(buf,True)[:2],("second",1))
+        with zipfile.ZipFile(buf) as archive:
+            journal=json.loads(archive.read("journal.json"))
+            hashes={e["path"]:e["sha256"] for e in json.loads(archive.read("manifest.json"))["files"]}
+            for target in ("entry","difference","citation","decision"):
+                bad=deepcopy(next_payment)
+                changed=bad["graph"]["payment_history"]["installments"]
+                if target=="entry": changed["matches"][0]["entry"]["amount"]="999.00"
+                if target=="difference": changed["calculation"]["difference"]="0.00"
+                if target=="citation": changed["matches"][0]["evidence"][-1]["quote"]="错引的测试原文"
+                if target=="decision": changed["matches"][0]["decision"]="return"
+                with self.subTest(target=target), self.assertRaises(ValueError):
+                    verify_payment_history(archive,hashes,bad,journal)
+
+    def test_installment_uncertainty_never_produces_a_partial_sum(self):
+        self.installment("base")
+        self.sign("base")
+        for key,opts in (("amount",{"amount":"4199.00"}),("date",{"paid_on":"2026-10-21"}),
+                         ("ceiling",{"total":"9900.00"}),("account",{"payee_account":"****0081"}),
+                         ("different-original",{"contract_variant":80}),
+                         ("currency",{"currency":"美元"}),("status",{"transfer_status":"已受理"})):
+            with self.subTest(key=key):
+                result=self.installment(key,**opts)["graph"]["payment_history"]["installments"]["calculation"]
+                self.assertIn(result["state"],{"conflict","missing"})
+                self.assertNotIn("paid_total",result)
+        other=self.workpaper("amended-contract",payment_term="分期付款，须扣减退款",transfer_ref="YL-AMEND")
+        self.assertEqual(other["graph"]["payment_history"]["installments"]["calculation"]["state"],"missing")
+        self.workpaper("full-contract",transfer_ref="YL-ADDITIONAL")
+        self.sign("full-contract")
+        blocked=self.installment("different-terms","4300.00","YL-NEW")
+        self.assertEqual(blocked["graph"]["payment_history"]["installments"]["calculation"]["state"],"conflict")
+        directory=Directory(self.store)
+        session,wid=directory.register({"login":"other-payer","name":"演练","password":"synthetic-password-42","workspace":"乙"})
+        tenant=self.installment("other-tenant",workspace=wid,user=directory.user(session))
+        self.assertEqual(tenant["graph"]["payment_history"]["installments"]["count"],0)
+
+    def test_new_distinct_installment_blocks_stale_initial_and_peer_approval(self):
+        self.installment("first")
+        stale=self.installment("later","4350.00","YL-SECOND")
+        self.installment("peer","4351.00","YL-THIRD")
+        self.sign("peer","escalate")
+        self.sign("first")
+        with self.assertRaisesRegex(CaseError,"新的已签收付款线索"):
+            self.sign("later")
+        source=self.store.detail("peer")["referrals"][0]
+        b08=next(f["id"] for f in stale["findings"] if f["rule"]=="B08")
+        with self.assertRaisesRegex(CaseError,"新的已签收付款线索"):
+            self.store.resolve_referral("peer",1,source["report_hash"],source["signoff_hash"],"独立复核","复核分期凭证","approve",[b08])
+        self.assertEqual(self.store.detail("peer")["status"],"in_review")
+        fresh=self.installment("later","4350.00","YL-SECOND",fresh=False)
+        self.assertEqual(fresh["graph"]["payment_history"]["installments"]["calculation"]["difference"],"150.00")
+
+    def test_installment_rechecks_original_even_for_printed_native_text(self):
+        self.installment("approved-originals")
+        self.sign("approved-originals")
+        path=self.store.files/"approved-originals"/"d02"/"original.jpg"
+        original=path.read_bytes()
+        path.write_bytes(b"changed fixture")
+        with self.assertRaisesRegex(CaseError,"来源摘要不符"):
+            self.installment("blocked","4200.01","YL-SECOND")
+        self.assertEqual(self.store.detail("blocked")["rev"],0)
+        path.write_bytes(original)
+        report=self.installment("blocked","4200.01","YL-SECOND",fresh=False)
+        self.assertEqual(report["graph"]["payment_history"]["installments"]["calculation"]["difference"],"0.01")
+
+    def test_two_distinct_installments_cannot_sign_the_same_history_concurrently(self):
+        self.installment("thread-a","4200.00","YL-THREAD-A")
+        self.installment("thread-b","4350.00","YL-THREAD-B")
+        barrier=threading.Barrier(2)
+        def approve(case):
+            barrier.wait(timeout=5)
+            try:
+                self.sign(case)
+                return 200
+            except CaseError as error:
+                return error.status
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            self.assertCountEqual(executor.map(approve,("thread-a","thread-b")),[200,409])
+
+    def test_installment_index_migration_limit_and_wrong_historical_scope(self):
+        from unittest.mock import patch
+        for n in range(3):
+            self.installment("history-"+str(n),"100.00","YL-HIST-"+str(n))
+            self.sign("history-"+str(n))
+        with self.store.connect(True) as db:
+            db.execute("DROP TABLE contract_payments")
+            db.execute("PRAGMA user_version=3")
+        self.store=Store(self.root)
+        with patch("storage.INSTALLMENT_LIMIT",2),patch("verify.INSTALLMENT_LIMIT",2),patch("installments.LIMIT",2):
+            report=self.installment("over-limit","10.00","YL-NEXT")
+            window=report["graph"]["payment_history"]["installments"]
+            self.assertEqual((window["count"],len(window["matches"]),window["calculation"]["state"]),(3,2,"incomplete"))
+            self.assertNotIn("paid_total",window["calculation"])
+            bundle=io.BytesIO()
+            export_bundle(self.store,"over-limit",1,bundle)
+            self.assertEqual(verify(bundle,True)[:2],("over-limit",1))
+        self.installment("other-contract",contract_id="OTHER-CONTRACT")
+        self.sign("other-contract")
+        with self.store.connect(True) as db:
+            db.execute("UPDATE contract_payments SET contract_key=(SELECT contract_key FROM contract_payments WHERE case_id='history-0') WHERE case_id='other-contract'")
+        with self.assertRaisesRegex(CaseError,"历史合同"):
+            self.installment("corrupt-index")
 
     def test_scope_decisions_and_legacy_backfill(self):
         legacy = self.workpaper("archived", history=False)

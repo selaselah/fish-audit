@@ -64,6 +64,20 @@ def check_archived_files(db, case_id, folder, observations):
             check_file(path,expected)
 
 
+def check_cited_files(db, case_id, folder, graph, citations):
+    docs = {d["id"]:d for d in graph["documents"]}
+    nodes = {n["id"]:n for n in graph["nodes"]}
+    observations = []
+    for item in citations:
+        doc,page = item["doc"],item["page"]
+        if (docs[doc]["sha256"] != item["source_sha256"] or nodes[doc]["sha256"] != item["source_sha256"]
+                or nodes[f"{doc}/p{page}"]["sha256"] != item["page_sha256"]):
+            raise CaseError("已签收字段与原版底稿的原件或页图摘要不符。",409)
+        observations.append(({"doc":doc,"page":page,"original_sha256":item["source_sha256"],
+                              "page_sha256":item["page_sha256"]},docs[doc]["ext"]))
+    check_archived_files(db,case_id,folder,observations)
+
+
 @dataclass
 class FieldSources:
     case_id: str

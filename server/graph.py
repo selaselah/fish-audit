@@ -46,7 +46,7 @@ SCALAR = {"contract_id", "invoice_id", "net", "tax", "total", "buyer", "seller",
           "transfer_amount","paid_on","transfer_ref","transfer_status"}
 FIELD_START = {field: re.compile(r"^(?:" + "|".join(sorted(LABELS[field], key=len, reverse=True)) + r")[:(（]")
                for field in SCALAR}
-TERMS = re.compile(r"分期|预付|质保金|保留款|分批|定金|订金|尾款|部分交付|红字|冲销|红冲|变更单|补充协议")
+TERMS = re.compile(r"分期|分[两二三四五六七八九十\d]+期|预付|质保金|保留款|分批|定金|订金|尾款|部分交付|红字|冲销|红冲|退款|退汇|冲正|撤销|抵扣|扣减|变更单|补充协议")
 
 
 def compact(value):

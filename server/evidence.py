@@ -4,6 +4,7 @@ import zipfile
 from config import CaseError
 from documents import digest
 from field_receipts import field_actions, validate_field_actions
+from payment_history import payment_matches_with_evidence
 from peer_review import verify_referrals, verify_review
 from storage import encode
 
@@ -133,7 +134,7 @@ def export_bundle(store, case_id, revision, stream):
             historic = store.files / match["case_id"] / match["doc"] / f"{match['page']}.jpg"
             path = f"prior/{match['case_id']}/r{match['rev']}/{match['doc']}/{match['page']}.jpg"
             write(path, historic.read_bytes(), match["page_hash"])
-        payments = report["graph"].get("payment_history", {}).get("matches", [])
+        payments = payment_matches_with_evidence(report["graph"].get("payment_history", {"matches":[]}))
         invoices = [m for m in report["graph"].get("prior_invoices",[]) if "peer_source_rev" in m or m.get("checked_field")]
         references = {}
         for match in [*invoices,*payments]:

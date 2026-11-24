@@ -10,6 +10,10 @@ EVIDENCE = {"title": "《中国注册会计师审计准则第1301号——审计
             "url": "https://www.cicpa.org.cn/ztzl1/Professional_standards/xxzztx/zyzz/sjzz/202105/P020240412542695263912.pdf",
             "edition": "2022-12-22 修订", "scope": "注册会计师审计的方法参考，用于说明证据评估与追加程序思路。"}
 SOURCES = {
+    "installment-tracking": {"title":"《企业内部控制应用指引第7号——采购业务》","edition":"2010-04-15",
+        "url":"https://kjs.mof.gov.cn/zhengcefabu/201005/P020230421440664863663.pdf","locator":"付款，第十三及十五条",
+        "scope":"采购付款跟踪的方法参考。B08 的去重方式和比较口径由本程序定义。",
+        "summary":"结合合同、付款凭证和采购记录跟踪付款，定期核对与供应商的往来。"},
     "voucher": {**ACCOUNTING, "edition": "2024年修正", "locator": "第十四条",
                 "summary": "核查原始凭证的准确性和完整性，遇有欠缺可要求补正。"},
     "purchase-records": {**PROCUREMENT, "locator": "第二部分（五）合同、（九）会计控制",
@@ -24,6 +28,7 @@ SOURCES = {
                   "summary": "不同来源的材料相互矛盾或可靠性存疑时，应考虑调整检查或追加程序。"},
 }
 MAPPING = {"B01":["purchase-records","evidence-quality"],"B02":["payment"],"B03":["payment","follow-up"],
+           "B08":["installment-tracking","follow-up"],
            "B04":["payment","voucher"],"B05":["evidence-quality","follow-up"],
            "B06":["payment","follow-up"],"B07":["payment","follow-up"],"E01": ["voucher", "evidence-quality"], "P01": ["purchase-records"], "P02": ["purchase-records"],
            "P03": ["purchase-records"], "I01": ["voucher", "follow-up"], "M01": ["voucher"],

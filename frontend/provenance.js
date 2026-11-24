@@ -4,7 +4,8 @@ function graphIndex(graph) {
   let index = graphIndexes.get(graph);
   if (!index) {
     const prior = new Map((graph.prior_invoices || []).map(row=>[row.id,row]));
-    for (const match of graph.payment_history?.matches || []) {
+    const history = graph.payment_history;
+    for (const match of [...(history?.matches || []),...(history?.installments?.matches || [])]) {
       for (const fact of match.evidence) {
         prior.set(fact.id,{...fact,case_id:match.case_id,rev:match.rev,title:match.title,decision:match.decision});
       }
@@ -99,6 +100,10 @@ function provenancePanel(report) {
     const result=box('trace-part trace-result',el('h3','本项结论'),tag(f.status),el('p',f.detail));
     if (f.calculations?.length) result.append(lazyFold('复算金额',()=>f.calculations.map(calculationPanel)));
     trail.replaceChildren(program,traceEvidence(report,f,index),result);
+    if (f.rule==='B08' && graph.payment_history?.installments) {
+      const details=installmentDetails(graph.payment_history.installments);
+      details.classList.add('trace-installments'); trail.append(details);
+    }
   }
   select.addEventListener('change',render); render();
   return box('panel trace-panel',el('h2','审计证据路径'),label,trail);

@@ -43,6 +43,10 @@ PYTHONPATH=server server/.venv/bin/python -m unittest discover -s server/tests -
 
 `server/.venv/bin/python docs/samples/cross_payments.py --run` 在本地演示库顺序提交三项任务。脚本先核对合成原件摘要、合同号、账户、流水及通过建议，再以「合成演练验收」签收自身生成的首次付款。随后提交原回单副本和另一张全额付款回单，两案分别应命中 B06 和 B07，停在待人工验收。单独运行脚本会仅生成带水印的 PDF。指定新的 `--run-id` 会生成独立的合同号及流水，可重复演练。
 
+### 跨案分期付款
+
+`server/.venv/bin/python docs/samples/installment_payments.py --run` 生成总额 8,400 元的合成合同，先核对原件摘要和成功流水，以演练身份签收 4,200 元首期回单。再提交 4,350 元的另一流水，检查 B08 的 150 元超额线索。另案重复提交首期回单，B06 提示重复，B08 只累计一次。用 `node frontend/tests/workspace.mjs --installment-case 案件编号` 可在浏览器检查任一后续案例，点回签收版原页。
+
 ### 退回后补充或替换原件
 
 `server/.venv/bin/python docs/samples/returned_files.py --run` 创建只含合同的虚构付款案，核对原件摘要及 B01 缺口后以演练身份退回。随后沿用同一合同，补交对应回单，并检查原退回版本及本次建议。加 `--prepare-parent` 可仅准备退回任务供网页操作。

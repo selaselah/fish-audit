@@ -276,6 +276,31 @@ function calculationPanel(calculation) {
   return box('formula', el('h4', calculation.label), ...operands,
     box('formula-result', el('strong', '复算结果'), el('strong', calculation.result + ' 元', 'amount')));
 }
+
+function installmentDetails(history) {
+  const calc = history.calculation;
+  if (calc.state!=='calculated') return lazyFold('核对累计范围',()=>[
+    el('p',calc.reason),...history.matches.map(m=>Team.paperLink(m.title+' · R'+m.rev,m.case_id,'source-jump',new URLSearchParams({rev:m.rev})))]);
+  return lazyFold('逐笔复算分期付款',()=>{
+    const ledger = box('installment-ledger');
+    const display = value=>value.replace(/\B(?=(\d{3})+\.)/g,',')+' 元';
+    const positive = !calc.difference.startsWith('-') && calc.difference!=='0.00';
+    const totals = box('installment-totals',
+      box('',el('small','已见回单累计'),el('strong',display(calc.paid_total),'amount')),
+      box('',el('small','合同总额'),el('strong',display(calc.contract_total),'amount'),citation(calc.contract_fact)),
+      box(positive?'excess':'',el('small','累计减合同'),el('strong',(positive?'+':'')+display(calc.difference),'amount')));
+    ledger.append(totals);
+    for (const payment of calc.payments) {
+      const row = box('installment-row',box('',el('small',payment.paid_on,'small'),el('strong',payment.reference,'mono')),
+        el('strong',display(payment.amount),'amount'),citation(payment.amount_fact));
+      if (payment.copies.length) row.append(lazyFold('同一流水的其他回单（'+payment.copies.length+'）',
+        ()=>payment.copies.map(citation)));
+      ledger.append(row);
+    }
+    return [ledger];
+  });
+}
+
 function finding(item) {
   const node = box('finding', box('flow', tag(item.status), el('h3', item.title), el('span', item.rule, 'mono')),
     el('p', item.detail), el('p', '执行依据 · ' + item.basis, 'muted'));
@@ -286,6 +311,8 @@ function finding(item) {
     state.detail.documents.find(doc => doc.id === id)?.name || id).join('、'), 'small'));
   if (item.calculations?.length) node.append(fold('查看金额算式与取数依据',
     ...item.calculations.map(calculationPanel)));
+  if (item.rule==='B08' && state.bundle.report.graph.payment_history?.installments)
+    node.append(installmentDetails(state.bundle.report.graph.payment_history.installments));
   if (item.evidence.length) node.append(lazyFold('查看本项全部引文（'+item.evidence.length+'）',()=>[box('chips',...item.evidence.map(citation))]));
   if (graphIndex(state.bundle.report.graph).nodes.has('finding/'+item.id)) node.append(action('查看证据路径',()=>{
     state.traceKey=state.detail.id+'@'+state.bundle.rev; state.traceId=item.id;
@@ -646,7 +673,7 @@ $('#upload-title').addEventListener('input', () => { state.key = null; });
 function profileChanged() {
   state.key = null;
   if ($('#upload-profile').value === bankProfile) {
-    $('#profile-note').textContent = '上传一份合同与一张银行回单，可核对收款账户、全额差额，以及本企业已签收底稿中的重复付款线索。';
+    $('#profile-note').textContent = '每个任务上传一份合同和一张银行回单。可核对收款账户、重复流水及全额差额，分期付款可与本企业已签收的回单累计比较。';
     return;
   }
   $('#profile-note').textContent = $('#upload-profile').value === travelProfile ?

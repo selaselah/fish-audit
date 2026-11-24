@@ -26,7 +26,8 @@ const paymentCase = caseArgument('--payment-case');
 const supplementCase = caseArgument('--supplement-case');
 const peerCase = caseArgument('--peer-case');
 const fieldCase = caseArgument('--field-case');
-const seeded = sampleDesk || paymentCase || supplementCase || peerCase || fieldCase;
+const installmentCase = caseArgument('--installment-case');
+const seeded = sampleDesk || paymentCase || supplementCase || peerCase || fieldCase || installmentCase;
 const root = 'http://127.0.0.1:' + (seeded ? 8000 : port);
 const children = [];
 const faults = [];
@@ -87,7 +88,43 @@ try {
   const click = (label, container='document') => evaluate('[...'+container+'.querySelectorAll("button,a")].find(b=>b.textContent==='+JSON.stringify(label)+' && b.getClientRects().length).click()');
   await call('Runtime.enable');
   await call('Page.navigate',{url:root});
-  if (fieldCase) {
+  if (installmentCase) {
+    const base = root+'/api/cases/'+installmentCase;
+    const detail = await (await fetch(base)).json();
+    assert.ok(detail.title.startsWith('合成演练 · '));
+    const {report} = await (await fetch(base+'/reports/'+detail.rev)).json();
+    const f = report.findings.find(f=>f.rule==='B08');
+    const window = report.graph.payment_history.installments;
+    const calc = window.calculation;
+    assert.equal(calc.state,'calculated');
+    const url = root+'/workpaper/'+installmentCase+'?'+new URLSearchParams({rev:detail.rev,finding:f.id});
+    await call('Page.navigate',{url});
+    const article = 'document.querySelector(".trace-grid")';
+    await wait('document.querySelector("#trace-select")?.value==='+JSON.stringify(f.id),'cumulative finding');
+    await evaluate('[...'+article+'.querySelectorAll("summary")].find(s=>s.textContent==="逐笔复算分期付款").click()');
+    await wait(article+'.querySelector(".installment-ledger")','receipt ledger');
+    const ledger = article+'.querySelector(".installment-ledger")';
+    assert.equal(await evaluate(ledger+'.querySelectorAll(".installment-row").length'),calc.payments.length);
+    const shown=(await evaluate(ledger+'.textContent')).replaceAll(',','');
+    for (const amount of [calc.paid_total,calc.contract_total,calc.difference]) assert.ok(shown.includes(amount+' 元'));
+    for (const p of calc.payments) assert.ok((await evaluate(ledger+'.textContent')).includes(p.reference));
+    await evaluate(ledger+'.querySelectorAll(".installment-row details").forEach(d=>d.open=true)');
+    await wait(ledger+'.querySelector(".installment-row a")','prior receipt amount link, including duplicate copy');
+    for (const width of [1440,1024,820,768,390,320]) {
+      await call('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && '+ledger+'.scrollWidth<='+ledger+'.clientWidth+1'),'installment ledger at '+width);
+    }
+    const historic=await evaluate(ledger+'.querySelector(".installment-row a").href');
+    const target=new URL(historic);
+    const source=window.matches.find(m=>target.pathname.endsWith('/'+m.case_id));
+    assert.equal(target.searchParams.get('rev'),String(source.rev));
+    assert.ok(source.evidence.some(e=>e.fact===target.searchParams.get('fact') && e.field==='transfer_amount'));
+    await click('审计结论');
+    await wait('[...document.querySelectorAll("[data-finding]")].some(row=>row.dataset.finding==='+JSON.stringify(f.id)+' && row.textContent.includes("逐笔复算分期付款"))','ledger available in audit conclusions');
+    await call('Page.navigate',{url:historic});
+    await wait('document.querySelector("#page-dialog")?.open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(target.searchParams.get('fact')),'archived receipt amount on pinned original');
+    console.log('PASS · Installment totals, unique receipts, historical amount on its original page and six widths');
+  } else if (fieldCase) {
     const base = root+'/api/cases/'+fieldCase;
     const current = await (await fetch(base)).json();
     assert.ok(current.title.startsWith('合成演练 · '));
