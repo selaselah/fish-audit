@@ -37,6 +37,58 @@ function lazyFold(title, build) {
   return details;
 }
 
+function performanceOverview(findings, graph) {
+  const overview = el('section','','performance-overview');
+  const summary = box('performance-statuses');
+  const inspect = (item, label) => {
+    const button = action('', () => {
+      const target = document.querySelector('[data-finding="'+CSS.escape(item.id)+'"]');
+      target?.focus({preventScroll:true});
+      target?.scrollIntoView({block:'start'});
+    }, 'performance-jump');
+    button.dataset.jumpFinding = item.id;
+    button.setAttribute('aria-label',label+' · '+statusName(item.status)+'，查看依据');
+    button.append(el('span',label),tag(item.status));
+    return button;
+  };
+  for (const [rule,label] of [['H01','签署与生效'],['H02','交付验收'],['H03','付款安排']]) {
+    const item = findings.find(f=>f.rule===rule);
+    if (item) summary.append(inspect(item,label));
+  }
+  overview.setAttribute('aria-label','履约结论与期次');
+  overview.append(summary);
+  const phases = findings.filter(f=>f.rule==='H04' && f.stage);
+  if (!phases.length) return overview;
+  const list = el('ol','','phase-summary');
+  const payments = findings.filter(f=>f.rule==='H05');
+  const index = graphIndex(graph);
+  const paymentLabel = f => {
+    const document = f.evidence.map(ref=>index.facts.get(ref)).find(fact=>fact?.field==='bank_receipt');
+    return document?.name || f.id;
+  };
+  for (const phase of phases) {
+    const stage = phase.stage;
+    const row = el('li');
+    row.dataset.phaseFinding = phase.id;
+    const heading = stage.name+(stage.share ? ' · '+stage.share+'%' : '');
+    const fact = index.facts.get(stage.clause_ref);
+    const source = fact ? action(heading,()=>openPage(fact.doc,fact.page,fact.id),'phase-source') : el('strong',heading);
+    if (fact) source.setAttribute('aria-label',heading+'，查看合同原文');
+    const results = box('phase-results',inspect(phase,'付款条件'));
+    const matched = payments.filter(f=>f.stage && ['name','clause_ref','clause','share'].every(k=>f.stage[k]===stage[k]));
+    if (matched.length) {
+      for (const item of matched) results.append(inspect(item,matched.length===1?'实付时点':paymentLabel(item)));
+    } else {
+      results.append(el('span','未关联回单','phase-unlinked'));
+    }
+    row.append(box('phase-contract',source,el('q',stage.clause)),results);
+    list.append(row);
+  }
+  overview.append(list);
+  for (const item of payments.filter(f=>!f.stage)) overview.append(inspect(item,'回单期次待核 · '+paymentLabel(item)));
+  return overview;
+}
+
 function performanceComparison(finding, graph) {
   const comparisons = {
     H01: ['对照生效条件与签署依据',['effect_clause','buyer_signature','seller_signature','contract_state','approval_authority','approval_result','approved_on','approval_signer']],
@@ -103,8 +155,11 @@ function mandatePanel(entries, graph) {
   const index = graphIndex(graph);
   for (const entry of entries) {
     const title = {buyer:'甲方',seller:'乙方',unassigned:'待归属'}[entry.side];
-    const section = box('mandate-side', box('flow', el('strong', title+(entry.agent?' · '+entry.agent:'')), tag(entry.status)));
+    const pending = {role:'仅列岗位或机构', joint:'多人授权', redacted:'姓名隐去', unclear:'姓名待核'}[entry.agent_kind];
+    const identity = pending || entry.agent;
+    const section = box('mandate-side', box('flow', el('strong', title+(identity?' · '+identity:'')), tag(entry.status)));
     section.dataset.mandateSide = entry.side;
+    if (entry.agent_kind) section.dataset.agentKind = entry.agent_kind;
     const facts = entry.evidence.map(ref => index.facts.get(ref)).filter(Boolean);
     const dates = el('dl', '', 'mandate-dates');
     for (const [field,key,label] of [['signed_on','signed_on','合同签约'],['granted_on','issued_on','委托书出具'],

@@ -106,6 +106,8 @@ PYTHONPATH=server server/.venv/bin/python -m unittest discover -s server/tests -
 
 运行 `server/.venv/bin/python docs/samples/mandates.py --run` 会上传四组水印件。每组各含合同、委托书、验收报告、质保确认和一份第二期回单。签约日都是 9 月 1 日。第一组书面授权签约至 9 月 30 日，第二组在 8 月 31 日到期，第三组只授权收货验收，第四组的备注要求采购总监另行书面批准。脚本以生成件摘要和逐行原文核对演练签字、签章及字段分类。可在本机用 `node frontend/tests/workspace.mjs --performance-case 案件编号` 检查授权日期、权限、备注以及各期条款的原页跳转。
 
+运行 `server/.venv/bin/python docs/samples/mandates.py --run --cases role joint redacted --run-id synthetic-signing-identity-v1` 可比较两份文件同写“采购负责人”、同列两名代理人、同写“张某”的三种签约情形。每组均核对受托人原文字段、未确认的图谱关系、三期条件及第二期实付时点。
+
 ### 缺陷整改及最终复验
 
 运行 `server/.venv/bin/python docs/samples/quality_reinspection.py --run` 生成并核验三组水印件。9 月 10 日交付的冷藏柜实测 8℃，高于合同上限 4℃。9 月 16 日完成整改，9 月 20 日复验实测 3℃。三案分别核查复验后的第二期付款、复验前已付的验收款以及缺陷号不同的复验报告。每一组均保留首次失败记录。

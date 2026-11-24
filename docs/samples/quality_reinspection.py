@@ -95,7 +95,8 @@ def reconcile_training_pages(cid,folder,records,*,case_titles=None,field_labels=
         with pdfium.PdfDocument(source) as pdf:
             assert len(pdf)==1
             printed=pdf[0].get_textpage().get_text_bounded()
-        source_lines={normalize(line) for line in printed.splitlines()}
+        ordered_lines=[normalize(line) for line in printed.splitlines()]
+        source_lines=set(ordered_lines)
         targets=[]
         for index,(label,value) in enumerate(rows):
             if label in fields:
@@ -104,6 +105,7 @@ def reconcile_training_pages(cid,folder,records,*,case_titles=None,field_labels=
                 targets.append((fields[label],value,label+"："+value,region))
         targets.append((types[title],title,title,"top"))
         counts=Counter(f for f,_,_,_ in targets)
+        printed_phases={normalize(line) for field,_,line,_ in targets if field=="payment_stage"}
         for field,value,line,region in targets:
             assert normalize(line) in source_lines
             graph=report["graph"]
@@ -112,6 +114,14 @@ def reconcile_training_pages(cid,folder,records,*,case_titles=None,field_labels=
             same=[f for f in facts if normalize(f["quote"])==normalize(line)]
             correct=any(f["field"]==field and f["status"] in ("anchored","confirmed") for f in same)
             wrong=[f for f in same if f["field"]!=field and f["status"]=="visual" and not f.get("amendment")]
+            if field=="payment_stage" and ordered_lines.count(normalize(line))==1:
+                merged=normalize(line)
+                for following in ordered_lines[ordered_lines.index(merged)+1:]:
+                    if following not in printed_phases:
+                        break
+                    merged+=following
+                    wrong.extend(f for f in facts if f["field"]==field and f["status"] in ("visual","unsupported")
+                                 and not f.get("amendment") and not f.get("source_line") and normalize(f["quote"])==merged)
             if correct and not wrong:
                 continue
             if not wrong:

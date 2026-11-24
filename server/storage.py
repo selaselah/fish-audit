@@ -819,7 +819,7 @@ class Store:
                 verify_quality_numbers(paper,page_text)
                 try:
                     verify_quality_references(paper, page_text, signing=True)
-                    verify_delegation_sources(paper, page_text)
+                    verify_delegation_sources(paper, page_text, signing=True)
                 except ValueError as error:
                     raise CaseError(str(error), 409) from error
             except (KeyError,TypeError,ValueError) as error:

@@ -1,10 +1,11 @@
 import copy
 import unittest
+from unittest.mock import patch
 
 from config import BANK, PERFORMANCE
 from controls import VERSION, conclusion, execute
-from delegation import verify_sources
-from performance import REINSPECTION_FORMAT, compute, verify_findings
+from delegation import LEGACY_FORMAT, coverage_gaps, rows_for_grants, verify_sources
+from performance import DELEGATION_FORMAT, REINSPECTION_FORMAT, compute, verify_findings
 from test_performance import BANK_DOC, CONTRACT, RECEIPT, WARRANTY, material, rows
 
 
@@ -28,7 +29,81 @@ def sample(edit=None, grants=None, **kwargs):
     return material([CONTRACT_BY_AGENT, *(grants if grants is not None else [GRANT]), RECEIPT, WARRANTY, BANK_DOC], edit, **kwargs)
 
 
+def identity(signer, agent):
+    return lambda i,f,l,v: {"buyer_agent_signature":signer+"（已签字）", "grant_agent":agent}.get(f,v)
+
+
 class DelegationTests(unittest.TestCase):
+    def test_role_joint_and_redacted_names_remain_observations_with_all_phases_pending(self):
+        for observed, kind in (("采购负责人","role"),("法定代表人","role"),("采购部","role"),("演练林岚及演练方程","joint"),
+                               ("张三、李四","joint"),("张三 李四","joint"),("王某","redacted"),("张＊","redacted"),
+                               ("陈XX","redacted"),("待填写资料","unclear")):
+            with self.subTest(observed=observed):
+                graph=sample(identity(observed,observed))
+                h01,=rows(graph,"H01")
+                entry,=h01["delegations"]
+                hold,=graph["delegation_coverage"]["agent_holds"]
+                self.assertEqual((h01["status"],entry["agent_kind"],hold["kind"]),("missing",kind,kind))
+                ref=hold["fact"]
+                self.assertIn(ref,entry["evidence"])
+                self.assertTrue(any(e["type"]=="unresolved_grant_agent" and e["from"]==hold["unit"]
+                                    and e["to"]==ref and e["evidence"]==[ref] for e in graph["edges"]))
+                self.assertFalse(any(n["type"]=="mandatary" for n in graph["nodes"]))
+                self.assertEqual(rows(graph,"H02")[0]["status"],"ok")
+                self.assertTrue(all(f["status"]=="missing" for f in rows(graph,"H04")+rows(graph,"H05")))
+        for name in ("王和平","欧阳明月","艾力·阿布"):
+            graph=sample(identity(name,name))
+            self.assertEqual(rows(graph,"H01")[0]["status"],"ok")
+            self.assertFalse(graph["delegation_coverage"]["agent_holds"])
+        mixed=sample(identity("张三 李四","张三李四"))
+        self.assertEqual(rows(mixed,"H01")[0]["delegations"][0]["agent_kind"],"joint")
+
+    def test_identity_gap_preserves_separate_date_and_scope_risks_and_signing_roles(self):
+        def edit(i,f,l,v):
+            return {"grant_until":"2026-08-31","grant_scope":"仅限收货"}.get(f, identity("采购主管","采购主管")(i,f,l,v))
+        entry=rows(sample(edit),"H01")[0]["delegations"][0]
+        self.assertEqual((entry["status"],entry["agent_kind"]),("risk","role"))
+        for value in ("采购主管","2026-08-31","仅限收货"):
+            self.assertIn(value,entry["detail"])
+        wrong_signature=[(f,"见证人签字" if f=="buyer_agent_signature" else l,v) for f,l,v in CONTRACT_BY_AGENT]
+        self.assertEqual(rows(material([wrong_signature,GRANT]),"H01")[0]["status"],"missing")
+
+    def test_verify_holds_requires_the_original_agent_field_and_prevents_shared_entity_recreation(self):
+        graph=sample(identity("采购负责人","采购负责人"))
+        paper={"policy":dict(VERSION,profile=PERFORMANCE),"graph":graph,"findings":execute(graph,PERFORMANCE)}
+        printed="\n".join(l+"："+("采购负责人" if f=="grant_agent" else v) if l else v for f,l,v in GRANT)
+        verify_sources(paper,lambda *_:printed)
+        verify_findings(paper)
+        for kind in ("remove","wrong_fact","extra_join","extra_person","type"):
+            with self.subTest(kind=kind):
+                changed=copy.deepcopy(paper)
+                g=changed["graph"]
+                edge=next(e for e in g["edges"] if e["type"]=="unresolved_grant_agent")
+                if kind=="remove": g["delegation_coverage"]["agent_holds"].clear()
+                if kind=="wrong_fact": edge["to"]="d01/p1/f1"
+                if kind=="extra_join": g["edges"].append({**edge,"type":"grant_agent"})
+                if kind=="extra_person": g["nodes"].append({"type":"mandatary","id":"invented","label":"采购负责人"})
+                if kind=="type": g["delegation_coverage"]["agent_holds"][0]["kind"]="named"
+                with self.assertRaises(ValueError): verify_sources(changed,lambda *_:printed)
+
+    def test_old_archived_decisions_replay_but_ambiguous_named_authority_needs_rerun_before_signoff(self):
+        def legacy_coverage(graph,read):
+            pages=rows_for_grants(graph,read)
+            graph["delegation_coverage"]={"format":LEGACY_FORMAT,"pages":pages}
+            graph["gaps"].extend(coverage_gaps(pages))
+        for name,approve in (("采购负责人",False),("张某",False),("演练林岚及演练方程",False),("王和平",True)):
+            with self.subTest(name=name),patch("graph.record_mandate_pages",legacy_coverage):
+                graph=sample(identity(name,name))
+                findings=compute(graph,DELEGATION_FORMAT)
+                self.assertEqual(next(f["status"] for f in findings if f["rule"]=="H01"),"ok")
+                paper={"graph":graph,"policy":{"delegation_checks":LEGACY_FORMAT,"performance_checks":DELEGATION_FORMAT},"findings":findings}
+                text="\n".join(l+"："+(name if f=="grant_agent" else v) if l else v for f,l,v in GRANT)
+                verify_sources(paper,lambda *_:text)
+                if approve: verify_sources(paper,lambda *_:text,signing=True)
+                else:
+                    with self.assertRaisesRegex(ValueError,"旧版签约授权"):
+                        verify_sources(paper,lambda *_:text,signing=True)
+
     def test_last_authorized_day_connects_the_contract_and_all_three_payment_conditions(self):
         graph = sample()
         finding, = rows(graph, "H01")

@@ -133,6 +133,13 @@ try {
     const [note] = hold.observations;
     assert.equal(note.quote, '缺陷编号展示说明：本单仅列尾号');
     assert.equal(hold.lines.length, 0);
+    await call('Page.navigate',{url:root+'/workpaper/'+qualityImageCase+'?rev='+task.rev});
+    await wait('!!document.querySelector(".performance-overview")','overview of incomplete material');
+    assert.equal(await evaluate('document.querySelectorAll(".phase-summary li").length'),0);
+    const missingPlan=report.findings.find(f=>f.rule==='H03');
+    assert.equal(missingPlan.status,'missing');
+    const planButton='.performance-statuses [data-jump-finding="'+missingPlan.id+'"]';
+    assert.ok(await evaluate('document.querySelector('+JSON.stringify(planButton)+').textContent.includes("证据不足")'));
     for (const width of [1280, 320]) {
       await call('Emulation.setDeviceMetricsOverride', {width, height:900, deviceScaleFactor:1, mobile:false});
       await call('Page.navigate', {url:root+'/workpaper/'+qualityImageCase+'?'+new URLSearchParams({rev:task.rev,fact:hold.fact})});
@@ -158,6 +165,37 @@ try {
     assert.ok(await evaluate('document.querySelector("#profile-note").textContent.includes("质保期满确认单")'));
     await call('Page.navigate',{url:root+'/workpaper/'+performanceCase+'?rev='+task.rev});
     await wait('!!document.querySelector(".performance-panel .clause-source")','contract performance report');
+    const summary='document.querySelector(".performance-overview")';
+    const jump = async (container,item) => {
+      const selector='[data-jump-finding="'+item.id+'"]';
+      const button=container+'.querySelector('+JSON.stringify(selector)+')';
+      assert.ok(await evaluate(button+'.querySelector(".tag").classList.contains('+JSON.stringify(item.status)+')'));
+      await evaluate(button+'.click()');
+      assert.equal(await evaluate('document.activeElement.dataset.finding'),item.id);
+    };
+    for (const f of report.findings.filter(f=>['H01','H02','H03'].includes(f.rule))) await jump(summary,f);
+    assert.equal(await evaluate(summary+'.querySelectorAll(".phase-summary li").length'),phases.length);
+    for (const phase of phases) {
+      const row=summary+'.querySelector('+JSON.stringify('[data-phase-finding="'+phase.id+'"]')+')';
+      assert.equal(await evaluate(row+'.querySelector("q").textContent'),phase.stage.clause);
+      await evaluate(row+'.querySelector(".phase-source").click()');
+      await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(phase.stage.clause_ref),'phase contract original from overview');
+      await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      await jump(row,phase);
+      const matched=report.findings.filter(f=>f.rule==='H05' && f.stage && ['name','clause','share','clause_ref'].every(k=>f.stage[k]===phase.stage[k]));
+      assert.equal(await evaluate(row+'.querySelectorAll(".phase-unlinked").length'),matched.length ? 0 : 1);
+      for (const payment of matched) await jump(row,payment);
+    }
+    for (const payment of report.findings.filter(f=>f.rule==='H05' && !f.stage)) await jump(summary,payment);
+    const sharedClause = await evaluate(`(() => {
+      const {findings,graph}=state.bundle.report;
+      const [first,second]=findings.filter(f=>f.rule==='H04').slice(0,2);
+      const sameLine={...second,stage:{...second.stage,clause_ref:first.stage.clause_ref}};
+      const receipt={...sameLine,id:'H05-99',rule:'H05'};
+      const preview=performanceOverview([first,sameLine,receipt],graph);
+      return [...preview.querySelectorAll('li')].map(row=>row.querySelectorAll('[data-jump-finding="H05-99"]').length);
+    })()`);
+    assert.deepEqual(sharedClause,[0,1],'a receipt belongs only to its named phase when two phases share one contract line');
     const chain=report.findings.find(f=>f.rule==='H02')?.reinspection;
     if (chain) {
       assert.equal(await evaluate('document.querySelector(".reinspection-trail").dataset.disposition'),chain.state);
@@ -186,9 +224,10 @@ try {
     }
     for (const entry of report.findings.find(f => f.rule==='H01').delegations || []) {
       const panel='document.querySelector('+JSON.stringify('[data-mandate-side="'+entry.side+'"]')+')';
+      if (entry.agent_kind) assert.equal(await evaluate(panel+'.dataset.agentKind'),entry.agent_kind);
       assert.deepEqual(await evaluate('[...'+panel+'.querySelectorAll("dd > span")].map(s=>s.textContent)'),
         [entry.signed_on,entry.issued_on,entry.valid_from,entry.valid_until].map(d=>d || '待核'));
-      for (const fact of report.graph.facts.filter(f => entry.evidence.includes(f.id) && [entry.signature_field,'grant_scope','grant_signature'].includes(f.field))) {
+      for (const fact of report.graph.facts.filter(f => entry.evidence.includes(f.id) && [entry.signature_field,'grant_agent','grant_scope','grant_signature'].includes(f.field))) {
         const row=panel+'.querySelector('+JSON.stringify('[data-mandate-fact="'+fact.id+'"]')+')';
         assert.ok(await evaluate(row+'.textContent.includes('+JSON.stringify(fact.quote)+')'));
         await evaluate(row+'.querySelector("button").click()');
@@ -248,7 +287,7 @@ try {
     }
     for (const width of [1440,1024,820,768,390,320]) {
       await call('Emulation.setDeviceMetricsOverride',{width,height:880,deviceScaleFactor:1,mobile:false});
-      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll(".clause-source,.mandate-dates,.mandate-side")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'performance layout at '+width);
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll(".phase-summary li,.phase-results,.clause-source,.mandate-dates,.mandate-side")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'performance layout at '+width);
     }
     const target=report.findings.find(f=>f.rule==='H02');
     await click('查看证据路径','document.querySelector('+JSON.stringify('[data-finding="'+target.id+'"]')+')');

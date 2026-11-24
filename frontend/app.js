@@ -503,6 +503,7 @@ function reportPanel() {
   if (report.supplement) review.append(returnComparison(report,state.bundle.rev));
   if (performance.length) {
     const conditions = box('panel performance-panel',el('h2','合同履约审查'));
+    conditions.append(performanceOverview(performance,report.graph));
     for (const entry of performance) conditions.append(finding(entry));
     review.append(conditions);
   }
