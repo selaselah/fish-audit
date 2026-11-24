@@ -365,3 +365,76 @@ class PaymentHistoryTests(unittest.TestCase):
             db.execute("UPDATE payment_index SET reference='YL-BBB' WHERE case_id='base'")
         with self.assertRaisesRegex(CaseError, "与已签收底稿中的原文不一致"):
             self.workpaper("new", transfer_ref="YL-BBB")
+
+    def test_missing_payment_indexes_are_restored_once_from_the_signed_workpaper(self):
+        from payment_history import payment_record
+        first = self.installment("first")
+        self.sign("first")
+        copy = self.installment("copy")
+        signature = payment_record(copy["graph"], copy["findings"])
+        with self.store.connect(True) as db:
+            db.execute("DELETE FROM payment_index WHERE case_id='first'")
+            db.execute("DELETE FROM contract_payments WHERE case_id='first'")
+        barrier = threading.Barrier(2)
+        def lookup(_):
+            barrier.wait(timeout=5)
+            return self.store.payment_history("copy", signature)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            for result in pool.map(lookup, range(2)):
+                self.assertEqual((result["counts"]["same"],result["installments"]["count"]), (1,1))
+                self.assertEqual(result["installments"]["calculation"]["paid_total"], "4200.00")
+        self.assertEqual(first, self.store.report("first",1)["report"])
+        with self.store.connect() as db:
+            messages = [r[0] for r in db.execute("SELECT message FROM events WHERE case_id='first' AND stage='payment_index'")]
+            self.assertEqual(len(messages), 1)
+            self.assertIn("流水、合同付款", messages[0])
+            self.assertIsNone(db.execute("SELECT 1 FROM payment_index_pending WHERE case_id='first'").fetchone())
+
+    def test_missing_current_and_historical_indexes_do_not_allow_stale_approval(self):
+        self.workpaper("signed-before-approval", transfer_ref="YL-FIRST")
+        self.workpaper("stale", transfer_ref="YL-SECOND")
+        peer = self.workpaper("peer", transfer_ref="YL-THIRD")
+        self.sign("peer","escalate")
+        self.sign("signed-before-approval")
+        with self.store.connect(True) as db:
+            for table in ("payment_index","contract_payments"):
+                db.execute("DELETE FROM "+table)
+        with self.assertRaisesRegex(CaseError,"新的已签收付款线索"):
+            self.sign("stale")
+        pin = self.store.detail("peer")["referrals"][0]
+        finding = next(f["id"] for f in peer["findings"] if f["rule"]=="B07")
+        with self.assertRaisesRegex(CaseError,"新的已签收付款线索"):
+            self.store.resolve_referral("peer",1,pin["report_hash"],pin["signoff_hash"],"独立复核","核对原流水","approve",[finding])
+        self.assertEqual(self.store.detail("stale")["status"],"ready")
+        self.assertEqual(self.store.detail("peer")["status"],"in_review")
+        current = self.workpaper("stale",fresh=False,transfer_ref="YL-SECOND")
+        self.assert_controls(current,"ok","risk")
+
+    def test_missing_contract_projection_keeps_uncountable_signed_history_and_checks_tenant(self):
+        self.installment("incomplete",transfer_status="已受理")
+        self.sign("incomplete")
+        directory = Directory(self.store)
+        session, other = directory.register({"login":"bank-index-other","name":"演练","password":"synthetic-password-42","workspace":"乙"})
+        self.installment("other",workspace=other,user=directory.user(session))
+        self.store.review("other",1,"演练验收","异企业演练","approve",actor=directory.user(session)["id"])
+        with self.store.connect(True) as db:
+            db.execute("DELETE FROM contract_payments WHERE case_id IN ('incomplete','other')")
+            db.execute("PRAGMA user_version=5")
+        self.store = Store(self.root)
+        history = self.installment("later",reference="YL-NEXT")["graph"]["payment_history"]["installments"]
+        self.assertEqual([(m["case_id"],m["entry"]) for m in history["matches"]],[("incomplete",None)])
+        self.assertNotIn("paid_total",history["calculation"])
+        with self.store.connect() as db:
+            self.assertIsNone(db.execute("SELECT 1 FROM contract_payments WHERE case_id='other'").fetchone())
+            self.assertIsNotNone(db.execute("SELECT 1 FROM payment_index_pending WHERE case_id='other'").fetchone())
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 6)
+
+    def test_damaged_signed_payment_archive_cannot_silently_disappear(self):
+        self.installment("signed")
+        self.sign("signed")
+        with self.store.connect(True) as db:
+            db.execute("DELETE FROM contract_payments WHERE case_id='signed'")
+            db.execute("UPDATE reports SET content=content || ' ' WHERE case_id='signed'")
+        with self.assertRaisesRegex(CaseError,"归档摘要不符"):
+            self.installment("later",reference="YL-NEXT")
+        self.assertEqual(self.store.detail("later")["rev"],0)

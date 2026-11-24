@@ -23,6 +23,7 @@ from invoice_history import (INDEX_FIELDS, InvoiceHistoryChanged, check_legacy_m
                              indexed_invoices, install_index_guard, pending_signed_indexes)
 from invoice_proof import source_record as invoice_source_record
 from payment_history import LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_facts, payment_record
+import payment_index
 from peer_review import different_reviewers, review_record, valid_findings, verify_review
 from supplements import compare_return
 from work_progress import checkpoints, install as install_progress, set_activity
@@ -210,6 +211,7 @@ class Store:
                     self.index_payment(db, row["id"], row["rev"], json.loads(row["content"]))
                 db.execute("PRAGMA user_version=4")
             install_index_guard(db)
+            payment_index.install(db)
             install_capacity(db)
         os.chmod(self.path, 0o600)
 
@@ -417,6 +419,7 @@ class Store:
     def index_report(self, db, case_id, revision, report):
         project(db, case_id, revision, report)
         self.index_payment(db, case_id, revision, report)
+        db.execute("DELETE FROM payment_index_pending WHERE case_id=?", (case_id,))
         db.executemany("INSERT INTO invoice_index VALUES(?,?,?,?,?,?,?,?,?,?)", self.index_rows(case_id, revision, report))
         db.execute("DELETE FROM invoice_index_pending WHERE case_id=? AND rev<=?",(case_id,revision))
 
@@ -528,14 +531,34 @@ class Store:
         if report["graph"].get("profile") != BANK:
             return
         signature = payment_record(report["graph"], report["findings"])
-        db.execute("DELETE FROM payment_index WHERE case_id=?", (case_id,))
-        if signature["reference"]:
-            db.execute("INSERT INTO payment_index(case_id,rev,payer,reference,settlement) VALUES(?,?,?,?,?)",
-                       (case_id, revision, signature["payer"], signature["reference"], signature["settlement"]))
-        db.execute("DELETE FROM contract_payments WHERE case_id=?",(case_id,))
-        if signature["installment"]["key"]:
-            db.execute("INSERT INTO contract_payments(case_id,rev,contract_key) VALUES(?,?,?)",
-                       (case_id,revision,signature["installment"]["key"]))
+        payment_index.update(db, case_id, revision, signature, reconcile=False)
+
+    @staticmethod
+    def reconcile_payment(db, case_id, revision, paper):
+        if paper.get("case_id") != case_id or paper["graph"].get("profile") != BANK:
+            raise CaseError("付款底稿的案件归属或审计范围与检索记录不一致。", 409)
+        signature = payment_record(paper["graph"], paper["findings"])
+        added = payment_index.update(db, case_id, revision, signature, reconcile=True)
+        if added:
+            event(db, case_id, "payment_index", f"已按留存底稿 R{revision} 补全{'、'.join(added)}检索记录。")
+        db.execute("DELETE FROM payment_index_pending WHERE case_id=?", (case_id,))
+        return signature
+
+    def reconcile_signed_payments(self, db, case_id):
+        for prior, revision in payment_index.pending_signed(db, case_id).fetchall():
+            content, _ = self.signed_version(db, prior, revision)
+            self.reconcile_payment(db, prior, revision, json.loads(content))
+
+    @contextmanager
+    def payment_snapshot(self, case_id, lookup):
+        while True:
+            with self.connect() as db:
+                db.execute("BEGIN")
+                if not lookup or payment_index.pending_signed(db, case_id).fetchone() is None:
+                    yield db
+                    return
+            with self.connect(True) as db:
+                self.reconcile_signed_payments(db, case_id)
 
     @staticmethod
     def payment_matches(db, case_id, signature, as_of):
@@ -554,9 +577,9 @@ class Store:
                                   JOIN signoffs s ON s.case_id=i.case_id AND s.rev=i.rev
                                   JOIN reports r ON r.case_id=i.case_id AND r.rev=i.rev
                                   WHERE c.workspace=(SELECT workspace FROM cases WHERE id=?) AND c.status IN ('closed','in_review')
-                                  AND c.id<>? AND s.time<=? AND {predicate}
+                                  AND c.id<>? AND c.profile=? AND s.time<=? AND {predicate}
                                   ORDER BY s.time DESC,i.case_id LIMIT ?""",
-                              (case_id, case_id, as_of, *params, PAYMENT_HISTORY_LIMIT))
+                              (case_id, case_id, BANK, as_of, *params, PAYMENT_HISTORY_LIMIT))
             for row in rows:
                 match = dict(row)
                 counts[kind] = match.pop("total")
@@ -605,8 +628,8 @@ class Store:
         return content, signoff
 
     def payment_history(self, case_id, signature):
-        with self.connect() as db:
-            db.execute("BEGIN")
+        installment = signature["installment"]
+        with self.payment_snapshot(case_id, signature["reference"] or (installment["requested"] and installment["key"])) as db:
             history = self.payment_matches(db, case_id, signature, stamp())
             for match in history["matches"]:
                 prior, rev = match["case_id"], match["rev"]
@@ -649,8 +672,8 @@ class Store:
                     JOIN reports r ON r.case_id=i.case_id AND r.rev=i.rev
                     JOIN signoffs s ON s.case_id=i.case_id AND s.rev=i.rev
                     WHERE c.workspace=(SELECT workspace FROM cases WHERE id=?) AND i.contract_key=? AND i.case_id<>?
-                      AND c.status='closed' AND s.decision='approve' AND s.time<=?
-                    ORDER BY s.time DESC,i.case_id LIMIT ?""",(case_id,key,case_id,as_of,INSTALLMENT_LIMIT))]
+                      AND c.profile=? AND c.status='closed' AND s.decision='approve' AND s.time<=?
+                    ORDER BY s.time DESC,i.case_id LIMIT ?""",(case_id,key,case_id,BANK,as_of,INSTALLMENT_LIMIT))]
         count = rows[0]["total"] if rows else 0
         for row in rows:
             del row["total"]
@@ -679,19 +702,21 @@ class Store:
             if changes:
                 raise InvoiceHistoryChanged(changes,peer)
             return invoice_approval_receipt(graph,current,revision,row["hash"],signoff)
-        row = db.execute("SELECT * FROM payment_index WHERE case_id=? AND rev=?", (case_id, revision)).fetchone()
-        contract = db.execute("SELECT contract_key FROM contract_payments WHERE case_id=? AND rev=?",(case_id,revision)).fetchone()
-        if not row and not contract:
+        signature = self.reconcile_payment(db,case_id,revision,paper)
+        installment = signature["installment"]
+        if not signature["reference"] and not (installment["requested"] and installment["key"]):
             return
+        self.reconcile_signed_payments(db,case_id)
         previous = paper["graph"].get("payment_history", {})
         now = stamp()
-        current = self.payment_matches(db,case_id,row,now) if row else {"counts":{"same":0,"full":0},"matches":[]}
+        current = self.payment_matches(db,case_id,signature,now)
         def keys(history):
-            return [(m["kind"], m["case_id"], m["rev"]) for m in history.get("matches", [])]
+            return [(m["kind"],m["case_id"],m["rev"],m["report_hash"],m["decision"],m["signed_at"])
+                    for m in history.get("matches", [])]
         changed = previous.get("counts", {"same":0,"full":0}) != current["counts"] or keys(previous) != keys(current)
-        if contract and payment_record(paper["graph"],paper["findings"])["installment"]["requested"]:
+        if installment["key"] and installment["requested"]:
             prior = previous.get("installments",{"count":0,"matches":[]})
-            latest = self.installment_matches(db,case_id,contract["contract_key"],now)
+            latest = self.installment_matches(db,case_id,installment["key"],now)
             def pins(window):
                 return [(m["case_id"],m["rev"],m["report_hash"],m["signed_at"]) for m in window["matches"]]
             changed = changed or latest["count"]!=prior["count"] or pins(latest)!=pins(prior)
