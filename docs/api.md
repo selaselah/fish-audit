@@ -182,3 +182,18 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 下载证据包后，使用 `server/.venv/bin/python server/verify.py --rules-from-git main --render-addenda 证据包.zip` 可以从本地可信提交复算结论，并从提交的原合同、补充协议及本次终验所据资料重新分页，核对页图、文字、引文位置及版式。重新分页使用与该版底稿匹配的本机分页程序和依赖。常规包校验也可以直接用系统 Python 执行。
 
 规则 2026.11.24.26 对已有文字定位的旧案按需补充版式记录。遇到补充协议线索时，使用原件重新分页，逐项比较旧页图摘要、文字及坐标，匹配后记录该页是否包含图片或批注。旧版原页无法重现时，相应补充协议继续要求人工通读。
+
+## 合同约定的验收签认
+
+自规则 `2026.11.24.27`，`policy.performance_checks` 为 `contract-performance-v8`，`policy.acceptance_authority` 为 `named-acceptance-signatures-v1`。当原件含有验收签认约定或身份待查的签字栏时，H02 的 `acceptance_authority` 保存合同要求、逐份记录和所据证据。
+
+| 字段 | 含义 |
+| --- | --- |
+| `mode`、`required` | `single` 为一名指定人员，`joint` 为须共同签认的两人，`unresolved` 为约定待核。人员按条款原序排列。 |
+| `applies_to` | `final` 为终验，`final_and_reinspection` 为终验及整改复验。约定范围未确定时为 null。 |
+| `records[]` | 分别列出 `acceptance`、`reinspection` 原件的 `unit`、`date`、`status`、`detail`、`signed` 和 `evidence`。`missing_names` 表示尚缺独立核准签认的人，`other_names` 表示已核签字栏里约定以外的人。 |
+| `clause_evidence`、`contract_evidence`、`evidence` | 对应签认约定、合同身份和生效时间、整体结论所引用的证据编号。 |
+
+`graph.acceptance_authority_sources` 按原件及页码保留条款 `clauses`、签字行 `signatures`、覆盖页 `pages` 和影像线索 `visual_notes`。签字行记录精确原文、原生行号及 `confirmed`。一条 `named_acceptance_signature` 关系将该份合同的条款连到一个经独立核图并符合约定的签字栏。签认相符证明所列人员与条款对应，交付数量、质量、缺陷关闭及付款时点仍需分别核验。
+
+本机通过决定会核对相关原件、页图、签认记录和来源。旧版曾给出终验相符并有未经检查的签认约定时，签收返回 409，请按当前规则重审。离线校验可用 `server/.venv/bin/python server/verify.py --rules-from-git main --render-performance 证据包.zip` 重新分页并复算指定版本的发现。

@@ -20,6 +20,7 @@ from policy import ACCOUNTING, MAPPING, SOURCES
 from reinspection import closed_steps
 from quality_labels import FORMAT as QUALITY_NUMBER_FORMAT
 from quality_references import FORMAT as QUALITY_REFERENCE_FORMAT
+from acceptance_authority import FORMAT as ACCEPTANCE_AUTHORITY
 from contract_changes import FORMAT as ADDENDUM_FORMAT
 from delegation import FORMAT as DELEGATION_FORMAT
 from transfers import RULES as TRANSFER_RULES, check_transfers
@@ -50,7 +51,7 @@ CATALOG = {
 }
 VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING, "performance_checks":PERFORMANCE_FORMAT,
            "quality_number_classification":QUALITY_NUMBER_FORMAT, "quality_references":QUALITY_REFERENCE_FORMAT,
-           "delegation_checks":DELEGATION_FORMAT, "quality_addenda":ADDENDUM_FORMAT,
+           "delegation_checks":DELEGATION_FORMAT, "quality_addenda":ADDENDUM_FORMAT, "acceptance_authority":ACCEPTANCE_AUTHORITY,
            "sources": SOURCES, "rule_sources": MAPPING, "invoice_sources": INVOICE_SOURCE_FORMAT,
            "invoice_approval": INVOICE_APPROVAL_FORMAT,"invoice_identity":INVOICE_IDENTITY_FORMAT,"invoice_lookup":INVOICE_LOOKUP,
            "invoice_number_masks":MASK_FORMAT,"payment_references":PAYMENT_REFERENCE_FORMAT,"payment_checks":PAYMENT_CHECKS}
@@ -123,7 +124,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
     def with_performance():
         for item in performance:
             record(item["rule"],item["status"],item["detail"],item["evidence"],item["scope"])
-            for key in ("stage","reinspection","delegations","quality_change"):
+            for key in ("stage","reinspection","delegations","quality_change","acceptance_authority"):
                 if key in item:
                     findings[-1][key] = item[key]
         return findings

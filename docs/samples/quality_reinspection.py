@@ -27,10 +27,7 @@ LABELS = {"验收单编号":"acceptance_number","复验单编号":"acceptance_nu
           "质保期满确认":"warranty_release"}
 
 
-def materials(run_id,mode):
-    code=hashlib.sha256((run_id+"-"+mode).encode()).hexdigest()[:8].upper()
-    folder=ROOT/"25-整改复验"/code
-    folder.mkdir(parents=True,exist_ok=True)
+def reinspection_records(code,mode):
     records=documents(code,"complete")
     template=records["验收报告"]
     original="YS-"+code
@@ -49,6 +46,14 @@ def materials(run_id,mode):
         records["复验报告"].append(("缺陷编号展示说明", "本单仅列尾号"))
     if mode=="early":
         records["银行付款回单"]=[(label,"2026年9月18日" if label=="付款日期" else value) for label,value in records["银行付款回单"]]
+    return records
+
+
+def materials(run_id,mode):
+    code=hashlib.sha256((run_id+"-"+mode).encode()).hexdigest()[:8].upper()
+    folder=ROOT/"25-整改复验"/code
+    folder.mkdir(parents=True,exist_ok=True)
+    records=reinspection_records(code,mode)
     font=embedded_font("QualityReinspectionCJK")
     for title,rows in records.items():
         pdf(folder/(title+".pdf"),title,rows,font=font)
@@ -105,7 +110,7 @@ def reconcile_training_pages(cid,folder,records,*,case_titles=None,field_labels=
                 targets.append((fields[label],value,label+"："+value,region))
         targets.append((types[title],title,title,"top"))
         counts=Counter(f for f,_,_,_ in targets)
-        printed_phases={normalize(line) for field,_,line,_ in targets if field=="payment_stage"}
+        separate={k:{normalize(line) for field,_,line,_ in targets if field==k} for k in ("payment_stage","acceptance_signer")}
         for field,value,line,region in targets:
             assert normalize(line) in source_lines
             graph=report["graph"]
@@ -114,10 +119,10 @@ def reconcile_training_pages(cid,folder,records,*,case_titles=None,field_labels=
             same=[f for f in facts if normalize(f["quote"])==normalize(line)]
             correct=any(f["field"]==field and f["status"] in ("anchored","confirmed") for f in same)
             wrong=[f for f in same if f["field"]!=field and f["status"]=="visual" and not f.get("amendment")]
-            if field=="payment_stage" and ordered_lines.count(normalize(line))==1:
+            if field in separate and ordered_lines.count(normalize(line))==1:
                 merged=normalize(line)
                 for following in ordered_lines[ordered_lines.index(merged)+1:]:
-                    if following not in printed_phases:
+                    if following not in separate[field]:
                         break
                     merged+=following
                     wrong.extend(f for f in facts if f["field"]==field and f["status"] in ("visual","unsupported")

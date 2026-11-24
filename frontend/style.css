@@ -113,6 +113,16 @@ textarea { width: 100%; resize: vertical; }
 .quality-change { margin:14px 0; padding:14px; background:var(--soft); border-inline-start:3px solid var(--green); }
 .quality-change[data-quality-change="pending"] { border-inline-start-color:#ac772c; }
 .quality-change h4 { margin:0; }
+.acceptance-authority { margin:14px 0; padding:14px; border-inline-start:3px solid var(--green); background:var(--soft); }
+.acceptance-authority[data-authority-status="missing"],.acceptance-authority[data-authority-status="risk"] { border-inline-start-color:#946421; }
+.acceptance-authority h4,.acceptance-authority p { margin:0; }
+.signer-requirement { margin-top:10px; }
+.signer-names { font-size:1.04rem; }
+.signature-record { margin-top:10px; padding-top:10px; border-top:1px solid var(--line); }
+.signer-source,.signer-review-note { display:flex; flex-wrap:wrap; gap:3px 10px; align-items:baseline; margin:4px 0; overflow-wrap:anywhere; }
+.signer-source q,.evidence-row[data-gap-line] blockquote { white-space:pre-wrap; }
+.signer-source .ref,.signer-review-note .ref { max-width:100%; overflow-wrap:anywhere; }
+.signature-record .signer-pending { margin:5px 0 0; color:#78511a; font-size:.9rem; }
 .quality-decision { color:var(--muted); font-size:.84rem; }
 .quality-standard { font-size:1.18rem; font-weight:650; margin:4px 0; }
 .change-comparison { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr)); gap:12px 20px; }

@@ -114,6 +114,10 @@ PYTHONPATH=server server/.venv/bin/python -m unittest discover -s server/tests -
 
 运行 `server/.venv/bin/python docs/samples/quality_reinspection.py --run` 生成并核验三组水印件。9 月 10 日交付的冷藏柜实测 8℃，高于合同上限 4℃。9 月 16 日完成整改，9 月 20 日复验实测 3℃。三案分别核查复验后的第二期付款、复验前已付的验收款以及缺陷号不同的复验报告。每一组均保留首次失败记录。
 
+### 合同指定验收人和共同签字
+
+运行 `server/.venv/bin/python docs/samples/acceptance_signers.py` 生成带水印的虚构采购资料。加上 `--run` 会通过本机网页使用的上传接口提交五案，核对原件摘要后按印刷行补正并模拟核图。用 `--cases joint missing different retest image` 可单独选择签字齐备、缺一人、换人签字、复验缺签或含影像代签说明的案例。每笔仍以同一总价及三期安排核查，可从 H02 签字栏原页追到受影响的付款结论。[已验证的五份本机底稿](../acceptance.md#2026-11-24-合同约定的验收签认)
+
 ### 复现首次读图的编号误分类
 
 运行 `server/.venv/bin/python docs/samples/quality_readback.py --run`，可用上述复验后付款案例的 R1 重测。脚本校验原版本证据包，把两份 PDF 与固定种子重新生成的水印样本逐字节比较，并检查重渲染的页图和文字层。随后只将两张水印页图连同真实初读候选送入视觉复检，将回执另存入演练目录。原底稿仍可照常打开。

@@ -187,6 +187,59 @@ function qualityChangePanel(change, graph) {
   return panel;
 }
 
+function acceptanceAuthorityPanel(entry, graph) {
+  const index = graphIndex(graph);
+  const sources = graph.acceptance_authority_sources;
+  const panel = box('acceptance-authority', box('flow', el('h4','验收签认权限'), tag(entry.status)));
+  panel.dataset.authorityStatus = entry.status;
+  const requirement = {single:'指定验收人',joint:'须共同签字',unresolved:'签认约定待核'}[entry.mode];
+  const names = el('strong',entry.required.join('、'),'signer-names');
+  panel.append(box('flow signer-requirement', el('span',requirement), names));
+  if (entry.applies_to) panel.append(el('p',entry.applies_to==='final'?'适用记录 · 终验':'适用记录 · 终验及整改复验','small'));
+  function sourceRow(item, remark) {
+    const fact = index.facts.get(item.fact || item.facts?.[0]);
+    const pinpoint = fact && (!item.line || fact.quote===item.quote) ? fact.id : null;
+    const doc = index.documents.get(item.doc);
+    const page = (doc?.name || '原件')+' · 第 '+item.page+' 页';
+    const link = action(page,()=>openPage(item.doc,item.page,pinpoint,pinpoint?null:item.line),'ref');
+    const row = box('signer-source',el('q',item.quote),link);
+    if (remark) row.append(el('span',remark,'small'));
+    row.dataset.signerSource = pinpoint || item.doc+'/p'+item.page+'/l'+item.line;
+    link.setAttribute('aria-label',page+'，查看“'+item.quote+'”');
+    return row;
+  }
+  const contracts = new Set(graph.documents_by_kind.contract || []);
+  for (const clause of sources.clauses) {
+    const remark = !clause.native?'读图引文待核':contracts.has(clause.unit) && clause.fact?'合同原文':'其他签认线索待核';
+    panel.append(sourceRow(clause,remark));
+  }
+  for (const record of entry.records) {
+    const section = el('section','','signature-record');
+    section.dataset.signerRecord = record.unit;
+    section.append(box('flow',el('strong',record.role==='reinspection'?'整改复验':'原验收'),el('span',record.date || '日期待核','small'),tag(record.status)));
+    for (const row of record.signed) section.append(sourceRow(row,row.confirmed?'签字栏已核图':'签字栏待核图'));
+    if (record.missing_names.length) section.append(el('p','尚缺已核签认 · '+record.missing_names.join('、'),'signer-pending'));
+    if (record.other_names.length) section.append(el('p','约定以外的签字人 · '+record.other_names.join('、'),'signer-pending'));
+    if (!record.signed.length) section.append(el('p','待补可核对的签字栏','small'));
+    panel.append(section);
+  }
+  const linesShown = new Set([...sources.clauses,...sources.signatures].map(s=>s.doc+'/p'+s.page+'/l'+s.line));
+  for (const page of sources.pages) {
+    if (!page.text_only) {
+      const name = index.documents.get(page.doc)?.name || '原件';
+      const button = action('查看'+name+'第 '+page.page+' 页',()=>openPage(page.doc,page.page),'ref');
+      button.dataset.signerPage = page.doc+'/p'+page.page;
+      panel.append(box('signer-review-note',el('span','本页含影像或版式待核，请通读签字栏和附注。'),button));
+    }
+    for (const line of page.uncovered) {
+      if (!linesShown.has(page.doc+'/p'+page.page+'/l'+line.line))
+        panel.append(sourceRow({...line,doc:page.doc,page:page.page},'待核原文'));
+    }
+  }
+  for (const note of sources.visual_notes) panel.append(sourceRow(note,'读图附注待核'));
+  return panel;
+}
+
 function reinspectionTrail(chain, graph) {
   const index = graphIndex(graph);
   const roles = [

@@ -81,7 +81,7 @@ def closed_steps(findings):
     return {}
 
 
-def assess(contract, receipts, repairs, retests, evaluate):
+def assess(contract, receipts, repairs, retests, evaluate, *, signature_ok=None):
     # A regular acceptance form may explicitly reference the record that it reinspects.
     originals, followups = [], list(retests)
     for doc in receipts:
@@ -139,7 +139,8 @@ def assess(contract, receipts, repairs, retests, evaluate):
     if not description or description in ("无","无遗留事项","无整改事项","无异常") or not (
             description==repair.body("repair_subject")==final.body("repair_subject")):
         return incomplete("整改与复验所指的缺陷事项尚未逐字对应原验收记录。")
-    if not original.signed("acceptance_signer") or initial not in ("issue","risk") or not (
+    signed_original = original.signed("acceptance_signer") if signature_ok is None else signature_ok(original)
+    if not signed_original or initial not in ("issue","risk") or not (
             original.body("acceptance_result") in SIGNED_FAILURE or initial=="issue"):
         return incomplete("需确定原验收的具体不合格或附条件结论及验收人核图签认。")
     action = repair.body("repair_action")

@@ -29,6 +29,7 @@ import payment_index
 from performance import verify_findings as verify_performance
 from quality_labels import verify_report as verify_quality_numbers
 from quality_references import verify_report as verify_quality_references
+from acceptance_authority import verify_sources as verify_acceptance_authority
 from contract_changes import verify_sources as verify_addendum_sources
 from delegation import verify_sources as verify_delegation_sources
 from peer_review import different_reviewers, review_record, valid_findings, verify_review
@@ -719,14 +720,14 @@ class Store:
             paper = json.loads(row["content"])
             graph = paper["graph"]
             if row["profile"]!=BANK:
-                checks = [f for f in paper["findings"] if f.get("delegations") or f.get("quality_change")]
+                checks = [f for f in paper["findings"] if f.get("delegations") or f.get("quality_change") or f.get("acceptance_authority")]
                 if not checks:
                     return None
                 named = {ref for f in checks for ref in f["evidence"]}
                 units = {d["id"]:d.get("source", d["id"]) for d in graph.get("audit_documents", graph["documents"])}
                 originals = {units[unit] for finding in checks for unit in finding["scope"]}
-                amendment = any(f.get("quality_change") for f in checks)
-                fields = [f["id"] for f in graph["facts"] if f["id"] in named or amendment and f["doc"] in originals]
+                full_pages = any(f.get("quality_change") or f.get("acceptance_authority") for f in checks)
+                fields = [f["id"] for f in graph["facts"] if f["id"] in named or full_pages and f["doc"] in originals]
                 pages = {(p["doc"],p["page"]) for p in paper["calls"]["pages"] if p["doc"] in originals}
                 registered = {(r["doc"],r["number"]) for r in db.execute("SELECT doc,number FROM pages WHERE case_id=?",(case_id,))
                               if r["doc"] in originals}
@@ -823,27 +824,33 @@ class Store:
                     verify_quality_references(paper, page_text, signing=True)
                     verify_delegation_sources(paper, page_text, signing=True)
                     verify_addendum_sources(paper, page_text, signing=True)
-                    for page in paper["graph"].get("quality_addenda",{}).get("pages",[]):
+                    verify_acceptance_authority(paper,page_text,signing=True)
+                    inspected = [*paper["graph"].get("quality_addenda",{}).get("pages",[]),
+                                 *paper["graph"].get("acceptance_authority_sources",{}).get("pages",[])]
+                    for page in inspected:
                         layer = db.execute("SELECT layer FROM pages WHERE case_id=? AND doc=? AND number=?",
                                            (case_id,page["doc"],page["page"])).fetchone()
                         if not layer or (json.loads(layer[0] or "{}").get("clause_text_only") is True)!=page["text_only"]:
-                            raise ValueError("补充协议页内影像或附注的分页记录与底稿不符。")
+                            raise ValueError("履约依据页内影像或附注的分页记录与底稿不符。")
                 except ValueError as error:
                     raise CaseError(str(error), 409) from error
             except (KeyError,TypeError,ValueError) as error:
                 raise CaseError("本版审计建议与逐项发现不一致，请核对所据底稿。",409) from error
         graph = paper["graph"]
         changed = any(f.get("quality_change") for f in paper["findings"])
-        if graph.get("profile")!=BANK and (changed or any(f.get("delegations") for f in paper["findings"])):
+        named_acceptance = any(f.get("acceptance_authority") for f in paper["findings"])
+        if graph.get("profile")!=BANK and (changed or named_acceptance or any(f.get("delegations") for f in paper["findings"])):
             if not payment_sources or len(payment_sources)!=1:
                 raise CaseError("签收前需重新核对合同及所据履约附件原件。",409)
             source = payment_sources[0][0]
             if (source.case_id,source.revision,source.report_hash)!=(case_id,revision,row["hash"]):
                 raise CaseError("履约原件所据的签收版已变化。",409)
             source.guard(db)
+            if named_acceptance:
+                event(db,case_id,"acceptance_signature_sources",f"签收前核对 R{revision} 的具名条款、验收签字及相关页图，共 {len(source.files)} 个文件。")
             if changed:
                 event(db,case_id,"addendum_sources",f"签收前核对 R{revision} 合同、补充协议、验收原件和相关页图，共 {len(source.files)} 个文件。")
-            else:
+            elif not named_acceptance:
                 event(db,case_id,"mandate_sources",f"签收前核对 R{revision} 的合同签字、委托书及相关页图，共 {len(source.files)} 个文件。")
         if graph.get("profile") == PERFORMANCE:
             return None

@@ -156,6 +156,12 @@ try {
     const api = root+'/api/cases/'+performanceCase;
     const task = await (await fetch(api)).json();
     assert.ok(task.title.startsWith('合成演练 · ') && task.profile==='cn-contract-performance/v1');
+    const requestedRev=process.argv.indexOf('--performance-rev');
+    if (requestedRev>=0) {
+      const rev=Number(process.argv[requestedRev+1]);
+      assert.ok(Number.isSafeInteger(rev) && rev>0 && rev<=task.rev);
+      task.rev=rev;
+    }
     const {report} = await (await fetch(api+'/reports/'+task.rev)).json();
     const phases = report.findings.filter(f=>f.rule==='H04');
     assert.deepEqual(phases.map(f=>f.stage.share),['30','60','10']);
@@ -198,6 +204,42 @@ try {
     assert.deepEqual(sharedClause,[0,1],'a receipt belongs only to its named phase when two phases share one contract line');
     const chain=report.findings.find(f=>f.rule==='H02')?.reinspection;
     const change=report.findings.find(f=>f.rule==='H02')?.quality_change;
+    const authority=report.findings.find(f=>f.rule==='H02')?.acceptance_authority;
+    if (authority) {
+      const panel='document.querySelector(".acceptance-authority")';
+      const ledger=report.graph.acceptance_authority_sources;
+      assert.equal(await evaluate(panel+'.dataset.authorityStatus'),authority.status);
+      assert.equal(await evaluate(panel+'.querySelector(".signer-names").textContent'),authority.required.join('、'));
+      for (const record of authority.records) {
+        const section=panel+'.querySelector('+JSON.stringify('[data-signer-record="'+record.unit+'"]')+')';
+        const visible=await evaluate(section+'.innerText');
+        for (const label of [record.date, ...record.missing_names, ...record.other_names].filter(Boolean)) assert.ok(visible.includes(label));
+        assert.equal(await evaluate(section+'.querySelectorAll(".signer-source").length'),record.signed.length);
+        assert.ok(await evaluate(section+'.querySelector(".tag").classList.contains('+JSON.stringify(record.status)+')'));
+      }
+      const sources=[...ledger.clauses,...authority.records.flatMap(r=>r.signed),...ledger.visual_notes,
+                     ...ledger.pages.flatMap(p=>p.uncovered.map(l=>({...l,doc:p.doc,page:p.page})))];
+      for (const item of sources) {
+        const fact=report.graph.facts.find(f=>f.id===(item.fact || item.facts?.[0]));
+        const ref=fact && (!item.line || fact.quote===item.quote) ? fact.id : null;
+        const id=ref || item.doc+'/p'+item.page+'/l'+item.line;
+        const row=panel+'.querySelector('+JSON.stringify('[data-signer-source="'+id+'"]')+')';
+        if (!ref && !await evaluate('!!'+row) && sources.some(s=>s!==item && s.doc===item.doc && s.page===item.page && s.line===item.line && s.fact)) continue;
+        assert.equal(await evaluate(row+'.querySelector("q").textContent'),item.quote);
+        assert.equal(await evaluate('getComputedStyle('+row+'.querySelector("q")).whiteSpace'),'pre-wrap');
+        await evaluate(row+'.querySelector("button").click()');
+        await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth>0','image of signature record');
+        if (ref) assert.equal(await evaluate('document.querySelector(".located").dataset.fact'),ref);
+        else assert.equal(await evaluate('document.querySelector(".located[data-gap-line] blockquote").textContent'),item.quote);
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
+      for (const page of ledger.pages.filter(p=>!p.text_only)) {
+        const locator=panel+'.querySelector('+JSON.stringify('[data-signer-page="'+page.doc+'/p'+page.page+'"]')+')';
+        await evaluate(locator+'.click()');
+        await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth>0','full signature page');
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
+    }
     if (change) {
       const panel='document.querySelector(".quality-change")';
       assert.equal(await evaluate(panel+'.dataset.qualityChange'),change.state);
@@ -349,7 +391,12 @@ try {
     }
     for (const width of [1440,1024,820,768,390,320]) {
       await call('Emulation.setDeviceMetricsOverride',{width,height:880,deviceScaleFactor:1,mobile:false});
-      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll(".phase-summary li,.phase-results,.clause-source,.mandate-dates,.mandate-side,.quality-change,.change-comparison,.change-source")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'performance layout at '+width);
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll(".phase-summary li,.phase-results,.clause-source,.mandate-dates,.mandate-side,.quality-change,.change-comparison,.change-source,.acceptance-authority,.signature-record,.signer-source")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'performance layout at '+width);
+      if (authority && process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
+        await evaluate('document.querySelector(".acceptance-authority").scrollIntoView({block:"start"});window.scrollBy(0,-54)');
+        const capture=await call('Page.captureScreenshot',{format:'png'});
+        await writeFile(join(process.env.AUDIT_UI_SHOTS,'signers-'+performanceCase+'-'+width+'.png'),Buffer.from(capture.data,'base64'));
+      }
       if (change && process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
         await evaluate('document.querySelector(".quality-change").scrollIntoView({block:"start"});window.scrollBy(0,-54)');
         const capture=await call('Page.captureScreenshot',{format:'png'});
@@ -359,6 +406,20 @@ try {
     const target=report.findings.find(f=>f.rule==='H02');
     await click('查看证据路径','document.querySelector('+JSON.stringify('[data-finding="'+target.id+'"]')+')');
     await wait('document.querySelector("#trace-select")?.value==='+JSON.stringify(target.id),'acceptance evidence graph');
+    if (authority) {
+      const edges=report.graph.edges.filter(e=>e.type==='named_acceptance_signature');
+      assert.equal(await evaluate('!!document.querySelector(".signature-relations")'),!!edges.length);
+      if (edges.length) await evaluate('document.querySelector(".signature-relations").open=true');
+      for (const edge of edges) {
+        const row='document.querySelector('+JSON.stringify('[data-signer-witness="'+edge.to+'"]')+')';
+        await wait(row+'?.querySelectorAll("button").length===2','source pair on the graph');
+        for (const [i,id] of [edge.from,edge.to].entries()) {
+          await evaluate(row+'.querySelectorAll("button")['+i+'].click()');
+          await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(id),'graph to original');
+          await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+        }
+      }
+    }
     console.log('PASS · Contract scope, three phase decisions, original clauses and evidence path at six widths');
   } else if (claimPairCase) {
     const api=root+'/api/cases/'+claimPairCase;

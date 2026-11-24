@@ -283,15 +283,20 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     const note = [...addenda.signals,...addenda.limited_numbers].find(s=>s.doc===docId && s.page===pageNumber && s.line===lineHint);
     if (note) gaps.push({...note,quality:'addendum_reference'});
   }
+  const signers = state.bundle?.report.graph.acceptance_authority_sources;
+  if (signers && lineHint && !gaps.some(g=>g.line===lineHint)) {
+    const source = [...signers.clauses,...signers.signatures].find(s=>s.doc===docId && s.page===pageNumber && s.line===lineHint);
+    if (source) gaps.push({...source,quality:'signer_reference'});
+  }
   for (const gap of gaps) {
-    const label = gap.quality==='addendum_reference'?'补充协议所据原文':'待核的原文字层';
+    const label = {addendum_reference:'补充协议所据原文',signer_reference:'验收签认所据原文'}[gap.quality] || '待核的原文字层';
     const section = box('evidence-row',el('h4',label+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
     section.dataset.gapLine = String(gap.line);
     if (gap.line===lineHint) {
       section.classList.add('located');
       focusRow=section;
     }
-    const field = ['mandate_clause','addendum_clause'].includes(gap.quality) ? null : gap.field || gap.title_hint;
+    const field = ['mandate_clause','addendum_clause','acceptance_authority_clause'].includes(gap.quality) ? null : gap.field || gap.title_hint;
     if (editable && field) {
       const unresolved=pageFacts.filter(f=>['visual','unsupported'].includes(f.status));
       const matching=unresolved.filter(f=>f.source_line?.number===gap.line && f.source_line.text===gap.quote);
@@ -457,6 +462,7 @@ function finding(item) {
   if (item.reinspection) node.append(reinspectionTrail(item.reinspection,state.bundle.report.graph));
   if (item.delegations) node.append(mandatePanel(item.delegations, state.bundle.report.graph));
   if (item.quality_change) node.append(qualityChangePanel(item.quality_change, state.bundle.report.graph));
+  if (item.acceptance_authority) node.append(acceptanceAuthorityPanel(item.acceptance_authority, state.bundle.report.graph));
   if (item.rule.startsWith('H')) {
     const comparison = performanceComparison(item,state.bundle.report.graph);
     if (comparison) node.append(comparison);
@@ -539,6 +545,17 @@ function graphPanel() {
   const panel = box('panel', el('h2', '本案证据关系'), el('p', graph.nodes.length + ' 个节点 · ' +
     graph.edges.length + ' 条关系 · ' + graph.facts.length + ' 条提取记录', 'muted'));
   const grouped = new Map();
+  const signers = graph.edges.filter(edge=>edge.type==='named_acceptance_signature');
+  if (signers.length) {
+    const list=lazyFold('合同约定与签认关系（'+signers.length+'）',()=>signers.map(edge=>{
+      const row=box('line',box('change-source',el('q',facts.get(edge.from).quote),citation(edge.from)),
+        box('change-source',el('q',facts.get(edge.to).quote),citation(edge.to)));
+      row.dataset.signerWitness=edge.to;
+      return row;
+    }));
+    list.classList.add('signature-relations');
+    panel.append(list);
+  }
   if (graph.audit_documents) panel.append(fold('合订资料的原页归属', ...graph.audit_documents.filter(doc => doc.source)
     .map(doc => box('line', el('strong', doc.name), citation(doc.source + '/p' + doc.page)))));
   for (const edge of relations) {

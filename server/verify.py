@@ -23,6 +23,7 @@ from peer_review import journal_decision, verify_referrals, verify_review
 from performance import LABELS as PERFORMANCE_FIELDS, verify_findings as verify_performance
 from quality_labels import verify_report as verify_quality_numbers
 from quality_references import verify_report as verify_quality_references
+from acceptance_authority import verify_sources as verify_acceptance_authority
 from contract_changes import verify_sources as verify_addendum_sources
 from delegation import verify_sources as verify_delegation_sources
 from protocol import canonical, response_request
@@ -232,6 +233,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
     verify_quality_references(report, page_text)
     verify_delegation_sources(report, page_text)
     verify_addendum_sources(report, page_text)
+    verify_acceptance_authority(report,page_text)
     if "conclusions.py" in report["policy"].get("code_sha256",{}):
         verify_result(report)
     graph = report["graph"]
@@ -243,8 +245,9 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
     for trace in report["calls"]["pages"]:
         doc, page = trace["doc"], trace["page"]
         page_node = nodes[f"{doc}/p{page}"]
+        inspected = [*graph.get("quality_addenda",{}).get("pages",[]),*graph.get("acceptance_authority_sources",{}).get("pages",[])]
         if report["policy"].get("quality_addenda") and ("clause_text_only" in trace or
-                any(p["doc"]==doc and p["page"]==page for p in graph["quality_addenda"]["pages"])):
+                any(p["doc"]==doc and p["page"]==page for p in inspected)):
             require(isinstance(trace.get("clause_text_only"),bool) and trace["clause_text_only"] is page_node.get("clause_text_only"),
                     "补充协议的页面版式与分页记录不符")
         require(hashes[f"{page_dir}/{doc}/{page}.jpg"] == trace["page_sha256"] == page_node["sha256"], "页图摘要不符")
@@ -264,7 +267,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
                      for note in h["observations"]}
     mandate_images = {(p["doc"],p["page"]) for p in graph.get("delegation_coverage",{}).get("pages",[]) if not p["native"]}
     texts = {}
-    performance_refs = {ref for item in report["findings"] if item.get("reinspection") or item.get("delegations") or item.get("quality_change") for ref in item["evidence"]}
+    performance_refs = {ref for item in report["findings"] if item.get("reinspection") or item.get("delegations") or item.get("quality_change") or item.get("acceptance_authority") for ref in item["evidence"]}
     for fact in graph["facts"]:
         require(fact["source_sha256"] == nodes[fact["doc"]]["sha256"] and
                 fact["page_sha256"] == nodes[f"{fact['doc']}/p{fact['page']}"]["sha256"], "取值与来源不符")
@@ -373,9 +376,10 @@ def render_addendum_sources(bundle, report, nodes):
     graph = report["graph"]
     ledger = graph.get("quality_addenda",{})
     selected = {p["doc"] for key in ("pages","signals","limited_numbers") for p in ledger.get(key,[])}
+    selected.update(p["doc"] for p in graph.get("acceptance_authority_sources",{}).get("pages",[]))
     units = {d["id"]:d.get("source",d["id"]) for d in graph.get("audit_documents",graph["documents"])}
-    selected.update(units[u] for f in report["findings"] if f.get("quality_change") for u in f["scope"])
-    require(selected,"本版底稿没有可按补充协议程序重新分页的原件。")
+    selected.update(units[u] for f in report["findings"] if f.get("quality_change") or f.get("acceptance_authority") for u in f["scope"])
+    require(selected,"本版底稿没有可按补充协议或具名验收签认程序重新分页的原件。")
     try:
         from documents import CaseError, prepare
     except ImportError as error:
@@ -394,7 +398,7 @@ def render_addendum_sources(bundle, report, nodes):
                 rendered = prepare(original,len(pages),save_images=False)
             except CaseError as error:
                 raise ValueError(f"无法重现《{doc['name']}》的原页。{error}") from error
-        require(len(rendered)==len(pages),"补充协议所据原件重新分页后的页数不符")
+        require(len(rendered)==len(pages),"履约所据原件重新分页后的页数不符")
         for page in rendered:
             number = page["number"]
             node = nodes[f"{doc_id}/p{number}"]
@@ -536,7 +540,8 @@ def verify(source, strict_rules=False, *, rule_checker=None, render_addenda=Fals
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="离线核对 Fish Audit 导出包的文件与引用。")
-    parser.add_argument("--render-addenda",action="store_true",help="从补充协议及本次终验所据原件重新生成页图，核对文字、引文位置和版式")
+    parser.add_argument("--render-performance","--render-addenda",dest="render_addenda",action="store_true",
+                        help="从补充协议、具名验收和终验所据的原件重新生成页图，核对文字、引文位置和版式")
     parser.add_argument("bundle", type=Path)
     rules = parser.add_mutually_exclusive_group()
     rules.add_argument("--rules", action="store_true", help="使用与底稿一致的本机程序，从图谱完整复算规则、追加程序及总建议")

@@ -25,6 +25,18 @@ FIELDS = {"补充协议编号":"addendum_number","原合同编号":"base_contrac
           "第三期":"payment_stage","交易状态":"transfer_status","付款日期":"paid_on","含税总额":"total"}
 
 
+def pdf_with_note(path,title,rows,font,note):
+    page=canvas.Canvas(str(path),pagesize=(595,842),invariant=1)
+    page.setTitle(title)
+    draw_pdf_page(page,title,rows,font=font)
+    image=Image.new("RGB",(945,98),"white")
+    draw=ImageDraw.Draw(image)
+    draw.rectangle((2,2,942,95),outline="#4d4d4d",width=2)
+    draw.text((14,25),note,fill="#232323",font=ImageFont.truetype(pdfmetrics.getFont(font).face.filename,39))
+    page.drawImage(ImageReader(image),48,125,width=435,height=45)
+    page.save()
+
+
 def generate(seed, mode):
     code = hashlib.sha256((seed+"-"+mode).encode()).hexdigest()[:8].upper()
     folder = ROOT/"27-合同变更与终验"/code
@@ -48,16 +60,7 @@ def generate(seed, mode):
     for title,rows in records.items():
         path=folder/(title+".pdf")
         if title==TITLE and mode=="image_rider":
-            page=canvas.Canvas(str(path),pagesize=(595,842),invariant=1)
-            page.setTitle(title)
-            draw_pdf_page(page,title,rows,font=font)
-            image=Image.new("RGB",(945,98),"white")
-            draw=ImageDraw.Draw(image)
-            draw.rectangle((2,2,942,95),outline="#4d4d4d",width=2)
-            draw.text((14,25),"附注：第二期付款前须取得履约保函",fill="#232323",
-                      font=ImageFont.truetype(pdfmetrics.getFont(font).face.filename,39))
-            page.drawImage(ImageReader(image),48,125,width=435,height=45)
-            page.save()
+            pdf_with_note(path,title,rows,font,"附注：第二期付款前须取得履约保函")
         else:
             pdf(path,title,rows,font=font)
     return folder,records
