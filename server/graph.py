@@ -3,7 +3,7 @@ import re
 import unicodedata
 from collections import defaultdict
 
-from invoice_identity import FORMAT as IDENTITY_FORMAT, SHORT, identity_relations
+from invoice_identity import CLAIM_PAIR_LABELS, FORMAT as IDENTITY_FORMAT, SHORT, identity_relations, printed_claim_pair
 from invoice_proof import invoice_number_edges
 from model import FIELDS
 
@@ -26,7 +26,7 @@ LABELS = {
     "buyer": ("采购方", "购方", "购买方", "甲方", "买方", "需方", "采购单位", "验收单位"),
     "seller": ("供应方", "销方", "销售方", "乙方", "卖方", "供方", "供应商", "供货单位"),
     "contract_id": ("合同编号", "合同号"), "invoice_id": ("发票号码", "票据号码", "发票号"),
-    "invoice_code": ("发票代码",), "claim_full_ref": ("随附发票代码及号码","随附发票代码和号码","随附发票代码/号码"),
+    "invoice_code": ("发票代码",), "claim_full_ref": CLAIM_PAIR_LABELS,
     "net": ("不含税金额", "不含税合计", "不含税价款", "金额合计"),
     "tax": ("税额", "税款"), "total": ("价税合计", "含税总额", "含税总价", "含税金额", "含税合计"),
     "currency": ("币种", "货币种类", "结算货币"),
@@ -148,6 +148,15 @@ def build_graph(docs, pages, attestations, amendments=()):
             observations[target] = {key: edit[key] for key in ("field", "value", "quote", "region")}
         lines = index_lines(page["text"])
         layer = page.get("layer") or {"type": "unknown", "lines": {}}
+        printed_pairs = set()
+        for ref,candidate in observations.items():
+            if candidate["field"]!="claim_ref" or ref in page_edits or layer["type"]!="text":
+                continue
+            position = lines.get(compact(candidate["quote"]).strip("。;；"))
+            if (position and layer["lines"].get(str(position[0])) and
+                    printed_claim_pair(candidate,position[1],check,ref.rsplit("/f",1)[-1])):
+                observations[ref] = {**candidate,"field":"claim_full_ref"}
+                printed_pairs.add(ref)
         nodes[page_id] = {"id": page_id, "type": "page", "label": f"第 {number} 页", "sha256": page["sha256"],
                           "text_sha256": hashlib.sha256(page["text"].encode()).hexdigest(), "layer": layer["type"]}
         edges.append({"from": doc, "to": page_id, "type": "contains", "evidence": [page_id]})
@@ -198,6 +207,8 @@ def build_graph(docs, pages, attestations, amendments=()):
                     "source_line": {"number": position[0], "text": position[1], "rects": rects} if position else None}
             if origin in headings:
                 fact["origin"] = "verified_printed_heading"
+            if fact_id in printed_pairs:
+                fact.update(origin="printed_claim_pair",model_field="claim_ref")
             if edit:
                 fact["amendment"] = edit
                 fact["original_candidate"] = output["facts"][int(index) - 1] if index else headings.get(origin)

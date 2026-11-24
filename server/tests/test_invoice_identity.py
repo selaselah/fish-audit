@@ -37,6 +37,29 @@ def materials(codes=CODES, *, numbers=None, claim=None, packet=False):
 
 
 class InvoiceIdentityTests(unittest.TestCase):
+    def test_model_classification_requires_the_same_printed_line_and_checked_image(self):
+        docs,pages=materials()
+        page=pages[0]
+        facts=page["extraction"]["output"]["facts"]
+        candidates=[]
+        for n,fact in enumerate(facts,1):
+            if fact["field"]=="claim_full_ref":
+                fact["field"]="claim_ref"
+                candidates.append({"index":str(n),"field":"随附发票号码","value":fact["value"],"quote":fact["quote"]})
+        votes=[{"index":c["index"],"support":"clear"} for c in candidates]
+        page["extraction"]["check"]={"input":candidates,"output":{"checks":votes}}
+        g=build_graph(docs,pages,{})
+        mapped=[f for f in g["facts"] if f["field"]=="claim_full_ref"]
+        self.assertEqual(len(mapped),2)
+        self.assertTrue(all(f["model_field"]=="claim_ref" and f["origin"]=="printed_claim_pair" for f in mapped))
+        self.assertEqual(next(f for f in execute(g,TRAVEL) if f["rule"]=="T03")["status"],"ok")
+        self.assertTrue(all(facts[int(c["index"])-1]["field"]=="claim_ref" for c in candidates))
+        votes[0]["support"]="conflict"
+        candidates[1]["quote"]="另处号码"
+        g=build_graph(docs,pages,{})
+        self.assertFalse(any(f["field"]=="claim_full_ref" for f in g["facts"]))
+        self.assertEqual(next(f for f in execute(g,TRAVEL) if f["rule"]=="T03")["status"],"missing")
+
     def test_different_codes_allow_an_explicitly_itemized_claim_and_split_invoice_pages(self):
         for packet in (False,True):
             g=build_graph(*materials(packet=packet),{})

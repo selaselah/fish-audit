@@ -10,7 +10,7 @@ from calculations import CalculationEvidence, SUPPORTED
 from field_receipts import verify_field_sources
 from installments import LIMIT as INSTALLMENT_LIMIT, calculate as calculate_installments, finding as installment_finding
 from invoice_approval import FORMAT as INVOICE_APPROVAL_FORMAT, validate as validate_invoice_approval
-from invoice_identity import FORMAT as INVOICE_IDENTITY_FORMAT, identity_relations
+from invoice_identity import FORMAT as INVOICE_IDENTITY_FORMAT, identity_relations, printed_claim_pair
 from invoice_proof import FORMAT as INVOICE_SOURCE_FORMAT, invoice_number_edges, source_record as invoice_source_record
 from payment_history import LIMIT, cited_facts, payment_record
 from peer_review import journal_decision, verify_referrals, verify_review
@@ -215,6 +215,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
                 verify_request(call, report["calls"].get("instructions", {}), photo)
     verify_request(report["calls"]["expert"], report["calls"].get("instructions", {}))
     page_checks = {(t["doc"],t["page"]): t.get("check") for t in report["calls"]["pages"]}
+    page_calls = {(t["doc"],t["page"]):t for t in report["calls"]["pages"]}
     texts = {}
     for fact in graph["facts"]:
         require(fact["source_sha256"] == nodes[fact["doc"]]["sha256"] and
@@ -238,6 +239,19 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
                 texts[path] = bundle.read(path).decode().splitlines()
             text = texts[path]
             require(1 <= line["number"] <= len(text) and text[line["number"]-1] == line["text"], "引文定位与原文字层不符")
+        if fact.get("origin")=="printed_claim_pair" or (fact["field"]=="claim_full_ref" and not fact.get("amendment")):
+            trace = page_calls[fact["doc"],fact["page"]]
+            index = fact["id"].rsplit("/f",1)[-1]
+            raw = trace["output"]["facts"]
+            require(index.isdecimal() and 1<=int(index)<=len(raw),"组合票号缺少原模型候选")
+            candidate = raw[int(index)-1]
+            require((fact["value"],fact["quote"])==(candidate["value"].strip(),candidate["quote"].strip()),"组合票号与原模型抄录不符")
+            if candidate["field"]=="claim_full_ref" and fact.get("origin")!="printed_claim_pair":
+                continue
+            require(fact.get("origin")=="printed_claim_pair" and line and line.get("rects")
+                    and nodes[f"{fact['doc']}/p{fact['page']}"].get("layer")=="text","组合票号的归类记录或原生文字定位不符")
+            require(fact["field"]=="claim_full_ref" and fact.get("model_field")==candidate["field"] and
+                    printed_claim_pair(candidate,line["text"],trace.get("check"),index),"组合票号与原模型抄录、印刷标签或复检不符")
     for item in graph["edges"]:
         require(item["from"] in nodes and item["to"] in nodes and item["evidence"] and
                 set(item["evidence"]) <= nodes.keys(), "图谱存在未登记引用")

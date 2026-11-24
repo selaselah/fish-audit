@@ -14,10 +14,25 @@ CODE = re.compile(r"(?:[0-9]{10}|[0-9]{12})")
 PAIR = re.compile(r"([0-9]{10}|[0-9]{12})[/|]([0-9]{8})")
 VERIFIED = {"anchored","confirmed"}
 FULLWIDTH = str.maketrans("０１２３４５６７８９／｜","0123456789/|")
+CLAIM_PAIR_LABELS = ("随附发票代码及号码","随附发票代码和号码","随附发票代码/号码")
 
 
 def printed(value):
     return "".join(value.translate(FULLWIDTH).split())
+
+
+def printed_claim_pair(candidate, line, check, index):
+    """A native labelled line and the independently checked image must support the same model transcription."""
+    if candidate["field"]!="claim_ref" or not check:
+        return False
+    content = printed(line).replace("：",":")
+    label,separator,value = content.partition(":")
+    if not (separator and label in CLAIM_PAIR_LABELS and PAIR.fullmatch(value) and printed(candidate["value"])==value
+            and printed(candidate["quote"]).replace("：",":")==content):
+        return False
+    inputs = [c for c in check.get("input",[]) if c["index"]==index]
+    votes = [c["support"] for c in check["output"]["checks"] if c["index"]==index]
+    return inputs==[{"field":"随附发票号码","index":index,"value":candidate["value"],"quote":candidate["quote"]}] and votes==["clear"]
 
 
 class InvoiceIdentities:

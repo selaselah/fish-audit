@@ -117,3 +117,5 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 版本引用可使用 `/w/{企业编号}/workpaper/{任务编号}?rev=版本&fact=证据编号`，本机使用 `/workpaper/{任务编号}`。浏览器会进入对应工作区和原页，服务端按登录账号核验资料访问权限。
 
 规则集 `2026.11.24.6` 开始返回 `graph.invoice_identity`。图中 `invoice_identity` 节点代表已获同页证据支持的完整票据标识，`identified_invoice` 边的 `evidence` 可定位到号码和配套代码。单笔代码字段为 `invoice_code`，报销单同一行明列的组合为 `claim_full_ref`。原件只列短号或代码有异议时，可从 I01、T02、T03 的状态和引用查看补证原因。
+
+`origin=printed_claim_pair` 的 `claim_full_ref` 保留 `model_field=claim_ref`。它记录模型逐字抄下代码和号码后，系统凭唯一可定位的原生文字行、明确印刷的组合标签及对应视觉复检作出的归类。离线校验会对照原始模型候选值、完整引文、标签与复检记录。

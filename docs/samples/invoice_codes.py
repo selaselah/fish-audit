@@ -49,7 +49,8 @@ def exercise(run_id,run):
     assert {n["label"] for n in paper["graph"]["nodes"] if n["type"]=="invoice_identity"}=={c+" / "+number for c in codes}
     results={f["rule"]:f for f in paper["findings"]}
     assert results["I01"]["status"]=="ok"
-    if results["T02"]["status"]=="ok":
+    if paper["policy"]["version"]!="2026.11.24.6" or results["T02"]["status"]=="ok":
+        assert results["T02"]["status"]=="ok"
         assert results["T03"]["status"]=="ok" and results["T03"]["calculations"][-1]["result"]=="0.00"
     else:
         assert results["T02"]["status"]==results["T03"]["status"]=="missing" and "calculations" not in results["T03"]

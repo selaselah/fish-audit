@@ -171,6 +171,7 @@ function openPage(docId, pageNumber, highlight) {
         '模型定位：页' + statusName(fact.region)), 'small'));
     if (fact.source_line) row.append(fold('对照本机文字层', el('blockquote', fact.source_line.text)));
     if (fact.origin === 'verified_printed_heading') row.append(el('small','标题来自可定位文字层，经模型对照页图复检。','small'));
+    if (fact.origin === 'printed_claim_pair') row.append(el('small','模型原列为随附票号。原页同一行明列代码和号码，逐项读图复检已核对这段引文。','small'));
     if (fact.visual_check) row.append(el('small', '模型二次读图 · ' +
       ({clear:'可辨认', conflict:'存在差异', unreadable:'无法核实'}[fact.visual_check] || fact.visual_check), 'small'));
     if (fact.source_line?.rects?.length) row.append(action('定位原文', () => locate(fact), 'ref'));

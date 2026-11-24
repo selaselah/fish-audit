@@ -32,8 +32,9 @@ const recoveringCase = caseArgument('--recovering-case');
 const invoiceConflict = caseArgument('--invoice-conflict-case');
 const invoiceSource = caseArgument('--invoice-source-case');
 const invoiceApproval = caseArgument('--invoice-approval-case');
+const claimPairCase = caseArgument('--claim-pair-case');
 const waitingCase = caseArgument('--waiting-case');
-const seeded = sampleDesk || paymentCase || supplementCase || peerCase || fieldCase || installmentCase || replayCase || recoveringCase || invoiceConflict || invoiceSource || invoiceApproval || waitingCase;
+const seeded = sampleDesk || paymentCase || supplementCase || peerCase || fieldCase || installmentCase || replayCase || recoveringCase || invoiceConflict || invoiceSource || invoiceApproval || claimPairCase || waitingCase;
 const root = waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN : recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
 if (recoveringCase || waitingCase) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
 const children = [];
@@ -95,7 +96,25 @@ try {
   const click = (label, container='document') => evaluate('[...'+container+'.querySelectorAll("button,a")].find(b=>b.textContent==='+JSON.stringify(label)+' && b.getClientRects().length).click()');
   await call('Runtime.enable');
   await call('Page.navigate',{url:root});
-  if (invoiceConflict) {
+  if (claimPairCase) {
+    const api=root+'/api/cases/'+claimPairCase;
+    const task=await (await fetch(api)).json();
+    assert.ok(task.title.startsWith('合成演练 · 八位同号异代码双票'));
+    const paper=(await (await fetch(api+'/reports/'+task.rev)).json()).report;
+    const pairs=paper.graph.facts.filter(f=>f.origin==='printed_claim_pair');
+    assert.equal(pairs.length,2);
+    for (const fact of pairs) {
+      await call('Page.navigate',{url:root+'/workpaper/'+claimPairCase+'?rev='+task.rev+'&fact='+encodeURIComponent(fact.id)});
+      await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.textContent.includes('+JSON.stringify(fact.quote)+')','original claim line');
+      assert.ok(await evaluate('document.querySelector(".located").textContent.includes("模型原列为随附票号")'));
+      assert.ok(await evaluate('document.querySelector(".located").textContent.includes("文字层第 '+fact.source_line.number+' 行")'));
+    }
+    for (const width of [1440,1024,820,768,390,320]) {
+      await call('Emulation.setDeviceMetricsOverride',{width,height:880,deviceScaleFactor:1,mobile:false});
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && document.querySelector(".located").scrollWidth<=document.querySelector(".located").clientWidth+1'),'printed pair at '+width);
+    }
+    console.log('PASS · Printed claim pairs, exact labelled lines, visible model classification and six widths');
+  } else if (invoiceConflict) {
     const path=root+'/api/cases/'+invoiceConflict;
     const get=async suffix=>(await fetch(path+suffix)).json();
     const task=await get('');
