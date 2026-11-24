@@ -1,5 +1,9 @@
 # 本机审计接口
 
+规则 `2026.11.25.07` 使用 `policy.delivery_batches=contract-delivery-batches-v2`。合同明定分批独立验收付款，且按批或统一指定验收人时，H02 的 `batch_acceptance.batches[].signing_requirement` 保存本批所需人员 `required` 和合同引文 `clause_ref`。每张可归属的验收单在 `records[].signing` 保存签字原行 `signed`、所缺人员 `missing_names`、额外签字人 `other_names`、对照状态和原因。签字原行含资料、页、行、引文及核图状态。原页有字而模型漏读时，事实编号可为空。
+
+每条 `batch_named_signature` 关系从本批合同签认条款指向该批一人的已核图签字行，仅在整批验收有充分依据时生成。签字相符、质量实测超限时，H02 会保留两个判断。H04 按该期对应的批次取证，H05 再核对回单所指的期次及支付日。旧版 `contract-delivery-batches-v1` 底稿继续按出具版本复算。
+
 规则 `2026.11.25.06` 的 `policy.quality_addenda` 为 `acceptance-addendum-v2`。出现交付数量变更线索时，`graph.quality_addenda.quantities` 保存合同、变更协议及验收资料的页清单、数量原行与关键身份和日期栏。每一条 `delivery_quantity_basis` 关系可定位到资料单元、页和行，`evidence` 包含原页及已有模型或人工引文。原生文字行可独立于模型抄录保存。
 
 H02 的 `quality_change.quantity` 列出 `original`、`previous`、`revised`、`accepted` 和 `applicable`。可核数量以 `{count, unit}` 表示，待核值为 `null`。`difference` 为同单位实收减应验，负数表示短收，零表示数量相符。变更的 `state` 为 `applied`、`original` 或 `pending`，质量检测与分期条件仍各有自己的发现。旧版仍按出具时程序复算，旧版终验曾判相符且原页现查见数量变更线索时，申请通过会返回 409 并要求重审。
@@ -218,7 +222,7 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 
 规则 `2026.11.24.29` 沿用下述日期校验，并用 `contract-performance-v10` 核对合同分批条款。在有相应条款的案件，H02 的 `batch_acceptance` 给出 `independent`、`deemed_final`、`completion_on`、`rule_ref`、各批 `batches[]`、验收原件 `records[]` 及可能影响合同或付款的 `riders[]`。`completion_on` 仅在合同明确约定全部合格即终验且证据完整时写入日期。每批保留合同原文引用、约定数量单位及编号、状态、原因、关联验收单和证据范围。H04/H05 的 `stage.batch_index` 与 `stage.batch_date` 指向各自所据的批次及有据的合格日期。
 
-`policy.delivery_batches` 标记为 `contract-delivery-batches-v1`。`graph.delivery_batch_sources` 保存分批线索、各页已覆盖范围、漏提的原行和影像观察。`delivery_batch_acceptance` 关系由交付批次条款指向验收范围，`batch_payment_basis` 由当期付款条款指向同一份验收记录。签收前及离线复算均核对这些关系和原文。证据包支持 `--render-performance` 从版本中的原件重现相关页图和条款版式。
+分批程序最初的 `policy.delivery_batches` 标记为 `contract-delivery-batches-v1`，具名分批签认使用 v2。`graph.delivery_batch_sources` 保存分批线索、各页已覆盖范围、漏提的原行和影像观察。`delivery_batch_acceptance` 关系由交付批次条款指向验收范围，`batch_payment_basis` 由当期付款条款指向同一份验收记录。签收前及离线复算均核对这些关系和原文。证据包支持 `--render-performance` 从版本中的原件重现相关页图和条款版式。
 
 ## 质保金释放依据
 

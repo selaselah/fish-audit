@@ -413,11 +413,32 @@ try {
         await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth>0 && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(id),'batch fact on the original');
         await evaluate('document.querySelector("#page-dialog [data-close]").click()');
       };
-      await openFact(panel,batches.rule_ref);
+      if (batches.rule_ref) await openFact(panel,batches.rule_ref);
       for (const b of batches.batches) {
         const section=panel+'.querySelector('+JSON.stringify('[data-delivery-index="'+b.index+'"]')+')';
         assert.ok(await evaluate(section+'.innerText.includes('+JSON.stringify(b.detail)+') && '+section+'.querySelector(".tag").classList.contains('+JSON.stringify(b.status)+')'));
         await openFact(section,b.clause_ref);
+        if (b.signing_requirement) {
+          const authority=section+'.querySelector(".batch-signing")';
+          await openFact(authority,b.signing_requirement.clause_ref);
+          for (const item of report.findings.filter(f=>f.stage?.batch_index===b.index)) {
+            const locator='[data-finding="'+item.id+'"] [aria-controls="batch-signing-'+b.index+'"]';
+            await evaluate('document.querySelector('+JSON.stringify(locator)+').click()');
+            assert.equal(await evaluate('document.activeElement.dataset.batchSigning'),String(b.index));
+          }
+          for (const record of batches.records.filter(r=>b.records.includes(r.unit) && r.signing)) {
+            const proof=authority+'.querySelector('+JSON.stringify('[data-signing-record="'+record.unit+'"]')+')';
+            await verifyRemarks(proof,record.signing.signed.map(s=>s.native && !s.fact?{...s,facts:[]}:s));
+            const native=record.signing.signed.find(s=>s.line && s.native);
+            if (native) {
+              await evaluate('reservationSource('+JSON.stringify({...native,fact:null,facts:[]})+',state.bundle.report.graph).querySelector("button").click()');
+              await wait('document.querySelector(".located[data-gap-line] blockquote")?.textContent==='+JSON.stringify(native.quote),'signature original without a model observation');
+              await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+            }
+            for (const value of [...record.signing.missing_names,...record.signing.other_names])
+              assert.ok(await evaluate(proof+'.innerText.includes('+JSON.stringify(value)+')'));
+          }
+        }
         for (const item of batches.records.filter(r=>b.records.includes(r.unit))) {
           for (const val of [item.number,item.date,...item.serials].filter(Boolean))
             assert.ok(await evaluate(section+'.innerText.includes('+JSON.stringify(val)+')'));
@@ -456,7 +477,7 @@ try {
       const sources=[...ledger.clauses,...authority.records.flatMap(r=>r.signed),...ledger.visual_notes,
                      ...ledger.pages.flatMap(p=>p.uncovered.map(l=>({...l,doc:p.doc,page:p.page})))];
       for (const item of sources) {
-        const fact=report.graph.facts.find(f=>f.id===(item.fact || item.facts?.[0]));
+        const fact=report.graph.facts.find(f=>f.id===(item.fact || (!item.line && item.facts?.[0])));
         const ref=fact && (!item.line || fact.quote===item.quote) ? fact.id : null;
         const id=ref || item.doc+'/p'+item.page+'/l'+item.line;
         const row=panel+'.querySelector('+JSON.stringify('[data-signer-source="'+id+'"]')+')';
@@ -664,6 +685,12 @@ try {
         await evaluate('document.querySelector(".delivery-batches").scrollIntoView({block:"start"});window.scrollBy(0,-40)');
         const capture=await call('Page.captureScreenshot',{format:'png'});
         await writeFile(join(process.env.AUDIT_UI_SHOTS,'batches-'+performanceCase+'-'+width+'.png'),Buffer.from(capture.data,'base64'));
+        if (batches.batches.some(b=>b.signing_requirement)) {
+          assert.ok(await evaluate('[...document.querySelectorAll(".batch-signing,.batch-signed-record")].every(e=>e.scrollWidth<=e.clientWidth+1)'));
+          await evaluate('(document.querySelector(".batch-signing[data-status=risk],.batch-signing[data-status=missing]") || document.querySelector(".batch-signing")).closest(".batch-record").scrollIntoView({block:"start"});window.scrollBy(0,-30)');
+          const shot=await call('Page.captureScreenshot',{format:'png'});
+          await writeFile(join(process.env.AUDIT_UI_SHOTS,'signing-'+performanceCase+'-'+width+'.png'),Buffer.from(shot.data,'base64'));
+        }
       }
       if (warranty) {
         const panel='document.querySelector(".warranty-review")';
@@ -776,7 +803,7 @@ try {
       }
     }
     if (batches) {
-      const edges=report.graph.edges.filter(e=>['delivery_batch_acceptance','batch_payment_basis'].includes(e.type));
+      const edges=report.graph.edges.filter(e=>['delivery_batch_acceptance','batch_payment_basis','batch_named_signature'].includes(e.type));
       assert.equal(await evaluate('!!document.querySelector(".batch-relations")'),!!edges.length);
       if (edges.length) await evaluate('document.querySelector(".batch-relations").open=true');
       for (const edge of edges) {

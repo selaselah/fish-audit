@@ -179,7 +179,34 @@ function deliveryBatchPanel(entry, graph, phases) {
     if (due.length) title.append(el('span',due.join('、'),'batch-payment'));
     section.append(title,sourceRow(b.clause_ref));
     for (const unit of b.records) section.append(receipt(records.get(unit)));
-    section.append(el('p',b.detail,'batch-detail'));
+    if (b.signing_requirement) {
+      const requirement=b.signing_requirement;
+      const signing=box('batch-signing',el('strong',requirement.required.length>1?'本批共同签认':'本批指定签认人'),sourceRow(requirement.clause_ref));
+      signing.dataset.batchSigning=String(b.index);
+      signing.id='batch-signing-'+b.index;
+      signing.tabIndex=-1;
+      signing.setAttribute('role','group');
+      signing.setAttribute('aria-label',b.label+'验收签认');
+      const outcomes=b.records.map(unit=>records.get(unit)).filter(r=>r.signing);
+      signing.dataset.status=outcomes.find(r=>r.signing.status!=='ok')?.signing.status || (outcomes.length?'ok':'missing');
+      for (const r of outcomes) {
+        const check=r.signing;
+        const result=box('batch-signed-record');
+        result.dataset.signingRecord=r.unit;
+        if (outcomes.length>1) result.append(el('strong',r.number || '验收单号待核'));
+        for (const signature of check.signed) {
+          const row=reservationSource(signature.native && !signature.fact?{...signature,facts:[]}:signature,graph);
+          row.append(el('span',signature.confirmed?'已核图':'签字待核图','small'));
+          result.append(row);
+        }
+        if (check.status!=='ok') result.append(el('p',check.detail,'signer-pending'));
+        if (check.status==='risk' && check.missing_names.length)
+          result.append(el('p','缺少已核签字 · '+check.missing_names.join('、'),'small'));
+        signing.append(result);
+      }
+      section.append(signing);
+    }
+    if (!b.records.some(unit=>records.get(unit)?.signing?.detail===b.detail)) section.append(el('p',b.detail,'batch-detail'));
     const refs=b.evidence.filter(ref=>proofFields.has(facts.get(ref)?.field));
     if (refs.length) section.append(lazyFold('核对标准、实测与签认原文',()=>refs.map(sourceRow)));
     panel.append(section);
@@ -573,7 +600,7 @@ function acceptanceAuthorityPanel(entry, graph) {
   panel.append(box('flow signer-requirement', el('span',requirement), names));
   if (entry.applies_to) panel.append(el('p',entry.applies_to==='final'?'适用记录 · 终验':'适用记录 · 终验及整改复验','small'));
   function sourceRow(item, remark) {
-    const fact = index.facts.get(item.fact || item.facts?.[0]);
+    const fact = index.facts.get(item.fact || (!item.line && item.facts?.[0]));
     const pinpoint = fact && (!item.line || fact.quote===item.quote) ? fact.id : null;
     const doc = index.documents.get(item.doc);
     const page = (doc?.name || '原件')+' · 第 '+item.page+' 页';

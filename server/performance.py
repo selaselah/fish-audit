@@ -625,7 +625,10 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True):
                                 contract_supported=signed["status"]=="ok",unclassified=extra_units)
         change["evidence"] = list(dict.fromkeys(change["evidence"]+signed["evidence"]))
     authority = None
-    if version in SIGNATORY_FORMATS:
+    batch_signers = {}
+    if version in BATCH_FORMATS and signed["status"]=="ok" and not (extra_units or change or repairs or retests):
+        batch_signers=delivery_batches.signing_plan(graph,contract)
+    if version in SIGNATORY_FORMATS and not batch_signers:
         authority = check_acceptance_authority(graph,contract,receipts,retests,contract_supported=signed["status"]=="ok",
                                               other_terms=bool(extra_units or change and not change["scope_clear"]), name_records=version in DATE_FORMATS)
     by_unit = {r["unit"]:r for r in authority["records"]} if authority else {}
@@ -643,7 +646,7 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True):
     plan, rows = schedule(contract,warranty_checks=version in WARRANTY_FORMATS,deadlines=version in PAYMENT_WINDOW_FORMATS)
     batch = None
     if version in BATCH_FORMATS:
-        batch = delivery_batches.inspect(graph,contract,receipts,native_spacing=version in EFFECT_FORMATS,
+        batch = delivery_batches.inspect(graph,contract,receipts,native_spacing=version in EFFECT_FORMATS,requirements=batch_signers,
                     other_terms=bool(signed["status"]!="ok" or extra_units or change or authority or repairs or retests or
                                      any(r.fields[k] or k in r.uncertain for r in receipts for k in ("original_acceptance","repair_number","defect_closure"))))
     batch_rows = {r["index"]:r for r in batch["batches"]} if batch else {}

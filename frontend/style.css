@@ -148,6 +148,10 @@ textarea { width: 100%; resize: vertical; }
 .batch-payment { font-variant-numeric:tabular-nums; color:var(--muted); }
 .batch-receipt { margin:8px 0; padding:5px 10px; border-inline-start:2px solid #9db1a2; }
 .batch-receipt p,.delivery-batches .batch-detail,.delivery-batches .batch-final { margin:4px 0; }
+.batch-signing { min-width:0; margin:9px 0; padding:8px 12px; background:var(--white); border-inline-start:3px solid var(--green); }
+.batch-signing:is([data-status="risk"],[data-status="missing"]) { background:#fbf7ed; border-inline-start-color:#946421; }
+.batch-signing:focus-visible { outline:2px solid var(--green); outline-offset:2px; }
+.batch-signing .signer-pending { margin:4px 0; color:#754e0d; font-weight:600; }
 .acceptance-authority { margin:14px 0; padding:14px; border-inline-start:3px solid var(--green); background:var(--soft); }
 .acceptance-authority[data-authority-status="missing"],.acceptance-authority[data-authority-status="risk"] { border-inline-start-color:#946421; }
 .acceptance-authority h4,.acceptance-authority p { margin:0; }

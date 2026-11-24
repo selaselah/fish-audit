@@ -521,6 +521,16 @@ function finding(item) {
     const evidence=box('flow',el('strong','第'+item.stage.batch_index+'批验收'),el('span',item.stage.batch_date || '合格日期待核','small'));
     if (record) evidence.append(citation(record.clause_ref));
     for (const ref of sources) evidence.append(citation(ref));
+    if (record?.signing_requirement) {
+      const targetId='batch-signing-'+record.index;
+      const jump=action('核对'+record.label+'签认',()=>{
+        const target=document.getElementById(targetId);
+        target.focus({preventScroll:true});
+        target.scrollIntoView({block:'start'});
+      },'text-button');
+      jump.setAttribute('aria-controls',targetId);
+      evidence.append(jump);
+    }
     node.append(evidence);
   }
   if (item.rule.startsWith('H')) {
@@ -645,10 +655,11 @@ function graphPanel() {
     links.classList.add('warranty-relations');
     panel.append(links);
   }
-  const batchEdges=graph.edges.filter(e=>['delivery_batch_acceptance','batch_payment_basis'].includes(e.type));
+  const batchLabels={delivery_batch_acceptance:'约定交付范围',batch_payment_basis:'本期付款条件',batch_named_signature:'本批指定人员与实际签认'};
+  const batchEdges=graph.edges.filter(e=>Object.hasOwn(batchLabels,e.type));
   if (batchEdges.length) {
     const list=lazyFold('分批验收与付款依据（'+batchEdges.length+'）',()=>batchEdges.map(edge=>{
-      const row=box('line',el('strong',edge.type==='batch_payment_basis'?'本期付款条件':'约定交付范围'),
+      const row=box('line',el('strong',batchLabels[edge.type]),
         box('batch-source',el('q',facts.get(edge.from).quote),citation(edge.from)),
         box('batch-source',el('q',facts.get(edge.to).quote),citation(edge.to)));
       row.dataset.batchWitness=edge.from+'>'+edge.to;

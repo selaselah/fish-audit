@@ -52,6 +52,13 @@ def person(value):
                                   "待明确","未提供","未记载","未注明","无名氏","不清楚","签字栏","仅盖章"})
 
 
+def required_names(value, joint):
+    names = [p.strip() for p in re.split("[、与和]",value)] if joint else [value.strip()]
+    if len(names)!=(2 if joint else 1) or len(set(names))!=len(names) or not all(person(p) for p in names):
+        return None
+    return names
+
+
 def instruction(raw):
     label,body = parts(raw)
     if label not in LABELS[CLAUSE]:
@@ -63,8 +70,8 @@ def instruction(raw):
     if not match:
         return None
     joint = match[3].startswith("共同")
-    names = [p.strip() for p in re.split("[、与和]",match[2])] if joint else [match[2].strip()]
-    if len(names)!=(2 if joint else 1) or len(set(names))!=len(names) or not all(person(p) for p in names):
+    names = required_names(match[2],joint)
+    if not names:
         return None
     return "joint" if joint else "single","final_and_reinspection" if "复验" in match[1] else "final",names
 

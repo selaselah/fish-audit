@@ -132,6 +132,12 @@ server/.venv/bin/python docs/samples/delivery_batches.py --run --run-id syntheti
 
 `--cases` 可选 `complete`（两批合格）、`missing`（缺第二批原件）、`quality`（报告称合格但第二批实测 8℃ 超出合同 4℃ 上限）、`duplicate`（两批登记相同设备）、`early`（9 月 15 日支付的第三期早于 9 月 20 日第二批验收）、`separate`（另行终验）及 `image`（原页附有影像暂收说明）。省略 `--run` 可仅生成资料。
 
+核对具名分批验收可另行运行下列命令。各案均使用一张 35,000 元回单，合同明确第二期对应第一批、第三期对应第二批。样本依次为各批签齐、缺第二批原件、第二批缺一人共同签字、由其他人签字、签齐后实测超限、各批共用同一组签认人员、签字页内嵌代签说明、合同末行另约监理会签。
+
+```sh
+server/.venv/bin/python docs/samples/delivery_batches.py --run --run-id synthetic-batch-signatures-v1 --cases named undelivered cosign substitute signed_quality common sign_image sign_rider
+```
+
 ### 双方盖章后仍有附加生效条件
 
 `server/.venv/bin/python docs/samples/contract_effect.py --run` 上传三笔水印采购案。`approved` 随合同提交约定的董事会批准决议，`written` 在合同页末印有另须取得书面批准的条件，`image` 把同一条件写在嵌入的影像框内。三案分别核对 H01 及履约付款条件。脚本仅对摘要一致的合成原件模拟字段补录、签认及人工核图。

@@ -2,7 +2,7 @@ import copy
 import unittest
 
 from controls import VERSION, execute
-from delivery_batches import evidence_edges, verify_sources
+from delivery_batches import LEGACY, evidence_edges, gaps, page_sources, verify_sources
 from performance import BATCH_FORMAT, DATE_FORMAT, compute, verify_findings
 from test_performance import CONTRACT, RECEIPT, WARRANTY, BANK_DOC, material
 
@@ -12,6 +12,20 @@ PLAN=[("payment_term","付款条款","分四期付款"),("payment_stage","第一
       ("payment_stage","第二期","第一批验收合格后支付35%"),("payment_stage","第三期","第二批验收合格后支付35%"),
       ("payment_stage","第四期","质保期满后支付10%")]
 ORIGINAL={1:"第一批",2:"第二批"}
+NAMED=["第一批验收须由周宁签字确认","第二批验收须由林岚、何平共同签字确认"]
+
+
+def named_receipt(index,names):
+    return [r for r in receipt(index) if r[0]!="acceptance_signer"]+[
+        ("acceptance_signer","验收签认",name+"（已签字）") for name in names]
+
+
+def named_case(second=("林岚","何平"),clauses=NAMED,common=False,**kwargs):
+    c=contract()+[("acceptance_signing_clause","验收签认约定",clause) for clause in clauses]
+    records=[named_receipt(1,("周宁","林岚") if common else ("周宁",))]
+    if second is not None:
+        records.append(named_receipt(2,second))
+    return sample(records,c,**kwargs)
 
 
 def contract(rule=RULE,with_serials=True):
@@ -37,6 +51,94 @@ def states(graph):
 
 
 class DeliveryBatchTests(unittest.TestCase):
+    def test_named_and_joint_signatures_are_compared_with_only_their_own_batch(self):
+        for names,overall,third,last,edges in ((("林岚","何平"),"ok","ok","ok",3),(("林岚",),"missing","missing","missing",1),
+                (("林岚","吴松"),"risk","risk","risk",1),(("林岚","何平","何平"),"missing","missing","missing",1),
+                (("林岚、何平",),"missing","missing","missing",1),(None,"missing","missing","missing",1)):
+            with self.subTest(names=names):
+                g=named_case(names)
+                h,ps,paid=states(g)
+                self.assertEqual((h["status"],[p["status"] for p in ps],paid["status"]),(overall,["ok","ok",third,last],"ok"))
+                batches=h["batch_acceptance"]["batches"]
+                self.assertEqual(batches[1]["signing_requirement"]["required"],["林岚","何平"])
+                self.assertNotIn(batches[1]["signing_requirement"]["clause_ref"],ps[1]["evidence"])
+                if names:
+                    rec=h["batch_acceptance"]["records"][1]
+                    self.assertNotIn(rec["unit"],ps[1]["scope"])
+                    self.assertEqual(rec["signing"]["other_names"],["吴松"] if "吴松" in names else [])
+                witnesses=[e for e in evidence_edges([h,*ps]) if e["type"]=="batch_named_signature"]
+                self.assertEqual(len(witnesses),edges)
+                self.assertTrue(all(e["from"] in e["evidence"] and e["to"] in e["evidence"] for e in witnesses))
+        both=named_case(("周宁","林岚"),["各批验收均须由周宁、林岚共同签字确认"],common=True)
+        h,ps,_=states(both)
+        self.assertEqual([f["status"] for f in ps],["ok"]*4)
+        self.assertEqual(len([e for e in evidence_edges([h,*ps]) if e["type"]=="batch_named_signature"]),4)
+        g=named_case(edit=lambda i,f,l,v:"柜温8℃" if i==3 and f=="measured_result" else v)
+        h,ps,paid=states(g)
+        self.assertEqual((h["status"],[p["status"] for p in ps],paid["status"]),("issue",["ok","ok","risk","risk"],"ok"))
+        self.assertEqual(h["batch_acceptance"]["records"][1]["signing"]["status"],"ok")
+        for field,value in (("buyer","另一采购方"),("accepted_on","2026-09-01")):
+            g=named_case(edit=lambda i,f,l,v:value if i==3 and f==field else v)
+            h,ps,_=states(g)
+            other=h["batch_acceptance"]["records"][1]
+            self.assertEqual((other["signing"]["status"],ps[1]["status"],ps[2]["status"]),("missing","ok","missing"))
+            self.assertFalse(any(e["type"]=="batch_named_signature" and e["to"].startswith(other["unit"]+"/")
+                                 for e in evidence_edges([h,*ps])))
+
+    def test_batch_signing_requires_complete_native_terms_and_separate_confirmed_signatures(self):
+        for clauses in ([NAMED[0]], [*NAMED,NAMED[1]], [*NAMED,"终验须由何平签字确认"],
+                [NAMED[0],"第二批验收须由林岚或何平签字确认"],[NAMED[0],"第二批验收须由验收负责人签字确认"],
+                [NAMED[0],"第二批验收须由林 岚签字确认"], [NAMED[0],"第二批验收须由同上签字确认"]):
+            with self.subTest(clauses=clauses):
+                h,ps,_=states(named_case(clauses=clauses))
+                self.assertNotEqual(h["status"],"ok")
+                self.assertFalse(any("signing_requirement" in b for b in h["batch_acceptance"]["batches"]))
+                self.assertTrue(all(p["status"]!="ok" for p in ps[1:]))
+        for unit,line in ((1,"另列条件：第二批验收另须监理代表会签"),(3,"签认附注：两份验收记录均属代签")):
+            h,ps,_=states(named_case(omissions=[(unit,line)]))
+            self.assertNotEqual(h["status"],"ok")
+            self.assertNotEqual(ps[1]["status"],"ok")
+        from test_acceptance_authority import reconstruct
+        g=reconstruct(named_case(),lambda item:not(item[0]=="d03" and "何平" in item[1]["quote"]))
+        h,ps,paid=states(g)
+        self.assertEqual((h["status"],ps[1]["status"],ps[2]["status"],paid["status"]),("missing","ok","missing","ok"))
+        self.assertEqual(h["batch_acceptance"]["records"][1]["signing"]["missing_names"],["何平"])
+        g=named_case(("林岚",),omissions=[(3,"验收签认：何平（已签字）")])
+        h,ps,paid=states(g)
+        signing=h["batch_acceptance"]["records"][1]["signing"]
+        raw=next(row for row in signing["signed"] if row["name"]=="何平")
+        self.assertTrue(raw["line"] and raw["native"] and not raw["facts"] and not raw["confirmed"])
+        self.assertEqual((signing["missing_names"],ps[1]["status"],ps[2]["status"],paid["status"]),(["何平"],"ok","missing","ok"))
+
+    def test_named_batch_signatures_replay_with_originals_and_versioned_scope(self):
+        g=named_case()
+        fs=execute(g,g["profile"])
+        g["edges"].extend(evidence_edges(fs))
+        p={"graph":g,"findings":fs,"policy":{**VERSION,"profile":g["profile"]}}
+        texts={d["id"]:"\n".join(f["quote"] for f in g["facts"] if f["doc"]==d["id"]) for d in g["documents"]}
+        read=lambda d,n:texts[d]
+        verify_sources(p,read)
+        verify_findings(p)
+        for part in ("edge","names","signer","version"):
+            altered=copy.deepcopy(p)
+            h=next(f for f in altered["findings"] if f["rule"]=="H02")
+            if part=="edge":
+                next(e for e in altered["graph"]["edges"] if e["type"]=="batch_named_signature")["to"]="d03/p1/f1"
+            elif part=="names":
+                h["batch_acceptance"]["batches"][1]["signing_requirement"]["required"]=["吴松"]
+            elif part=="signer":
+                h["batch_acceptance"]["records"][1]["signing"]["signed"][1]["confirmed"]=False
+            else:
+                altered["policy"]["delivery_batches"]=LEGACY
+            with self.assertRaises(ValueError):
+                verify_sources(altered,read) if part in ("edge","version") else verify_findings(altered)
+        g["delivery_batch_sources"]=page_sources(g,read,LEGACY)
+        g["gaps"]=[r for r in g["gaps"] if r["quality"]!="delivery_batch_clause"]+gaps(g["delivery_batch_sources"])
+        g["edges"]=[e for e in g["edges"] if e["type"] not in ("batch_named_signature","delivery_batch_acceptance","batch_payment_basis")]
+        legacy={**VERSION,"version":"2026.11.25.06","delivery_batches":LEGACY,"profile":g["profile"]}
+        self.assertTrue(all(f["status"]=="missing" for f in states(g)[1]))
+        verify_sources({"policy":legacy,"graph":g,"findings":compute(g)},read)
+
     def test_independent_receipts_cover_whole_only_with_express_terms(self):
         for with_serials in (True,False):
             g=sample([receipt(2,with_serials),receipt(1,with_serials)],contract(with_serials=with_serials))
