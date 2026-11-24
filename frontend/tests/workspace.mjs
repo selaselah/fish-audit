@@ -203,7 +203,18 @@ try {
       assert.equal(await evaluate(row+'.querySelectorAll(".phase-unlinked").length'),matched.length ? 0 : 1);
       for (const payment of matched) await jump(row,payment);
     }
-    for (const payment of report.findings.filter(f=>f.rule==='H05' && !f.stage)) await jump(summary,payment);
+    for (const payment of report.findings.filter(f=>f.rule==='H05' && !f.stage)) {
+      await jump(summary,payment);
+      const panel='document.querySelector('+JSON.stringify('[data-finding="'+payment.id+'"] .performance-comparison')+')';
+      const originals=report.graph.facts.filter(f=>payment.evidence.includes(f.id) && ['paid_on','transfer_amount','payment_designation'].includes(f.field));
+      for (const fact of originals) {
+        const row=panel+'.querySelector('+JSON.stringify('[data-source-fact="'+fact.id+'"]')+')';
+        await wait(panel+'?.open && '+row+'?.querySelector("blockquote").textContent==='+JSON.stringify(fact.quote),'unassigned receipt source');
+        await evaluate(row+'.querySelector("button").click()');
+        await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(fact.id),'original unassigned payment');
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
+    }
     if (phases.length>=2) {
       const sharedClause = await evaluate(`(() => {
         const {findings,graph}=state.bundle.report;
@@ -257,6 +268,12 @@ try {
       assert.equal(await evaluate(panel+'.open'),supplier.status!=='ok');
       await evaluate(panel+'.open=true');
       await verifyRemarks(panel,supplier.lines);
+      const note=supplier.lines.find(s=>s.kind==='delivery_note' && s.line);
+      if (note) {
+        await evaluate('reservationSource('+JSON.stringify({...note,facts:[]})+',state.bundle.report.graph).querySelector("button").click()');
+        await wait('document.querySelector(".located[data-gap-line] blockquote")?.textContent==='+JSON.stringify(note.quote),'original delivery note without an extracted fact');
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
       for (const page of supplier.pages.filter(p=>!supplier.names[p.unit] || !p.native || !p.text_only)) {
         const button=panel+'.querySelector('+JSON.stringify('[data-supplier-page="'+page.doc+'/p'+page.page+'"]')+')';
         await evaluate(button+'.click()');

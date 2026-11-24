@@ -63,6 +63,45 @@ def rows(graph, rule):
 
 
 class PerformanceTests(unittest.TestCase):
+    def test_each_transfer_remains_visible_without_a_schedule_or_unique_contract(self):
+        no_schedule = [r for r in CONTRACT if r[0] not in ("payment_term","payment_stage")]
+        bank = BANK_DOC + [("transfer_amount","付款金额","100,000.00"),("transfer_ref","交易流水号","YL-CB-100")]
+        for contracts in ([], [no_schedule], [CONTRACT, no_schedule]):
+            with self.subTest(contracts=len(contracts)):
+                graph = material([*contracts, RECEIPT, bank, bank])
+                payments = rows(graph, "H05")
+                bank_units = graph["documents_by_kind"]["bank_receipt"]
+                self.assertEqual(len(payments), 2)
+                for finding, unit in zip(payments, bank_units):
+                    self.assertEqual(finding["status"], "missing")
+                    self.assertNotIn("stage", finding)
+                    self.assertEqual(set(finding["scope"]) & set(bank_units), {unit})
+                    facts = [f for f in graph["facts"] if f["id"] in finding["evidence"]]
+                    cited = {f["field"] for f in facts if f["doc"] == unit}
+                    self.assertTrue({"bank_receipt","transfer_amount","transfer_ref","payment_designation","paid_on"} <= cited)
+                    self.assertTrue(all(f["doc"] not in set(bank_units)-{unit} for f in facts))
+                    self.assertIn(unit+"/p1", finding["evidence"])
+                    for contract in graph["documents_by_kind"].get("contract", []):
+                        self.assertIn(contract+"/p1", finding["evidence"])
+                self.assertEqual(rows(graph, "H03")[0]["status"], "missing")
+                if len(contracts) == 1:
+                    self.assertEqual(rows(graph, "H02")[0]["status"], "ok")
+
+    def test_previous_report_without_transfer_rows_replays_and_requires_reaudit_to_sign(self):
+        contract = [r for r in CONTRACT if r[0] not in ("payment_term","payment_stage")]
+        graph = material([contract,RECEIPT,BANK_DOC])
+        report = {"policy":{**VERSION,"profile":PERFORMANCE}, "graph":graph, "findings":execute(graph,PERFORMANCE)}
+        verify_findings(report)
+        report["findings"] = [f for f in report["findings"] if f["rule"]!="H05"]
+        with self.assertRaisesRegex(ValueError, "数量"):
+            verify_findings(report)
+        report["policy"]["version"] = "2026.11.25.04"
+        for finding in report["findings"]:
+            finding["version"] = report["policy"]["version"]
+        verify_findings(report)
+        with self.assertRaisesRegex(ValueError, "银行回单未逐笔核对"):
+            verify_findings(report, signing=True)
+
     def test_positive_closed_chain_and_citations(self):
         graph = material([CONTRACT,RECEIPT,WARRANTY,BANK_DOC])
         findings = execute(graph,PERFORMANCE)

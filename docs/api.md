@@ -1,5 +1,7 @@
 # 本机审计接口
 
+自规则 `2026.11.25.05` 起，合同未提取到任何付款安排或无法确定唯一现行合同时，每个已识别的 `bank_receipt` 仍生成一项 H05。其 `status` 为 `missing`，没有 `stage`。从 `scope` 和 `evidence` 可定位各自的回单、可见用途、金额、日期以及候核合同页。没有回单时不生成此项。历史版本按原程序复算，申请通过一份漏列可识别回单的履约底稿时返回 409 并提示重新审计。
+
 规则 `2026.11.25.04` 使用 `policy.acceptance_reservations=acceptance-reservations-v2`。H02 的 `acceptance_reservations.supplier` 包含 `status`、`detail`、逐项名称 `names`、所据 `pages` 与 `lines`。名称以资料或分册单元为键，取自受支持的原文字段。`graph.acceptance_reservation_sources.supplier_rows` 列示 `seller` 原行和 `delivery_note` 附注，`supplier_identity_basis` 关系从资料单元连到该页。申请通过旧版底稿时，会重查原已判相符的终验供货主体及第三方交付线索。
 
 规则 `2026.11.25.03` 的 `policy.contract_effect` 为 `contract-effect-sources-v2`。有单独签章日期记载时，H01 的 `effect_review.conditions` 保留 `kind=seal_date` 的原件引文，`effect_review.seals.dates` 按 `buyer_sealed_on`、`seller_sealed_on` 保存证据支持的日期。`declared_on` 为原件所列生效日，`completed_on` 为按约定核准的最后盖章日，未核清时为 `null`。旧版仍按原规则回放，申请通过时会重新核验所据主合同的日期。

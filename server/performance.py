@@ -561,7 +561,26 @@ def matches_stage(designation, row):
     return bool(ordinal and row["index"] is not None and row["index"] == number(ordinal[1]))
 
 
-def compute(graph, version=FORMAT):
+RECEIPT_COVERAGE_SINCE = "2026.11.25.05"
+
+
+def receipts_without_schedule(graph, contracts, plan_evidence, plan_units):
+    contract_units = [contract.unit for contract in contracts]
+    sources = graph.get("payment_window_sources", {}).get("pages", [])
+    contract_pages = [f"{p['doc']}/p{p['page']}" for p in sources if p["unit"] in contract_units]
+    if len(contracts) == 1:
+        detail = "已提交银行回单，合同付款方式与期次尚缺依据。请取得付款条款或附表，再核对此笔支付的用途和时点。"
+    else:
+        detail = "已提交银行回单，须先查明该笔对应的现行合同，再核对其付款约定和实际支付时点。"
+    for unit in graph["documents_by_kind"].get("bank_receipt", []):
+        bank = Material(graph, unit)
+        refs = bank.evidence("bank_receipt","contract_id","payment_designation","paid_on","transfer_status",
+                             "payer","payee","transfer_amount","transfer_ref")
+        pages = [f"{p['doc']}/p{p['page']}" for p in sources if p["unit"] == unit]
+        yield result("H05","missing",detail,[*refs,*pages,*plan_evidence,*contract_pages],[*plan_units,unit])
+
+
+def compute(graph, version=FORMAT, *, include_unassigned_receipts=True):
     kinds = graph["documents_by_kind"]
     def materials(kind):
         return [Material(graph, unit) for unit in kinds.get(kind, ())]
@@ -569,8 +588,11 @@ def compute(graph, version=FORMAT):
     if len(contracts) != 1:
         scope = [d["id"] for d in graph.get("audit_documents", graph["documents"])]
         refs = [f["id"] for f in graph["facts"] if f["field"] == "contract"]
-        return [result(rule,"missing","需先确定本次审查所据的一份现行合同及其资料归属。",refs,scope)
-                for rule in ("H01","H02","H03","H04")]
+        output = [result(rule,"missing","需先确定本次审查所据的一份现行合同及其资料归属。",refs,scope)
+                  for rule in ("H01","H02","H03","H04")]
+        if version == FORMAT and include_unassigned_receipts:
+            output.extend(receipts_without_schedule(graph, contracts, refs, [c.unit for c in contracts]))
+        return output
     contract = contracts[0]
     receipts, releases = materials("acceptance"), materials("warranty")
     approvals = materials("contract_approval") if version != FIRST_FORMAT else []
@@ -719,6 +741,8 @@ def compute(graph, version=FORMAT):
     output = [signed, accepted, plan]
     if not rows:
         output.append(result("H04","missing","缺少可逐期核对的付款约定。",plan["evidence"],plan["scope"]))
+        if version == FORMAT and include_unassigned_receipts:
+            output.extend(receipts_without_schedule(graph, contracts, plan["evidence"], plan["scope"]))
         return output
     expiry,warranty_refs,release_check=None,[],None
     if version in WARRANTY_FORMATS:
@@ -868,7 +892,9 @@ def verify_findings(report, *, signing=False):
         raise ValueError("合同履约范围或程序版本不符")
     if marker in (REINSPECTION_FORMAT, *MANDATE_FORMATS):
         verify_number_links(report["graph"])
-    expected = [] if profile == "cn-travel-reimbursement/v1" else compute(report["graph"],marker)
+    include_receipts = policy.get("version", "") >= RECEIPT_COVERAGE_SINCE
+    expected = [] if profile == "cn-travel-reimbursement/v1" else compute(
+        report["graph"], marker, include_unassigned_receipts=include_receipts)
     found = [f for f in report["findings"] if f["rule"] in RULES]
     if len(found) != len(expected):
         raise ValueError("合同履约程序数量与证据图谱不符")
@@ -888,6 +914,9 @@ def verify_findings(report, *, signing=False):
                 or (saved.get("id"),saved.get("version"),saved.get("title"),saved.get("basis")) !=
                 (f"{rule}-{position}",policy["version"],*RULES[rule])):
             raise ValueError("合同履约结论、期次或引文与证据图谱不符")
+    if (signing and not include_receipts and any(f["rule"]=="H04" for f in found)
+            and not any(f["rule"]=="H05" for f in found) and report["graph"]["documents_by_kind"].get("bank_receipt")):
+        raise ValueError("旧版底稿有银行回单未逐笔核对。请保留原版，重新审计后签收。")
     if signing and marker not in DATE_FORMATS and any(f["status"]=="ok" and f["rule"] in ("H01","H02","H05") for f in found):
         old_ok = {(f["rule"],tuple(sorted(f["scope"]))) for f in found if f["status"]=="ok"}
         for current in compute(report["graph"],FORMAT):

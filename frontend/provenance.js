@@ -101,7 +101,9 @@ function performanceComparison(finding, graph) {
   const comparisons = {
     H01: ['对照生效条件与签署依据',['effect_clause','signed_on','effect_on','valid_until','buyer_signature','seller_signature','contract_state','approval_authority','approval_result','approved_on','approval_signer']],
     H02: ['对照验收范围、标准与结果',['accepted_on','acceptance_scope','quantity_agreed','quantity_accepted','acceptance_criteria','inspection_basis','measured_result','acceptance_result','acceptance_exception','acceptance_signer']],
-    H05: ['对照付款和履约日期',['payment_designation','paid_on','effect_on','approved_on','accepted_on','warranty_release']],
+    H05: finding.stage ?
+      ['对照付款和履约日期',['payment_designation','paid_on','effect_on','approved_on','accepted_on','warranty_release']] :
+      ['对照合同与待核回单',['contract_id','payer','payee','payment_designation','paid_on','transfer_amount','transfer_status','transfer_ref']],
   };
   const spec = comparisons[finding.rule];
   if (!spec) return null;
@@ -116,7 +118,7 @@ function performanceComparison(finding, graph) {
     return row;
   }));
   details.classList.add('performance-comparison');
-  details.open = ['risk','issue'].includes(finding.status);
+  details.open = ['risk','issue'].includes(finding.status) || (finding.rule==='H05' && !finding.stage);
   return details;
 }
 
