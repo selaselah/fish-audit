@@ -14,7 +14,7 @@ from storage import encode
 
 
 METHODS = {name: (SERVER / name).read_bytes() for name in
-           ("calculations.py", "capacity.py", "config.py", "controls.py", "documents.py", "graph.py", "jobs.py", "model.py", "payment_history.py", "policy.py", "protocol.py", "storage.py", "transfers.py")}
+           ("calculations.py", "capacity.py", "config.py", "controls.py", "documents.py", "graph.py", "jobs.py", "model.py", "payment_history.py", "policy.py", "protocol.py", "storage.py", "supplements.py", "transfers.py")}
 CODE_DIGESTS = {name: digest(source) for name, source in METHODS.items()}
 
 
@@ -124,4 +124,7 @@ class Worker:
         policy = {**VERSION, "profile": profile, "code_sha256": CODE_DIGESTS, "archived_methods": True, "calculations": FORMAT}
         report = {"case_id": case_id, "policy": policy, "graph": graph, "findings": findings,
                   "result": result, "calls": calls}
+        supplement = store.supplement_record(report)
+        if supplement:
+            report["supplement"] = supplement
         store.save_report(case_id, report, digest(encode(report).encode()), METHODS)

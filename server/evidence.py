@@ -11,10 +11,41 @@ def journal(store, case_id):
     with store.connect() as db:
         attestations = [dict(row) for row in db.execute("""SELECT seq,rev,fact,decision,reviewer,actor,note,time
                          FROM attestations WHERE case_id=? ORDER BY seq""", (case_id,))]
-    return {"id": case_id, "title": case["title"], "workspace":case["workspace"], "submitter":case["submitter"],
+    result = {"id": case_id, "title": case["title"], "workspace":case["workspace"], "submitter":case["submitter"],
             "status": case["status"], "created": case["created"],
             "events": case["events"], "revisions": case["revisions"], "decisions": case["decisions"],
             "attestations": attestations, "amendments": store.amendments(case_id)}
+    if case["supplement_of"]:
+        result["supplement_of"] = case["supplement_of"]
+    return result
+
+
+def write_returned_source(store, report, write):
+    supplement = report["supplement"]
+    prior = supplement["parent"]
+    with store.connect() as db:
+        content, signoff = store.signed_source(db, report["case_id"], prior, supplement["rev"])
+    write("supplement/report.json", content, supplement["report_hash"])
+    write("supplement/signoff.json", encode(signoff).encode(), supplement["signoff_hash"])
+    previous = json.loads(content)
+    graph = previous["graph"]
+    if previous["policy"].get("archived_methods"):
+        current_methods = report["policy"].get("code_sha256", {}) if report["policy"].get("archived_methods") else {}
+        for name, checksum in previous["policy"]["code_sha256"].items():
+            if current_methods.get(name) != checksum:
+                write("supplement/methods/"+name, store.method_source(checksum), checksum)
+    retained = {r["parent_doc"] for r in supplement["retained"]}
+    for doc in graph["documents"]:
+        if doc["id"] not in retained:
+            source = store.files / prior / doc["id"] / ("original" + doc["ext"])
+            write("supplement/originals/" + doc["id"] + doc["ext"], source.read_bytes(), doc["sha256"])
+    pages = {(p["doc"],p["number"]):p for p in store.pages(prior)}
+    for node in graph["nodes"]:
+        if node["type"] == "page":
+            doc, number = node["id"].split("/p")
+            prefix = f"supplement/pages/{doc}/{number}"
+            write(prefix+".jpg", (store.files / prior / doc / (number+".jpg")).read_bytes(), node["sha256"])
+            write(prefix+".txt", pages[doc,int(number)]["text"].encode(), node.get("text_sha256"))
 
 
 def export_bundle(store, case_id, revision, stream):
@@ -79,6 +110,8 @@ def export_bundle(store, case_id, revision, stream):
                 if (prior, rev, doc, page) not in included:
                     write(path + ".jpg", (store.files / prior / doc / f"{page}.jpg").read_bytes(), node["sha256"])
                 write(path + ".txt", pages[doc, page]["text"].encode(), node.get("text_sha256"))
+        if "supplement" in report:
+            write_returned_source(store, report, write)
         manifest = {"case_id": case_id, "revision": revision, "report_sha256": bundle["sha256"],
                     "encoding": "UTF-8", "files": files}
         archive.writestr("manifest.json", encode(manifest))

@@ -5,6 +5,7 @@ import {mkdtemp, readFile, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join, resolve} from 'node:path';
 import {createServer} from 'node:net';
+import {createHash} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {once} from 'node:events';
 
@@ -14,10 +15,17 @@ await once(socket, 'listening');
 const port = socket.address().port;
 await new Promise(resolve => socket.close(resolve));
 const sampleDesk = process.argv.includes('--sample-desk');
-const paymentArgument = process.argv.indexOf('--payment-case');
-const paymentCase = paymentArgument > -1 ? process.argv[paymentArgument+1] : null;
-if (paymentArgument > -1) assert.match(paymentCase || '',/^[a-f0-9]{32}$/);
-const root = 'http://127.0.0.1:' + (sampleDesk || paymentCase ? 8000 : port);
+function caseArgument(name) {
+  const index = process.argv.indexOf(name);
+  if (index < 0) return null;
+  const id = process.argv[index+1];
+  assert.match(id || '',/^[a-f0-9]{32}$/);
+  return id;
+}
+const paymentCase = caseArgument('--payment-case');
+const supplementCase = caseArgument('--supplement-case');
+const seeded = sampleDesk || paymentCase || supplementCase;
+const root = 'http://127.0.0.1:' + (seeded ? 8000 : port);
 const children = [];
 const faults = [];
 function start(binary, args, env = process.env) {
@@ -37,7 +45,7 @@ async function until(read, label, timeout = 15000) {
 }
 let ws;
 try {
-  if (!sampleDesk && !paymentCase) start(process.env.AUDIT_PYTHON || 'server/.venv/bin/python', ['server/main.py'], {...process.env,
+  if (!seeded) start(process.env.AUDIT_PYTHON || 'server/.venv/bin/python', ['server/main.py'], {...process.env,
     PORT:String(port), AUDIT_BIND:'127.0.0.1', AUDIT_ACCESS_MODE:'saas', AUDIT_PUBLIC_ORIGIN:root,
     AUDIT_DATA_DIR:join(scratch, 'data')});
   await until(async () => (await fetch(root+'/api/health')).ok,'service');
@@ -77,7 +85,71 @@ try {
   const click = (label, container='document') => evaluate('[...'+container+'.querySelectorAll("button,a")].find(b=>b.textContent==='+JSON.stringify(label)+' && b.getClientRects().length).click()');
   await call('Runtime.enable');
   await call('Page.navigate',{url:root});
-  if (paymentCase) {
+  if (supplementCase) {
+    const base = root+'/api/cases/';
+    const child = await (await fetch(base+supplementCase)).json();
+    assert.ok(child.title.startsWith('合成演练 · '));
+    const current = (await (await fetch(base+supplementCase+'/reports/'+child.rev)).json()).report;
+    const origin = current.supplement;
+    const parent = await (await fetch(base+origin.parent)).json();
+    assert.ok(parent.title.startsWith('合成演练 · '));
+    const old = (await (await fetch(base+origin.parent+'/reports/'+origin.rev)).json()).report;
+    const group = origin.comparisons.find(g=>g.rule==='B01') || origin.comparisons[0];
+    const previousId = group.before[0].id;
+    await call('Page.navigate',{url:root+'/workpaper/'+supplementCase});
+    await wait('!!document.querySelector(".return-comparison")','returned workpaper comparison');
+    const otherRisk = current.findings.find(f=>f.status!=='ok' && !origin.comparisons.some(g=>g.rule===f.rule));
+    if (otherRisk) {
+      await evaluate('[...document.querySelectorAll(".return-comparison details")].find(d=>d.querySelector("summary").textContent.startsWith("本次其他风险与缺口")).open=true');
+      const url = await wait('[...document.querySelectorAll(".return-comparison a")].find(a=>a.textContent.startsWith('+JSON.stringify(otherRisk.rule+' ')+'))?.href','additional finding on new material');
+      assert.equal(new URL(url).searchParams.get('finding'),otherRisk.id);
+      await call('Page.navigate',{url});
+      await wait('document.querySelector("#trace-select")?.value==='+JSON.stringify(otherRisk.id),'new risk evidence path');
+      await call('Page.navigate',{url:root+'/workpaper/'+supplementCase});
+      await wait('!!document.querySelector(".return-comparison")','comparison reopened');
+    }
+    await evaluate('[...document.querySelectorAll(".return-comparison details")].find(d=>d.querySelector("summary").textContent.startsWith('+JSON.stringify(group.rule+' ')+')).open=true');
+    const before = await wait('document.querySelector(".return-comparison a[href*=finding]")?.href','signed parent finding link');
+    assert.equal(new URL(before).pathname,'/workpaper/'+origin.parent);
+    for (const width of [1440,1024,820,768,390,320]) {
+      await call('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),'supplement comparison at '+width);
+    }
+    await call('Page.navigate',{url:before});
+    if (old.graph.nodes.some(n=>n.id==='finding/'+previousId))
+      await wait('document.querySelector("#trace-select")?.value==='+JSON.stringify(previousId),'signed parent evidence path');
+    else await wait('document.activeElement?.dataset.finding==='+JSON.stringify(previousId),'legacy finding focused on original workpaper');
+    await click('提交补件','document.querySelector("#supplement-family")');
+    await wait('document.querySelector("#upload-dialog")?.open && document.querySelector("#upload-profile").disabled','returned intake');
+    assert.equal(await evaluate('document.querySelectorAll("#retain-files input:checked").length'),parent.documents.length);
+    await evaluate('document.querySelectorAll("#retain-files input:checked").forEach(c=>c.click());document.querySelector("#upload-form").requestSubmit()');
+    await wait('document.querySelector("#upload-error").textContent.includes("请选择")','empty supplement validation');
+    await evaluate('document.querySelector("#retain-files input").click()');
+    if (process.argv.includes('--live')) {
+      assert.match(parent.title,/^合成演练 · 缺银行回单 · [A-F0-9]{8}$/);
+      const code = parent.title.slice(-8);
+      const title = '合成演练 · 手机补交回单 · '+code;
+      let id = parent.supplements.find(c=>c.title===title)?.id;
+      if (!id) {
+        const file = resolve('docs/samples/generated/11-退回补交银行回单',code,'银行付款回单.pdf');
+        assert.equal(createHash('sha256').update(await readFile(file)).digest('hex'),
+          child.documents.find(d=>d.name==='银行付款回单.pdf').sha256);
+        const {root:dom} = await call('DOM.getDocument');
+        const {nodeId} = await call('DOM.querySelector',{nodeId:dom.nodeId,selector:'#upload-files'});
+        await call('DOM.setFileInputFiles',{nodeId,files:[file]});
+        await evaluate('document.querySelector("#upload-title").value='+JSON.stringify(title)+';document.querySelector("#supplement-note").value="手机端演练补交原回单";document.querySelector("#upload-form").requestSubmit()');
+        await wait('!document.querySelector("#upload-dialog").open && document.querySelector("#case-title").textContent==='+JSON.stringify(title),'new mobile submission');
+        id = await evaluate('location.hash.split("/").pop()');
+      } else await call('Page.navigate',{url:root+'/workpaper/'+id});
+      await wait('!!document.querySelector(".return-comparison")','live supplemental audit',540000);
+      const saved = (await (await fetch(base+id+'/reports/1')).json()).report;
+      assert.equal(saved.supplement.parent,origin.parent);
+      assert.deepEqual(saved.supplement.retained,origin.retained);
+      assert.equal(saved.supplement.reason,parent.decisions.at(-1).note);
+      console.log('Live mobile supplement '+id+' · '+saved.result.verdict);
+    }
+    console.log('PASS · Signed return, versioned finding link, retained originals and mobile supplemental intake at six widths');
+  } else if (paymentCase) {
     const base = root+'/api/cases/'+paymentCase;
     const detail = await (await fetch(base)).json();
     assert.ok(detail.title.startsWith('合成演练 · '),'use a marked training task');

@@ -5,6 +5,7 @@ import shutil
 import sys
 import tempfile
 import uuid
+from contextlib import ExitStack
 from pathlib import Path
 from urllib.parse import urlencode, urlsplit
 
@@ -40,14 +41,49 @@ def text_field(value, name, limit):
     return value.strip()
 
 
-def upload(store, workspace, user):
+def save_original(folder, doc, name, stream, remaining):
+    name = text_field((name or "").replace("\\", "/").split("/")[-1], "文件名", 200)
+    ext = Path(name).suffix.lower()
+    if ext not in FORMATS:
+        raise CaseError(f"不支持 {ext or '无后缀'} 文件，请使用 PDF、Word 或图片。", 415)
+    target = folder / doc
+    target.mkdir()
+    hasher, size = hashlib.sha256(), 0
+    with (target / ("original" + ext)).open("xb") as output:
+        while chunk := stream.read(128 * 1024):
+            size += len(chunk)
+            if size > MAX_FILE_BYTES or size > remaining:
+                raise CaseError("单份资料上限 16 MiB，整案上限 48 MiB。", 413)
+            output.write(chunk)
+            hasher.update(chunk)
+    if not size:
+        raise CaseError("资料为空，请重新选择文件。", 400)
+    return {"id": doc, "name": name, "ext": ext, "sha256": hasher.hexdigest(), "size": size}
+
+
+def upload(store, workspace, user, parent=None):
     title = text_field(request.form.get("title"), "任务名称", 100)
     profile = request.form.get("profile", PROFILE)
+    inherited, supplement = [], None
+    if parent:
+        revision = request.form.get("rev", "")
+        if not re.fullmatch(r"[1-9][0-9]{0,8}", revision):
+            raise CaseError("请选择有效的退回底稿版本。", 400)
+        profile, previous = store.supplement_input(parent, int(revision), workspace, user and user["id"])
+        if request.form.get("profile", profile) != profile:
+            raise CaseError("补件须沿用前案的审计范围。", 400)
+        keep_ids = request.form.getlist("retain")
+        inherited = [doc for doc in previous if doc["id"] in keep_ids]
+        if len(inherited) != len(keep_ids):
+            raise CaseError("沿用清单中存在重复或不属于前案的原件编号。", 400)
+        note = request.form.get("note", "").strip()
+        supplement = {"parent": parent, "rev": int(revision), "retained": [],
+                      "note": text_field(note, "补件说明", 2000) if note else ""}
     if profile not in PROFILES:
         raise CaseError("请选择支持的审计范围。", 400)
     files = request.files.getlist("files")
-    if not 1 <= len(files) <= MAX_FILES:
-        raise CaseError(f"每案可上传 1 至 {MAX_FILES} 份资料。", 400)
+    if not 1 <= len(files) + len(inherited) <= MAX_FILES:
+        raise CaseError(f"每案可提交 1 至 {MAX_FILES} 份资料（含沿用原件）。", 400)
     key = request.headers.get("Idempotency-Key") or uuid.uuid4().hex
     if not re.fullmatch(r"[a-zA-Z0-9_-]{12,100}", key):
         raise CaseError("提交编号无效。", 400)
@@ -58,30 +94,29 @@ def upload(store, workspace, user):
     folder.mkdir(mode=0o700)
     keep = False
     try:
-        docs, total = [], 0
-        for index, item in enumerate(files, 1):
-            name = text_field((item.filename or "").replace("\\", "/").split("/")[-1], "文件名", 200)
-            ext = Path(name).suffix.lower()
-            if ext not in FORMATS:
-                raise CaseError(f"不支持 {ext or '无后缀'} 文件，请使用 PDF、Word 或图片。", 415)
-            doc = f"d{index:02d}"
-            target = folder / doc
-            target.mkdir()
-            hasher = hashlib.sha256()
-            size = 0
-            with (target / ("original" + ext)).open("xb") as output:
-                while chunk := item.stream.read(128 * 1024):
-                    size += len(chunk)
-                    total += len(chunk)
-                    if size > MAX_FILE_BYTES or total > MAX_CASE_BYTES:
-                        raise CaseError("单份资料上限 16 MiB，整案上限 48 MiB。", 413)
-                    output.write(chunk)
-                    hasher.update(chunk)
-            if not size:
-                raise CaseError("资料为空，请重新选择文件。", 400)
-            docs.append({"id": doc, "name": name, "ext": ext, "sha256": hasher.hexdigest(), "size": size})
-        fingerprint = digest(encode([title, docs] if profile == PROFILE else [title, docs, profile]).encode())
-        accepted = store.create(case_id, title, docs, key, fingerprint, profile, workspace, user)
+        docs, remaining = [], MAX_CASE_BYTES
+        with ExitStack() as streams:
+            inputs = []
+            for doc in inherited:
+                path = store.files / parent / doc["id"] / ("original" + doc["ext"])
+                try:
+                    inputs.append((doc["name"], streams.enter_context(path.open("rb")), doc))
+                except FileNotFoundError as exc:
+                    raise CaseError("所选前案原件缺失，请检查归档资料。", 409) from exc
+            inputs.extend((item.filename, item.stream, None) for item in files)
+            for index, (name, stream, previous) in enumerate(inputs, 1):
+                doc = save_original(folder, f"d{index:02d}", name, stream, remaining)
+                if previous:
+                    if any(doc[k] != previous[k] for k in ("size", "sha256")):
+                        raise CaseError("前案原件与签收时保存的摘要不符。", 409)
+                    supplement["retained"].append({"parent_doc": previous["id"], "doc": doc["id"]})
+                docs.append(doc)
+                remaining -= doc["size"]
+        identity = [title, docs] if profile == PROFILE else [title, docs, profile]
+        if supplement:
+            identity.append(supplement)
+        fingerprint = digest(encode(identity).encode())
+        accepted = store.create(case_id, title, docs, key, fingerprint, profile, workspace, user, supplement)
         keep = accepted == case_id
         return accepted
     finally:
@@ -171,12 +206,17 @@ def create_app(store, worker):
             if not re.fullmatch(r"d[0-9]{2}/p[1-9][0-9]*/(?:[ft][1-9][0-9]*|h[a-f0-9]{12})",ref) or "rev" not in args:
                 raise CaseError("请选择有效的版本和证据编号。",400)
             args["fact"] = ref
+        if "finding" in request.args:
+            ref = request.args["finding"]
+            if not re.fullmatch(r"[A-Z][0-9]{2}-[1-9][0-9]*", ref) or "rev" not in args or "fact" in args:
+                raise CaseError("请选择有效的底稿版本和程序发现。", 400)
+            args["finding"] = ref
         route = ("w/"+wid+"/" if wid else "")+"case/"+case_id
         return redirect("/#"+route+("?" + urlencode(args) if args else ""))
 
     @app.get("/<filename>")
     def asset(filename):
-        if filename not in {"app.js", "team.js", "desk.js", "provenance.js", "style.css"}:
+        if filename not in {"app.js", "team.js", "desk.js", "provenance.js", "supplements.js", "style.css"}:
             raise CaseError("资源不存在。", 404)
         return send_file(FRONTEND / filename)
 
@@ -214,18 +254,19 @@ def create_app(store, worker):
         return jsonify(search_evidence(store, g.workspace, request.args))
 
     @business.post("/cases")
-    def submit():
+    @business.post("/cases/<case_id>/supplements")
+    def submit(case_id=None):
         if request.mimetype != "multipart/form-data":
             raise CaseError("请以 multipart/form-data 上传资料。", 415)
         if not os.getenv("OPENAI_API_KEY"):
             raise CaseError("请配置 server/.env 中的 OPENAI_API_KEY 并重启服务。", 503)
-        case_id = upload(store, g.workspace, g.actor)
+        case_id = upload(store, g.workspace, g.actor, case_id)
         worker.wakeup.set()
         return jsonify(id=case_id), 202
 
     @business.get("/cases/<case_id>")
     def detail(case_id):
-        data = store.detail(case_id)
+        data = store.detail(case_id, g.actor["id"] if g.role == "employee" else None)
         if g.role == "employee":
             data["revisions"] = []
         data["can_review"] = g.role != "employee"

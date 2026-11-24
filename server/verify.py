@@ -9,6 +9,7 @@ from pathlib import Path
 from calculations import CalculationEvidence, SUPPORTED
 from payment_history import LIMIT, cited_facts, payment_record
 from protocol import canonical, response_request
+from supplements import compare_return
 
 
 def sha(data):
@@ -41,6 +42,8 @@ def replay_rules(report):
     local = Path(__file__).resolve().parent
     digests = report["policy"].get("code_sha256", {})
     modules = ("config.py","controls.py","graph.py","calculations.py","model.py","payment_history.py","policy.py","transfers.py")
+    if "supplement" in report:
+        modules += ("supplements.py",)
     for name in modules:
         require(digests.get(name) == sha((local / name).read_bytes()), "严格复算需要与底稿一致的本机规则版本："+name)
     from controls import VERSION, additional, conclusion, execute
@@ -113,6 +116,91 @@ def verify_payment_history(bundle, hashes, report, journal):
                         "历史引文与原页文字行不符")
 
 
+def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
+    graph = report["graph"]
+    nodes = {node["id"]: node for node in graph["nodes"]}
+    require(len(nodes) == len(graph["nodes"]), "图节点重复")
+    for doc in graph["documents"]:
+        path = originals[doc["id"]] if originals is not None else "originals/" + doc["id"] + doc["ext"]
+        require(hashes[path] == doc["sha256"] == nodes[doc["id"]]["sha256"], "原件摘要不符")
+    for trace in report["calls"]["pages"]:
+        doc, page = trace["doc"], trace["page"]
+        page_node = nodes[f"{doc}/p{page}"]
+        require(hashes[f"{page_dir}/{doc}/{page}.jpg"] == trace["page_sha256"] == page_node["sha256"], "页图摘要不符")
+        if "text_sha256" in page_node:
+            require(hashes[f"{page_dir}/{doc}/{page}.txt"] == page_node["text_sha256"], "文字层摘要不符")
+        calls = [trace, *([trace["check"]] if trace.get("check") else [])]
+        if any(call.get("request_format") for call in calls):
+            photo = bundle.read(f"{page_dir}/{doc}/{page}.jpg")
+            for call in calls:
+                verify_request(call, report["calls"].get("instructions", {}), photo)
+    verify_request(report["calls"]["expert"], report["calls"].get("instructions", {}))
+    page_checks = {(t["doc"],t["page"]): t.get("check") for t in report["calls"]["pages"]}
+    texts = {}
+    for fact in graph["facts"]:
+        require(fact["source_sha256"] == nodes[fact["doc"]]["sha256"] and
+                fact["page_sha256"] == nodes[f"{fact['doc']}/p{fact['page']}"]["sha256"], "取值与来源不符")
+        if fact.get("origin") == "verified_printed_heading":
+            check = page_checks.get((fact["doc"],fact["page"])) or {}
+            key = fact["id"].rsplit("/", 1)[-1]
+            candidate = fact.get("original_candidate") or fact
+            inputs = [row for row in check.get("input", []) if row["index"] == key]
+            votes = [row["support"] for row in check.get("output", {}).get("checks", []) if row["index"] == key]
+            require(len(inputs) == 1 and inputs[0]["quote"] == candidate["quote"] and
+                    inputs[0]["value"] == candidate["value"] and votes == ["clear"], "印刷标题缺少对应的视觉复检")
+        if "unit" in fact:
+            section = nodes[fact["unit"]]
+            require(section["type"] == "document_section" and section["source"] == fact["doc"]
+                    and section["page"] == fact["page"], "合订单据归属与原页不符")
+        line = fact.get("source_line")
+        if line:
+            path = f"{page_dir}/{fact['doc']}/{fact['page']}.txt"
+            if path not in texts:
+                texts[path] = bundle.read(path).decode().splitlines()
+            text = texts[path]
+            require(1 <= line["number"] <= len(text) and text[line["number"]-1] == line["text"], "引文定位与原文字层不符")
+    for item in graph["edges"]:
+        require(item["from"] in nodes and item["to"] in nodes and item["evidence"] and
+                set(item["evidence"]) <= nodes.keys(), "图谱存在未登记引用")
+    for finding in report["findings"]:
+        require(set(finding["evidence"]) <= nodes.keys(), "程序引用不存在")
+    if "calculations" in report["policy"]:
+        require(report["policy"]["calculations"] in SUPPORTED, "未知的金额复算格式")
+        CalculationEvidence(graph).verify(report["findings"])
+    for checksum, instruction in report["calls"].get("instructions", {}).items():
+        require(sha(instruction.encode()) == checksum, "提示词摘要不符")
+    return nodes
+
+
+def verify_returned_source(bundle, hashes, report, journal):
+    snapshot = report["supplement"]
+    intake = journal["supplement_of"]
+    parent = json.loads(bundle.read("supplement/report.json"))
+    signoff = json.loads(bundle.read("supplement/signoff.json"))
+    require(snapshot["parent"] == intake["id"] == parent["case_id"] and snapshot["rev"] == intake["rev"] == signoff["rev"]
+            and intake["title"] == signoff["title"] and signoff["workspace"] == journal["workspace"]
+            and datetime.fromisoformat(signoff["time"]) <= datetime.fromisoformat(journal["created"]), "前案归属、签收版本或时间不符")
+    require(hashes["supplement/report.json"] == snapshot["report_hash"] and hashes["supplement/signoff.json"] == snapshot["signoff_hash"],
+            "前案底稿或签收摘要不符")
+    if "parent_hash" in intake or "signoff_hash" in intake:
+        require(intake.get("parent_hash") == snapshot["report_hash"] and intake.get("signoff_hash") == snapshot["signoff_hash"],
+                "前案底稿或签收摘要与补件受理时不符")
+    expected = compare_return(report, parent, signoff, hashes["supplement/report.json"], intake["retained"], intake["note"])
+    require(snapshot == expected, "补件资料清单、退回理由或程序对照不符")
+    if parent["policy"].get("archived_methods"):
+        current_methods = report["policy"].get("code_sha256", {}) if report["policy"].get("archived_methods") else {}
+        for name, checksum in parent["policy"]["code_sha256"].items():
+            folder = "methods/" if current_methods.get(name) == checksum else "supplement/methods/"
+            require(hashes[folder+name] == checksum, "前案执行程序与留存的源码不符")
+    retained = {row["parent_doc"]: row["doc"] for row in intake["retained"]}
+    originals = {}
+    for doc in parent["graph"]["documents"]:
+        old = doc["id"]
+        prefix = "originals/" + retained[old] if old in retained else "supplement/originals/" + old
+        originals[old] = prefix + doc["ext"]
+    verify_workpaper_sources(bundle, hashes, parent, "supplement/pages", originals)
+
+
 def verify(source, strict_rules=False):
     with zipfile.ZipFile(source) as bundle:
         names = bundle.namelist()
@@ -140,61 +228,15 @@ def verify(source, strict_rules=False):
         if report["policy"].get("archived_methods"):
             for name, expected in report["policy"]["code_sha256"].items():
                 require(hashes.get("methods/" + name) == expected, "执行程序版本不符：" + name)
-        nodes = {node["id"]: node for node in graph["nodes"]}
-        require(len(nodes) == len(graph["nodes"]), "图节点重复")
-        for doc in graph["documents"]:
-            require(hashes["originals/" + doc["id"] + doc["ext"]] == doc["sha256"] == nodes[doc["id"]]["sha256"], "原件摘要不符")
-        for trace in report["calls"]["pages"]:
-            doc, page = trace["doc"], trace["page"]
-            page_node = nodes[f"{doc}/p{page}"]
-            require(hashes[f"pages/{doc}/{page}.jpg"] == trace["page_sha256"] == page_node["sha256"], "页图摘要不符")
-            if "text_sha256" in page_node:
-                require(hashes[f"pages/{doc}/{page}.txt"] == page_node["text_sha256"], "文字层摘要不符")
-            calls = [trace, *([trace["check"]] if trace.get("check") else [])]
-            if any(call.get("request_format") for call in calls):
-                photo = bundle.read(f"pages/{doc}/{page}.jpg")
-                for call in calls:
-                    verify_request(call, report["calls"].get("instructions", {}), photo)
-        verify_request(report["calls"]["expert"], report["calls"].get("instructions", {}))
+        nodes = verify_workpaper_sources(bundle, hashes, report, "pages")
         for match in graph.get("prior_invoices", []):
             path = f"prior/{match['case_id']}/r{match['rev']}/{match['doc']}/{match['page']}.jpg"
             require(hashes[path] == match["page_hash"] and match["id"] in nodes, "历史票号证据不符")
         if "payment_history" in graph:
             verify_payment_history(bundle, hashes, report, journal)
-        page_checks = {(t["doc"],t["page"]): t.get("check") for t in report["calls"]["pages"]}
-        texts = {}
-        for fact in graph["facts"]:
-            require(fact["source_sha256"] == nodes[fact["doc"]]["sha256"] and
-                    fact["page_sha256"] == nodes[f"{fact['doc']}/p{fact['page']}"]["sha256"], "取值与来源不符")
-            if fact.get("origin") == "verified_printed_heading":
-                check = page_checks.get((fact["doc"],fact["page"])) or {}
-                key = fact["id"].rsplit("/", 1)[-1]
-                candidate = fact.get("original_candidate") or fact
-                inputs = [row for row in check.get("input", []) if row["index"] == key]
-                votes = [row["support"] for row in check.get("output", {}).get("checks", []) if row["index"] == key]
-                require(len(inputs) == 1 and inputs[0]["quote"] == candidate["quote"] and
-                        inputs[0]["value"] == candidate["value"] and votes == ["clear"], "印刷标题缺少对应的视觉复检")
-            if "unit" in fact:
-                section = nodes[fact["unit"]]
-                require(section["type"] == "document_section" and section["source"] == fact["doc"]
-                        and section["page"] == fact["page"], "合订单据归属与原页不符")
-            line = fact.get("source_line")
-            if line:
-                path = f"pages/{fact['doc']}/{fact['page']}.txt"
-                if path not in texts:
-                    texts[path] = bundle.read(path).decode().splitlines()
-                text = texts[path]
-                require(1 <= line["number"] <= len(text) and text[line["number"]-1] == line["text"], "引文定位与原文字层不符")
-        for item in graph["edges"]:
-            require(item["from"] in nodes and item["to"] in nodes and item["evidence"] and
-                    set(item["evidence"]) <= nodes.keys(), "图谱存在未登记引用")
-        for finding in report["findings"]:
-            require(set(finding["evidence"]) <= nodes.keys(), "程序引用不存在")
-        if "calculations" in report["policy"]:
-            require(report["policy"]["calculations"] in SUPPORTED, "未知的金额复算格式")
-            CalculationEvidence(graph).verify(report["findings"])
-        for checksum, instruction in report["calls"].get("instructions", {}).items():
-            require(sha(instruction.encode()) == checksum, "提示词摘要不符")
+        require(("supplement" in report) == ("supplement_of" in journal), "底稿与受理记录中的补件归属不符")
+        if "supplement" in report:
+            verify_returned_source(bundle, hashes, report, journal)
         if strict_rules:
             replay_rules(report)
         return case_id, revision, len(entries)

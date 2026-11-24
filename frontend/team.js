@@ -18,7 +18,9 @@ const Team = {
     const anchor = link(label,path,className);
     anchor.addEventListener('click',event=>{
       if (event.button===0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
-        event.preventDefault(); location.hash = target;
+        event.preventDefault();
+        if (location.hash===target) { state.openedCitation=null; refresh(); }
+        else location.hash = target;
       }
     });
     return anchor;
@@ -63,7 +65,7 @@ const Team = {
   },
   async logout() {
     await post('/api/auth/logout',{});
-    Desk.reset(); this.authMode = 'login'; this.freshInvite = null;
+    Desk.reset(); resetIntake(); this.authMode = 'login'; this.freshInvite = null;
     this.session = null; this.current = null; state.bundle = null; state.detail = null; state.cases = [];
     for (const id of ['case-panel','case-list','team-panel']) $('#'+id).replaceChildren();
     location.hash = 'account'; await refresh();

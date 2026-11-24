@@ -11,6 +11,7 @@ from capacity import admit, install as install_capacity, settings
 from config import BANK, CaseError, PROFILE
 from graph import compact, invoice_number_edges
 from payment_history import LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_facts, payment_record
+from supplements import compare_return
 from workbench import prepare_index, project
 
 
@@ -22,6 +23,10 @@ def encode(value):
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True, allow_nan=False)
 
 
+def source_hashes(content, signoff):
+    return hashlib.sha256(content).hexdigest(), hashlib.sha256(canonical(signoff)).hexdigest()
+
+
 def event(db, case_id, stage, message):
     db.execute("INSERT INTO events(case_id,time,stage,message) VALUES(?,?,?,?)",
                (case_id, stamp(), stage, message))
@@ -29,10 +34,11 @@ def event(db, case_id, stage, message):
 
 def authorize_write(db, workspace, actor, *, review=False):
     if workspace == "local":
-        return
+        return "admin"
     member = db.execute("SELECT role FROM members WHERE workspace=? AND account=?", (workspace, actor)).fetchone()
     if not member or (review and member["role"] == "employee"):
         raise CaseError("当前账号无权执行此次操作。", 403)
+    return member["role"]
 
 
 def authorize_case_write(db, case_id, actor):
@@ -95,6 +101,11 @@ class Store:
                     PRIMARY KEY(case_id,rev,fact));
                 CREATE INDEX IF NOT EXISTS invoice_keys ON invoice_index(number_key);
                 CREATE TABLE IF NOT EXISTS method_sources(sha256 TEXT PRIMARY KEY, source BLOB NOT NULL);
+                CREATE TABLE IF NOT EXISTS case_supplements(
+                    child TEXT PRIMARY KEY REFERENCES cases(id), parent TEXT NOT NULL, parent_rev INTEGER NOT NULL,
+                    note TEXT NOT NULL, retained TEXT NOT NULL, parent_hash TEXT NOT NULL, signoff_hash TEXT NOT NULL, CHECK(child<>parent),
+                    FOREIGN KEY(parent,parent_rev) REFERENCES signoffs(case_id,rev));
+                CREATE INDEX IF NOT EXISTS supplements_parent ON case_supplements(parent);
             """)
             db.execute("BEGIN IMMEDIATE")
             if "layer" not in {row["name"] for row in db.execute("PRAGMA table_info(pages)")}:
@@ -118,6 +129,19 @@ class Store:
                                    self.index_rows(row["id"], row["rev"], json.loads(row["content"])))
                 db.execute("PRAGMA user_version=1")
             self.fts_enabled = prepare_index(db)
+            columns = {row["name"] for row in db.execute("PRAGMA table_info(case_supplements)")}
+            for name in ("parent_hash", "signoff_hash"):
+                if name not in columns:
+                    db.execute(f"ALTER TABLE case_supplements ADD COLUMN {name} TEXT")
+            if not {"parent_hash", "signoff_hash"} <= columns:
+                rows = db.execute("""SELECT x.child,x.parent,x.parent_rev,json_extract(r.content,'$.supplement.report_hash') AS captured,
+                                  json_extract(r.content,'$.supplement.signoff_hash') AS signed FROM case_supplements x
+                                  LEFT JOIN reports r ON r.case_id=x.child AND r.rev=1""")
+                for row in rows:
+                    digests = (row["captured"], row["signed"])
+                    if not all(digests):
+                        digests = source_hashes(*self.signed_source(db, row["child"], row["parent"], row["parent_rev"]))
+                    db.execute("UPDATE case_supplements SET parent_hash=?,signoff_hash=? WHERE child=?", (*digests, row["child"]))
             db.execute("""CREATE TABLE IF NOT EXISTS payment_index(
                 case_id TEXT PRIMARY KEY, rev INTEGER NOT NULL, payer TEXT NOT NULL, reference TEXT NOT NULL,
                 settlement TEXT, FOREIGN KEY(case_id,rev) REFERENCES reports(case_id,rev))""")
@@ -148,11 +172,16 @@ class Store:
         finally:
             db.close()
 
-    def create(self, case_id, title, docs, request_key, fingerprint, profile=PROFILE, workspace="local", user=None):
+    def create(self, case_id, title, docs, request_key, fingerprint, profile=PROFILE, workspace="local", user=None, supplement=None):
         with self.connect(True) as db:
             now = stamp()
             user = user or {}
-            authorize_write(db, workspace, user.get("id"))
+            role = authorize_write(db, workspace, user.get("id"))
+            if supplement:
+                source = self.returned_case(db, supplement["parent"], supplement["rev"], workspace,
+                                            user.get("id") if role == "employee" else None)
+                if profile != source["profile"]:
+                    raise CaseError("补件须沿用前案的审计范围。", 409)
             previous = db.execute("SELECT id,fingerprint FROM cases WHERE request_key=?", (request_key,)).fetchone()
             if previous:
                 if previous["fingerprint"] != fingerprint:
@@ -164,6 +193,11 @@ class Store:
                        (case_id, title, now, now, request_key, fingerprint, profile, workspace,user.get("id"),user.get("name")))
             db.executemany("INSERT INTO docs(case_id,id,name,ext,size,sha256) VALUES(?,?,?,?,?,?)",
                            [(case_id, doc["id"], doc["name"], doc["ext"], doc["size"], doc["sha256"]) for doc in docs])
+            if supplement:
+                digests = source_hashes(*self.signed_source(db, case_id, supplement["parent"], supplement["rev"]))
+                db.execute("""INSERT INTO case_supplements(child,parent,parent_rev,note,retained,parent_hash,signoff_hash)
+                              VALUES(?,?,?,?,?,?,?)""", (case_id, supplement["parent"], supplement["rev"], supplement["note"],
+                                                        encode(supplement["retained"]), *digests))
             event(db, case_id, "queued", f"收到 {len(docs)} 份原件。")
             return case_id
 
@@ -405,10 +439,46 @@ class Store:
                               (workspace,submitter,submitter))
             return [dict(row) for row in rows]
 
-    def detail(self, case_id):
+    @staticmethod
+    def returned_case(db, parent, rev, workspace, owner):
+        case = db.execute("""SELECT c.id,c.title,c.profile,c.status,c.rev,s.decision,r.hash FROM cases c
+                             LEFT JOIN signoffs s ON s.case_id=c.id AND s.rev=c.rev
+                             LEFT JOIN reports r ON r.case_id=c.id AND r.rev=c.rev
+                             WHERE c.id=? AND c.workspace=? AND (? IS NULL OR c.submitter=?)""",
+                          (parent, workspace, owner, owner)).fetchone()
+        if not case:
+            raise CaseError("未找到该审计任务。", 404)
+        if case["status"] != "closed" or case["rev"] != rev or case["decision"] != "return":
+            raise CaseError("请从已签收为「退回补件」的底稿版本发起补件。", 409)
+        return case
+
+    def supplement_input(self, parent, rev, workspace, actor):
         with self.connect() as db:
             db.execute("BEGIN")
-            case = db.execute("SELECT id,title,profile,workspace,submitter,submitter_name,created,updated,status,stage,progress,message,error,rev FROM cases WHERE id=?", (case_id,)).fetchone()
+            role = authorize_write(db, workspace, actor)
+            source = self.returned_case(db, parent, rev, workspace, actor if role == "employee" else None)
+            data = db.execute("SELECT content FROM reports WHERE case_id=? AND rev=?", (parent, rev)).fetchone()[0].encode()
+            if hashlib.sha256(data).hexdigest() != source["hash"]:
+                raise CaseError("前案底稿与签收版本的摘要不符。", 409)
+            return source["profile"], json.loads(data)["graph"]["documents"]
+
+    def supplement_record(self, current):
+        with self.connect() as db:
+            db.execute("BEGIN")
+            row = db.execute("SELECT * FROM case_supplements WHERE child=?", (current["case_id"],)).fetchone()
+            if not row:
+                return None
+            data, signoff = self.signed_source(db, row["child"], row["parent"], row["parent_rev"])
+            if source_hashes(data, signoff) != (row["parent_hash"], row["signoff_hash"]):
+                raise CaseError("前案底稿或签收意见与补件受理时的摘要不符，已停止生成补件底稿。", 409)
+            return compare_return(current, json.loads(data), signoff, row["parent_hash"],
+                                  json.loads(row["retained"]), row["note"])
+
+    def detail(self, case_id, owner=None):
+        with self.connect() as db:
+            db.execute("BEGIN")
+            case = db.execute("""SELECT id,title,profile,workspace,submitter,submitter_name,created,updated,status,stage,progress,message,error,rev
+                               FROM cases WHERE id=? AND (? IS NULL OR submitter=?)""", (case_id, owner, owner)).fetchone()
             if not case:
                 raise CaseError("未找到该审计任务。", 404)
             detail = dict(case)
@@ -416,6 +486,13 @@ class Store:
             detail["events"] = [dict(row) for row in db.execute("SELECT seq,time,stage,message FROM events WHERE case_id=? ORDER BY seq", (case_id,))]
             detail["revisions"] = [dict(row) for row in db.execute("SELECT rev,created,hash FROM reports WHERE case_id=? ORDER BY rev DESC", (case_id,))]
             detail["decisions"] = [dict(row) for row in db.execute("SELECT rev,decision,reviewer,actor,note,time FROM signoffs WHERE case_id=? ORDER BY rev", (case_id,))]
+            family = (case_id, case["workspace"], owner, owner)
+            parent = db.execute("""SELECT c.id,c.title,s.parent_rev AS rev,s.note,s.retained,s.parent_hash,s.signoff_hash FROM case_supplements s
+                        JOIN cases c ON c.id=s.parent WHERE s.child=? AND c.workspace=? AND (? IS NULL OR c.submitter=?)""", family).fetchone()
+            detail["supplement_of"] = {**dict(parent), "retained": json.loads(parent["retained"])} if parent else None
+            detail["supplements"] = [dict(r) for r in db.execute("""SELECT c.id,c.title,c.rev,c.status,c.created,s.parent_rev FROM case_supplements s
+                        JOIN cases c ON c.id=s.child WHERE s.parent=? AND c.workspace=? AND (? IS NULL OR c.submitter=?)
+                        ORDER BY c.created,c.id""", family)]
             return detail
 
     def report(self, case_id, rev):

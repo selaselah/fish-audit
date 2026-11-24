@@ -96,6 +96,9 @@ details > summary { cursor: pointer; color: var(--green); padding: 7px 0; }
 .evidence-row.located { background: #fff8e7; }
 .page-view > div:first-child { position: sticky; top: 0; max-height: 76vh; overflow: auto; }
 .check-label { display: flex; align-items: center; gap: 8px; margin: 0; }
+#retain-files { min-width: 0; border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; }
+#retain-files .check-label { padding: 5px 0; overflow-wrap: anywhere; }
+#supplement-family .source-jump { overflow-wrap: anywhere; }
 blockquote { margin: 8px 0; background: #f4f7f6; border-left: 2px solid #adbfba; padding: 7px 12px; white-space: pre-wrap; }
 dialog { width: min(570px, 94vw); max-height: 91vh; border: 1px solid var(--line); border-radius: 9px; padding: clamp(17px, 2.5vw, 28px); color: var(--ink); box-shadow: 0 15px 70px #15312c33; }
 dialog.wide-dialog { width: min(1140px,95vw); }

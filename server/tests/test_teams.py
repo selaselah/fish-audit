@@ -98,6 +98,39 @@ class EnterpriseFlow(unittest.TestCase):
         self.assertEqual(other.get("/api/w/"+b+"/evidence?q=DEMO").json["hits"], [])
         self.assertEqual(self.store.summary(),[])
 
+    def test_returned_tasks_respect_employee_ownership_and_workspace(self):
+        admin,a,ah = self.register("return-admin")
+        other,b,bh = self.register("other-return-admin")
+        def employee(login):
+            token = admin.post("/api/workspaces/"+a+"/invites",headers=ah,json={"role":"employee"}).json["token"]
+            return self.register(login,invite=token)
+        first,_,fh = employee("return-owner")
+        peer,_,ph = employee("return-peer")
+        parent = self.submit(first,a,fh)
+        self.worker.run(self.store.claim())
+        base = "/api/w/"+a+"/cases/"+parent
+        admin.post(base+"/signoff",headers=ah,json={"rev":1,"decision":"return","note":"演练补充原件"})
+        body = {"title":"沿用原件","rev":"1","retain":"d01","note":"重新提交原页供复核"}
+        def send(client, headers, url):
+            return client.post(url+"/supplements",headers=headers,content_type="multipart/form-data",data=body)
+        self.assertEqual(send(peer,ph,base).status_code,404)
+        self.assertEqual(send(other,bh,"/api/w/"+b+"/cases/"+parent).status_code,404)
+        self.assertEqual(send(first,{},base).status_code,403)
+        own = send(first,fh,base)
+        self.assertEqual(own.status_code,202,own.json)
+        reviewer = send(admin,ah,base)
+        self.assertEqual(reviewer.status_code,202,reviewer.json)
+        detail = first.get(base).json
+        self.assertEqual([r["id"] for r in detail["supplements"]],[own.json["id"]])
+        self.assertEqual(len(admin.get(base).json["supplements"]),2)
+        own_base = "/api/w/"+a+"/cases/"+own.json["id"]
+        self.assertEqual(first.get(own_base).json["supplement_of"]["id"],parent)
+        self.assertEqual(first.get(own_base+"/reports/1").status_code,403)
+        self.assertEqual(peer.get(own_base).status_code,404)
+        self.store.limits["storage_mib"] = 0
+        self.assertEqual(send(first,fh,base).status_code,429)
+        self.assertEqual(len(admin.get(base).json["supplements"]),2)
+
     def test_atomic_admission_and_accounted_requests(self):
         from concurrent.futures import ThreadPoolExecutor
         from capacity import job_scope, request_attempt, usage

@@ -239,6 +239,8 @@ function calculationPanel(calculation) {
 function finding(item) {
   const node = box('finding', box('flow', tag(item.status), el('h3', item.title), el('span', item.rule, 'mono')),
     el('p', item.detail), el('p', '执行依据 · ' + item.basis, 'muted'));
+  node.dataset.finding = item.id;
+  node.tabIndex = -1;
   if (item.scope.length) node.append(el('small', '检查范围 · ' + item.scope.map(id =>
     state.bundle.report.graph.audit_documents?.find(doc => doc.id === id)?.name ||
     state.detail.documents.find(doc => doc.id === id)?.name || id).join('、'), 'small'));
@@ -278,7 +280,10 @@ function reportPanel() {
   const working = box('panel', el('h3', '底稿留存'), el('p', 'R' + state.bundle.rev + ' · ' + time(state.bundle.created), 'muted'),
     link('下载底稿及证据包', base() + '/reports/' + state.bundle.rev + '/bundle', 'button'),
     fold('底稿 SHA-256', el('code', state.bundle.sha256)));
-  return box('grid', box('', conclusion, findings), box('', human, working));
+  const review = box('', conclusion);
+  if (report.supplement) review.append(returnComparison(report,state.bundle.rev));
+  review.append(findings);
+  return box('grid', review, box('', human, working));
 }
 function graphPanel() {
   const graph = state.bundle.report.graph;
@@ -390,6 +395,7 @@ function renderCase() {
     }));
   }
   const bundle = state.bundle;
+  renderSupplementFamily(data,bundle?.rev);
   $('#report-tools').hidden = !bundle;
   if (!bundle) {
     const content = [sourceList(), activityPanel()];
@@ -409,6 +415,7 @@ function renderCase() {
 }
 function clearCaseView() {
   state.detail = null; state.bundle = null;
+  $('#supplement-family').hidden = true; $('#supplement-family').replaceChildren();
   for (const id of ['case-panel','case-title','case-meta','case-status','progress-panel','page-content'])
     $('#'+id).replaceChildren();
   $('#report-tools').hidden = true;
@@ -456,7 +463,19 @@ async function refresh() {
         bundle = await api(Team.cases() + '/' + data.id + '/reports/' + rev);
       if (epoch !== state.epoch) return;
       state.detail = data; state.bundle = rev ? bundle : null;
+      const requestedFinding = route.params.get('finding');
+      let focusFinding;
+      if (requestedFinding && state.openedCitation!==location.hash && state.bundle?.report.findings.some(f=>f.id===requestedFinding)) {
+        state.openedCitation=location.hash; state.traceKey=data.id+'@'+rev; state.traceId=requestedFinding;
+        const traced = graphIndex(bundle.report.graph).nodes.has('finding/'+requestedFinding);
+        state.tab=traced?'graph':'report'; focusFinding=traced?'#trace-select':'[data-finding="'+requestedFinding+'"]';
+      }
       renderCase();
+      if (focusFinding) {
+        const target = $(focusFinding);
+        for (let p=target?.parentElement;p;p=p.parentElement) if (p.tagName==='DETAILS') p.open=true;
+        target?.focus();
+      }
       const target = route.params.get('fact');
       if (target && state.openedCitation !== location.hash && state.bundle) {
         const fact = state.bundle.report.graph.facts.find(f => f.id === target);
@@ -476,7 +495,7 @@ async function refresh() {
       clearCaseView(); Desk.reset(); state.cases=[];
       for (const id of ['case-panel','case-list','team-panel']) $('#'+id).replaceChildren();
       if (error.status === 401 || error.status === 403) {
-        Team.session=null;
+        Team.session=null; resetIntake();
         for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close();
       }
     }
@@ -555,7 +574,8 @@ $('#review-form').addEventListener('submit', async event => {
   }
   finally { button.disabled = false; }
 });
-$('#new-case').addEventListener('click', () => $('#upload-dialog').showModal());
+$('#new-case').addEventListener('click', () => openIntake());
+$('#supplement-fields').addEventListener('input',()=>{state.key=null;});
 $('#upload-files').addEventListener('change', () => {
   state.key = null; $('#upload-error').textContent = '';
   $('#chosen-files').replaceChildren(...[...$('#upload-files').files].map(file => el('li', file.name)));
@@ -579,14 +599,22 @@ $('#upload-form').addEventListener('submit', async event => {
   data.append('profile', $('#upload-profile').value);
   const button = $('#submit-files'); button.disabled = true; button.textContent = '正在提交…';
   try {
-    if (files.length > 12 || files.some(file => file.size > 16*1024**2) || files.reduce((sum,file) => sum + file.size, 0) > 48*1024**2)
+    const parent = state.intakeParent;
+    const retained = parent ? [...$('#retain-files').querySelectorAll('input:checked')] : [];
+    const bytes = retained.reduce((sum,input)=>sum+Number(input.dataset.bytes),0);
+    if (!(files.length+retained.length)) throw new Error('请选择沿用原件或添加资料。');
+    if (files.length+retained.length > 12 || files.some(file => file.size > 16*1024**2) || bytes+files.reduce((sum,file) => sum + file.size, 0) > 48*1024**2)
       throw new Error('所选资料超出文件数或大小限制。');
     for (const file of files) data.append('files', file);
+    if (parent) {
+      data.append('rev',String(parent.rev)); data.append('note',$('#supplement-note').value);
+      for (const input of retained) data.append('retain',input.value);
+    }
     state.key ||= crypto.randomUUID();
-    const {id} = await api(Team.cases(), {method:'POST', headers:{'Idempotency-Key':state.key}, body:data});
+    const url = Team.cases()+(parent?'/'+parent.id+'/supplements':'');
+    const {id} = await api(url, {method:'POST', headers:{'Idempotency-Key':state.key}, body:data});
     if (workspace !== Team.current?.id) return;
-    $('#upload-dialog').close(); $('#upload-form').reset(); $('#chosen-files').replaceChildren();
-    profileChanged(); $('#upload-error').textContent = ''; location.hash = Team.hash('case/' + id);
+    $('#upload-dialog').close(); resetIntake(); location.hash = Team.hash('case/' + id);
   } catch (error) { $('#upload-error').textContent = error.message; }
   finally { button.disabled = false; button.textContent = '提交并开始审计'; }
 });
@@ -597,7 +625,7 @@ window.addEventListener('hashchange', () => {
   state.openedCitation=null; state.traceId=null; state.traceKey=null; state.bundle = null; state.detail = null; state.pinned = 0; state.tab = 'report';
   if ((Team.current?.id || null) !== Team.route().id) {
     Desk.reset(); state.key=null; state.cases=[]; $('#case-list').replaceChildren(); $('#team-panel').replaceChildren();
-    $('#upload-form').reset(); $('#chosen-files').replaceChildren(); profileChanged();
+    resetIntake();
   }
   for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close();
   clearCaseView();

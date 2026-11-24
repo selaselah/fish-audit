@@ -292,6 +292,98 @@ class LocalFlowTests(unittest.TestCase):
         original.write_bytes(b"wrong source")
         self.assertEqual(self.client.get(base + "/reports/2/bundle").status_code, 409)
 
+    def test_returned_originals_are_pinned_compared_and_replayable(self):
+        from copy import deepcopy
+        import zipfile
+        from jobs import CODE_DIGESTS, METHODS
+        from verify import sha, verify_returned_source
+
+        data = MultiDict([("title","原退回样本"),("files",(io.BytesIO(self.photo),"替换旧页.jpg")),
+                          ("files",(io.BytesIO(self.photo),"沿用旧页.jpg"))])
+        parent = self.client.post("/api/cases",data=data).json["id"]
+        old_source = b"# archived fixture storage implementation"
+        with patch.dict(METHODS, {"storage.py":old_source}), patch.dict(CODE_DIGESTS, {"storage.py":sha(old_source)}):
+            self.worker.run(self.store.claim())
+        base = "/api/cases/"+parent
+        source = self.client.get(base+"/reports/1").json
+        payload = {"rev":1,"reviewer":"演练","decision":"return","note":"请替换第一份资料并保留第二份。"}
+        self.assertEqual(self.client.post(base+"/signoff",json=payload).status_code,200)
+
+        def submit(note="补交一页清晰资料", revision=1, retained=("d02",), add=True):
+            body = MultiDict([("title","独立补件"),("rev",str(revision)),("note",note)])
+            for doc in retained:
+                body.add("retain",doc)
+            if add:
+                body.add("files",(io.BytesIO(self.photo),"补充新页.jpg"))
+            return self.client.post(base+"/supplements",content_type="multipart/form-data",data=body,
+                                    headers={"Idempotency-Key":"returned-case-1234"})
+
+        self.assertEqual(submit(revision=2).status_code,409)
+        self.assertEqual(submit(retained=("d09",)).status_code,400)
+        self.assertEqual(submit(retained=("d02","d02")).status_code,400)
+        self.assertEqual(submit(retained=(),add=False).status_code,400)
+        response = submit()
+        self.assertEqual(response.status_code,202,response.json)
+        cid = response.json["id"]
+        self.assertNotEqual(cid,parent)
+        self.assertEqual(submit().json["id"],cid)
+        self.assertEqual(submit(note="不同的提交").status_code,409)
+        self.worker.run(self.store.claim())
+        child_base = "/api/cases/"+cid
+        result = self.client.get(child_base+"/reports/1").json["report"]
+        snapshot = result["supplement"]
+        self.assertEqual((snapshot["parent"],snapshot["rev"],snapshot["report_hash"]),(parent,1,source["sha256"]))
+        self.assertEqual(snapshot["retained"],[{"parent_doc":"d02","doc":"d01"}])
+        self.assertEqual(snapshot["reason"],payload["note"])
+        self.assertTrue(snapshot["comparisons"])
+        self.assertEqual([d["name"] for d in self.store.documents(cid)],["沿用旧页.jpg","补充新页.jpg"])
+        self.assertEqual(self.client.get(base+"/reports/1").json,source)
+        self.assertEqual(self.store.detail(parent)["status"],"closed")
+        self.assertEqual([c["id"] for c in self.store.detail(parent)["supplements"]],[cid])
+        self.assertEqual(Store(self.root).detail(cid)["supplement_of"]["retained"],snapshot["retained"])
+        with self.client.get(child_base+"/reports/1/bundle") as download:
+            stream = io.BytesIO(download.data)
+        self.assertEqual(verify(stream,True)[:2],(cid,1))
+        with zipfile.ZipFile(stream) as archive:
+            self.assertIn("supplement/originals/d01.jpg",archive.namelist())
+            self.assertNotIn("supplement/originals/d02.jpg",archive.namelist())
+            self.assertIn("supplement/pages/d02/1.jpg",archive.namelist())
+            self.assertEqual(archive.read("supplement/methods/storage.py"),old_source)
+            hashes = {i["path"]:i["sha256"] for i in json.loads(archive.read("manifest.json"))["files"]}
+            journal = json.loads(archive.read("journal.json"))
+            for change in ({"reason":"替换退回决定"},{"retained":[]},{"comparisons":[]}):
+                altered = deepcopy(result)
+                altered["supplement"].update(change)
+                with self.subTest(change=change), self.assertRaises(ValueError):
+                    verify_returned_source(archive,hashes,altered,journal)
+            altered_journal = deepcopy(journal)
+            altered_journal["supplement_of"]["parent_hash"] = "changed"
+            with self.assertRaisesRegex(ValueError,"受理时"):
+                verify_returned_source(archive,hashes,result,altered_journal)
+        with self.store.connect(True) as db:
+            db.execute("UPDATE signoffs SET note=? WHERE case_id=? AND rev=1",("签收后被改动的意见",parent))
+        with self.assertRaisesRegex(CaseError,"与补件受理时的摘要不符"):
+            self.store.supplement_record(result)
+        with self.store.connect(True) as db:
+            db.execute("UPDATE signoffs SET note=? WHERE case_id=? AND rev=1",(payload["note"],parent))
+        old = self.store.files / parent / "d02" / "original.jpg"
+        old.write_bytes(b"changed archived original")
+        self.assertEqual(submit().status_code,409)
+        self.assertEqual(len(list(self.store.files.iterdir())),2)
+
+    def test_approved_or_open_case_cannot_be_used_as_a_return(self):
+        cid = self.submit().json["id"]
+        base = "/api/cases/"+cid
+        data = {"title":"补件","rev":"1","retain":"d01"}
+        def attempt():
+            return self.client.post(base+"/supplements",content_type="multipart/form-data",data=data)
+        self.assertEqual(attempt().status_code,409)
+        self.worker.run(self.store.claim())
+        self.assertEqual(attempt().status_code,409)
+        self.client.post(base+"/signoff",json={"rev":1,"reviewer":"演练","decision":"approve","note":"演练已验收"})
+        self.assertEqual(attempt().status_code,409)
+        self.assertEqual(self.store.detail(cid)["supplements"],[])
+
     def test_file_validation_and_scope(self):
         self.assertEqual(self.client.post("/api/cases", json={}).status_code, 415)
         self.assertEqual(self.client.post("/api/cases", headers={"Origin":"http://example.test"}).status_code, 403)
