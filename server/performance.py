@@ -5,11 +5,14 @@ import unicodedata
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal
+from reinspection import LABELS as REINSPECTION_FIELDS, assess as assess_reinspection, verify_number_links
 
 
 PROFILE = "cn-contract-performance/v1"
 FIRST_FORMAT = "contract-performance-v1"
-FORMAT = "contract-performance-v2"
+BOARD_FORMAT = "contract-performance-v2"
+FORMAT = "contract-performance-v3"
+SUPPORTED = (FIRST_FORMAT,BOARD_FORMAT,FORMAT)
 RULES = {
     "H01": ("合同签署与约定生效条件", "核对合同双方、签订日期、生效条款和签署栏的人工核图记录，保留附加条件及状态疑点。"),
     "H02": ("交付范围与验收质量", "按合同编号、标的和采购方关联验收资料，核对日期、验收范围、结论、签认和遗留事项。"),
@@ -18,6 +21,7 @@ RULES = {
     "H05": ("实付日期与合同前提", "按同一合同、回单明列期次及付款日期，核对付款时点已有的履约证据。"),
 }
 LABELS = {
+    **REINSPECTION_FIELDS,
     "effect_clause": ("生效条款", "合同生效条件", "生效条件", "合同生效条款"),
     "buyer_signature": ("甲方签署", "甲方签章", "采购方签署", "买方签章"),
     "seller_signature": ("乙方签署", "乙方签章", "供应方签署", "卖方签章"),
@@ -28,8 +32,8 @@ LABELS = {
     "measured_result": ("实测结果", "检测结果", "实测数据"),
     "quantity_agreed": ("约定交付数量", "合同交付数量"),
     "quantity_accepted": ("实际验收数量", "验收数量"),
-    "acceptance_scope": ("验收范围", "验收批次", "验收阶段"),
-    "acceptance_signer": ("验收签认", "验收负责人", "验收人", "验收签字"),
+    "acceptance_scope": ("验收范围", "验收批次", "验收阶段", "复验范围"),
+    "acceptance_signer": ("验收签认", "验收负责人", "验收人", "验收签字", "复验签认"),
     "acceptance_exception": ("遗留事项", "整改事项", "保留事项", "整改结论"),
     "payment_stage": ("付款期次", "首付款", "预付款", "进度款", "验收款", "质保金", "尾款"),
     "warranty_release": ("质保期满确认", "质保期满记录"),
@@ -133,6 +137,9 @@ class Material:
         values = {norm(f["value"]) for f in rows}
         return next(iter(values)) if len(values) == 1 and not self.incomplete(field) else ""
 
+    def date(self, field):
+        return day(self.body(field))
+
     def body(self, field):
         rows = self.fields[field]
         values = {row_body(f) for f in rows}
@@ -189,7 +196,7 @@ def effect(contract, approvals=(), version=FORMAT):
               "buyer_signature","seller_signature","adjustment")
     refs = contract.evidence(*fields)
     terms = contract.body("effect_clause")
-    board = BOARD_CONDITION.fullmatch(terms) if version == FORMAT else None
+    board = BOARD_CONDITION.fullmatch(terms) if version != FIRST_FORMAT else None
     state = contract.body("contract_state")
     missing = []
     if not contract.single("contract_id"):
@@ -425,8 +432,13 @@ def compute(graph, version=FORMAT):
                 for rule in ("H01","H02","H03","H04")]
     contract = contracts[0]
     receipts, releases = materials("acceptance"), materials("warranty")
-    approvals = materials("contract_approval") if version==FORMAT else []
-    signed, accepted = effect(contract,approvals,version), acceptance(contract, receipts)
+    approvals = materials("contract_approval") if version != FIRST_FORMAT else []
+    signed = effect(contract,approvals,version)
+    if version == FORMAT:
+        accepted, accepted_on = assess_reinspection(contract,receipts,materials("remediation"),materials("reinspection"),acceptance)
+    else:
+        accepted = acceptance(contract, receipts)
+        accepted_on = day(receipts[0].single("accepted_on")) if accepted["status"]=="ok" else None
     plan, rows = schedule(contract)
     classified = {u for group in kinds.values() for u in group}
     for doc in graph.get("audit_documents",graph["documents"]):
@@ -443,15 +455,14 @@ def compute(graph, version=FORMAT):
     if not rows:
         output.append(result("H04","missing","缺少可逐期核对的付款约定。",plan["evidence"],plan["scope"]))
         return output
-    accepted_on = day(receipts[0].single("accepted_on")) if accepted["status"] == "ok" else None
     expiry, warranty_refs = warranty(contract, releases, accepted_on)
     stages = []
     for idx, row in enumerate(rows, 1):
         kind = row["kind"]
-        fallback_label = f"条款 {idx}" if version == FORMAT else f"第{idx}期"
+        fallback_label = f"第{idx}期" if version == FIRST_FORMAT else f"条款 {idx}"
         stage = {"name":row["label"] or fallback_label,"share":row["share"],"clause":row["text"],"clause_ref":row["ref"]}
         refs = [row["ref"], *signed["evidence"]]
-        scope = signed["scope"].copy() if version == FORMAT else [contract.unit]
+        scope = [contract.unit] if version == FIRST_FORMAT else signed["scope"].copy()
         if kind in ("acceptance","warranty"):
             refs += accepted["evidence"]
             scope += accepted["scope"]
@@ -500,6 +511,9 @@ def compute(graph, version=FORMAT):
             dates.append(expiry)
         if any(point and point > paid for point in dates):
             status, detail = "risk","回单付款日早于本期所据的履约日期，请复核提前支付的授权和依据。"
+        elif (accepted.get("reinspection",{}).get("state")=="closed" and row["kind"] in ("acceptance","warranty")
+              and paid==accepted_on):
+            status, detail = "missing","付款与缺陷关闭在同一天，需取得时分记录核对先后顺序。"
         elif check["status"] != "ok" or not all(dates):
             status, detail = "missing","付款对应本期，现有材料尚不足以证实付款日已满足全部前提。"
         else:
@@ -511,13 +525,15 @@ def compute(graph, version=FORMAT):
 def verify_findings(report):
     policy = report["policy"]
     marker = policy.get("performance_checks")
-    if "performance.py" in policy.get("code_sha256", {}) and marker not in (FIRST_FORMAT,FORMAT):
+    if "performance.py" in policy.get("code_sha256", {}) and marker not in SUPPORTED:
         raise ValueError("底稿缺少对应的合同履约程序版本")
     if marker is None:
         return
     profile = policy["profile"]
-    if marker not in (FIRST_FORMAT,FORMAT) or report["graph"].get("profile") != profile:
+    if marker not in SUPPORTED or report["graph"].get("profile") != profile:
         raise ValueError("合同履约范围或程序版本不符")
+    if marker==FORMAT:
+        verify_number_links(report["graph"])
     expected = [] if profile == "cn-travel-reimbursement/v1" else compute(report["graph"],marker)
     found = [f for f in report["findings"] if f["rule"] in RULES]
     if len(found) != len(expected):
@@ -526,6 +542,7 @@ def verify_findings(report):
         rule = saved["rule"]
         position = report["findings"].index(saved) + 1
         if (any(saved.get(key) != val for key, val in entry.items()) or saved.get("stage") != entry.get("stage")
+                or saved.get("reinspection") != entry.get("reinspection")
                 or (saved.get("id"),saved.get("version"),saved.get("title"),saved.get("basis")) !=
                 (f"{rule}-{position}",policy["version"],*RULES[rule])):
             raise ValueError("合同履约结论、期次或引文与证据图谱不符")

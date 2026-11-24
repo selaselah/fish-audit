@@ -244,6 +244,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
     version = report["policy"].get("payment_references")
     selected_notes = set(note_refs(graph.get("transfer_references",{}).get("facts",[]))) if version in REFERENCE_FORMATS-{FIRST_REFERENCE_FORMAT} else set()
     texts = {}
+    reinspection_refs = {ref for item in report["findings"] if item.get("reinspection") for ref in item["evidence"]}
     for fact in graph["facts"]:
         require(fact["source_sha256"] == nodes[fact["doc"]]["sha256"] and
                 fact["page_sha256"] == nodes[f"{fact['doc']}/p{fact['page']}"]["sha256"], "取值与来源不符")
@@ -271,7 +272,8 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
             verify_transcription(fact,page_calls,nodes,"流水展示说明",note_policy=report["policy"])
         elif invoice_number or (version in REFERENCE_FORMATS and fact["field"]=="transfer_ref"):
             verify_transcription(fact,page_calls,nodes,"票号" if invoice_number else "流水号")
-        elif report["policy"].get("performance_checks") and fact["field"] in PERFORMANCE_FIELDS:
+        elif (report["policy"].get("performance_checks") and fact["field"] in PERFORMANCE_FIELDS or
+              fact["id"] in reinspection_refs and fact.get("origin")!="verified_printed_heading"):
             verify_transcription(fact,page_calls,nodes,"履约条款与签认")
             decision = fact.get("attestation") or {}
             require((fact["status"]=="confirmed") == (decision.get("decision")=="confirm"),"履约字段与核图决定不符")

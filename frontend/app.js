@@ -129,7 +129,7 @@ async function loadReviewImage(image, source) {
     URL.revokeObjectURL(objectUrl);
   }
 }
-function openPage(docId, pageNumber, highlight) {
+function openPage(docId, pageNumber, highlight, lineHint) {
   const item = state.detail.documents.find(doc => doc.id === docId);
   if (!item) return;
   const pageUrl = workpaperSource(docId,'pages/'+pageNumber);
@@ -240,10 +240,18 @@ function openPage(docId, pageNumber, highlight) {
   const gaps = (state.bundle?.report.graph.gaps || []).filter(g => g.doc === docId && g.page === pageNumber && g.quote);
   for (const gap of gaps) {
     const section = box('evidence-row',el('h4','待核的原文字层 · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
+    section.dataset.gapLine = String(gap.line);
+    if (gap.line===lineHint) {
+      section.classList.add('located');
+      focusRow=section;
+    }
     const field = gap.field || gap.title_hint;
     if (editable && field) {
-      const candidates = pageFacts.filter(f => f.field===field && !['anchored','confirmed'].includes(f.status));
-      if (candidates.length <= 1) section.append(action(candidates.length ? '据此行更正候选' : '据此行补录',
+      const unresolved=pageFacts.filter(f=>['visual','unsupported'].includes(f.status));
+      const matching=unresolved.filter(f=>f.source_line?.number===gap.line && f.source_line.text===gap.quote);
+      const candidates=matching.length?matching:unresolved.filter(f=>f.field===field && !f.source_line);
+      const label=candidates.length && candidates[0].field!==field?'据原文更正字段类别':'据此行更正候选';
+      if (candidates.length <= 1) section.append(action(candidates.length ? label : '据此行补录',
         ()=>openAmend(docId,pageNumber,candidates[0],{field,quote:gap.quote}),'ref'));
     }
     right.append(section);
@@ -268,7 +276,8 @@ function openPage(docId, pageNumber, highlight) {
   $('#page-content').replaceChildren(box('page-view', left, right));
   $('#page-dialog').showModal();
   if (focusRow) {
-    locate(pageFacts.find(fact => fact.id === highlight));
+    const fact=pageFacts.find(f=>f.id===highlight);
+    if (fact) locate(fact);
     focusRow.scrollIntoView({block: 'nearest'});
   }
 }
@@ -399,6 +408,7 @@ function finding(item) {
   node.dataset.finding = item.id;
   node.tabIndex = -1;
   if (item.stage) node.insertBefore(box('clause-source',el('q',item.stage.clause), citation(item.stage.clause_ref)),node.children[1]);
+  if (item.reinspection) node.append(reinspectionTrail(item.reinspection,state.bundle.report.graph));
   if (item.rule.startsWith('H')) {
     const comparison = performanceComparison(item,state.bundle.report.graph);
     if (comparison) node.append(comparison);
@@ -888,7 +898,7 @@ $('#upload-title').addEventListener('input', () => { state.key = null; });
 function profileChanged() {
   state.key = null;
   if ($('#upload-profile').value === performanceProfile) {
-    $('#profile-note').textContent = '上传一份合同，可附合同审批单、验收单、质保期满确认单和列明期次的回单。逐项查看生效约定、验收范围、整改事项及每期付款前提。';
+    $('#profile-note').textContent = '上传一份合同，可附审批单、验收单、质保期满确认单和列明期次的回单。发生整改时，一并提交原验收、整改记录和最终复验报告。';
     return;
   }
   if ($('#upload-profile').value === bankProfile) {

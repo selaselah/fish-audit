@@ -4,6 +4,8 @@
 
 创建任务时可提交 `profile=cn-contract-performance/v1` 审查合同履约与分期。当前规则在采购及银行回单范围也执行 H01–H05。报告的 `findings` 保留各程序的 `status`、`evidence` 和 `scope`。已识别的 H04/H05 期次还包含 `stage.name`（期名）、`share`（百分数文本）、`clause`（本期条款）和 `clause_ref`（完整原文的证据编号）。缺少证明的项目仍进入报告。
 
+涉及整改的 H02 可包含 `reinspection`。其中 `state` 为 `open` 或 `closed`，`steps` 按原验收、整改、复验三种角色列出实际收到的来源。每步保存 `role`（`original`、`repair`、`final`）、`unit`（文件或分册页）、`date`（ISO 日期或 null）及 `evidence`（原页证据编号）。当次是否可以据此认定验收或付款条件满足，分别由 H02、H04 和 H05 的状态说明。
+
 | 请求 | 作用 |
 | --- | --- |
 | `GET /api/health` | 服务状态，`audit` 中提供审计服务商、模型、业务范围及页数限制。兼容字段 `mode` 指旧版文本审核模式 |

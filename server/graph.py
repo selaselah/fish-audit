@@ -10,10 +10,12 @@ from invoice_proof import invoice_number_edges
 from model import FIELDS
 from performance import LABELS as PERFORMANCE_LABELS, STAGE_PREFIX, complete_line
 from payment_reference import attach as attach_payment_references, partial_line, printed_partial_value
+from reinspection import NUMBER_TYPES as QUALITY_NUMBERS
 
 
 KINDS = {"invoice": "发票", "contract": "合同", "acceptance": "验收单"}
-TITLE_FIELDS = {**KINDS, "claim": "报销", "bank_receipt":"回单", "warranty":"质保期满确认","contract_approval":"审批"}
+TITLE_FIELDS = {**KINDS, "claim": "报销", "bank_receipt":"回单", "warranty":"质保期满确认","contract_approval":"审批",
+                "remediation":"整改","reinspection":"复验"}
 PRINTED_TITLES = {label: field for field, labels in {
     "invoice": ("发票", "采购发票", "住宿服务发票", "增值税专用发票", "增值税普通发票", "增值税电子普通发票",
                 "电子发票(普通发票)", "电子发票(增值税专用发票)"),
@@ -21,6 +23,8 @@ PRINTED_TITLES = {label: field for field, labels in {
     "acceptance": ("验收单", "到货验收单", "验收报告", "采购验收单", "设备验收单"),
     "warranty": ("质保期满确认单", "质保期满确认书"),
     "contract_approval": ("合同审批单","合同审批记录","董事会合同审批记录"),
+    "remediation": ("整改记录单","缺陷整改记录","整改完成记录"),
+    "reinspection": ("复验报告","整改复验单","最终复验报告","整改复验报告"),
     "bank_receipt": ("银行付款回单", "银行转账回单", "电子银行回单", "银行电子回单", "转账回单"),
     "claim": ("报销单", "差旅报销单", "差旅费报销单", "费用报销单"),
 }.items() for label in labels}
@@ -39,8 +43,8 @@ LABELS = {
     "currency": ("币种", "货币种类", "结算货币"),
     "unit": ("金额单位", "计价单位", "金额单位为"),
     "issued_on": ("开票日期", "开具日期"), "signed_on": ("签约日期", "签订日期", "签署日期"),
-    "accepted_on": ("验收日期", "验收时间"),
-    "acceptance_result": ("验收结果", "验收结论"),
+    "accepted_on": ("验收日期", "验收时间","复验日期"),
+    "acceptance_result": ("验收结果", "验收结论","复验结果","复验结论"),
     "subject": ("采购标的", "标的名称", "项目名称", "货物名称", "商品名称", "品名"),
     "payment_term": ("结算条款", "付款条款", "付款方式", "结算方式", "支付条件", "付款条件", "结算条件"),
     "adjustment": ("变更", "红冲", "冲销", "补充协议", "红字"),
@@ -245,6 +249,7 @@ def build_graph(docs, pages, attestations, amendments=()):
                     by_kind[field].append(doc)
             kind = {"buyer": "party", "seller": "party", "payer":"party", "payee":"party",
                     "payee_account":"bank_account", "contract_account":"bank_account", "contract_id": "contract_number",
+                    **QUALITY_NUMBERS,
                     "invoice_id": "invoice_number", "claim_ref": "invoice_number"}.get(field, field)
             target = entity_id(kind, value)
             nodes[target] = {"id": target, "type": kind, "label": value}

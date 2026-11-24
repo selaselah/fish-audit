@@ -56,10 +56,9 @@ def confirm_printed_records(cid, folder, records):
     detail = get(path)
     assert {d["name"]:d["sha256"] for d in detail["documents"]} == {
         title+".pdf":hashlib.sha256((folder/(title+".pdf")).read_bytes()).hexdigest() for title in records}
-    expected = {"甲方签章":"buyer_signature","乙方签章":"seller_signature","验收签认":"acceptance_signer","审批签认":"approval_signer"}
+    expected = {"甲方签章":"buyer_signature","乙方签章":"seller_signature","验收签认":"acceptance_signer","复验签认":"acceptance_signer",
+                "审批签认":"approval_signer","整改签认":"repair_signer"}
     report = wait(cid)
-    if get(path)["rev"] > 1:
-        return report
     selected = []
     for title, rows in records.items():
         for label,value in rows:
@@ -69,8 +68,11 @@ def confirm_printed_records(cid, folder, records):
                        and normalize(f["quote"])==normalize(label+"："+value) and f.get("source_line")
                        and normalize(f["source_line"]["text"])==normalize(f["quote"])]
             assert len(matches)==1, (title,label,"水印原文与提取结果尚待人工核图")
-            selected.append(matches[0]["id"])
-    post(path+"/attest",{"rev":1,"reviewer":"水印演练校验","decision":"confirm","facts":selected,
+            if matches[0]["status"]!="confirmed":
+                selected.append(matches[0]["id"])
+    if not selected:
+        return report
+    post(path+"/attest",{"rev":get(path)["rev"],"reviewer":"水印演练校验","decision":"confirm","facts":selected,
                         "note":"按生成件摘要与原页逐字核对本次合成签章、验收签认栏；此记录仅用于虚构资料的功能验收。"})
     return wait(cid)
 

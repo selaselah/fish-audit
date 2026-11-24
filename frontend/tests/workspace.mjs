@@ -41,10 +41,11 @@ const partialTransfer = caseArgument('--partial-transfer-case');
 const visibilityCase = caseArgument('--visibility-case');
 const accountReview = caseArgument('--account-review-case');
 const performanceCase = caseArgument('--performance-case');
+const reinspectionGap = caseArgument('--reinspection-gap-case');
 const brokenPayment = caseArgument('--payment-source-case');
 const waitingCase = caseArgument('--waiting-case');
 const seeded = [sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
-                invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,brokenPayment,waitingCase].some(Boolean);
+                invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
 const root = brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
   recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
@@ -109,7 +110,20 @@ try {
   const click = (label, container='document') => evaluate('[...'+container+'.querySelectorAll("button,a")].find(b=>b.textContent==='+JSON.stringify(label)+' && b.getClientRects().length).click()');
   await call('Runtime.enable');
   await call('Page.navigate',{url:root});
-  if (performanceCase) {
+  if (reinspectionGap) {
+    const api=root+'/api/cases/'+reinspectionGap;
+    const task=await (await fetch(api)).json();
+    assert.ok(task.title.startsWith('合成演练 · ') && task.profile==='cn-contract-performance/v1');
+    const {report}=await (await fetch(api+'/reports/1')).json();
+    const gap=report.graph.gaps.find(g=>g.quality==='uncovered_title' && g.title_hint==='reinspection');
+    assert.ok(gap);
+    await call('Page.navigate',{url:root+'/workpaper/'+reinspectionGap+'?rev=1'});
+    await wait('document.querySelector(".reinspection-trail")?.textContent.includes('+JSON.stringify(gap.quote)+')','unassigned reinspection page');
+    await click('核对原页第 '+gap.line+' 行','document.querySelector(".reinspection-trail")');
+    await wait('document.querySelector("#page-dialog").open && document.querySelector(".located[data-gap-line] blockquote")?.textContent==='+JSON.stringify(gap.quote),'missing heading line');
+    assert.equal(await evaluate('document.querySelector(".located[data-gap-line]").dataset.gapLine'),String(gap.line));
+    console.log('PASS · Unverified reinspection heading links to the original native line');
+  } else if (performanceCase) {
     const api = root+'/api/cases/'+performanceCase;
     const task = await (await fetch(api)).json();
     assert.ok(task.title.startsWith('合成演练 · ') && task.profile==='cn-contract-performance/v1');
@@ -122,6 +136,22 @@ try {
     assert.ok(await evaluate('document.querySelector("#profile-note").textContent.includes("质保期满确认单")'));
     await call('Page.navigate',{url:root+'/workpaper/'+performanceCase+'?rev='+task.rev});
     await wait('!!document.querySelector(".performance-panel .clause-source")','contract performance report');
+    const chain=report.findings.find(f=>f.rule==='H02')?.reinspection;
+    if (chain) {
+      assert.equal(await evaluate('document.querySelector(".reinspection-trail").dataset.disposition'),chain.state);
+      for (const role of ['original','repair','final']) {
+        const step=chain.steps.find(s=>s.role===role);
+        assert.ok(step);
+        const row='document.querySelector('+JSON.stringify('[data-reinspection-role="'+role+'"]')+')';
+        assert.ok(await evaluate(row+'.textContent.includes('+JSON.stringify(step.date)+')'));
+        const factId=await evaluate(row+'.querySelector("[data-cited-fact]").dataset.citedFact');
+        assert.ok(step.evidence.includes(factId));
+        const fact=report.graph.facts.find(f=>f.id===factId);
+        await evaluate(row+'.querySelector("[data-cited-fact] button").click()');
+        await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.textContent.includes('+JSON.stringify(fact.quote)+')','reinspection source '+role);
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
+    }
     for (const phase of phases) {
       const selector='[data-finding="'+phase.id+'"]';
       const node='document.querySelector('+JSON.stringify(selector)+')';

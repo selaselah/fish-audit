@@ -17,6 +17,7 @@ from payment_checks import FORMAT as PAYMENT_CHECKS
 from payment_reference import FORMAT as PAYMENT_REFERENCE_FORMAT
 from performance import FORMAT as PERFORMANCE_FORMAT, RULES as PERFORMANCE_RULES, compute as check_performance
 from policy import ACCOUNTING, MAPPING, SOURCES
+from reinspection import closed_steps
 from transfers import RULES as TRANSFER_RULES, check_transfers
 
 
@@ -69,6 +70,8 @@ def parsed_date(fact):
 
 def execute(graph, profile=PROFILE, payment_lookup=None):
     findings = []
+    performance = [] if profile==TRAVEL else check_performance(graph)
+    chain = closed_steps(performance)
     evidence = CalculationEvidence(graph)
     docs = audit_documents(graph)
     kinds = graph["documents_by_kind"]
@@ -84,7 +87,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
                          "detail": observation, "evidence": list(dict.fromkeys(refs)), "scope": scope or []})
         if invoice_lookup is not None:
             findings[-1]["invoice_lookup"] = invoice_lookup
-        calculations = evidence.formulas(findings[-1])
+        calculations = evidence.formulas(findings[-1],chain.get("final"))
         if calculations:
             findings[-1]["calculations"] = calculations
         return status
@@ -112,10 +115,11 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
            f"共 {len(facts)} 条提取记录，{len(unverified)} 条待核或有异议，{len(set(gaps))} 页存在辨读或覆盖缺口。",
            gaps + ids(unverified), doc_ids)
     def with_performance():
-        for item in check_performance(graph):
+        for item in performance:
             record(item["rule"],item["status"],item["detail"],item["evidence"],item["scope"])
-            if "stage" in item:
-                findings[-1]["stage"] = item["stage"]
+            for key in ("stage","reinspection"):
+                if key in item:
+                    findings[-1][key] = item[key]
         return findings
 
     if profile == PERFORMANCE:
@@ -157,12 +161,21 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
     if profile == TRAVEL:
         check_travel(graph, linked, identities, values, record)
         return findings
-    titles = [fact for fact in facts.values() if fact["field"] in KINDS and fact["status"] in ("anchored", "confirmed")]
+    support = set()
+    if chain:
+        support.update((chain["original"],chain["repair"]))
+        kinds = {**kinds,"acceptance":[chain["final"]]}
+    optional = set(kinds.get("contract_approval",[])+kinds.get("warranty",[]))
+    for item in performance:
+        if item["status"]=="ok":
+            support.update(optional.intersection(item["scope"]))
+    titles = [fact for fact in facts.values() if fact["field"] in {*KINDS,"reinspection","remediation"} and fact["status"] in ("anchored", "confirmed")]
     assignment = [doc for kind in KINDS for doc in kinds.get(kind, [])]
     complete = (all(len(kinds.get(kind, [])) == 1 for kind in KINDS) and
-                len(assignment) == len(set(assignment)) and set(assignment) == set(doc_ids) and not (kinds.get("claim") or kinds.get("bank_receipt")))
+                len(assignment) == len(set(assignment)) and set(assignment) == set(doc_ids)-support and not (kinds.get("claim") or kinds.get("bank_receipt")))
     count_text = "、".join(f"{label} {len(kinds.get(kind, []))} 份" for kind, label in KINDS.items())
     record("P01", "ok" if complete else "missing", f"按已核标题识别到{count_text}。"
+           + ("结算所据验收单取自已核的最终复验。" if chain else "")
            + ("" if complete else "请核对缺件、多单或未识别资料。"), ids(titles), doc_ids)
 
     for doc in kinds.get("invoice", []):
@@ -184,7 +197,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
     if not complete:
         multi = False
         if len(kinds.get("contract", [])) == 1 and len(kinds.get("acceptance", [])) == 1 and len(kinds.get("invoice", [])) > 1:
-            multi = check_multi_invoice(graph, kinds, linked, identities, amounts_valid, values, record)
+            multi = check_multi_invoice(graph, kinds, linked, identities, amounts_valid, values, record,support)
         for rule in ("P02", "P03", "C01", "M02", "D01", "A01", "S01"):
             if rule == "M02" and multi:
                 continue
@@ -245,12 +258,12 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
     return with_performance()
 
 
-def check_multi_invoice(graph, kinds, linked, identities, amounts_valid, values, record):
+def check_multi_invoice(graph, kinds, linked, identities, amounts_valid, values, record,support):
     contract = kinds["contract"][0]
     acceptance = kinds["acceptance"][0]
     invoices = kinds["invoice"]
     docs = [contract, acceptance, *invoices]
-    if len(set(docs)) != len(docs) or set(docs) != {doc["id"] for doc in audit_documents(graph)}:
+    if len(set(docs)) != len(docs) or set(docs) != {doc["id"] for doc in audit_documents(graph)}-support:
         return False
     pairs = [(doc, field) for field in ("contract_id", "buyer", "seller", "subject", "currency", "unit", "total") for doc in docs]
     facts = values("M02", pairs)

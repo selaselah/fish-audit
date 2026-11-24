@@ -4,6 +4,7 @@ import re
 import unicodedata
 from collections import defaultdict
 from decimal import Decimal
+from reinspection import closed_steps
 
 
 FORMAT = "cny-evidence-v2"
@@ -64,7 +65,7 @@ class CalculationEvidence:
                 "amount_fact": amount["id"], "raw": amount["value"], "currency_fact": currency["id"],
                 "unit_fact": unit["id"], "decimal": format(number, ".2f")}
 
-    def formulas(self, finding):
+    def formulas(self, finding, final_acceptance=None):
         rule, status = finding["rule"], finding["status"]
         if rule not in {"M01", "M02", "T03", "B04"} or status == "missing" or (rule == "M01" and status == "risk"):
             return []
@@ -72,6 +73,10 @@ class CalculationEvidence:
         invoices = self.kinds.get("invoice", [])
         def one(kind):
             docs = self.kinds.get(kind, [])
+            if kind=="acceptance" and final_acceptance:
+                if final_acceptance not in [*docs,*self.kinds.get("reinspection",[])]:
+                    raise ValueError("最终复验算式的已核单据归属不符")
+                return final_acceptance
             if len(docs) != 1:
                 raise ValueError("算式的单据范围不唯一")
             return docs[0]
@@ -126,6 +131,7 @@ class CalculationEvidence:
         return calculations
 
     def verify(self, findings):
+        final = closed_steps(findings).get("final")
         for finding in findings:
-            if self.formulas(finding) != finding.get("calculations", []):
+            if self.formulas(finding,final) != finding.get("calculations", []):
                 raise ValueError("金额算式、引文或计算结果不一致")
