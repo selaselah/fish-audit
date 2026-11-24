@@ -1,8 +1,11 @@
 import hashlib
 import io
 import json
+import sqlite3
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
@@ -78,6 +81,61 @@ class ExpertCheckpointTests(unittest.TestCase):
         store = Store(self.root)
         store.recover()
         Worker(store,self.extract).run(store.claim())
+
+    def test_busy_writer_keeps_returned_expert_response_in_memory_until_it_can_be_saved(self):
+        cid = self.submit()
+        returned,deliver = threading.Event(),threading.Event()
+        connect = sqlite3.connect
+        def short_timeout(*args,**kwargs):
+            return connect(*args,**{**kwargs,"timeout":.025})
+        def reply(*args):
+            response = self.respond(*args)
+            returned.set()
+            if not deliver.wait(5):
+                raise RuntimeError("没有释放合成响应")
+            return response
+        class Consumed(Exception):
+            pass
+        issued=False
+        claim=self.store.claim
+        def one_case():
+            nonlocal issued
+            if issued:
+                raise Consumed
+            issued=True
+            return claim()
+        def consume():
+            self.worker.thread=threading.current_thread()
+            try:
+                self.worker.loop()
+            except Consumed:
+                pass
+        with ThreadPoolExecutor(max_workers=1) as pool,patch("storage.sqlite3.connect",side_effect=short_timeout), \
+                patch.object(self.store,"claim",side_effect=one_case),patch("model.urlopen",side_effect=lambda req,timeout:reply(req,timeout)):
+            future=pool.submit(consume)
+            with connect(self.store.path) as held:
+                try:
+                    self.assertTrue(returned.wait(5))
+                    held.execute("BEGIN IMMEDIATE")
+                    deliver.set()
+                    self.assertTrue(self.store.waiting_for_write.wait(3))
+                    self.assertEqual(self.client.get("/api/ready").json.get("component"),"database_write")
+                    self.assertTrue(self.client.get(self.base+"/"+cid).json["waiting_for_database"])
+                    with self.assertRaises(CaseError) as busy:
+                        with self.store.connect(True):
+                            self.fail("前台写入不应越过锁")
+                    self.assertEqual(busy.exception.status,503)
+                    self.assertEqual(len(self.requests),1)
+                finally:
+                    deliver.set()
+                    held.rollback()
+            future.result(5)
+        self.assertFalse(self.store.waiting_for_write.is_set())
+        paper=self.client.get(self.base+"/"+cid+"/reports/1").json["report"]
+        self.assertEqual((len(self.requests),paper["calls"]["expert"]["response_id"]),(1,"resp-fixture-1"))
+        with self.store.connect() as db:
+            self.assertEqual(db.execute("SELECT count(*) FROM model_requests WHERE case_id=?",(cid,)).fetchone()[0],1)
+        self.assertNotIn("waiting_for_database",self.client.get(self.base+"/"+cid).json)
 
     def test_recovery_reuses_only_this_revision_and_does_not_reserve_a_request(self):
         cid = self.interrupt()

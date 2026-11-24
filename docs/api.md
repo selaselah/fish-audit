@@ -32,7 +32,7 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 
 ## 逐页进度与资料预览
 
-`GET /api/ready` 是公开的就绪探测接口。任务线程运行且数据库可读时，响应为 `{"status":"ready","mode":"local"}` 或企业模式 `saas`。未就绪时返回 HTTP 503，`component` 为 `worker` 或 `database`。探测读取任务表结构并检查线程状态。
+`GET /api/ready` 是公开的就绪探测接口。任务线程运行且数据库可读时，响应为 `{"status":"ready","mode":"local"}` 或企业模式 `saas`。未就绪时返回 HTTP 503，`component` 为 `worker`、`database` 或 `database_write`。后者表明任务线程遇到数据库写锁，正在原事务开始或提交的位置等待。前台操作遇到持续写入占用时会返回 503，调用方可在解除占用后重试。在排队或处理中的任务详情内，`waiting_for_database: true` 用于显示这个等待状态。
 
 任务详情的 `page_progress.counts` 分别给出已分页 `prepared`、已提取 `read`、已有视觉复检记录 `checked` 的页数。三项分别计数，已复检页也计入已提取页。`documents` 以原件编号列出页码及最近保存的状态，`invalid` 表示提取记录需要检查。`activity` 提供当前处理或中断位置的原件、页码及步骤，队列中、已完成及整案处理阶段可为空。完成视觉复检的页仍可能有待人工确认的字段。
 

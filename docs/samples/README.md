@@ -35,6 +35,8 @@ server/.venv/bin/python docs/samples/run.py
 
 ## 离线回归
 
+`server/.venv/bin/python docs/samples/writer_contention.py` 会建立独立临时数据库，处理一张带演练标记的照片。页面提取与专家响应由受控函数提供，SQLite、网页和后台写入走真实流程。Chrome 在桌面和手机宽度看到等待提示后，演练释放写锁，检查原任务完成且只处理一次响应，再离线复算底稿。
+
 ```sh
 PYTHONPATH=server server/.venv/bin/python -m unittest discover -s server/tests -v
 ```

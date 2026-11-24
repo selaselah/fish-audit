@@ -278,6 +278,8 @@ def create_app(store, worker):
     def ready():
         if worker.thread is None or not worker.thread.is_alive():
             return jsonify(status="unavailable",component="worker"),503
+        if store.waiting_for_write.is_set():
+            return jsonify(status="unavailable",component="database_write"),503
         try:
             with closing(sqlite3.connect(store.path.resolve().as_uri()+"?mode=ro",uri=True,timeout=1)) as db:
                 db.execute("SELECT id,rev FROM cases LIMIT 0")

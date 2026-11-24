@@ -35,24 +35,26 @@ class Worker:
         except BlockingIOError as error:
             self.lock.close()
             raise RuntimeError("此资料目录已有一个服务进程正在工作。") from error
-        self.store.recover()
+        with self.store.background_writes():
+            self.store.recover()
         self.thread = threading.Thread(target=self.loop, daemon=True, name="case-worker")
         self.thread.start()
 
     def loop(self):
-        while True:
-            case_id = self.store.claim()
-            if not case_id:
-                self.wakeup.wait(3)
-                self.wakeup.clear()
-                continue
-            try:
-                self.run(case_id)
-            except CaseError as error:
-                self.store.fail(case_id, str(error))
-            except Exception as error:
-                logging.error("Worker failed for %s (%s)", case_id, type(error).__name__)
-                self.store.fail(case_id, "处理遇到内部错误，已保存已完成的检查点。")
+        with self.store.background_writes():
+            while True:
+                case_id = self.store.claim()
+                if not case_id:
+                    self.wakeup.wait(3)
+                    self.wakeup.clear()
+                    continue
+                try:
+                    self.run(case_id)
+                except CaseError as error:
+                    self.store.fail(case_id, str(error))
+                except Exception as error:
+                    logging.error("Worker failed for %s (%s)", case_id, type(error).__name__)
+                    self.store.fail(case_id, "处理遇到内部错误，已保存已完成的检查点。")
 
     def run(self, case_id):
         with job_scope(self.store, case_id):

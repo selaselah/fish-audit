@@ -500,6 +500,7 @@ function renderCase() {
   progress.replaceChildren(box('panel-head', el('strong', statusName(data.stage)), el('span', data.progress + '%', 'mono')));
   const meter = el('progress'); meter.max = 100; meter.value = data.progress; meter.setAttribute('aria-label','审计任务进度');
   progress.append(meter, el('p', data.message, 'muted'));
+  if (data.waiting_for_database) progress.append(el('p','后台任务正在等待数据库写入，解除占用后会继续。','note'));
   if (data.status === 'queued' || data.status === 'running') {
     const steps = ['prepare','extract','graph','controls','expert'];
     const position = steps.indexOf(data.stage);

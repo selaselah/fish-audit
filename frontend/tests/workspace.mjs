@@ -32,9 +32,10 @@ const recoveringCase = caseArgument('--recovering-case');
 const invoiceConflict = caseArgument('--invoice-conflict-case');
 const invoiceSource = caseArgument('--invoice-source-case');
 const invoiceApproval = caseArgument('--invoice-approval-case');
-const seeded = sampleDesk || paymentCase || supplementCase || peerCase || fieldCase || installmentCase || replayCase || recoveringCase || invoiceConflict || invoiceSource || invoiceApproval;
-const root = recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
-if (recoveringCase) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
+const waitingCase = caseArgument('--waiting-case');
+const seeded = sampleDesk || paymentCase || supplementCase || peerCase || fieldCase || installmentCase || replayCase || recoveringCase || invoiceConflict || invoiceSource || invoiceApproval || waitingCase;
+const root = waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN : recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
+if (recoveringCase || waitingCase) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
 const children = [];
 const faults = [];
 function start(binary, args, env = process.env) {
@@ -239,6 +240,20 @@ try {
       await wait('document.querySelector("#page-dialog").open && !!document.querySelector(".located")','pinned historical invoice from signoff');
     }
     console.log('PASS · Human approval, original search scope, pinned invoice evidence and six viewport widths');
+  } else if (waitingCase) {
+    const path=root+'/api/cases/'+waitingCase;
+    const task=await (await fetch(path)).json();
+    assert.equal(task.title,'合成演练 · 写锁释放后继续');
+    await call('Page.navigate',{url:root+'/workpaper/'+waitingCase});
+    await wait('document.querySelector("#progress-panel").textContent.includes("后台任务正在等待数据库写入")','worker waiting for a database writer',30000);
+    for (const width of [1440,390,320]) {
+      await call('Emulation.setDeviceMetricsOverride',{width,height:820,deviceScaleFactor:1,mobile:false});
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),'database wait at '+width);
+    }
+    await writeFile(process.env.SYNTHETIC_WRITER_OBSERVED,'visible');
+    await wait('document.querySelector("#version").value==="1" && document.querySelector("#case-status").textContent==="待验收"','same job completed after the writer released',30000);
+    assert.ok(await evaluate('!document.querySelector("#progress-panel").textContent.includes("等待数据库写入")'));
+    console.log('PASS · Desktop and mobile showed the storage wait and resumed at the first completed workpaper');
   } else if (recoveringCase) {
     const workspace=process.env.SYNTHETIC_RECOVERY_WORKSPACE;
     assert.match(workspace || '',/^[0-9a-f]{32}$/);

@@ -106,8 +106,9 @@ def probe(address, files, enterprise, timeout, host=None):
         if response.status!=200:
             if path=="/api/ready" and response.status==503:
                 reason = json.loads(data).get("component")
-                if reason in {"worker","database"}:
-                    raise ValueError("后台工作进程未运行" if reason=="worker" else "任务数据库无法读取")
+                issues = {"worker":"后台工作进程未运行","database":"任务数据库无法读取","database_write":"后台任务正在等待数据库写入"}
+                if reason in issues:
+                    raise ValueError(issues[reason])
             raise ValueError(f"{path} 返回 HTTP {response.status}")
         return data
     try:

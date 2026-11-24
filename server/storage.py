@@ -2,8 +2,11 @@ import hashlib
 import json
 import os
 import sqlite3
+import threading
+import time
 import uuid
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
 
 from backup import MARKER
@@ -21,6 +24,10 @@ from peer_review import different_reviewers, review_record, valid_findings, veri
 from supplements import compare_return
 from work_progress import checkpoints, install as install_progress, set_activity
 from workbench import prepare_index, project
+
+
+BACKGROUND_WRITER = ContextVar("fish_audit_background_writer",default=None)
+TRANSIENT_WRITER_CODES = {getattr(sqlite3,k) for k in ("SQLITE_BUSY","SQLITE_BUSY_RECOVERY","SQLITE_BUSY_TIMEOUT") if hasattr(sqlite3,k)}
 
 
 def stamp():
@@ -70,6 +77,7 @@ class Store:
             raise RuntimeError("资料目录仍在复制中，请使用已完成恢复的目录。")
         self.limits = settings()
         self.root = root
+        self.waiting_for_write = threading.Event()
         self.files = root / "cases"
         self.files.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.path = root / "audit.sqlite3"
@@ -202,15 +210,43 @@ class Store:
         os.chmod(self.path, 0o600)
 
     @contextmanager
+    def background_writes(self):
+        token = BACKGROUND_WRITER.set(self)
+        try:
+            yield
+        finally:
+            BACKGROUND_WRITER.reset(token)
+
+    def write_boundary(self, operation, *args):
+        background = BACKGROUND_WRITER.get() is self
+        try:
+            while True:
+                try:
+                    return operation(*args)
+                except sqlite3.OperationalError as error:
+                    if getattr(error,"sqlite_errorcode",None) not in TRANSIENT_WRITER_CODES:
+                        raise
+                    if not background:
+                        raise CaseError("任务数据库正处理另一笔写入，请稍后重试。",503) from error
+                    self.waiting_for_write.set()
+                    time.sleep(.1)
+        finally:
+            if background:
+                self.waiting_for_write.clear()
+
+    @contextmanager
     def connect(self, write=False):
         db = sqlite3.connect(self.path, timeout=12)
         db.row_factory = sqlite3.Row
         try:
             db.execute("PRAGMA foreign_keys=ON")
             if write:
-                db.execute("BEGIN IMMEDIATE")
+                self.write_boundary(db.execute,"BEGIN IMMEDIATE")
             yield db
-            db.commit()
+            if write:
+                self.write_boundary(db.commit)
+            else:
+                db.commit()
         except BaseException:
             db.rollback()
             raise
@@ -705,6 +741,8 @@ class Store:
             detail["documents"] = [dict(row) for row in db.execute("SELECT id,name,ext,size,sha256,pages FROM docs WHERE case_id=? ORDER BY id", (case_id,))]
             if with_progress:
                 detail["page_progress"] = checkpoints(db, case, detail["documents"])
+                if case["status"] in {"queued","running"} and self.waiting_for_write.is_set():
+                    detail["waiting_for_database"] = True
             detail["events"] = [dict(row) for row in db.execute("SELECT seq,time,stage,message FROM events WHERE case_id=? ORDER BY seq", (case_id,))]
             detail["revisions"] = [dict(row) for row in db.execute("SELECT rev,created,hash FROM reports WHERE case_id=? ORDER BY rev DESC", (case_id,))]
             detail["decisions"] = []

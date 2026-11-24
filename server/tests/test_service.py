@@ -2,9 +2,11 @@ import contextlib
 import io
 import json
 import os
+import sqlite3
 import tempfile
 import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
@@ -16,6 +18,38 @@ from storage import Store
 
 
 class WebReadinessTests(unittest.TestCase):
+    def test_busy_commit_retries_the_transaction_boundary_without_repeating_its_writes(self):
+        with tempfile.TemporaryDirectory() as temp, ThreadPoolExecutor(max_workers=1) as pool:
+            root = Path(temp)
+            store = Store(root/"audit")
+            path = root/"commit-test.sqlite3"
+            prepared,commit = threading.Event(),threading.Event()
+            def insert():
+                with contextlib.closing(sqlite3.connect(path,timeout=.025)) as writer,store.background_writes():
+                    writer.execute("BEGIN IMMEDIATE")
+                    writer.execute("INSERT INTO records VALUES (1)")
+                    prepared.set()
+                    if not commit.wait(3):
+                        raise RuntimeError("测试读取未就绪")
+                    store.write_boundary(writer.commit)
+                    with self.assertRaisesRegex(sqlite3.OperationalError,"no such table"):
+                        store.write_boundary(writer.execute,"SELECT * FROM missing_table")
+            with contextlib.closing(sqlite3.connect(path)) as reader:
+                reader.execute("CREATE TABLE records(value INTEGER)")
+                future=pool.submit(insert)
+                try:
+                    self.assertTrue(prepared.wait(3))
+                    reader.execute("BEGIN")
+                    self.assertEqual(reader.execute("SELECT count(*) FROM records").fetchone()[0],0)
+                    commit.set()
+                    self.assertTrue(store.waiting_for_write.wait(2))
+                finally:
+                    commit.set()
+                    reader.rollback()
+                future.result(3)
+                self.assertEqual(reader.execute("SELECT value FROM records").fetchall(),[(1,)])
+                self.assertFalse(store.waiting_for_write.is_set())
+
     def test_ready_reads_the_existing_database_and_requires_a_running_worker(self):
         with tempfile.TemporaryDirectory() as temp, patch.dict(os.environ,{"AUDIT_ACCESS_MODE":"local","AUDIT_PUBLIC_ORIGIN":""}):
             store = Store(Path(temp))
