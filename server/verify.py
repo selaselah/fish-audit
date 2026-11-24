@@ -12,6 +12,7 @@ from installments import LIMIT as INSTALLMENT_LIMIT, calculate as calculate_inst
 from payment_history import LIMIT, cited_facts, payment_record
 from peer_review import journal_decision, verify_referrals, verify_review
 from protocol import canonical, response_request
+from rule_replay import check_receipt, compare_rules, replay_from_git
 from supplements import compare_return
 
 
@@ -51,16 +52,8 @@ def replay_rules(report):
         modules += ("supplements.py",)
     for name in modules:
         require(digests.get(name) == sha((local / name).read_bytes()), "严格复算需要与底稿一致的本机规则版本："+name)
-    from controls import VERSION, additional, conclusion, execute
-    graph = report["graph"]
-    policy = report["policy"]
-    require(all(policy.get(key) == VERSION[key] for key in ("version","sources","rule_sources")), "制度与程序目录不符")
-    require(graph.get("profile") == policy["profile"], "程序执行范围不符")
-    findings = execute(graph, policy["profile"])
-    proposals = report["calls"]["expert"]["output"]["followups"]
-    findings += additional(graph, [p for p in proposals if p["procedure"] != "no_trigger"])
-    require(findings == report["findings"], "用归档图谱复算的程序结果与已存底稿不符")
-    require(conclusion(findings) == report["result"], "审计建议与复算结果不符")
+    import controls
+    compare_rules(report,controls)
 
 
 def verify_payment_history(bundle, hashes, report, journal):
@@ -243,7 +236,7 @@ def verify_peer_source(bundle, hashes, report, signoff, folder=""):
         verify_review(report, bundle.read(source), json.loads(bundle.read(referral)), signoff)
 
 
-def verify(source, strict_rules=False):
+def verify(source, strict_rules=False, *, rule_checker=None):
     with zipfile.ZipFile(source) as bundle:
         names = bundle.namelist()
         require(len(names) == len(set(names)), "包内出现同名文件")
@@ -313,16 +306,34 @@ def verify(source, strict_rules=False):
             verify_returned_source(bundle, hashes, report, journal)
         if strict_rules:
             replay_rules(report)
+        if rule_checker is not None:
+            created = next(item["created"] for item in journal["revisions"] if item["rev"]==revision)
+            rule_checker(report,revision,hashes["report.json"],created)
         return case_id, revision, len(entries)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="离线核对 Fish Audit 导出包的文件与引用。")
     parser.add_argument("bundle", type=Path)
-    parser.add_argument("--rules", action="store_true", help="使用与底稿一致的本机程序，从图谱完整复算规则、追加程序及总建议")
+    rules = parser.add_mutually_exclusive_group()
+    rules.add_argument("--rules", action="store_true", help="使用与底稿一致的本机程序，从图谱完整复算规则、追加程序及总建议")
+    rules.add_argument("--rules-from-git",metavar="本地可信提交或分支",help="从指定提交的本地发布历史中匹配规则源码并复算")
+    parser.add_argument("--replay-receipt",metavar="复算记录.json",type=Path,help="核对网页下载的复算记录，默认使用本地 HEAD 的发布历史")
     args = parser.parse_args()
+    if args.rules and args.replay_receipt:
+        parser.error("复算记录使用本地 Git 发布历史，请选择 --rules-from-git 或省略 --rules。")
     try:
-        case_id, revision, files = verify(args.bundle, args.rules)
+        def historical(report,revision,report_hash,created):
+            ref = args.rules_from_git or "HEAD"
+            if args.replay_receipt:
+                receipt = json.loads(args.replay_receipt.read_bytes())
+                require(isinstance(receipt,dict),"复算记录须为 JSON 对象")
+                outcome = check_receipt(receipt,report,revision,report_hash,created,ref)
+            else:
+                outcome = replay_from_git(report,ref)
+            require(outcome["state"]=="verified",outcome.get("message","规则与底稿不符"))
+            print(f"规则复算一致：{outcome['finding_count']} 项发现，规则源码来自本地提交 {outcome['commit']}。")
+        case_id, revision, files = verify(args.bundle,args.rules,rule_checker=historical if args.rules_from_git or args.replay_receipt else None)
         print(f"校验成功：{case_id} R{revision}，{files} 个文件。")
     except (KeyError, TypeError, ValueError, OSError, zipfile.BadZipFile) as error:
         parser.exit(1, f"校验失败：{error}\n")

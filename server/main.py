@@ -30,7 +30,8 @@ from graph import compact
 from jobs import Worker
 from model import FIELDS
 from review import review_text
-from storage import Store, encode
+from rule_replay import RulesUnavailable, replay_from_git
+from storage import Store, encode, stamp
 from workbench import inbox, search_evidence
 
 
@@ -250,6 +251,10 @@ def create_app(store, worker):
             if not re.fullmatch(r"[A-Z][0-9]{2}-[1-9][0-9]*", ref) or "rev" not in args or "fact" in args:
                 raise CaseError("请选择有效的底稿版本和程序发现。", 400)
             args["finding"] = ref
+        if "view" in request.args:
+            if request.args["view"]!="replay" or set(args)!={"rev"}:
+                raise CaseError("复算入口需要确定的底稿版本。",400)
+            args["view"] = "replay"
         route = ("w/"+wid+"/" if wid else "")+"case/"+case_id
         return redirect("/#"+route+("?" + urlencode(args) if args else ""))
 
@@ -315,6 +320,19 @@ def create_app(store, worker):
     @business.get("/cases/<case_id>/reports/<int:rev>")
     def report(case_id, rev):
         return jsonify(store.report(case_id, rev))
+
+    @business.post("/cases/<case_id>/reports/<int:rev>/replay")
+    def replay(case_id, rev):
+        if request.args or ((request.is_json or request.content_length) and json_body()):
+            raise CaseError("复算使用所选底稿及服务端发布的规则版本。",400)
+        version = store.report(case_id,rev)
+        paper = version["report"]
+        try:
+            checked = replay_from_git(paper)
+        except RulesUnavailable as error:
+            checked = {"state":"unavailable","message":str(error)}
+        return jsonify(**checked,format="fish-audit-rule-replay/v1",case_id=case_id,rev=rev,report_sha256=version["sha256"],checked_at=stamp(),
+                       rule_version=paper["policy"]["version"])
 
     @business.get("/cases/<case_id>/reports/<int:rev>/methods/<name>")
     def method_source(case_id, rev, name):

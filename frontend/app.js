@@ -1,6 +1,7 @@
 const $ = selector => document.querySelector(selector);
 const state = {cases: [], filter: 'all', detail: null, bundle: null, tab: 'report', pinned: 0,
   timer: null, epoch: 0, key: null, review: null};
+const ruleChecks = new WeakMap();
 const labels = {
   queued: '排队中', running: '处理中', ready: '待验收', in_review: '待复核', closed: '已归档', failed: '已中断',
   prepare: '资料分页', extract: '多模态解析', graph: '证据建图', controls: '规则执行', expert: '专家复核',
@@ -277,6 +278,48 @@ function calculationPanel(calculation) {
     box('formula-result', el('strong', '复算结果'), el('strong', calculation.result + ' 元', 'amount')));
 }
 
+function ruleReplayPanel(bundle) {
+  const panel = box('panel rule-replay',el('h2','规则复算'),
+    el('p','使用本版图谱与已保存的专家建议，逐项核对审计发现和整案建议。','muted'));
+  const check = ruleChecks.get(bundle);
+  const button = action(check?.state==='running'?'正在匹配版本并复算…':'复算本版规则',async()=>{
+    ruleChecks.set(bundle,{state:'running'});
+    panel.replaceWith(ruleReplayPanel(bundle));
+    try {
+      const result=await post(Team.cases()+'/'+bundle.report.case_id+'/reports/'+bundle.rev+'/replay',{});
+      if (result.report_sha256!==bundle.sha256 || result.case_id!==bundle.report.case_id || result.rev!==bundle.rev)
+        throw new Error('返回的复算记录与所选底稿摘要不符。');
+      ruleChecks.set(bundle,result);
+    } catch (error) {
+      ruleChecks.set(bundle,{state:'error',message:error.message});
+    }
+    if (state.bundle===bundle) $('.rule-replay')?.replaceWith(ruleReplayPanel(bundle));
+  });
+  button.disabled=check?.state==='running';
+  panel.append(button);
+  if (!check) return panel;
+  const status=el('p','','replay-status'); status.setAttribute('role','status');
+  status.textContent=({running:'正在查找摘要匹配的规则源码。',
+    verified:'复算一致 · '+check.finding_count+' 项发现 · 底稿建议「'+statusName(check.verdict)+'」',
+    unavailable:'无法复算 · '+check.message,mismatch:'复算不一致 · '+check.message,error:check.message})[check.state];
+  panel.append(status);
+  if (check.checked_at) {
+    const fields=[box('line',el('strong','底稿 SHA-256'),el('code',check.report_sha256))];
+    if (check.commit) fields.push(box('line',el('strong','匹配规则的 Git 提交'),el('code',check.commit)));
+    if (check.findings_sha256) fields.push(box('line',el('strong','审计发现 SHA-256'),el('code',check.findings_sha256)));
+    if (check.result_sha256) fields.push(box('line',el('strong','整案建议 SHA-256'),el('code',check.result_sha256)));
+    for (const [name,hash] of Object.entries(check.modules || {})) fields.push(box('line',el('strong',name),el('code',hash)));
+    panel.append(fold('查看 '+time(check.checked_at)+' 的复算记录',...fields),
+      action('下载复算记录',()=>{
+        const url=URL.createObjectURL(new Blob([JSON.stringify(check,null,2)+'\n'],{type:'application/json'}));
+        const save=link('',url);
+        save.download='复算记录-'+check.case_id+'-R'+check.rev+'.json';
+        document.body.append(save); save.click(); save.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+      },'text-button'));
+  }
+  return panel;
+}
+
 function installmentDetails(history) {
   const calc = history.calculation;
   if (calc.state!=='calculated') return lazyFold('核对累计范围',()=>[
@@ -437,7 +480,7 @@ function activityPanel() {
       catch (error) { alertText(error); await refresh(); }
     }));
   }
-  return box('', panel, log);
+  return box('', ruleReplayPanel(bundle), panel, log);
 }
 function renderCase() {
   const data = state.detail;
@@ -543,6 +586,8 @@ async function refresh() {
         state.openedCitation=location.hash; state.traceKey=data.id+'@'+rev; state.traceId=requestedFinding;
         const traced = graphIndex(bundle.report.graph).nodes.has('finding/'+requestedFinding);
         state.tab=traced?'graph':'report'; focusFinding=traced?'#trace-select':'[data-finding="'+requestedFinding+'"]';
+      } else if (route.params.get('view')==='replay' && state.openedCitation!==location.hash && state.bundle) {
+        state.openedCitation=location.hash; state.tab='activity'; focusFinding='.rule-replay button';
       }
       renderCase();
       if (focusFinding) {

@@ -27,7 +27,8 @@ const supplementCase = caseArgument('--supplement-case');
 const peerCase = caseArgument('--peer-case');
 const fieldCase = caseArgument('--field-case');
 const installmentCase = caseArgument('--installment-case');
-const seeded = sampleDesk || paymentCase || supplementCase || peerCase || fieldCase || installmentCase;
+const replayCase = caseArgument('--replay-case');
+const seeded = sampleDesk || paymentCase || supplementCase || peerCase || fieldCase || installmentCase || replayCase;
 const root = 'http://127.0.0.1:' + (seeded ? 8000 : port);
 const children = [];
 const faults = [];
@@ -88,7 +89,44 @@ try {
   const click = (label, container='document') => evaluate('[...'+container+'.querySelectorAll("button,a")].find(b=>b.textContent==='+JSON.stringify(label)+' && b.getClientRects().length).click()');
   await call('Runtime.enable');
   await call('Page.navigate',{url:root});
-  if (installmentCase) {
+  if (replayCase) {
+    const base=root+'/api/cases/'+replayCase;
+    const original=await (await fetch(base)).json();
+    assert.ok(original.title.startsWith('合成演练 · '));
+    const index=process.argv.indexOf('--revision');
+    const rev=index<0 ? original.rev : Number(process.argv[index+1]);
+    assert.ok(Number.isSafeInteger(rev) && rev>0);
+    const saved=await (await fetch(base+'/reports/'+rev)).json();
+    const expected=process.argv.includes('--expect-unavailable') ? 'unavailable' : 'verified';
+    await call('Page.navigate',{url:root+'/workpaper/'+replayCase+'?rev='+rev+'&view=replay'});
+    await wait('document.querySelector("#case-title")?.textContent==='+JSON.stringify(original.title),'pinned replay case');
+    await wait('document.querySelector(".rule-replay button")===document.activeElement','pinned replay action');
+    await click('复算本版规则','document.querySelector(".rule-replay")');
+    await wait('document.querySelector(".rule-replay .replay-status")?.textContent.includes('+JSON.stringify(expected==='verified'?'复算一致':'无法复算')+')','pinned rule replay',60000);
+    await evaluate('document.querySelector(".rule-replay details").open=true');
+    const result=await evaluate('document.querySelector(".rule-replay").textContent');
+    assert.ok(result.includes(saved.sha256));
+    for (const width of [1440,1024,820,768,390,320]) {
+      await call('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),'replay receipt at '+width);
+    }
+    await call('Browser.setDownloadBehavior',{behavior:'allow',downloadPath:scratch});
+    await click('下载复算记录','document.querySelector(".rule-replay")');
+    const filename=join(scratch,'复算记录-'+replayCase+'-R'+rev+'.json');
+    const receipt=await until(async()=>JSON.parse(await readFile(filename,'utf8')),'downloaded JSON receipt');
+    assert.deepEqual([receipt.state,receipt.report_sha256,receipt.rev,receipt.case_id],[expected,saved.sha256,rev,replayCase]);
+    if (expected==='verified') {
+      assert.ok(result.includes(receipt.findings_sha256) && result.includes(receipt.result_sha256));
+      const zip=join(scratch,'workpaper.zip');
+      await writeFile(zip,Buffer.from(await (await fetch(base+'/reports/'+rev+'/bundle')).arrayBuffer()));
+      const proof=execFileSync(process.env.AUDIT_PYTHON || 'server/.venv/bin/python',['server/verify.py',zip,'--replay-receipt',filename],{encoding:'utf8'});
+      assert.ok(proof.includes(receipt.commit) && proof.includes('校验成功'));
+      assert.equal(receipt.finding_count,saved.report.findings.length);
+    } else assert.ok(!receipt.commit && receipt.message);
+    const after=await (await fetch(base)).json();
+    for (const key of ['decisions','revisions','events','status']) assert.deepEqual(after[key],original[key]);
+    console.log('PASS · '+expected+' rule replay, downloaded version receipt and six widths');
+  } else if (installmentCase) {
     const base = root+'/api/cases/'+installmentCase;
     const detail = await (await fetch(base)).json();
     assert.ok(detail.title.startsWith('合成演练 · '));

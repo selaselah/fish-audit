@@ -50,6 +50,31 @@ class EnterpriseFlow(unittest.TestCase):
         self.assertEqual(response.status_code,202,response.json)
         return response.json["id"]
 
+    def test_rule_replay_is_scoped_to_the_selected_immutable_workpaper(self):
+        owner,wid,headers=self.register("replay-owner")
+        other,other_space,other_headers=self.register("replay-other")
+        invite=owner.post("/api/workspaces/"+wid+"/invites",headers=headers,json={"role":"employee"}).json
+        employee,_,member_headers=self.register("replay-employee",invite=invite["token"])
+        cid=self.submit(employee,wid,member_headers)
+        self.worker.run(self.store.claim())
+        path=f"/api/w/{wid}/cases/{cid}/reports/1/replay"
+        before=self.store.detail(cid)
+        paper=self.store.report(cid,1)
+        with patch("main.replay_from_git",return_value={"state":"verified","verdict":"review"}) as replay:
+            self.assertEqual(employee.post(path,headers=member_headers,json={}).status_code,403)
+            self.assertEqual(other.post(path.replace(wid,other_space),headers=other_headers,json={}).status_code,404)
+            self.assertEqual(owner.post(path,json={}).status_code,403)
+            self.assertEqual(owner.post(path,headers=headers,json={"ref":"another-version"}).status_code,400)
+            self.assertEqual(owner.post(path.replace("/1/","/2/"),headers=headers,json={}).status_code,404)
+            replay.assert_not_called()
+            response=owner.post(path,headers=headers)
+            self.assertEqual(response.status_code,200)
+            result=response.json
+            self.assertEqual((result["state"],result["case_id"],result["rev"],result["report_sha256"]),
+                             ("verified",cid,1,paper["sha256"]))
+            replay.assert_called_once_with(paper["report"])
+        self.assertEqual(self.store.detail(cid),before)
+
     def test_membership_and_scoped_evidence(self):
         admin,a,ah = self.register("org-a")
         other,b,bh = self.register("org-b")
