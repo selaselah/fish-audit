@@ -156,6 +156,13 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     }
     for (const row of right.querySelectorAll('[data-fact]')) row.classList.toggle('located', row.dataset.fact === fact.id);
   }
+  function focusObservation(source) {
+    locate(source);
+    const target = right.querySelector('.located');
+    target.tabIndex = -1;
+    target.focus({preventScroll:true});
+    target.scrollIntoView({block:'nearest'});
+  }
   for (const fact of pageFacts) {
     const row = box('evidence-row');
     row.dataset.fact = fact.id;
@@ -188,6 +195,22 @@ function openPage(docId, pageNumber, highlight, lineHint) {
       row.append(review);
     }
     if (fact.origin === 'printed_claim_pair') row.append(el('small','模型原列为随附票号。原页同一行明列代码和号码，逐项读图复检已核对这段引文。','small'));
+    const qualityHold = state.bundle.report.graph.quality_references?.holds.find(h => h.fact === fact.id);
+    if (qualityHold) {
+      const note = box('quality-number-hold');
+      note.append(el('strong', '需核对完整编号'));
+      for (const line of qualityHold.lines) {
+        note.append(el('blockquote', '本页第 '+line.number+' 行 · '+line.quote));
+        const source = pageFacts.find(f => f.id !== fact.id && f.source_line?.number === line.number && f.source_line.text === line.quote);
+        if (source) note.append(action('定位同页展示说明', () => focusObservation(source), 'ref'));
+      }
+      for (const observation of qualityHold.observations) {
+        note.append(el('blockquote', '本页读图引文 · '+observation.quote));
+        const source = pageFacts.find(f => f.id === observation.fact);
+        if (source) note.append(tag(source.status), action('定位同页展示说明', () => focusObservation(source), 'ref'));
+      }
+      row.append(note);
+    }
     if (state.bundle.report.graph.number_masks?.facts.some(m=>m.fact===fact.id))
       row.append(el('small','原文含遮盖位或只列尾号。取得完整票号后可重新核对。','small'));
     const partialTransfer = state.bundle.report.graph.transfer_references?.facts.find(m=>m.fact===fact.id);
@@ -199,13 +222,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
         row.append(el('blockquote','本页第 '+line.number+' 行 · '+line.text));
       for (const note of partialTransfer.notes || []) {
         const source = pageFacts.find(f=>f.id===note.fact);
-        if (source) row.append(el('blockquote',note.quote),tag(note.status),action('定位同页展示说明',()=>{
-          locate(source);
-          const target = right.querySelector('.located');
-          target.tabIndex=-1;
-          target.focus({preventScroll:true});
-          target.scrollIntoView({block:'nearest'});
-        },'ref'));
+        if (source) row.append(el('blockquote',note.quote),tag(note.status),action('定位同页展示说明',()=>focusObservation(source),'ref'));
       }
       row.append(el('small',unchecked?'核对整张回单的流水栏、页脚和备注后，可在核图意见中记录展示范围。':
         pending?'核对这条说明后可重新审计。':'取得完整流水后可查找相同回单、复算累计付款。','small'));

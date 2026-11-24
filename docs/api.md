@@ -8,6 +8,8 @@
 
 当 `policy.quality_number_classification` 为 `printed-quality-number-v1` 时，按原页标签改归的编号事实带有 `origin: "printed_quality_number"`。`field` 是核对后的分类，`model_field` 保留初次分类，`value` 和 `quote` 保留当时抄录。按 `doc` 和 `page` 找到 `calls.pages[].check`，事实编号末尾 `f` 后的数字及 `classification_index` 分别对应原分类和印刷标签的候选项。两项的具体输入在 `input`，判断在 `output.checks`。底稿支持按 `?rev=版本号&fact=事实编号` 定位页图。
 
+`policy.quality_references` 为 `quality-reference-visibility-v1` 时，`graph.quality_references.holds` 记录需补全的验收、整改或缺陷编号。每项含原观察 `fact`、字段名 `field`、原始取值、页码及资料归属，可定位行在 `lines` 中，图像页上的相关读图引文在 `observations` 中。对应图谱边的类型带 `incomplete_` 前缀，直接连到本页事实。若旧版的缺陷关闭依赖这种部分编号，签收通过接口返回 409，说明需要重审。
+
 | 请求 | 作用 |
 | --- | --- |
 | `GET /api/health` | 服务状态，`audit` 中提供审计服务商、模型、业务范围及页数限制。兼容字段 `mode` 指旧版文本审核模式 |

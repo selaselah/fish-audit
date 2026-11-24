@@ -103,6 +103,7 @@ def complete_line(field, value, quote):
 class Material:
     def __init__(self, graph, unit):
         self.unit = unit
+        self.quality_holds = [h for h in graph.get("quality_references", {}).get("holds", []) if h["unit"] == unit]
         self.fields = defaultdict(list)
         self.refs = []
         self.gaps = []

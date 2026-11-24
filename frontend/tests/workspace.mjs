@@ -41,11 +41,12 @@ const partialTransfer = caseArgument('--partial-transfer-case');
 const visibilityCase = caseArgument('--visibility-case');
 const accountReview = caseArgument('--account-review-case');
 const performanceCase = caseArgument('--performance-case');
+const qualityImageCase = caseArgument('--quality-image-case');
 const reinspectionGap = caseArgument('--reinspection-gap-case');
 const brokenPayment = caseArgument('--payment-source-case');
 const waitingCase = caseArgument('--waiting-case');
 const seeded = [sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
-                invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
+                invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
 const root = brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
   recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
@@ -123,6 +124,27 @@ try {
     await wait('document.querySelector("#page-dialog").open && document.querySelector(".located[data-gap-line] blockquote")?.textContent==='+JSON.stringify(gap.quote),'missing heading line');
     assert.equal(await evaluate('document.querySelector(".located[data-gap-line]").dataset.gapLine'),String(gap.line));
     console.log('PASS · Unverified reinspection heading links to the original native line');
+  } else if (qualityImageCase) {
+    const api = root+'/api/cases/'+qualityImageCase;
+    const task = await (await fetch(api)).json();
+    assert.ok(task.title.startsWith('合成演练 · 缺陷尾号说明'));
+    const {report} = await (await fetch(api+'/reports/'+task.rev)).json();
+    const [hold] = report.graph.quality_references.holds;
+    const [note] = hold.observations;
+    assert.equal(note.quote, '缺陷编号展示说明：本单仅列尾号');
+    assert.equal(hold.lines.length, 0);
+    for (const width of [1280, 320]) {
+      await call('Emulation.setDeviceMetricsOverride', {width, height:900, deviceScaleFactor:1, mobile:false});
+      await call('Page.navigate', {url:root+'/workpaper/'+qualityImageCase+'?'+new URLSearchParams({rev:task.rev,fact:hold.fact})});
+      const card = 'document.querySelector(".located .quality-number-hold")';
+      await wait('document.querySelector("#page-dialog img")?.naturalWidth && '+card+'?.querySelector("button:enabled") && '+card+'.innerText.includes('+JSON.stringify(note.quote)+')',
+        'visible number and page image');
+      await click('定位同页展示说明', card);
+      await wait('document.activeElement?.dataset.fact==='+JSON.stringify(note.fact)+' && document.querySelector(".located").dataset.fact==='+JSON.stringify(note.fact),
+        'qualified image observation');
+      assert.ok(await evaluate('document.querySelector(".located").textContent.includes('+JSON.stringify(note.quote)+')'));
+    }
+    console.log('PASS · Same-page image note is traceable from the confirmed defect digits on desktop and mobile');
   } else if (performanceCase) {
     const api = root+'/api/cases/'+performanceCase;
     const task = await (await fetch(api)).json();
@@ -189,6 +211,20 @@ try {
         [labels[0]+' · 与原页冲突', labels[1]+' · 与原页相符']);
       assert.deepEqual(await evaluate('[...'+card+'.querySelectorAll("blockquote")].map(b=>b.textContent)'),
         [fact.quote, fact.quote]);
+      await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+    }
+    for (const hold of report.graph.quality_references?.holds || []) {
+      const query = new URLSearchParams({rev: String(task.rev), fact: hold.fact});
+      await call('Page.navigate', {url: root+'/workpaper/'+performanceCase+'?'+query});
+      const card = 'document.querySelector(".located .quality-number-hold")';
+      await wait('document.querySelector("#page-dialog").open && '+card+' && document.querySelector(".located").dataset.fact==='+JSON.stringify(hold.fact),
+        'qualified identifier on the original page');
+      const lines = [...hold.lines.map(l => '本页第 '+l.number+' 行 · '+l.quote),
+        ...hold.observations.map(o => '本页读图引文 · '+o.quote)];
+      assert.deepEqual(await evaluate('[...'+card+'.querySelectorAll("blockquote")].map(b=>b.textContent)'), lines);
+      assert.equal(await evaluate(card+'.querySelector("strong").textContent'), '需核对完整编号');
+      await call('Emulation.setDeviceMetricsOverride',{width:320,height:880,deviceScaleFactor:1,mobile:false});
+      assert.ok(await evaluate(card+'.clientWidth>0 && '+card+'.scrollWidth<='+card+'.clientWidth+1'));
       await evaluate('document.querySelector("#page-dialog [data-close]").click()');
     }
     for (const width of [1440,1024,820,768,390,320]) {

@@ -12,6 +12,7 @@ from performance import LABELS as PERFORMANCE_LABELS, STAGE_PREFIX, complete_lin
 from payment_reference import attach as attach_payment_references, partial_line, printed_partial_value
 from reinspection import NUMBER_TYPES as QUALITY_NUMBERS
 from quality_labels import numbered_lines, verified as verified_quality_number
+from quality_references import attach as record_quality_references
 
 
 KINDS = {"invoice": "发票", "contract": "合同", "acceptance": "验收单"}
@@ -277,6 +278,7 @@ def build_graph(docs, pages, attestations, amendments=()):
     partition_documents(graph, pages)
     withhold_partial_numbers(graph)
     texts = {(page["doc"],page["number"]):page["text"] for page in pages}
+    record_quality_references(graph, lambda doc, number: texts[doc, number])
     attach_payment_references(graph, lambda doc, number: texts[doc,number])
     graph["invoice_identity"] = IDENTITY_FORMAT
     graph["invoice_lookup"] = INVOICE_LOOKUP

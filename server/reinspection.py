@@ -32,6 +32,7 @@ NUMBER_TYPES = {"acceptance_number":"acceptance_reference","original_acceptance"
 
 def verify_number_links(graph):
     nodes = {n["id"]:n for n in graph["nodes"]}
+    held = {item["fact"] for item in graph.get("quality_references", {}).get("holds", [])}
     expected = []
     def compact(value):
         return "".join(unicodedata.normalize("NFKC",value).split())
@@ -39,13 +40,17 @@ def verify_number_links(graph):
         kind = NUMBER_TYPES.get(fact["field"])
         if not kind or fact["status"] not in ("anchored","confirmed"):
             continue
+        if fact["id"] in held:
+            expected.append((fact.get("unit", fact["doc"]), fact["id"], "incomplete_"+fact["field"], (fact["id"],)))
+            continue
         value = compact(fact["value"])
         target = kind+"-"+hashlib.sha256(value.encode()).hexdigest()[:18]
         node = nodes.get(target)
         if not node or node["type"]!=kind or compact(node["label"])!=value:
             raise ValueError("整改复验编号与所据原文实体不符")
         expected.append((fact.get("unit",fact["doc"]),target,fact["field"],(fact["id"],)))
-    actual = [(e["from"],e["to"],e["type"],tuple(e["evidence"])) for e in graph["edges"] if e["type"] in NUMBER_TYPES]
+    kinds = set(NUMBER_TYPES) | {"incomplete_"+field for field in NUMBER_TYPES}
+    actual = [(e["from"],e["to"],e["type"],tuple(e["evidence"])) for e in graph["edges"] if e["type"] in kinds]
     if sorted(actual)!=sorted(expected):
         raise ValueError("整改复验编号边与资料归属、编号或引文不符")
 
@@ -61,8 +66,11 @@ def identifier(doc, field):
 
 def step(role, doc, date_field, fields):
     date = doc.date(date_field)
+    sources = doc.evidence(*fields)
+    sources.extend(f"{h['doc']}/p{h['page']}" for h in doc.quality_holds if h["field"] in fields and h["lines"])
+    sources.extend(note["fact"] for h in doc.quality_holds if h["field"] in fields for note in h["observations"])
     return {"role":role, "unit":doc.unit, "date":date.isoformat() if date else None,
-            "evidence":doc.evidence(*fields)}
+            "evidence":list(dict.fromkeys(sources))}
 
 
 def closed_steps(findings):
@@ -116,6 +124,10 @@ def assess(contract, receipts, repairs, retests, evaluate):
         return incomplete("三份记录仍需已核的原件标题及单据归属。")
     if not all(linked(contract,doc) for doc in (original,repair,final)):
         return incomplete("原验收、整改或复验的合同号、双方主体及交付标的尚未全部对应。")
+    partial = list(dict.fromkeys(LABELS[h["field"]][0]+"“"+h["value"]+"”"
+                                 for record in (original, repair, final) for h in record.quality_holds))
+    if partial:
+        return incomplete("、".join(partial)+"存在遮盖或仅展示部分编号的记载，请核对三份原件的完整编号。")
     original_id, repair_id = identifier(original,"acceptance_number"), identifier(repair,"repair_number")
     final_id, defect = identifier(final,"acceptance_number"), identifier(original,"defect_number")
     if not all((original_id,repair_id,final_id,defect)) or original_id==final_id or not (

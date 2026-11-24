@@ -15,7 +15,7 @@ from storage import encode
 
 
 METHODS = {name: (SERVER / name).read_bytes() for name in
-           ("calculations.py", "capacity.py", "conclusions.py", "config.py", "controls.py", "documents.py", "field_receipts.py", "field_sources.py", "graph.py", "installments.py", "invoice_approval.py", "invoice_comparison.py", "invoice_history.py", "invoice_identity.py", "invoice_masks.py", "invoice_proof.py", "jobs.py", "model.py", "payment_checks.py", "payment_history.py", "payment_index.py", "payment_notes.py", "payment_reference.py", "payment_visibility.py", "peer_review.py", "performance.py", "policy.py", "protocol.py", "quality_labels.py", "reinspection.py", "storage.py", "supplements.py", "transfers.py", "work_progress.py")}
+           ("calculations.py", "capacity.py", "conclusions.py", "config.py", "controls.py", "documents.py", "field_receipts.py", "field_sources.py", "graph.py", "installments.py", "invoice_approval.py", "invoice_comparison.py", "invoice_history.py", "invoice_identity.py", "invoice_masks.py", "invoice_proof.py", "jobs.py", "model.py", "payment_checks.py", "payment_history.py", "payment_index.py", "payment_notes.py", "payment_reference.py", "payment_visibility.py", "peer_review.py", "performance.py", "policy.py", "protocol.py", "quality_labels.py", "quality_references.py", "reinspection.py", "storage.py", "supplements.py", "transfers.py", "work_progress.py")}
 CODE_DIGESTS = {name: digest(source) for name, source in METHODS.items()}
 
 

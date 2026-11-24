@@ -111,3 +111,13 @@ PYTHONPATH=server server/.venv/bin/python -m unittest discover -s server/tests -
 运行 `server/.venv/bin/python docs/samples/quality_readback.py --run`，可用上述复验后付款案例的 R1 重测。脚本校验原版本证据包，把两份 PDF 与固定种子重新生成的水印样本逐字节比较，并检查重渲染的页图和文字层。随后只将两张水印页图连同真实初读候选送入视觉复检，将回执另存入演练目录。原底稿仍可照常打开。
 
 省略 `--run` 可仅查看待复检的原始引文。使用 `--bundle 原版证据包.zip --verify-receipt 读图回执.json` 可离线复核归档请求摘要、逐项判断和图谱采信结果。要从正常上传入口重跑六份文件，可用 `quality_reinspection.py --run --cases closed --run-id synthetic-quality-readback-v2`。
+
+### 三张单据都有 0042 时能否关闭缺陷
+
+运行以下命令会通过本机工作台分别上传三组水印资料。第一组在三份记录的缺陷栏都印“尾号0042”。第二组都印“0042”，仅复验报告另行注明本单只列尾号。第三组的完整缺陷号就是“0042”。合同约定、签认、温度和付款时点相同。
+
+```sh
+server/.venv/bin/python docs/samples/quality_reinspection.py --run --cases partial noted short --run-id synthetic-quality-number-visibility-v1
+```
+
+`server/.venv/bin/python docs/samples/quality_image_notes.py --run` 从同一张水印原页生成 JPEG 和无文字层的扫描 PDF，分别上传工作台。脚本只模拟核对编号栏“0042”及其同页说明。两个任务用于查看影像取证，每案仅含复验报告。可用 `node frontend/tests/workspace.mjs --quality-image-case 案件编号` 在 Chrome 的桌面和手机宽度从编号跳到原始读图说明。

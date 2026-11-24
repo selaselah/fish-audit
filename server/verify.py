@@ -21,6 +21,7 @@ from payment_reference import LEGACY_FORMAT as FIRST_REFERENCE_FORMAT, SUPPORTED
 from peer_review import journal_decision, verify_referrals, verify_review
 from performance import LABELS as PERFORMANCE_FIELDS, verify_findings as verify_performance
 from quality_labels import verify_report as verify_quality_numbers
+from quality_references import verify_report as verify_quality_references
 from protocol import canonical, response_request
 from rule_replay import check_receipt, replay_from_git, replay_installed
 from supplements import compare_return
@@ -222,7 +223,10 @@ def verify_transcription(fact, page_calls, nodes, subject, *, note_policy=None):
 
 def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
     verify_performance(report)
-    verify_quality_numbers(report,lambda doc,page:bundle.read(f"{page_dir}/{doc}/{page}.txt").decode())
+    def page_text(doc, page):
+        return bundle.read(f"{page_dir}/{doc}/{page}.txt").decode()
+    verify_quality_numbers(report, page_text)
+    verify_quality_references(report, page_text)
     if "conclusions.py" in report["policy"].get("code_sha256",{}):
         verify_result(report)
     graph = report["graph"]
@@ -247,6 +251,8 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
     page_calls = {(t["doc"],t["page"]):t for t in report["calls"]["pages"]}
     version = report["policy"].get("payment_references")
     selected_notes = set(note_refs(graph.get("transfer_references",{}).get("facts",[]))) if version in REFERENCE_FORMATS-{FIRST_REFERENCE_FORMAT} else set()
+    quality_notes = {note["fact"] for h in graph.get("quality_references", {}).get("holds", [])
+                     for note in h["observations"]}
     texts = {}
     reinspection_refs = {ref for item in report["findings"] if item.get("reinspection") for ref in item["evidence"]}
     for fact in graph["facts"]:
@@ -274,6 +280,8 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
         invoice_number = report["policy"].get("invoice_number_masks")==MASK_FORMAT and fact["field"] in NUMBER_FIELDS
         if fact["id"] in selected_notes:
             verify_transcription(fact,page_calls,nodes,"流水展示说明",note_policy=report["policy"])
+        elif fact["id"] in quality_notes:
+            verify_transcription(fact,page_calls,nodes,"验收或整改编号展示说明")
         elif invoice_number or (version in REFERENCE_FORMATS and fact["field"]=="transfer_ref"):
             verify_transcription(fact,page_calls,nodes,"票号" if invoice_number else "流水号")
         elif (report["policy"].get("performance_checks") and fact["field"] in PERFORMANCE_FIELDS or

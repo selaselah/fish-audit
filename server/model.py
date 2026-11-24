@@ -58,6 +58,7 @@ def array(item):
 
 
 STRING = {"type": "string"}
+MAX_ARRAY_ITEMS = 140
 PAGE_SCHEMA = object_schema({
     "quality": choice(["readable", "partial", "unreadable"]),
     "facts": array(object_schema({
@@ -85,6 +86,7 @@ unit 单独抄明示的金额单位（如“金额单位：元”），value 抄
 合同审批单或董事会合同审批记录的抬头用 contract_approval；审批记录与被审批的合同是两种资料。审批机构、签认、决定及决定日期分别用 approval_authority、approval_signer、approval_result、approved_on。保留决定中的否定、暂缓及其他条件。
 独立整改记录标题用 remediation，复验报告标题用 reinspection。原验收及复验自身的单号均用 acceptance_number，所引“原验收单编号”用 original_acceptance。逐份抄录缺陷编号 defect_number、整改记录编号 repair_number 及对应缺陷文字 repair_subject。整改记录上实际措施、整改状态、完成日期及签认分别用 repair_action、repair_result、repaired_on、repair_signer。复验报告的复验日期、范围、结论及签认沿用 accepted_on、acceptance_scope、acceptance_result、acceptance_signer。复验单的“缺陷关闭结论”用 defect_closure。每份材料的检验依据用 inspection_basis，只有合同本身约定的验收标准用 acceptance_criteria。只抄所见，不补齐关联编号或缺陷处理过程。
 居中抬头“复验报告”“整改记录单”各自单列标题事实，value 与 quote 均为完整抬头。正文的“整改记录编号”在整改单和复验报告中一律是 repair_number，value 只写印刷的整串编号，quote 抄完整标签和值。原验收单编号与本页的复验单编号需分行区分。
+验收、整改及缺陷编号含“尾号”、星号或遮盖字符时，照录所见及限定词。若页脚或另栏标明某个编号只显示部分字符，另以 other 收录这整行说明，保留它所指的编号名称。
 按页面实际印刷的单据标题确定类型。住宿服务发票、运输服务发票等标题用 invoice；只有报销申请人填写的报销单标题才用 claim。同属一次差旅不改变票据本身的类型。
 申请报销金额用 claim_total，出差人或旅客姓名用 traveler。差旅起止日期分为 trip_start、trip_end；
 发票或行程凭据上明确的消费日期、乘车日期、费用发生日期用 service_on（开票日期另用 issued_on）。报销单列出的随附发票号码逐项分别用 claim_ref；同一行明列“随附发票代码及号码”的，只提取一个 claim_full_ref，value 照抄代码、分隔符和号码，quote 抄整行。不拼接分散的代码和号码。
@@ -249,7 +251,7 @@ def validate(value, schema):
         for key, child in schema["properties"].items():
             validate(value[key], child)
     elif kind == "array":
-        if not isinstance(value, list) or len(value) > 140:
+        if not isinstance(value, list) or len(value) > MAX_ARRAY_ITEMS:
             raise ValueError("array")
         for element in value:
             validate(element, schema["items"])
@@ -268,7 +270,11 @@ def attach_check(path, trace):
     facts = trace["output"]["facts"]
     candidates = [{"index": str(index), "field": FIELDS[item["field"]], "value": item["value"], "quote": item["quote"]}
                   for index, item in enumerate(facts, 1)]
-    candidates.extend(trace.get("native_candidates", trace.get("heading_candidates", [])))
+    remaining = MAX_ARRAY_ITEMS - len(candidates)
+    if remaining < 0:
+        raise CaseError("单页初读字段超过可逐项复检的上限，请拆分页内资料。")
+    extras = trace.get("native_candidates", trace.get("heading_candidates", []))
+    candidates.extend(extras[:remaining])
     schema = object_schema({"checks": array(object_schema({"index": choice([item["index"] for item in candidates]),
                            "support": choice(["clear", "conflict", "unreadable"])}))})
     image = base64.b64encode(path.read_bytes()).decode("ascii")

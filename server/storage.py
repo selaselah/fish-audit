@@ -28,6 +28,7 @@ from payment_history import LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_fac
 import payment_index
 from performance import verify_findings as verify_performance
 from quality_labels import verify_report as verify_quality_numbers
+from quality_references import verify_report as verify_quality_references
 from peer_review import different_reviewers, review_record, valid_findings, verify_review
 from payment_reference import FORMAT as PAYMENT_REFERENCE_FORMAT, SUPPORTED as REFERENCE_FORMATS
 from supplements import compare_return
@@ -794,6 +795,10 @@ class Store:
                     row = db.execute("SELECT text FROM pages WHERE case_id=? AND doc=? AND number=?",(case_id,doc,page)).fetchone()
                     return row[0] if row else None
                 verify_quality_numbers(paper,page_text)
+                try:
+                    verify_quality_references(paper, page_text, signing=True)
+                except ValueError as error:
+                    raise CaseError(str(error), 409) from error
             except (KeyError,TypeError,ValueError) as error:
                 raise CaseError("本版审计建议与逐项发现不一致，请核对所据底稿。",409) from error
         graph = paper["graph"]

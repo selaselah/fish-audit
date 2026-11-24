@@ -10,7 +10,9 @@ from generate import ROOT, embedded_font, pdf
 from run import BASE, get, post, submit, wait
 
 
-CASES = {"closed":"整改复验后支付第二期","early":"整改期间提前支付验收款","mismatch":"复验缺陷号与原件不符"}
+CASES = {"closed":"整改复验后支付第二期","early":"整改期间提前支付验收款","mismatch":"复验缺陷号与原件不符",
+         "partial":"整改三份记录仅列同一缺陷尾号","noted":"复验报告单独注明仅列缺陷尾号",
+         "short":"完整缺陷编号恰为四位"}
 DEFECT = "柜温控制探头失准"
 TITLES = {"复验报告":"reinspection","整改记录单":"remediation","验收报告":"acceptance","质保期满确认单":"warranty",
           "采购合同":"contract","银行付款回单":"bank_receipt"}
@@ -33,7 +35,7 @@ def materials(run_id,mode):
     template=records["验收报告"]
     original="YS-"+code
     repair="ZG-"+code
-    defect="QX-"+code
+    defect = {"partial":"尾号0042", "noted":"0042", "short":"0042"}.get(mode, "QX-"+code)
     initial={"验收日期":"2026年9月10日","验收结论":"不合格","实测结果":"柜温8℃","遗留事项":DEFECT}
     records["验收报告"]=[(label,initial.get(label,value)) for label,value in template]+[("验收单编号",original),("缺陷编号",defect)]
     links=[("原验收单编号",original),("整改记录编号",repair),("缺陷编号",defect)]
@@ -43,6 +45,8 @@ def materials(run_id,mode):
     records["复验报告"]=[(labels.get(label,label),value) for label,value in template]
     records["复验报告"] += [("复验单编号","FY-"+code),("原验收单编号",original),("整改记录编号",repair),
                           ("缺陷编号",defect+"2" if mode=="mismatch" else defect),("复验对象",DEFECT),("缺陷关闭结论","已关闭")]
+    if mode == "noted":
+        records["复验报告"].append(("缺陷编号展示说明", "本单仅列尾号"))
     if mode=="early":
         records["银行付款回单"]=[(label,"2026年9月18日" if label=="付款日期" else value) for label,value in records["银行付款回单"]]
     font=embedded_font("QualityReinspectionCJK")
@@ -54,14 +58,25 @@ def materials(run_id,mode):
 def verify_report(report, mode):
     by_rule={f["rule"]:f for f in report["findings"]}
     check=by_rule["H02"]
-    expected={"closed":("closed","ok","ok","pass"),"early":("closed","ok","risk","review"),
-              "mismatch":("open","issue","missing","reject")}[mode]
+    expected={"closed":("closed","ok","ok","pass"), "short":("closed","ok","ok","pass"), "early":("closed","ok","risk","review")}.get(
+        mode, ("open","issue","missing","reject"))
     actual=check["reinspection"]["state"],check["status"],by_rule["H05"]["status"],report["result"]["verdict"]
     assert actual==expected, (actual,expected,[(f["rule"],f["detail"]) for f in report["findings"] if f["status"]!="ok"])
     assert [s["date"] for s in check["reinspection"]["steps"]]==["2026-09-10","2026-09-16","2026-09-20"]
     assert all(s["evidence"] and set(s["evidence"])<=set(check["evidence"]) for s in check["reinspection"]["steps"])
-    assert any(s["status"]==("risk" if mode=="mismatch" else "ok") for s in report["findings"]
+    assert any(s["status"]==("risk" if expected[0]=="open" else "ok") for s in report["findings"]
                if s["rule"]=="H04" and s["stage"]["share"]=="60")
+    if mode in ("partial", "noted"):
+        holds = report["graph"]["quality_references"]["holds"]
+        assert len(holds) == (3 if mode=="partial" else 1), holds
+        assert all(h["field"]=="defect_number" and h["fact"] in check["evidence"] for h in holds)
+        assert all(any(e["type"]=="incomplete_defect_number" and e["to"]==h["fact"]
+                       for e in report["graph"]["edges"]) for h in holds)
+        assert "完整编号" in check["detail"]
+        if mode=="noted":
+            assert holds[0]["lines"][0]["quote"]=="缺陷编号展示说明：本单仅列尾号"
+    if mode=="short":
+        assert report["graph"]["quality_references"]["holds"]==[]
 
 
 def reconcile_training_pages(cid,folder,records):
@@ -115,7 +130,7 @@ if __name__=="__main__":
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run",action="store_true")
     parser.add_argument("--run-id",default="synthetic-quality-reinspection-v1")
-    parser.add_argument("--cases",nargs="+",choices=CASES,default=list(CASES))
+    parser.add_argument("--cases",nargs="+",choices=CASES,default=["closed","early","mismatch"])
     args=parser.parse_args()
     queue=[]
     for mode in args.cases:
