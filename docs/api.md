@@ -125,3 +125,5 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 `invoice-approval-v2` 在 `screened` 留存签收时查看的全部同号引文，`matches` 仅列相同标识和判定依据不足的候选。`possible_match` 表示仅有待核候选，`insufficient_identity` 表示本案短号的代码待核。报告出具后新出现的排除项也能沿回执打开前案的代码原文。当前签收版导出的 ZIP 随附该次筛查直接引用的历史签收、底稿、原件、页图及文字层。离线工具能复核候选分类 和每个排除依据，检索范围以企业当时的数据库为准。
 
 规则集 `2026.11.24.10` 起，`graph.number_masks.facts` 保留含明确遮盖符或尾号提示的已核引文、页码和可见原值。相应的 `incomplete_invoice_id`、`incomplete_claim_ref` 或 `incomplete_claim_full_ref` 边分别连回各自的观察记录。I02 的 `invoice_lookup.withheld` 列出本次无法作精确查重的发票字段。签收回执的 `withheld` 保留查验范围缺口，`incomplete_number` 表示本次有票号不全且没有相同或待判定的前案候选。
+
+对于尚待签收、使用旧规则的底稿，若其中已核的遮盖号码仍以可精确匹配的票号进入图谱，初审或独立复核选择通过会返回 409。`incomplete_numbers` 包含原案件、版本、涉及字段的 `count` 及前八条 `facts`。每条含证据编号、实际可见值和页码。初审可在原对话框查看引文，保留原版后重新审计。独立复核人可选择退回补件。已签收的历史版本仍可导出并复算当时的结论。

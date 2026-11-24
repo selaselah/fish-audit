@@ -35,11 +35,14 @@ const invoiceApproval = caseArgument('--invoice-approval-case');
 const claimPairCase = caseArgument('--claim-pair-case');
 const invoiceCodeHistory = caseArgument('--invoice-code-case');
 const maskedInvoice = caseArgument('--masked-invoice-case');
+const legacyMask = caseArgument('--legacy-mask-case');
 const waitingCase = caseArgument('--waiting-case');
 const seeded = [sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
-                invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,waitingCase].some(Boolean);
-const root = waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN : recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
-if (recoveringCase || waitingCase) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
+                invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,waitingCase].some(Boolean);
+const root = legacyMask ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
+  recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
+if (recoveringCase || waitingCase || legacyMask) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
+if (legacyMask) assert.ok(!['8000','8010'].includes(new URL(root).port));
 const children = [];
 const faults = [];
 function start(binary, args, env = process.env) {
@@ -117,6 +120,32 @@ try {
       assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && document.querySelector(".located").scrollWidth<=document.querySelector(".located").clientWidth+1'),'printed pair at '+width);
     }
     console.log('PASS · Printed claim pairs, exact labelled lines, visible model classification and six widths');
+  } else if (legacyMask) {
+    const api=root+'/api/cases/'+legacyMask;
+    const get=async suffix=>(await fetch(api+suffix)).json();
+    const task=await get(''),original=await get('/reports/1');
+    assert.ok(task.title.startsWith('合成演练 · 遮盖票号的费用申请') && task.rev===1 && task.status==='ready');
+    assert.ok(!original.report.graph.number_masks && original.report.result.verdict==='pass');
+    const fields=original.report.graph.facts.filter(f=>['invoice_id','claim_ref'].includes(f.field) && f.value.includes('****'));
+    assert.equal(fields.length,2);
+    await call('Page.navigate',{url:root+'/workpaper/'+legacyMask+'?rev=1'});
+    await wait('[...document.querySelectorAll("button")].some(b=>b.textContent==="填写验收意见")','legacy review available');
+    await click('填写验收意见');
+    await evaluate('document.querySelector("#reviewer").value="演练核验员";document.querySelector("#review-decision").value="approve";document.querySelector("#review-note").value="核对含遮盖票号的旧底稿。";document.querySelector("#review-form").requestSubmit()');
+    await wait('document.querySelectorAll("#review-error a").length===2','both masked references');
+    const links=await evaluate('[...document.querySelectorAll("#review-error a")].map(a=>a.href)');
+    assert.deepEqual(links.map(url=>new URL(url).searchParams.get('fact')).sort(),fields.map(f=>f.id).sort());
+    assert.ok(await evaluate('document.querySelector("#review-decision option[value=approve]").disabled && document.querySelector("#review-note").value==="核对含遮盖票号的旧底稿。"'));
+    for (const width of [1440,1024,820,768,390,320]) {
+      await call('Emulation.setDeviceMetricsOverride',{width,height:860,deviceScaleFactor:1,mobile:false});
+      assert.ok(await evaluate('document.querySelector("#review-dialog").scrollWidth<=document.querySelector("#review-dialog").clientWidth+1'),'legacy approval at '+width);
+    }
+    await click('保留 R1 并重新审计','document.querySelector("#review-error")');
+    const next=await until(async()=>{const item=await get('');return item.rev===2 && item.status==='ready' && item;},'reassessed masked case',120000);
+    assert.equal(next.decisions.length,0);
+    assert.equal((await get('/reports/2')).report.result.verdict,'review');
+    assert.equal((await get('/reports/1')).sha256,original.sha256);
+    console.log('PASS · Legacy decision withheld, original citations, preserved note, six widths and reviewed R2');
   } else if (maskedInvoice) {
     const api=root+'/api/cases/'+maskedInvoice;
     const task=await (await fetch(api)).json();

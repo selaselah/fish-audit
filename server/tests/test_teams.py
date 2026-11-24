@@ -262,6 +262,53 @@ class EnterpriseFlow(unittest.TestCase):
         with upgraded.connect() as db:
             self.assertFalse(db.execute("SELECT 1 FROM invoice_index WHERE case_id=?",(first,)).fetchone())
 
+    def test_legacy_masked_number_requires_a_new_review_at_either_approval(self):
+        from jobs import VERSION
+        admin,wid,headers=self.register("legacy-mask-review")
+        token=admin.post("/api/workspaces/"+wid+"/invites",headers=headers,json={"role":"auditor"}).json["token"]
+        peer,_,ph=self.register("legacy-mask-peer",invite=token)
+        root=f"/api/w/{wid}/cases/"
+        mask="26****001234"
+        lines=["采购发票","发票号码："+mask]
+        def native(*args,**kwargs):
+            pages=prepare(*args,**kwargs)
+            pages[0].update(text="\n".join(lines),layer={"type":"text","lines":{"1":[[.1,.1,.5,.2]],"2":[[.1,.3,.5,.4]]}})
+            return pages
+        out={"quality":"readable","facts":[{"field":field,"value":value,"quote":quote,"region":"top"} for field,value,quote in
+             (("invoice","采购发票",lines[0]),("invoice_id",mask,lines[1]))]}
+        trace={"model":"fixture","output":out,"check":{"model":"fixture","output":{"checks":[]}}}
+        def legacy(key):
+            cid=self.submit(admin,wid,headers,key)
+            old={k:v for k,v in VERSION.items() if k!="invoice_number_masks"}
+            with patch("jobs.prepare",native), patch.object(self.worker,"extract",return_value=(out,trace)), \
+                 patch("graph.withhold_partial_numbers",lambda g:None),patch("jobs.VERSION",old):
+                self.worker.run(self.store.claim())
+            return cid
+        first=legacy("legacy-masked-approval")
+        old=self.store.report(first,1)
+        choice={"rev":1,"decision":"approve","note":"演练核对旧版。"}
+        blocked=admin.post(root+first+"/signoff",headers=headers,json=choice)
+        self.assertEqual(blocked.status_code,409)
+        self.assertEqual(blocked.json["incomplete_numbers"]["facts"][0]["fact"],"d01/p1/f2")
+        self.assertEqual(self.store.report(first,1),old)
+        self.assertEqual(admin.get(root+first).json["decisions"],[])
+        self.assertEqual(admin.post(root+first+"/rerun",headers=headers,json={"rev":1}).status_code,202)
+        self.worker.run(self.store.claim())
+        self.assertEqual(admin.post(root+first+"/signoff",headers=headers,json={**choice,"rev":2}).status_code,200)
+        receipt=admin.get(root+first+"/reports/2").json["invoice_approval"]
+        self.assertEqual((receipt["outcome"],receipt["withheld"][0]["value"]),("incomplete_number",mask))
+        with admin.get(root+first+"/reports/2/bundle") as response:
+            self.assertEqual(verify(io.BytesIO(response.data),True)[:2],(first,2))
+        second=legacy("legacy-masked-peer")
+        self.assertEqual(admin.post(root+second+"/signoff",headers=headers,json={**choice,"decision":"escalate"}).status_code,200)
+        pin=admin.get(root+second).json["referrals"][0]
+        paper=self.store.report(second,1)["report"]
+        body={**choice,"findings":[paper["findings"][0]["id"]],"report_hash":pin["report_hash"],"signoff_hash":pin["signoff_hash"]}
+        blocked=peer.post(root+second+"/peer-review",headers=ph,json=body)
+        self.assertEqual((blocked.status_code,blocked.json["incomplete_numbers"]["case_id"]),(409,second))
+        self.assertEqual(admin.get(root+second).json["status"],"in_review")
+        self.assertEqual(peer.post(root+second+"/peer-review",headers=ph,json={**body,"decision":"return"}).status_code,200)
+
     def test_same_serial_different_codes_at_issuance_and_at_signature(self):
         admin,wid,headers=self.register("printed-codes")
         base="/api/w/"+wid+"/cases/"

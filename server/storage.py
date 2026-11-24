@@ -19,7 +19,7 @@ from installments import LIMIT as INSTALLMENT_LIMIT, calculate as calculate_inst
 from invoice_approval import receipt as invoice_approval_receipt, validate as validate_invoice_approval
 from invoice_comparison import FORMAT as INVOICE_LOOKUP, actionables, archived_identity, lookup_numbers, screen
 from invoice_identity import InvoiceIdentities
-from invoice_history import (INDEX_FIELDS, InvoiceHistoryChanged, differences as invoice_differences,
+from invoice_history import (INDEX_FIELDS, InvoiceHistoryChanged, check_legacy_masks, differences as invoice_differences,
                              indexed_invoices, install_index_guard, pending_signed_indexes)
 from invoice_proof import source_record as invoice_source_record
 from payment_history import LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_facts, payment_record
@@ -663,6 +663,7 @@ class Store:
         paper = json.loads(row["content"])
         graph = paper["graph"]
         if graph.get("profile",paper["policy"].get("profile")) != BANK:
+            check_legacy_masks(graph,case_id,revision,peer)
             keys = sorted({edge["to"] for edge in invoice_number_edges(graph)})
             if keys:
                 self.reconcile_invoice_index(db,case_id)

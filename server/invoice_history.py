@@ -1,6 +1,7 @@
 """Compare the signed invoice observations available to an auditor at two points in time."""
 
 from config import CaseError
+from invoice_masks import FORMAT as MASK_FORMAT, marked_fields
 
 
 INDEX_FIELDS = ("case_id","rev","doc","fact","page","number_key","quote","source_hash","page_hash","document_kind")
@@ -40,6 +41,25 @@ class InvoiceHistoryChanged(CaseError):
         self.differences = differences
         next_step = ("请退回补件，沿用原件重审后核对前案。" if peer else "请保留本版并重新审计，核对前案后再决定。")
         super().__init__("本版出具后，同票签收记录发生变化。"+next_step,409)
+
+
+class LegacyMaskedInvoice(CaseError):
+    def __init__(self,case_id,revision,fields,peer):
+        self.case_id,self.revision,self.fields=case_id,revision,fields
+        action="请退回补件，在新任务中核对完整票号。" if peer else "请保留本版并重新审计，再核对完整票号。"
+        super().__init__("旧版底稿将含遮盖位或尾号的原文用于票号比对。"+action,409)
+
+
+def check_legacy_masks(graph,case_id,revision,peer):
+    if graph.get("number_masks",{}).get("format")==MASK_FORMAT:
+        return
+    invoices=set(graph["documents_by_kind"].get("invoice",[]))
+    claims=set(graph["documents_by_kind"].get("claim",[]))
+    eligible={r for e in graph["edges"] if e["type"] in {"invoice_id","claim_ref","claim_full_ref"} for r in e["evidence"]}
+    marked=[m for m in marked_fields(graph) if m["fact"] in eligible and
+            ((m["field"]=="invoice_id" and m["unit"] in invoices) or (m["field"]!="invoice_id" and m["unit"] in claims))]
+    if marked:
+        raise LegacyMaskedInvoice(case_id,revision,marked,peer)
 
 
 def indexed_invoices(db,case_id,keys):

@@ -29,7 +29,7 @@ from documents import digest
 from evidence import export_bundle
 from graph import compact
 from jobs import Worker
-from invoice_history import InvoiceHistoryChanged
+from invoice_history import InvoiceHistoryChanged, LegacyMaskedInvoice
 from model import FIELDS
 from review import review_text
 from rule_replay import RulesUnavailable, replay_from_git
@@ -221,6 +221,9 @@ def create_app(store, worker):
     def known_error(error):
         if isinstance(error,InvoiceHistoryChanged):
             return jsonify(error=str(error),invoice_history={"count":len(error.differences),"changes":error.differences[:8]}),error.status
+        if isinstance(error,LegacyMaskedInvoice):
+            return jsonify(error=str(error),incomplete_numbers={"case_id":error.case_id,"rev":error.revision,
+                           "count":len(error.fields),"facts":error.fields[:8]}),error.status
         return jsonify(error=str(error)), error.status
 
     @app.errorhandler(HTTPException)

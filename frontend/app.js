@@ -68,6 +68,7 @@ async function api(url, options = {}) {
     const problem = new Error(data.error || '服务请求失败。');
     problem.status = response.status;
     problem.invoiceHistory = data.invoice_history;
+    problem.incompleteNumbers = data.incomplete_numbers;
     throw problem;
   }
   return data;
@@ -642,11 +643,25 @@ function chooseRevision(rev = 0) {
   state.pinned = rev;
   history.replaceState(null,'',Team.hash('case/'+state.detail.id+(rev ? '?rev='+rev : '')));
 }
-function showInvoiceChanges(container,problem,choice) {
+function showInvoiceReviewConflict(container,problem,choice) {
   const history = problem.invoiceHistory;
   choice.querySelector('option[value="approve"]').disabled=true;
   choice.value='';
   const list = el('ul','','invoice-changes');
+  const partial=problem.incompleteNumbers;
+  if (partial) {
+    for (const field of partial.facts) {
+      const params=new URLSearchParams({rev:String(partial.rev),fact:field.fact});
+      const anchor=Team.paperLink('查看 R'+partial.rev+' 第 '+field.page+' 页原文',partial.case_id,'source-jump',params);
+      anchor.target='_blank'; anchor.rel='noopener';
+      const row=el('li');
+      row.append(el('strong',field.value),anchor);
+      list.append(row);
+    }
+    container.replaceChildren(el('strong',problem.message),list);
+    if (partial.count>partial.facts.length) container.append(el('p','本版共 '+partial.count+' 处不完整票号。','small'));
+    return;
+  }
   const source = (item,label)=>{
     const params = new URLSearchParams({rev:String(item.rev),fact:item.fact});
     const anchor = Team.paperLink(label+' · '+item.title+' R'+item.rev+' · '+statusName(item.decision),item.case_id,'source-jump',params);
@@ -738,8 +753,8 @@ $('#review-form').addEventListener('submit', async event => {
     $('#review-dialog').close(); chooseRevision(); await refresh();
   } catch (error) {
     const message = $('#review-error');
-    if (error.invoiceHistory) {
-      showInvoiceChanges(message,error,$('#review-decision'));
+    if (error.invoiceHistory || error.incompleteNumbers) {
+      showInvoiceReviewConflict(message,error,$('#review-decision'));
       message.append(action('保留 R'+pending.rev+' 并重新审计',async e=>{
         const rerun = e.currentTarget; rerun.disabled = true;
         try {
