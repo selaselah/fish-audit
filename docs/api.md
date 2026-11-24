@@ -6,9 +6,11 @@
 
 涉及整改的 H02 可包含 `reinspection`。其中 `state` 为 `open` 或 `closed`，`steps` 按原验收、整改、复验三种角色列出实际收到的来源。每步保存 `role`（`original`、`repair`、`final`）、`unit`（文件或分册页）、`date`（ISO 日期或 null）及 `evidence`（原页证据编号）。当次是否可以据此认定验收或付款条件满足，分别由 H02、H04 和 H05 的状态说明。
 
-当 `policy.delegation_checks` 为 `written-contract-mandate-v1` 或 `written-contract-mandate-v2`，涉及代理签署的 H01 会给出 `delegations`。每项含 `side`（`buyer`、`seller` 或 `unassigned`）、签字栏字段 `signature_field`、签字栏可读内容 `agent`、委托书归属 `units`、`status`、`detail` 和 `evidence`。四个 ISO 日期字段 `signed_on`、`issued_on`、`valid_from`、`valid_until` 的未知值为 null。`graph.delegation_coverage.pages` 按原件页列出是否有可核原生文字层，以及尚未归入已核授权字段的行号和原文。图谱可用 `grant_principal`、`grant_counterparty` 关联采购主体，用 `buyer_grant_ref` 或 `seller_grant_ref` 核对委托书自己的 `grant_number`。
+当 `policy.delegation_checks` 为 `written-contract-mandate-v1`、`written-contract-mandate-v2` 或 `written-contract-mandate-v3`，涉及代理签署的 H01 会给出 `delegations`。每项含 `side`（`buyer`、`seller` 或 `unassigned`）、签字栏字段 `signature_field`、签字栏可读内容 `agent`、委托书归属 `units`、`status`、`detail` 和 `evidence`。四个 ISO 日期字段 `signed_on`、`issued_on`、`valid_from`、`valid_until` 的未知值为 null。`graph.delegation_coverage.pages` 按原件页列出是否有可核原生文字层，以及尚未归入已核授权字段的行号和原文。图谱可用 `grant_principal`、`grant_counterparty` 关联采购主体，用 `buyer_grant_ref` 或 `seller_grant_ref` 核对委托书自己的 `grant_number`。
 
 v2 中甲、乙方代理核查的 `agent_kind` 记录姓名栏判读类别。取值为 `named`（单个具名写法）、`role`（岗位或机构）、`joint`（多人）、`redacted`（隐名）或 `unclear`（待核）。`graph.delegation_coverage.agent_holds` 中的每一项记录委托书受托人栏的 `fact`、`field`、`unit`、`doc`、`page`、`value` 和待核原因 `kind`。相应的 `unresolved_grant_agent` 关系从单据指向本页事实，只能据此追溯原文。旧版若曾凭这些记载核准代理签约，再次提交通过决定时返回 409 并提示重审。
+
+v3 另在 `graph.delegation_coverage.signer_holds` 登记待核的合同签字栏。两类登记均有 `lines`，其中的 `line` 是原页文字层的一基行号，`quote` 含原有姓名间隔。多个印刷行在去除空白后相同时，附上全部匹配行。影像没有原生行时该数组为空。`joint` 表示须核对是否多人，`agent` 中的连写内容须结合登记原文解释。旧版已经据此核准书面授权时，签收通过会重新检查所引原页。
 
 当 `policy.quality_number_classification` 为 `printed-quality-number-v1` 时，按原页标签改归的编号事实带有 `origin: "printed_quality_number"`。`field` 是核对后的分类，`model_field` 保留初次分类，`value` 和 `quote` 保留当时抄录。按 `doc` 和 `page` 找到 `calls.pages[].check`，事实编号末尾 `f` 后的数字及 `classification_index` 分别对应原分类和印刷标签的候选项。两项的具体输入在 `input`，判断在 `output.checks`。底稿支持按 `?rev=版本号&fact=事实编号` 定位页图。
 

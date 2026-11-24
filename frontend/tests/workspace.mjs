@@ -232,9 +232,30 @@ try {
         assert.ok(await evaluate(row+'.textContent.includes('+JSON.stringify(fact.quote)+')'));
         await evaluate(row+'.querySelector("button").click()');
         await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(fact.id),'delegated signature or authority');
+        const ledger=report.graph.delegation_coverage;
+        const held=[...(ledger.agent_holds || []),...(ledger.signer_holds || [])].find(h=>h.fact===fact.id && h.lines?.length);
+        if (held) {
+          const native='document.querySelector(".located .mandate-name-source")';
+          assert.equal(await evaluate(native+'.dataset.mandateKind'),held.kind);
+          assert.deepEqual(await evaluate('[...'+native+'.querySelectorAll("blockquote")].map(q=>q.textContent)'),held.lines.map(l=>l.quote));
+          assert.equal(await evaluate('getComputedStyle('+native+'.querySelector("blockquote")).whiteSpace'),'pre-wrap');
+        }
         await evaluate('document.querySelector("#page-dialog [data-close]").click()');
       }
       for (const page of report.graph.delegation_coverage.pages.filter(p=>entry.units.includes(p.unit))) {
+        if (!page.native) {
+          assert.ok(await evaluate(panel+'.textContent.includes("需通读完整授权范围")'));
+          const notes=report.graph.facts.filter(f=>f.doc===page.doc && f.page===page.page && f.field==='other');
+          const group=panel+'.querySelector('+JSON.stringify('[data-mandate-image="'+page.doc+'/p'+page.page+'"]')+')';
+          if (notes.length) await evaluate(group+'.open=true');
+          for (const fact of notes) {
+            const row=group+'.querySelector('+JSON.stringify('[data-mandate-note="'+fact.id+'"]')+')';
+            await wait(row+'?.textContent.includes('+JSON.stringify(fact.quote)+')','image note transcription');
+            await evaluate(row+'.querySelector("button").click()');
+            await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(fact.id),'image note original');
+            await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+          }
+        }
         for (const line of page.uncovered) {
           await click('核对委托书第 '+line.line+' 行', panel);
           await wait('document.querySelector(".located[data-gap-line] blockquote")?.textContent==='+JSON.stringify(line.quote),'unreviewed authority condition');

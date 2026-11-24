@@ -143,6 +143,9 @@ function openPage(docId, pageNumber, highlight, lineHint) {
   const left = box('', box('image-sheet', image, overlay), enlarged);
   const right = box('', el('h3', '本页引文'));
   const pageFacts = (state.bundle?.report.graph.facts || []).filter(fact => fact.doc === docId && fact.page === pageNumber);
+  const coverage = state.bundle?.report.graph.delegation_coverage;
+  const nameHolds = new Map([...(coverage?.agent_holds || []),...(coverage?.signer_holds || [])]
+    .filter(h=>h.doc===docId && h.page===pageNumber && h.lines?.length).map(h=>[h.fact,h]));
   const editable = state.bundle?.rev === state.detail.rev && state.detail.status === 'ready';
   const selected = new Set();
   let focusRow;
@@ -180,6 +183,13 @@ function openPage(docId, pageNumber, highlight, lineHint) {
       el('small', fact.id + ' · ' + (fact.source_line ? '文字层第 ' + fact.source_line.number + ' 行' :
         '模型定位：页' + statusName(fact.region)), 'small'));
     if (fact.source_line) row.append(fold('对照本机文字层', el('blockquote', fact.source_line.text)));
+    const nameHold = nameHolds.get(fact.id);
+    if (nameHold) {
+      const native = box('mandate-name-source',el('strong','核对姓名栏原文'));
+      native.dataset.mandateKind = nameHold.kind;
+      for (const line of nameHold.lines) native.append(el('small','原页第 '+line.line+' 行','small'),el('blockquote',line.quote));
+      row.append(native);
+    }
     if (fact.origin === 'verified_printed_heading') row.append(el('small','标题来自可定位文字层，经模型对照页图复检。','small'));
     if (fact.origin === 'printed_quality_number') {
       const trace=state.bundle.report.calls.pages.find(t=>t.doc===docId && t.page===pageNumber);

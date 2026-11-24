@@ -108,6 +108,8 @@ PYTHONPATH=server server/.venv/bin/python -m unittest discover -s server/tests -
 
 运行 `server/.venv/bin/python docs/samples/mandates.py --run --cases role joint redacted --run-id synthetic-signing-identity-v1` 可比较两份文件同写“采购负责人”、同列两名代理人、同写“张某”的三种签约情形。每组均核对受托人原文字段、未确认的图谱关系、三期条件及第二期实付时点。
 
+运行 `server/.venv/bin/python docs/samples/mandates.py --run --cases spaced compound --run-id synthetic-printed-agent-v1` 比较两组四字写法。一组签字栏、受托人栏均印“周宁 方程”，另一组均印“欧阳明月”。演练核对姓名中的间隔、原页逐行记录和各期付款条件。
+
 ### 缺陷整改及最终复验
 
 运行 `server/.venv/bin/python docs/samples/quality_reinspection.py --run` 生成并核验三组水印件。9 月 10 日交付的冷藏柜实测 8℃，高于合同上限 4℃。9 月 16 日完成整改，9 月 20 日复验实测 3℃。三案分别核查复验后的第二期付款、复验前已付的验收款以及缺陷号不同的复验报告。每一组均保留首次失败记录。

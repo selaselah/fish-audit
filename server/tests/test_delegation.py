@@ -4,8 +4,9 @@ from unittest.mock import patch
 
 from config import BANK, PERFORMANCE
 from controls import VERSION, conclusion, execute
-from delegation import LEGACY_FORMAT, coverage_gaps, rows_for_grants, verify_sources
-from performance import DELEGATION_FORMAT, REINSPECTION_FORMAT, compute, verify_findings
+from delegation import LEGACY_FORMAT, NAME_FORMAT, coverage_gaps, rows_for_grants, unresolved_agents, verify_sources
+from graph import build_graph
+from performance import DELEGATION_FORMAT, IDENTITY_FORMAT, REINSPECTION_FORMAT, compute, verify_findings
 from test_performance import BANK_DOC, CONTRACT, RECEIPT, WARRANTY, material, rows
 
 
@@ -31,6 +32,17 @@ def sample(edit=None, grants=None, **kwargs):
 
 def identity(signer, agent):
     return lambda i,f,l,v: {"buyer_agent_signature":signer+"（已签字）", "grant_agent":agent}.get(f,v)
+
+
+def fixture_text(edit=None):
+    pages={}
+    for i,group in enumerate([CONTRACT_BY_AGENT,GRANT,RECEIPT,WARRANTY,BANK_DOC],1):
+        lines=[]
+        for field,label,value in group:
+            value=edit(i,field,label,value) if edit else value
+            lines.append(label+"："+value if label else value)
+        pages[f"d{i:02d}",1]="\n".join(lines)
+    return lambda doc,page:pages[doc,page]
 
 
 class DelegationTests(unittest.TestCase):
@@ -71,8 +83,8 @@ class DelegationTests(unittest.TestCase):
     def test_verify_holds_requires_the_original_agent_field_and_prevents_shared_entity_recreation(self):
         graph=sample(identity("采购负责人","采购负责人"))
         paper={"policy":dict(VERSION,profile=PERFORMANCE),"graph":graph,"findings":execute(graph,PERFORMANCE)}
-        printed="\n".join(l+"："+("采购负责人" if f=="grant_agent" else v) if l else v for f,l,v in GRANT)
-        verify_sources(paper,lambda *_:printed)
+        source=fixture_text(identity("采购负责人","采购负责人"))
+        verify_sources(paper,source)
         verify_findings(paper)
         for kind in ("remove","wrong_fact","extra_join","extra_person","type"):
             with self.subTest(kind=kind):
@@ -84,7 +96,7 @@ class DelegationTests(unittest.TestCase):
                 if kind=="extra_join": g["edges"].append({**edge,"type":"grant_agent"})
                 if kind=="extra_person": g["nodes"].append({"type":"mandatary","id":"invented","label":"采购负责人"})
                 if kind=="type": g["delegation_coverage"]["agent_holds"][0]["kind"]="named"
-                with self.assertRaises(ValueError): verify_sources(changed,lambda *_:printed)
+                with self.assertRaises(ValueError): verify_sources(changed,source)
 
     def test_old_archived_decisions_replay_but_ambiguous_named_authority_needs_rerun_before_signoff(self):
         def legacy_coverage(graph,read):
@@ -97,12 +109,63 @@ class DelegationTests(unittest.TestCase):
                 findings=compute(graph,DELEGATION_FORMAT)
                 self.assertEqual(next(f["status"] for f in findings if f["rule"]=="H01"),"ok")
                 paper={"graph":graph,"policy":{"delegation_checks":LEGACY_FORMAT,"performance_checks":DELEGATION_FORMAT},"findings":findings}
-                text="\n".join(l+"："+(name if f=="grant_agent" else v) if l else v for f,l,v in GRANT)
-                verify_sources(paper,lambda *_:text)
-                if approve: verify_sources(paper,lambda *_:text,signing=True)
+                source=fixture_text(identity(name,name))
+                verify_sources(paper,source)
+                if approve: verify_sources(paper,source,signing=True)
                 else:
                     with self.assertRaisesRegex(ValueError,"旧版签约授权"):
-                        verify_sources(paper,lambda *_:text,signing=True)
+                        verify_sources(paper,source,signing=True)
+
+    def test_native_names_separated_by_space_remain_distinct_even_if_the_reader_joins_them(self):
+        for signed,granted in (("周宁 方程","周宁 方程"),("周宁方程","周宁　方程"),("周宁 方程","周宁方程"),("欧阳明月","欧阳明月")):
+            with self.subTest(signed=signed,granted=granted):
+                source=fixture_text(identity(signed,granted))
+                def originals(docs,pages,*args):
+                    for p in pages: p["text"]=source(p["doc"],p["number"])
+                    return build_graph(docs,pages,*args)
+                with patch("test_performance.build_graph",side_effect=originals):
+                    graph=sample(identity("".join(signed.split()),"".join(granted.split())))
+                paper={"graph":graph,"policy":dict(VERSION,profile=PERFORMANCE),"findings":execute(graph,PERFORMANCE)}
+                verify_sources(paper,source,signing=True)
+                verify_findings(paper)
+                evidence=graph["delegation_coverage"]
+                separate=lambda value:any(c.isspace() for c in value)
+                self.assertEqual(bool(evidence["signer_holds"]),separate(signed))
+                self.assertEqual(bool(evidence["agent_holds"]),separate(granted))
+                self.assertEqual(any(n["type"]=="mandatary" for n in graph["nodes"]),not separate(granted))
+                for hold in evidence["signer_holds"]+evidence["agent_holds"]:
+                    line,=hold["lines"]
+                    self.assertEqual(hold["kind"],"joint")
+                    self.assertEqual(line["quote"],source(hold["doc"],hold["page"]).splitlines()[line["line"]-1])
+                expected="missing" if separate(signed) or separate(granted) else "ok"
+                self.assertEqual(rows(graph,"H01")[0]["status"],expected)
+                self.assertTrue(all(f["status"]==expected for f in rows(graph,"H04")+rows(graph,"H05")))
+                if evidence["signer_holds"]:
+                    hold,=evidence["signer_holds"]
+                    edge,=[e for e in graph["edges"] if e["type"]==hold["field"] and e["evidence"]==[hold["fact"]]]
+                    self.assertEqual(edge["to"],hold["fact"])
+                    edge["to"]=hold["unit"]
+                    with self.assertRaisesRegex(ValueError,"待核签署栏"): verify_sources(paper,source)
+                    edge["to"]=hold["fact"]
+                    evidence["signer_holds"][0]["lines"][0]["quote"]="甲方代理人签字：周宁方程（已签字）"
+                    with self.assertRaises(ValueError): verify_sources(paper,source)
+
+    def test_v2_positive_with_joined_transcription_cannot_be_signed_after_native_recheck(self):
+        source=fixture_text(identity("周宁 方程","周宁 方程"))
+        def originals(docs,pages,*args):
+            for p in pages: p["text"]=source(p["doc"],p["number"])
+            return build_graph(docs,pages,*args)
+        def model_only(graph,read):
+            pages=rows_for_grants(graph,read)
+            graph["delegation_coverage"]={"format":NAME_FORMAT,"pages":pages,"agent_holds":unresolved_agents(graph)}
+            graph["gaps"].extend(coverage_gaps(pages))
+        with patch("test_performance.build_graph",side_effect=originals),patch("graph.record_mandate_pages",model_only):
+            graph=sample(identity("周宁方程","周宁方程"))
+        findings=compute(graph,IDENTITY_FORMAT)
+        self.assertEqual(next(f["status"] for f in findings if f["rule"]=="H01"),"ok")
+        report={"graph":graph,"policy":{"delegation_checks":NAME_FORMAT,"performance_checks":IDENTITY_FORMAT},"findings":findings}
+        verify_sources(report,source)
+        with self.assertRaisesRegex(ValueError,"旧版签约授权"): verify_sources(report,source,signing=True)
 
     def test_last_authorized_day_connects_the_contract_and_all_three_payment_conditions(self):
         graph = sample()
@@ -161,8 +224,8 @@ class DelegationTests(unittest.TestCase):
     def test_offline_rechecks_every_mandate_line_entity_and_decision(self):
         g=sample()
         paper={"policy":{**VERSION,"profile":PERFORMANCE},"graph":g,"findings":execute(g,PERFORMANCE)}
-        printed="\n".join(l+"："+v if l else v for _,l,v in GRANT)
-        verify_sources(paper,lambda *_:printed)
+        source=fixture_text()
+        verify_sources(paper,source)
         verify_findings(paper)
         for case in ("date","edge","source","coverage"):
             with self.subTest(case=case):
@@ -176,4 +239,4 @@ class DelegationTests(unittest.TestCase):
                 if case=="coverage":
                     changed["graph"]["delegation_coverage"]["pages"]=[]
                 with self.assertRaises(ValueError):
-                    verify_sources(changed,lambda *_:printed+"\n另有限制" if case=="source" else printed)
+                    verify_sources(changed,lambda doc,page:source(doc,page)+("\n另有限制" if case=="source" else ""))

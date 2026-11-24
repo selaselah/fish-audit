@@ -217,9 +217,9 @@ def verify_transcription(fact, page_calls, nodes, subject, *, note_policy=None):
             raw["quote"].strip()==fact["quote"],subject+"与当时模型抄录或人工补正不符")
     if note_policy is not None:
         decision = fact.get("attestation") or {}
-        require((fact["status"]=="confirmed")== (decision.get("decision")=="confirm"),"流水展示说明与人工核图决定不符")
+        require((fact["status"]=="confirmed")== (decision.get("decision")=="confirm"),subject+"与人工核图决定不符")
         if fact["status"]=="confirmed" and "field_receipts.py" in note_policy.get("code_sha256",{}):
-            require(decision.get("source_check"),"流水展示说明缺少当时的人工核图回执")
+            require(decision.get("source_check"),subject+"缺少当时的人工核图回执")
 
 
 def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
@@ -255,6 +255,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
     selected_notes = set(note_refs(graph.get("transfer_references",{}).get("facts",[]))) if version in REFERENCE_FORMATS-{FIRST_REFERENCE_FORMAT} else set()
     quality_notes = {note["fact"] for h in graph.get("quality_references", {}).get("holds", [])
                      for note in h["observations"]}
+    mandate_images = {(p["doc"],p["page"]) for p in graph.get("delegation_coverage",{}).get("pages",[]) if not p["native"]}
     texts = {}
     performance_refs = {ref for item in report["findings"] if item.get("reinspection") or item.get("delegations") for ref in item["evidence"]}
     for fact in graph["facts"]:
@@ -284,6 +285,8 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
             verify_transcription(fact,page_calls,nodes,"流水展示说明",note_policy=report["policy"])
         elif fact["id"] in quality_notes:
             verify_transcription(fact,page_calls,nodes,"验收或整改编号展示说明")
+        elif fact["field"]=="other" and (fact["doc"],fact["page"]) in mandate_images:
+            verify_transcription(fact,page_calls,nodes,"委托书同页读图引文",note_policy=report["policy"])
         elif invoice_number or (version in REFERENCE_FORMATS and fact["field"]=="transfer_ref"):
             verify_transcription(fact,page_calls,nodes,"票号" if invoice_number else "流水号")
         elif (report["policy"].get("performance_checks") and fact["field"] in PERFORMANCE_FIELDS or

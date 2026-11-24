@@ -155,7 +155,7 @@ function mandatePanel(entries, graph) {
   const index = graphIndex(graph);
   for (const entry of entries) {
     const title = {buyer:'甲方',seller:'乙方',unassigned:'待归属'}[entry.side];
-    const pending = {role:'仅列岗位或机构', joint:'多人授权', redacted:'姓名隐去', unclear:'姓名待核'}[entry.agent_kind];
+    const pending = {role:'仅列岗位或机构', joint:'受托人数待核', redacted:'姓名隐去', unclear:'姓名待核'}[entry.agent_kind];
     const identity = pending || entry.agent;
     const section = box('mandate-side', box('flow', el('strong', title+(identity?' · '+identity:'')), tag(entry.status)));
     section.dataset.mandateSide = entry.side;
@@ -177,7 +177,19 @@ function mandatePanel(entries, graph) {
       section.append(line);
     }
     for (const page of (graph.delegation_coverage?.pages || []).filter(p => entry.units.includes(p.unit))) {
-      if (!page.native) section.append(el('p', '委托书第 '+page.page+' 页为影像，需通读完整授权范围。', 'small'));
+      if (!page.native) {
+        section.append(el('p', '委托书第 '+page.page+' 页为影像，需通读完整授权范围。', 'small'));
+        const notes = graph.facts.filter(f=>f.doc===page.doc && f.page===page.page && f.field==='other');
+        if (notes.length) {
+          const details = lazyFold('查看同页其他读图引文（'+notes.length+'）',()=>notes.map(f=>{
+            const row=box('reinspection-line',el('span',f.quote),tag(f.status),citation(f.id));
+            row.dataset.mandateNote=f.id;
+            return row;
+          }));
+          details.dataset.mandateImage=page.doc+'/p'+page.page;
+          section.append(details);
+        }
+      }
       for (const line of page.uncovered) section.append(box('reinspection-line', el('span', line.quote),
         action('核对委托书第 '+line.line+' 行',()=>openPage(page.doc,page.page,null,line.line),'ref')));
     }

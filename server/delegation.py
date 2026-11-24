@@ -10,7 +10,8 @@ from quality_references import incomplete_number
 
 
 LEGACY_FORMAT = "written-contract-mandate-v1"
-FORMAT = "written-contract-mandate-v2"
+NAME_FORMAT = "written-contract-mandate-v2"
+FORMAT = "written-contract-mandate-v3"
 TITLES = ("授权委托书", "签约授权委托书", "合同签署授权委托书", "采购合同授权委托书")
 LABELS = {
     "buyer_agent_signature": ("甲方代理人签字", "甲方授权代理人签字", "采购方委托代理人签字"),
@@ -36,6 +37,7 @@ ENTITY_TYPES = {"buyer_grant_ref":"mandate_number", "seller_grant_ref":"mandate_
 PAGE_MARK = re.compile(r"第?[0-9]{1,4}页(?:[/／共][0-9]{1,4}页)?")
 SIGNER = re.compile(r"(?:(?:委托代理人|授权代理人|代理人):?)?([\u3400-\u9fff·A-Za-z]{2,40})\((?:已签字|已签名)\)")
 PRINTED_SIGNER = re.compile(r"(?:(?:委托代理人|授权代理人|代理人):?)?(.{1,100})\((?:已签字|已签名)\)")
+NATIVE_SIGNER = re.compile(r"(?:(?:委托代理人|授权代理人|代理人)\s*:?\s*)?(.{1,100}?)\s*\(\s*已\s*签\s*[字名]\s*\)")
 HAN = r"[\u3400-\u9fff]"
 SINGLE_NAME = re.compile(HAN+r"{2,4}|"+HAN+r"{1,12}(?:·"+HAN+r"{1,12}){1,3}")
 JOINT_NAME = re.compile(r"[、,/&;+]|等人|共同|联合|两人|二人|分别|任选|之一|任一|"+HAN+r"{2,}[和与及暨或]"+HAN+r"{2,}")
@@ -95,6 +97,56 @@ def unresolved_agents(graph):
     return holds
 
 
+def printed_name(field, line):
+    body = unicodedata.normalize("NFKC",line).partition(":")[2].strip()
+    if field=="grant_agent":
+        return body
+    signed = NATIVE_SIGNER.fullmatch(body)
+    return signed[1] if signed else ""
+
+
+def identity_holds(graph, read_text):
+    """Compare the transcription to each matching native line before identifying a person."""
+    pages = {n["id"]:n for n in graph["nodes"] if n["type"]=="page"}
+    by_page = {}
+    agents, signers = [], []
+    signature_fields = {*PARTY_SIGNATURES, "buyer_agent_signature", "seller_agent_signature"}
+    for fact in graph["facts"]:
+        field = fact["field"]
+        if fact["status"] not in ("anchored", "confirmed") or field not in signature_fields and field!="grant_agent":
+            continue
+        address = fact["doc"],fact["page"]
+        quoted = printed_name(field,fact["quote"])
+        if field in signature_fields and not quoted:
+            continue
+        native = pages[f"{address[0]}/p{address[1]}"]
+        lines = []
+        if native.get("layer")=="text":
+            if address not in by_page:
+                source = read_text(*address)
+                if not isinstance(source,str) or hashlib.sha256(source.encode()).hexdigest()!=native.get("text_sha256"):
+                    raise ValueError("受托人或签字栏与原页文字层摘要不符")
+                indexed = defaultdict(list)
+                for number, line in enumerate(source.splitlines(),1):
+                    indexed[normalized(line)].append({"line":number, "quote":line})
+                by_page[address] = indexed
+            lines = by_page[address].get(normalized(fact["quote"]), [])
+        value,kind = quoted,agent_kind(quoted)
+        for line in lines:
+            visible = printed_name(field,line["quote"])
+            visible_kind = agent_kind(visible)
+            if visible_kind!="named":
+                value,kind = visible,visible_kind
+                break
+        if not printed_value(field, fact["value"], fact["quote"]) or native.get("layer")=="text" and not lines:
+            kind = "unclear"
+        if kind!="named":
+            target = agents if field=="grant_agent" else signers
+            target.append({"fact":fact["id"], "field":field, "doc":fact["doc"], "page":fact["page"],
+                           "unit":fact.get("unit",fact["doc"]), "value":value or fact["value"], "kind":kind, "lines":lines})
+    return agents,signers
+
+
 def rows_for_grants(graph, read_text):
     units = set(graph["documents_by_kind"].get("power_of_attorney", []))
     if not units:
@@ -138,16 +190,21 @@ def coverage_gaps(pages):
 
 def attach(graph, read_text):
     pages = rows_for_grants(graph, read_text)
-    holds = unresolved_agents(graph)
-    graph["delegation_coverage"] = {"format":FORMAT, "pages":pages, "agent_holds":holds}
+    holds,signers = identity_holds(graph, read_text)
+    graph["delegation_coverage"] = {"format":FORMAT, "pages":pages, "agent_holds":holds, "signer_holds":signers}
     graph["gaps"].extend(coverage_gaps(pages))
-    if holds:
+    if holds or signers:
         withheld = {h["fact"] for h in holds}
+        local_signatures = {(h["field"],h["fact"]) for h in signers}
         removed = set()
         for edge in graph["edges"]:
-            if edge["type"]=="grant_agent" and edge["evidence"][0] in withheld:
+            ref = edge["evidence"][0]
+            if edge["type"]=="grant_agent" and ref in withheld:
                 removed.add(edge["to"])
-                edge.update(type="unresolved_grant_agent", to=edge["evidence"][0])
+                edge.update(type="unresolved_grant_agent", to=ref)
+            elif (edge["type"],ref) in local_signatures:
+                removed.add(edge["to"])
+                edge["to"] = ref
         unused = removed - {edge["to"] for edge in graph["edges"]}
         graph["nodes"] = [n for n in graph["nodes"] if n["id"] not in unused]
 
@@ -161,12 +218,18 @@ def verify_sources(report, read_text, *, signing=False):
         return
     pages = rows_for_grants(graph, read_text)
     coverage = {"format":marker, "pages":pages}
-    holds = unresolved_agents(graph) if signing or marker==FORMAT else []
-    withheld = set()
     if marker==FORMAT:
+        holds,signers = identity_holds(graph,read_text)
+        coverage["signer_holds"] = signers
+    elif marker==NAME_FORMAT:
+        holds = unresolved_agents(graph)
+    else:
+        holds = []
+    withheld = set()
+    if marker in (NAME_FORMAT,FORMAT):
         coverage["agent_holds"] = holds
         withheld = {h["fact"] for h in holds}
-    expected_format = {LEGACY_FORMAT:"contract-performance-v4", FORMAT:"contract-performance-v5"}.get(marker)
+    expected_format = {LEGACY_FORMAT:"contract-performance-v4", NAME_FORMAT:"contract-performance-v5", FORMAT:"contract-performance-v6"}.get(marker)
     if (not expected_format or policy.get("performance_checks")!=expected_format or graph.get("delegation_coverage")!=coverage
             or coverage_gaps(pages) != [g for g in graph["gaps"] if g["quality"]=="mandate_clause"]):
         raise ValueError("授权委托书的已核页面或未覆盖条款与原页不符")
@@ -191,14 +254,22 @@ def verify_sources(report, read_text, *, signing=False):
         expected.append((unit, target, fact["field"], (fact["id"],)))
     actual = [(e["from"],e["to"],e["type"],tuple(e["evidence"])) for e in graph["edges"]
               if e["type"] in ENTITY_TYPES or e["type"]=="unresolved_grant_agent" or nodes.get(e["to"],{}).get("type")=="mandatary"]
-    if sorted(actual)!=sorted(expected) or marker==FORMAT and persons!={n["id"] for n in nodes.values() if n["type"]=="mandatary"}:
+    if sorted(actual)!=sorted(expected) or marker!=LEGACY_FORMAT and persons!={n["id"] for n in nodes.values() if n["type"]=="mandatary"}:
         raise ValueError("代理授权图谱关系与原件归属不符")
-    if signing and marker==LEGACY_FORMAT:
-        ambiguous = {h["fact"] for h in holds}
-        for finding in report["findings"]:
-            for entry in finding.get("delegations", []):
-                if entry["status"]=="ok" and (agent_kind(entry["agent"] or "")!="named" or ambiguous.intersection(entry["evidence"])):
-                    raise ValueError("旧版签约授权所据姓名仅列岗位、多人或不完整，请按现行程序重审。")
+    if marker==FORMAT:
+        located = {(h["field"],h["fact"]):h["unit"] for h in signers}
+        expected_signers = [(unit,ref,field,(ref,)) for (field,ref),unit in located.items()]
+        actual_signers = [(e["from"],e["to"],e["type"],tuple(e["evidence"])) for e in graph["edges"]
+                          if any((e["type"],ref) in located for ref in e["evidence"])]
+        if sorted(actual_signers)!=sorted(expected_signers):
+            raise ValueError("待核签署栏应指向其所在原页的签字记录")
+    if signing and marker!=FORMAT:
+        approved = [entry for f in report["findings"] for entry in f.get("delegations",[]) if entry["status"]=="ok"]
+        if approved:
+            agents,signers = identity_holds(graph,read_text)
+            ambiguous = {h["fact"] for h in agents+signers}
+            if any(agent_kind(e["agent"] or "")!="named" or ambiguous.intersection(e["evidence"]) for e in approved):
+                raise ValueError("旧版签约授权所据姓名仅列岗位、多人或不完整，请按现行程序重审。")
 
 
 def present(doc, field):
@@ -231,6 +302,9 @@ def decision(contract, side, signature, grants, *, strict_names):
             if matched and agent_kind(matched[1])!="named":
                 entry["agent_kind"] = agent_kind(matched[1])
                 break
+        printed_signer = next((h for h in contract.signer_holds if h["field"]==signature),None)
+        if printed_signer:
+            entry["agent_kind"] = printed_signer["kind"]
     signed = contract.date("signed_on")
     entry["signed_on"] = signed.isoformat() if signed else None
     if len(grants) != 1:
@@ -255,7 +329,7 @@ def decision(contract, side, signature, grants, *, strict_names):
             entry["agent_kind"] = observed["kind"]
             source = "委托书受托人栏“"+observed["value"]+"”"
         else:
-            source = "合同代理签字栏“"+contract.body(signature)+"”"
+            source = "合同代理签字栏“"+(printed_signer["value"] if printed_signer else contract.body(signature))+"”"
         note = label+source+IDENTITY_NOTES[entry["agent_kind"]]
         risks = []
         if all((issued,start,end,signed)) and start<=end and (issued>signed or not start<=signed<=end):

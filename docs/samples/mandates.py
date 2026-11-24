@@ -17,8 +17,10 @@ from delegation import LABELS
 CASES = {"valid":"委托代理人在授权期内签约", "expired":"签约时书面授权已到期",
          "receipt":"受托人仅获授权收货验收", "restriction":"委托书备注明列签约审批限制",
          "role":"合同与委托书均仅列采购负责人", "joint":"委托书记载两名代理人",
-         "redacted":"合同和委托书仅列隐去的姓名"}
-IDENTITIES = {"role":"采购负责人", "joint":"演练林岚及演练方程", "redacted":"张某"}
+         "redacted":"合同和委托书仅列隐去的姓名", "spaced":"受托人栏以空格隔开两组姓名",
+         "compound":"同一位具名受托人的四字姓名"}
+IDENTITIES = {"role":"采购负责人", "joint":"演练林岚及演练方程", "redacted":"张某", "spaced":"周宁 方程", "compound":"欧阳明月"}
+HOLD_KIND = {"role":"role","joint":"joint","redacted":"redacted","spaced":"joint"}
 FIELDS = {name:field for field,names in LABELS.items() for name in names}
 FIELDS.update({"签约日期":"signed_on","实际生效日期":"effect_on","生效条款":"effect_clause","约定交付数量":"quantity_agreed",
                "约定验收标准":"acceptance_criteria","付款条款":"payment_term","第一期":"payment_stage","第二期":"payment_stage",
@@ -59,23 +61,32 @@ def generate(seed, mode):
 def verify_case(report, mode):
     h01, = [f for f in report["findings"] if f["rule"]=="H01"]
     entry, = h01["delegations"]
-    status = {"valid":"ok","expired":"risk","receipt":"risk"}.get(mode,"missing")
-    assert (h01["status"],entry["status"],entry["agent"])==(status,status,IDENTITIES.get(mode,AGENT)), h01
-    if mode in IDENTITIES:
+    positive = mode in ("valid","compound")
+    status = "ok" if positive else {"expired":"risk","receipt":"risk"}.get(mode,"missing")
+    observed = IDENTITIES.get(mode,AGENT)
+    assert (h01["status"],entry["status"],entry["agent"])==(status,status,"".join(observed.split())), h01
+    if mode in HOLD_KIND:
         hold, = report["graph"]["delegation_coverage"]["agent_holds"]
-        assert (hold["kind"],entry["agent_kind"],hold["value"])==(mode,mode,IDENTITIES[mode])
+        assert (hold["kind"],entry["agent_kind"],hold["value"])==(HOLD_KIND[mode],HOLD_KIND[mode],observed)
         edge, = [e for e in report["graph"]["edges"] if e["type"]=="unresolved_grant_agent"]
         assert edge["to"]==hold["fact"] and hold["fact"] in entry["evidence"]
         assert not any(n["type"]=="mandatary" for n in report["graph"]["nodes"])
         assert all(f["status"]=="missing" for f in report["findings"] if f["rule"]=="H05")
+        if mode=="spaced":
+            signer, = report["graph"]["delegation_coverage"]["signer_holds"]
+            assert signer["kind"]=="joint"
+            assert all(len(h["lines"])==1 and observed in h["lines"][0]["quote"] for h in (signer,hold))
+    if mode=="compound":
+        assert entry["agent_kind"]=="named"
+        assert not any(report["graph"]["delegation_coverage"][k] for k in ("agent_holds","signer_holds"))
     assert entry["signed_on"]=="2026-09-01" and entry["issued_on"]=="2026-07-25"
     assert set(entry["evidence"])<=set(h01["evidence"])
     assert next(f for f in report["findings"] if f["rule"]=="H02")["status"]=="ok"
     assert next(f for f in report["findings"] if f["rule"]=="H03")["status"]=="ok"
     phases = [f for f in report["findings"] if f["rule"]=="H04"]
     assert [f["stage"]["share"] for f in phases]==["30","60","10"]
-    assert all(f["status"]==("ok" if mode=="valid" else "missing") and set(entry["units"])<=set(f["scope"]) for f in phases)
-    assert report["result"]["verdict"]==("pass" if mode=="valid" else "review"), report["findings"]
+    assert all(f["status"]==("ok" if positive else "missing") and set(entry["units"])<=set(f["scope"]) for f in phases)
+    assert report["result"]["verdict"]==("pass" if positive else "review"), report["findings"]
     page, = report["graph"]["delegation_coverage"]["pages"]
     assert page["native"] and page["unit"] in entry["units"]
     assert [l["quote"] for l in page["uncovered"]]==(["备注：签约前须另经采购总监书面批准"] if mode=="restriction" else [])
