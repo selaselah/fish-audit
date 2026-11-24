@@ -288,15 +288,20 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     const source = [...signers.clauses,...signers.signatures].find(s=>s.doc===docId && s.page===pageNumber && s.line===lineHint);
     if (source) gaps.push({...source,quality:'signer_reference'});
   }
+  const batches=state.bundle?.report.graph.delivery_batch_sources;
+  if (batches && lineHint && !gaps.some(g=>g.line===lineHint)) {
+    const source=batches.signals.find(s=>s.doc===docId && s.page===pageNumber && s.line===lineHint);
+    if (source) gaps.push({...source,quality:'delivery_batch_clause'});
+  }
   for (const gap of gaps) {
-    const label = {addendum_reference:'补充协议所据原文',signer_reference:'验收签认所据原文'}[gap.quality] || '待核的原文字层';
+    const label = {addendum_reference:'补充协议所据原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文'}[gap.quality] || '待核的原文字层';
     const section = box('evidence-row',el('h4',label+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
     section.dataset.gapLine = String(gap.line);
     if (gap.line===lineHint) {
       section.classList.add('located');
       focusRow=section;
     }
-    const field = ['mandate_clause','addendum_clause','acceptance_authority_clause'].includes(gap.quality) ? null : gap.field || gap.title_hint;
+    const field = ['mandate_clause','addendum_clause','acceptance_authority_clause','delivery_batch_clause'].includes(gap.quality) ? null : gap.field || gap.title_hint;
     if (editable && field) {
       const unresolved=pageFacts.filter(f=>['visual','unsupported'].includes(f.status));
       const matching=unresolved.filter(f=>f.source_line?.number===gap.line && f.source_line.text===gap.quote);
@@ -467,6 +472,20 @@ function finding(item) {
   if (item.delegations) node.append(mandatePanel(item.delegations, state.bundle.report.graph));
   if (item.quality_change) node.append(qualityChangePanel(item.quality_change, state.bundle.report.graph));
   if (item.acceptance_authority) node.append(acceptanceAuthorityPanel(item.acceptance_authority, state.bundle.report.graph));
+  if (item.batch_acceptance) {
+    const {graph,findings}=state.bundle.report;
+    node.append(deliveryBatchPanel(item.batch_acceptance,graph,findings.filter(f=>f.rule==='H04')));
+  }
+  if (item.stage?.batch_index) {
+    const {findings}=state.bundle.report;
+    const batch=findings.find(f=>f.batch_acceptance)?.batch_acceptance;
+    const record=batch?.batches.find(b=>b.index===item.stage.batch_index);
+    const sources=(record?.records || []).map(unit=>batch.records.find(r=>r.unit===unit)?.scope_ref).filter(Boolean);
+    const evidence=box('flow',el('strong','第'+item.stage.batch_index+'批验收'),el('span',item.stage.batch_date || '合格日期待核','small'));
+    if (record) evidence.append(citation(record.clause_ref));
+    for (const ref of sources) evidence.append(citation(ref));
+    node.append(evidence);
+  }
   if (item.rule.startsWith('H')) {
     const comparison = performanceComparison(item,state.bundle.report.graph);
     if (comparison) node.append(comparison);
@@ -549,6 +568,18 @@ function graphPanel() {
   const panel = box('panel', el('h2', '本案证据关系'), el('p', graph.nodes.length + ' 个节点 · ' +
     graph.edges.length + ' 条关系 · ' + graph.facts.length + ' 条提取记录', 'muted'));
   const grouped = new Map();
+  const batchEdges=graph.edges.filter(e=>['delivery_batch_acceptance','batch_payment_basis'].includes(e.type));
+  if (batchEdges.length) {
+    const list=lazyFold('分批验收与付款依据（'+batchEdges.length+'）',()=>batchEdges.map(edge=>{
+      const row=box('line',el('strong',edge.type==='batch_payment_basis'?'本期付款条件':'约定交付范围'),
+        box('batch-source',el('q',facts.get(edge.from).quote),citation(edge.from)),
+        box('batch-source',el('q',facts.get(edge.to).quote),citation(edge.to)));
+      row.dataset.batchWitness=edge.from+'>'+edge.to;
+      return row;
+    }));
+    list.classList.add('batch-relations');
+    panel.append(list);
+  }
   const signers = graph.edges.filter(edge=>edge.type==='named_acceptance_signature');
   if (signers.length) {
     const list=lazyFold('合同约定与签认关系（'+signers.length+'）',()=>signers.map(edge=>{
@@ -968,7 +999,7 @@ $('#upload-title').addEventListener('input', () => { state.key = null; });
 function profileChanged() {
   state.key = null;
   if ($('#upload-profile').value === performanceProfile) {
-    $('#profile-note').textContent = '上传合同及本次要核对的履约资料。代理人签约可附授权委托书，另可提交审批单、验收单、整改复验记录、质保期满确认单及分期回单。';
+    $('#profile-note').textContent = '上传合同、验收单及注明期次的付款回单。分批交付时请附各批验收单。涉及代理、审批、整改或质保时，可附授权委托书、审批记录、复验报告及质保期满确认单。';
     return;
   }
   if ($('#upload-profile').value === bankProfile) {

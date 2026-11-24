@@ -12,7 +12,7 @@ from reinspection import LINK_KEYS, linked
 
 
 FORMAT = "named-acceptance-signatures-v1"
-PERFORMANCE_FORMATS = ("contract-performance-v8","contract-performance-v9")
+PERFORMANCE_FORMATS = ("contract-performance-v8","contract-performance-v9","contract-performance-v10")
 CLAUSE = "acceptance_signing_clause"
 SIGNER = "acceptance_signer"
 LABELS = {CLAUSE:("验收签认约定","验收签署约定","验收签字要求","终验签认约定","指定验收人","甲方指定验收人")}

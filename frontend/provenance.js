@@ -130,6 +130,91 @@ function dateEvidencePanel(finding, graph) {
   return panel.children.length>1 ? panel : null;
 }
 
+function deliveryBatchPanel(entry, graph, phases) {
+  const {facts,documents}=graphIndex(graph);
+  const ledger=graph.delivery_batch_sources;
+  const panel=el('section','','delivery-batches');
+  const records=new Map(entry.records.map(r=>[r.unit,r]));
+  const matched=new Set(entry.batches.flatMap(b=>b.records));
+  const complete=entry.batches.filter(b=>b.status==='ok').length;
+  const sourceRow = ref => {
+    const fact=facts.get(ref);
+    const row=box('batch-source',el('q',fact.source_line?.text || fact.quote),citation(ref));
+    row.dataset.batchFact=ref;
+    return row;
+  };
+  panel.setAttribute('aria-label','分批交付与验收');
+  panel.append(box('batch-heading',el('h4','分批交付与验收'),el('span',complete+' / '+entry.batches.length+' 批有合格依据','small')));
+  const rule=facts.get(entry.rule_ref);
+  if (rule) panel.append(sourceRow(rule.id));
+  if (entry.completion_on) panel.append(el('p','按合同达到终验条件 · '+entry.completion_on,'batch-final'));
+  else if (!entry.deemed_final) panel.append(el('p',rule && /另行(组织最终验收|终验)/.test(rule.quote)?'合同约定另行终验，待核终验原件。':'各批验收与最终验收的关系待核。','batch-final'));
+  function receipt(r) {
+    const group=box('batch-receipt');
+    const scope=facts.get(r.scope_ref);
+    const head=box('flow',el('strong',r.number || '验收单号待核'),el('span',r.date || '日期待核','small'));
+    if (scope) head.append(citation(r.scope_ref));
+    group.append(head);
+    const summary=[r.count!=null?'实收 '+r.count+r.unit_name:'实收数量待核',...r.serials].join(' · ');
+    group.append(el('p',summary));
+    return group;
+  }
+  const proofFields=new Set(['acceptance_number','accepted_on','delivered_serials','quantity_accepted','inspection_basis','measured_result',
+                             'acceptance_result','acceptance_exception','acceptance_signer','acceptance_criteria']);
+  for (const b of entry.batches) {
+    const section=el('section','','batch-record');
+    section.dataset.deliveryIndex=String(b.index);
+    const title=box('flow',el('h5',b.label),tag(b.status));
+    const due=phases.filter(f=>f.stage?.batch_index===b.index).map(f=>f.stage.name+' '+f.stage.share+'%');
+    if (due.length) title.append(el('span',due.join('、'),'batch-payment'));
+    section.append(title,sourceRow(b.clause_ref));
+    for (const unit of b.records) section.append(receipt(records.get(unit)));
+    section.append(el('p',b.detail,'batch-detail'));
+    const refs=b.evidence.filter(ref=>proofFields.has(facts.get(ref)?.field));
+    if (refs.length) section.append(lazyFold('核对标准、实测与签认原文',()=>refs.map(sourceRow)));
+    panel.append(section);
+  }
+  for (const r of entry.records.filter(r=>!matched.has(r.unit))) {
+    panel.append(box('batch-record',el('h5','归属待核的验收单'),receipt(r),el('p',r.detail)));
+  }
+  const observed=new Set();
+  for (const p of ledger.pages) {
+    if (!p.text_only) {
+      const link=action((documents.get(p.doc)?.name || '原件')+' · 第 '+p.page+' 页',()=>openPage(p.doc,p.page),'ref');
+      link.dataset.batchPage=p.doc+'/p'+p.page;
+      panel.append(box('batch-source',el('strong','核对整页影像及附注'),link));
+    }
+    for (const l of p.uncovered) {
+      const row=box('batch-source',el('q',l.quote),action('核对原件第 '+l.line+' 行',()=>openPage(p.doc,p.page,null,l.line),'ref'));
+      row.dataset.batchLine=p.doc+'/p'+p.page+'/l'+l.line;
+      panel.append(row);
+      observed.add(p.doc+'/p'+p.page+'@'+l.quote);
+    }
+  }
+  for (const item of ledger.visual_notes) {
+    const row=sourceRow(item.fact);
+    row.append(tag(facts.get(item.fact).status));
+    panel.append(row);
+    observed.add(item.fact);
+  }
+  for (const item of entry.riders) {
+    if (facts.has(item.ref) && !observed.has(item.ref)) {
+      panel.append(sourceRow(item.ref));
+      observed.add(item.ref);
+    }
+  }
+  if (!rule || !entry.batches.length) {
+    for (const s of ledger.signals) {
+      if (observed.has(s.doc+'/p'+s.page+'@'+s.quote)) continue;
+      const fact=s.facts.find(ref=>facts.get(ref)?.quote===s.quote);
+      if (fact) panel.append(sourceRow(fact));
+      else panel.append(box('batch-source',el('q',s.quote),
+        action('核对合同第 '+s.page+' 页',()=>openPage(s.doc,s.page,null,s.line),'ref')));
+    }
+  }
+  return panel;
+}
+
 function qualityChangePanel(change, graph) {
   const index = graphIndex(graph);
   const facts = change.evidence.map(id=>index.facts.get(id)).filter(Boolean);

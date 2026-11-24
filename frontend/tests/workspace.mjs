@@ -164,7 +164,8 @@ try {
     }
     const {report} = await (await fetch(api+'/reports/'+task.rev)).json();
     const phases = report.findings.filter(f=>f.rule==='H04');
-    assert.deepEqual(phases.map(f=>f.stage.share),['30','60','10']);
+    const batches=report.findings.find(f=>f.rule==='H02')?.batch_acceptance;
+    assert.deepEqual(phases.map(f=>f.stage.share),batches?['20','35','35','10']:['30','60','10']);
     await wait('!!document.querySelector("#new-case")','new audit');
     await evaluate('document.querySelector("#new-case").click()');
     await evaluate('const p=document.querySelector("#upload-profile");p.value="cn-contract-performance/v1";p.dispatchEvent(new Event("change"));');
@@ -220,6 +221,45 @@ try {
     }
     const change=report.findings.find(f=>f.rule==='H02')?.quality_change;
     const authority=report.findings.find(f=>f.rule==='H02')?.acceptance_authority;
+    if (batches) {
+      const panel='document.querySelector(".delivery-batches")';
+      const ledger=report.graph.delivery_batch_sources;
+      const openFact=async (container,id) => {
+        const row=container+'.querySelector('+JSON.stringify('[data-batch-fact="'+id+'"]')+')';
+        const fact=report.graph.facts.find(f=>f.id===id);
+        await wait(row+'?.querySelector("q").textContent==='+JSON.stringify(fact.source_line?.text || fact.quote),'exact batch quote');
+        await evaluate(row+'.querySelector("button").click()');
+        await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth>0 && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(id),'batch fact on the original');
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      };
+      await openFact(panel,batches.rule_ref);
+      for (const b of batches.batches) {
+        const section=panel+'.querySelector('+JSON.stringify('[data-delivery-index="'+b.index+'"]')+')';
+        assert.ok(await evaluate(section+'.innerText.includes('+JSON.stringify(b.detail)+') && '+section+'.querySelector(".tag").classList.contains('+JSON.stringify(b.status)+')'));
+        await openFact(section,b.clause_ref);
+        for (const item of batches.records.filter(r=>b.records.includes(r.unit))) {
+          for (const val of [item.number,item.date,...item.serials].filter(Boolean))
+            assert.ok(await evaluate(section+'.innerText.includes('+JSON.stringify(val)+')'));
+        }
+        await evaluate(section+'.querySelector("details").open=true');
+        for (const fact of report.graph.facts.filter(f=>b.evidence.includes(f.id) && ['measured_result','acceptance_criteria','delivered_serials'].includes(f.field)))
+          await openFact(section,fact.id);
+        await evaluate(section+'.querySelector("details").open=false');
+      }
+      for (const page of ledger.pages.filter(p=>!p.text_only)) {
+        const button=panel+'.querySelector('+JSON.stringify('[data-batch-page="'+page.doc+'/p'+page.page+'"]')+')';
+        await evaluate(button+'.click()');
+        await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth>0','batch image annotation');
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
+      for (const note of ledger.visual_notes) await openFact(panel,note.fact);
+      for (const page of ledger.pages) for (const line of page.uncovered) {
+        const row=panel+'.querySelector('+JSON.stringify('[data-batch-line="'+page.doc+'/p'+page.page+'/l'+line.line+'"]')+')';
+        await evaluate(row+'.querySelector("button").click()');
+        await wait('document.querySelector(".located[data-gap-line] blockquote")?.textContent==='+JSON.stringify(line.quote),'batch rider on original');
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
+    }
     if (authority) {
       const panel='document.querySelector(".acceptance-authority")';
       const ledger=report.graph.acceptance_authority_sources;
@@ -406,7 +446,12 @@ try {
     }
     for (const width of [1440,1024,820,768,390,320]) {
       await call('Emulation.setDeviceMetricsOverride',{width,height:880,deviceScaleFactor:1,mobile:false});
-      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll(".phase-summary li,.phase-results,.clause-source,.mandate-dates,.mandate-side,.quality-change,.change-comparison,.change-source,.acceptance-authority,.signature-record,.signer-source,.contract-date-evidence")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'performance layout at '+width);
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll(".phase-summary li,.phase-results,.clause-source,.mandate-dates,.mandate-side,.quality-change,.change-comparison,.change-source,.acceptance-authority,.signature-record,.signer-source,.contract-date-evidence,.delivery-batches,.batch-source,.batch-record,.batch-receipt")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'performance layout at '+width);
+      if (batches && process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
+        await evaluate('document.querySelector(".delivery-batches").scrollIntoView({block:"start"});window.scrollBy(0,-40)');
+        const capture=await call('Page.captureScreenshot',{format:'png'});
+        await writeFile(join(process.env.AUDIT_UI_SHOTS,'batches-'+performanceCase+'-'+width+'.png'),Buffer.from(capture.data,'base64'));
+      }
       if (report.findings.some(f=>f.date_checks) && process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
         await evaluate('document.querySelector(".contract-date-evidence").scrollIntoView({block:"start"});window.scrollBy(0,-140)');
         const capture=await call('Page.captureScreenshot',{format:'png'});
@@ -426,6 +471,20 @@ try {
     const target=report.findings.find(f=>f.rule==='H02');
     await click('查看证据路径','document.querySelector('+JSON.stringify('[data-finding="'+target.id+'"]')+')');
     await wait('document.querySelector("#trace-select")?.value==='+JSON.stringify(target.id),'acceptance evidence graph');
+    if (batches) {
+      const edges=report.graph.edges.filter(e=>['delivery_batch_acceptance','batch_payment_basis'].includes(e.type));
+      assert.equal(await evaluate('!!document.querySelector(".batch-relations")'),!!edges.length);
+      if (edges.length) await evaluate('document.querySelector(".batch-relations").open=true');
+      for (const edge of edges) {
+        const row='document.querySelector('+JSON.stringify('[data-batch-witness="'+edge.from+'>'+edge.to+'"]')+')';
+        await wait(row+'?.querySelectorAll("button").length===2','batch and receipt pair');
+        for (const [i,id] of [edge.from,edge.to].entries()) {
+          await evaluate(row+'.querySelectorAll("button")['+i+'].click()');
+          await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(id),'linked batch original');
+          await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+        }
+      }
+    }
     if (authority) {
       const edges=report.graph.edges.filter(e=>e.type==='named_acceptance_signature');
       assert.equal(await evaluate('!!document.querySelector(".signature-relations")'),!!edges.length);
@@ -440,7 +499,7 @@ try {
         }
       }
     }
-    console.log('PASS · Contract scope, three phase decisions, original clauses and evidence path at six widths');
+    console.log('PASS · Contract scope, '+phases.length+' phase decisions, original clauses and evidence path at six widths');
   } else if (claimPairCase) {
     const api=root+'/api/cases/'+claimPairCase;
     const task=await (await fetch(api)).json();

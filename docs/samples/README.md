@@ -122,6 +122,16 @@ PYTHONPATH=server server/.venv/bin/python -m unittest discover -s server/tests -
 
 `server/.venv/bin/python docs/samples/contract_dates.py --run` 生成四笔相同金额及分期比例的水印采购。可用 `--cases early reversed same_day warranty` 选择终验早于董事会批准生效、合同截止早于生效、同日验收并付款或期内验收且期后质保届满的场景。
 
+### 两次交付各付 35%
+
+运行下列命令，从本机上传入口提交七笔虚构的冷藏柜采购案。每案合同价 10 万元，四期比例为 20%、35%、35%、10%。每批约定验收两台。样本脚本核对原件摘要及印刷原行后，为水印签字栏留存模拟核图记录。生成的 PDF 在 `docs/samples/generated/30-分批交付与独立验收付款/` 下。
+
+```sh
+server/.venv/bin/python docs/samples/delivery_batches.py --run --run-id synthetic-delivery-batches-v1
+```
+
+`--cases` 可选 `complete`（两批合格）、`missing`（缺第二批原件）、`quality`（报告称合格但第二批实测 8℃ 超出合同 4℃ 上限）、`duplicate`（两批登记相同设备）、`early`（9 月 15 日支付的第三期早于 9 月 20 日第二批验收）、`separate`（另行终验）及 `image`（原页附有影像暂收说明）。省略 `--run` 可仅生成资料。
+
 ### 复现首次读图的编号误分类
 
 运行 `server/.venv/bin/python docs/samples/quality_readback.py --run`，可用上述复验后付款案例的 R1 重测。脚本校验原版本证据包，把两份 PDF 与固定种子重新生成的水印样本逐字节比较，并检查重渲染的页图和文字层。随后只将两张水印页图连同真实初读候选送入视觉复检，将回执另存入演练目录。原底稿仍可照常打开。

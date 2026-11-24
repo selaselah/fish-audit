@@ -84,7 +84,7 @@ def verify_report(report, mode):
         assert report["graph"]["quality_references"]["holds"]==[]
 
 
-def reconcile_training_pages(cid,folder,records,*,case_titles=None,field_labels=None,document_types=None):
+def reconcile_training_pages(cid,folder,records,*,case_titles=None,field_labels=None,document_types=None,printed_titles=None,row_spacing=34):
     path="/api/cases/"+cid
     detail=get(path)
     expected={title+".pdf":hashlib.sha256((folder/(title+".pdf")).read_bytes()).hexdigest() for title in records}
@@ -105,12 +105,13 @@ def reconcile_training_pages(cid,folder,records,*,case_titles=None,field_labels=
         targets=[]
         for index,(label,value) in enumerate(rows):
             if label in fields:
-                top=(842-649+34*index)/842
+                top=(842-649+row_spacing*index)/842
                 region="top" if top<1/3 else "bottom" if top>=2/3 else "middle"
                 targets.append((fields[label],value,label+"："+value,region))
-        targets.append((types[title],title,title,"top"))
+        printed_title=(printed_titles or {}).get(title,title)
+        targets.append((types[printed_title],printed_title,printed_title,"top"))
         counts=Counter(f for f,_,_,_ in targets)
-        separate={k:{normalize(line) for field,_,line,_ in targets if field==k} for k in ("payment_stage","acceptance_signer")}
+        separate={k:{normalize(line) for field,_,line,_ in targets if field==k} for k in ("payment_stage","acceptance_signer","delivery_batch")}
         for field,value,line,region in targets:
             assert normalize(line) in source_lines
             graph=report["graph"]

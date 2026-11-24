@@ -15,6 +15,7 @@ from quality_labels import numbered_lines, verified as verified_quality_number
 from quality_references import attach as record_quality_references
 from delegation import ENTITY_TYPES as DELEGATION_ENTITIES, TITLES as MANDATE_TITLES, attach as record_mandate_pages, printed_value as mandate_value
 from contract_changes import NUMBER_TYPES as ADDENDUM_NUMBERS, TITLES as ADDENDUM_TITLES, attach as record_addenda, number_target
+import delivery_batches
 from acceptance_authority import CLAUSE as AUTHORITY_CLAUSE, SIGNER as ACCEPTANCE_SIGNATURE, attach as record_signatories, witness_edges
 
 
@@ -284,7 +285,7 @@ def build_graph(docs, pages, attestations, amendments=()):
             if field in ADDENDUM_NUMBERS:
                 target, entity_label = number_target(field,value,quote,fact_id)
                 kind = ADDENDUM_NUMBERS[field]
-            if field in (AUTHORITY_CLAUSE,ACCEPTANCE_SIGNATURE):
+            if field in (AUTHORITY_CLAUSE,ACCEPTANCE_SIGNATURE) or field in delivery_batches.LABELS:
                 target = fact_id
             if target!=fact_id:
                 nodes[target] = {"id": target, "type": kind, "label": entity_label}
@@ -297,6 +298,7 @@ def build_graph(docs, pages, attestations, amendments=()):
     texts = {(page["doc"],page["number"]):page["text"] for page in pages}
     record_mandate_pages(graph, lambda doc, number: texts[doc, number])
     record_addenda(graph, lambda doc, number: texts[doc, number])
+    delivery_batches.attach(graph, lambda doc, number: texts[doc,number])
     record_signatories(graph, lambda doc, number: texts[doc, number])
     record_quality_references(graph, lambda doc, number: texts[doc, number])
     attach_payment_references(graph, lambda doc, number: texts[doc,number])
@@ -372,6 +374,7 @@ def link_procedures(graph, findings, calls):
     nodes = graph["nodes"]
     edges = graph["edges"]
     edges.extend(witness_edges(findings))
+    edges.extend(delivery_batches.evidence_edges(findings))
     expert_id = "model/expert"
     nodes.append({"id": expert_id, "type": "model_call", "label": "专家追加程序",
                   "response_id": calls["expert"].get("response_id"), "model": calls["expert"]["model"]})

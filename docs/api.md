@@ -200,6 +200,10 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 
 ## 履约日期核对
 
+规则 `2026.11.24.29` 沿用下述日期校验，并用 `contract-performance-v10` 核对合同分批条款。在有相应条款的案件，H02 的 `batch_acceptance` 给出 `independent`、`deemed_final`、`completion_on`、`rule_ref`、各批 `batches[]`、验收原件 `records[]` 及可能影响合同或付款的 `riders[]`。`completion_on` 仅在合同明确约定全部合格即终验且证据完整时写入日期。每批保留合同原文引用、约定数量单位及编号、状态、原因、关联验收单和证据范围。H04/H05 的 `stage.batch_index` 与 `stage.batch_date` 指向各自所据的批次及有据的合格日期。
+
+`policy.delivery_batches` 标记为 `contract-delivery-batches-v1`。`graph.delivery_batch_sources` 保存分批线索、各页已覆盖范围、漏提的原行和影像观察。`delivery_batch_acceptance` 关系由交付批次条款指向验收范围，`batch_payment_basis` 由当期付款条款指向同一份验收记录。签收前及离线复算均核对这些关系和原文。证据包支持 `--render-performance` 从版本中的原件重现相关页图和条款版式。
+
 规则 `2026.11.24.28` 使用 `contract-performance-v9`。涉及日期疑点的 H01、H02 或 H05 附有 `date_checks[]`。每一项保存 `event`（`contract_period`、`acceptance`、`reinspection` 或 `payment`）、`status`（`risk` 或 `missing`）、案情说明 `detail` 和引用 `evidence`。原生日期的证据可定位到逐字引文和文字层原行，人工核图的日期可以回到其核图回执。H04 继承该期所据的签署、验收或质保条件。历史底稿保留当时的程序，申请签收时会重新检查原为相符的日期判断。
 
 `--render-performance` 可从 v9 本案的合同、审批、验收、质保、回单等履约程序所据原件重现分页，同时校核文字、定位和版式。使用 `--rules-from-git main` 可按当时的程序重算各版结论。

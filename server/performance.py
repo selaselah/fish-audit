@@ -9,6 +9,7 @@ from reinspection import LABELS as REINSPECTION_FIELDS, LINK_KEYS, assess as ass
 from delegation import LABELS as DELEGATION_FIELDS, PARTY_SIGNATURES, checks as check_delegations, complete_id
 from contract_changes import LABELS as ADDENDUM_FIELDS, LIMIT, SOURCE_LABELS, candidates as change_candidates, labelled_sources, resolve as resolve_change
 from acceptance_authority import LABELS as AUTHORITY_FIELDS, SIGN_LABELS, check as check_acceptance_authority
+import delivery_batches
 
 
 PROFILE = "cn-contract-performance/v1"
@@ -20,8 +21,10 @@ IDENTITY_FORMAT = "contract-performance-v5"
 NATIVE_FORMAT = "contract-performance-v6"
 ADDENDUM_FORMAT = "contract-performance-v7"
 SIGNATORY_FORMAT = "contract-performance-v8"
-FORMAT = "contract-performance-v9"
-SIGNATORY_FORMATS = (SIGNATORY_FORMAT,FORMAT)
+DATE_FORMAT = "contract-performance-v9"
+FORMAT = "contract-performance-v10"
+DATE_FORMATS = (DATE_FORMAT,FORMAT)
+SIGNATORY_FORMATS = (SIGNATORY_FORMAT,*DATE_FORMATS)
 ADDENDUM_FORMATS = (ADDENDUM_FORMAT,*SIGNATORY_FORMATS)
 MANDATE_FORMATS = (DELEGATION_FORMAT, IDENTITY_FORMAT, NATIVE_FORMAT, *ADDENDUM_FORMATS)
 SUPPORTED = (FIRST_FORMAT, BOARD_FORMAT, REINSPECTION_FORMAT, *MANDATE_FORMATS)
@@ -37,6 +40,7 @@ LABELS = {
     **DELEGATION_FIELDS,
     **ADDENDUM_FIELDS,
     **AUTHORITY_FIELDS,
+    **delivery_batches.LABELS,
     "effect_clause": ("生效条款", "合同生效条件", "生效条件", "合同生效条款"),
     **PARTY_SIGNATURES,
     "contract_state": ("合同状态", "协议状态"),
@@ -554,7 +558,7 @@ def compute(graph, version=FORMAT):
     approvals = materials("contract_approval") if version != FIRST_FORMAT else []
     grants = materials("power_of_attorney") if version in MANDATE_FORMATS else ()
     signed = effect(contract, approvals, version, grants)
-    if version==FORMAT:
+    if version in DATE_FORMATS:
         add_date_checks(signed,period_checks(contract))
     classified = {u for group in kinds.values() for u in group}
     extra_units = {d["id"] for d in graph.get("audit_documents",graph["documents"])} - classified
@@ -570,7 +574,7 @@ def compute(graph, version=FORMAT):
     authority = None
     if version in SIGNATORY_FORMATS:
         authority = check_acceptance_authority(graph,contract,receipts,retests,contract_supported=signed["status"]=="ok",
-                                              other_terms=bool(extra_units or change and not change["scope_clear"]), name_records=version==FORMAT)
+                                              other_terms=bool(extra_units or change and not change["scope_clear"]), name_records=version in DATE_FORMATS)
     by_unit = {r["unit"]:r for r in authority["records"]} if authority else {}
     def signatory(record):
         return by_unit[record.unit]["status"]=="ok" if record.unit in by_unit else record.signed("acceptance_signer")
@@ -583,6 +587,40 @@ def compute(graph, version=FORMAT):
         accepted = acceptance(contract, receipts)
         accepted_on = day(receipts[0].single("accepted_on")) if accepted["status"]=="ok" else None
     plan, rows = schedule(contract)
+    batch = None
+    if version==FORMAT:
+        batch = delivery_batches.inspect(graph,contract,receipts,
+                    other_terms=bool(signed["status"]!="ok" or extra_units or change or authority or repairs or retests or
+                                     any(r.fields[k] or k in r.uncertain for r in receipts for k in ("original_acceptance","repair_number","defect_closure"))))
+    batch_rows = {r["index"]:r for r in batch["batches"]} if batch else {}
+    if batch:
+        for item,applicable in ((signed,[r for r in batch["riders"] if r["kind"]=="contract"]),(plan,batch["riders"])):
+            if applicable:
+                if item["status"]=="ok":
+                    item["status"]="missing"
+                item["detail"]+=" 另有材料记载影响合同或付款的条件，需核对其效力及适用范围。"
+                item["evidence"]=list(dict.fromkeys(item["evidence"]+[r["ref"] for r in applicable]))
+                item["scope"]=list(dict.fromkeys(item["scope"]+[r["unit"] for r in applicable]))
+        batch["scope"] = list(dict.fromkeys(batch["scope"]+signed["scope"]))
+        batch["evidence"] = list(dict.fromkeys(batch["evidence"]+signed["evidence"]))
+        accepted["batch_acceptance"] = batch
+        accepted["scope"] = list(dict.fromkeys(accepted["scope"]+batch["scope"]))
+        accepted["evidence"] = list(dict.fromkeys(accepted["evidence"]+batch["evidence"]))
+        if accepted["status"]=="issue" and batch["status"]!="issue":
+            accepted["detail"] += " "+batch["detail"]
+        else:
+            accepted.update(status=batch["status"],detail=batch["detail"])
+        accepted_on = day(batch["completion_on"] or "") if accepted["status"]=="ok" else None
+        if accepted.get("reinspection") and not accepted_on:
+            accepted["reinspection"]["state"]="open"
+        if not batch["contract_clear"] or not batch["independent"]:
+            plan.update(status="missing",detail="需核对分批条款、附注和完整付款前提。 "+plan["detail"])
+            plan["evidence"]=list(dict.fromkeys(plan["evidence"]+contract.evidence("batch_clause","delivery_batch")+
+                                               [r for r in batch["evidence"] if "/f" not in r and "/h" not in r]))
+        for row in rows:
+            index=delivery_batches.payment_index(row,contract)
+            if index is not None:
+                row.update(kind="batch",batch_index=index)
     if authority:
         authority["evidence"] = list(dict.fromkeys(authority["evidence"]+signed["evidence"]))
         authority["units"] = list(dict.fromkeys(authority["units"]+signed["scope"]))
@@ -596,7 +634,7 @@ def compute(graph, version=FORMAT):
             if accepted.get("reinspection"):
                 accepted["reinspection"]["state"] = "open"
         accepted["detail"] += " "+authority["detail"]
-    if version==FORMAT:
+    if version in DATE_FORMATS:
         chronology = receipt_date_checks(contract,receipts,retests)
         if chronology and accepted.get("reinspection",{}).get("state")=="closed":
             initial_units = {s["unit"] for s in accepted["reinspection"]["steps"] if s["role"]=="original"}
@@ -654,6 +692,9 @@ def compute(graph, version=FORMAT):
         output.append(result("H04","missing","缺少可逐期核对的付款约定。",plan["evidence"],plan["scope"]))
         return output
     expiry, warranty_refs = warranty(contract, releases, accepted_on)
+    if batch and (len(releases)!=1 or not same_contract(contract,releases[0]) or
+                  not labelled_sources(releases[0],LINK_KEYS) or not delivery_batches.readable(graph["delivery_batch_sources"],releases[0].unit)):
+        expiry = None
     stages = []
     for idx, row in enumerate(rows, 1):
         kind = row["kind"]
@@ -661,6 +702,12 @@ def compute(graph, version=FORMAT):
         stage = {"name":row["label"] or fallback_label,"share":row["share"],"clause":row["text"],"clause_ref":row["ref"]}
         refs = [row["ref"], *signed["evidence"]]
         scope = [contract.unit] if version == FIRST_FORMAT else signed["scope"].copy()
+        this_batch = batch_rows.get(row.get("batch_index"))
+        if kind=="batch":
+            stage["batch_index"] = row["batch_index"]
+            stage["batch_date"] = this_batch["date"] if this_batch else None
+            refs += this_batch["evidence"] if this_batch else batch["evidence"]
+            scope += this_batch["scope"] if this_batch else batch["scope"]
         if kind in ("acceptance","warranty"):
             refs += accepted["evidence"]
             scope += accepted["scope"]
@@ -669,11 +716,19 @@ def compute(graph, version=FORMAT):
             scope += [r.unit for r in releases]
         if plan["status"] != "ok":
             refs += plan["evidence"]
+            if batch:
+                scope += plan["scope"]
             status, detail = "missing","付款安排尚未核清，无法确认本期条件。"
         elif not kind:
             status, detail = "missing","需核对本期付款的完整前提及其履行材料。"
         elif signed["status"] != "ok":
             status, detail = "missing","合同签署或约定生效条件尚待核实。"
+        elif kind=="batch":
+            if this_batch:
+                status="risk" if this_batch["status"]=="issue" else this_batch["status"]
+                detail=this_batch["label"]+" · "+this_batch["detail"]
+            else:
+                status,detail="missing","本期明列的批次尚未与合同交付明细对应。"
         elif kind in ("acceptance","warranty") and accepted["status"] != "ok":
             status, detail = "risk" if accepted["status"] in ("issue","risk") else "missing","现有验收资料不足以支持本期付款。"
         elif kind == "warranty" and not expiry:
@@ -691,21 +746,23 @@ def compute(graph, version=FORMAT):
         matching = [(r,s) for r,s in stages if matches_stage(designation,r)]
         if version == FIRST_FORMAT:
             matching = [(r,s) for r,s in stages if designation and designation == s["stage"]["name"]]
-        paid = printed_day(bank,"paid_on") if version==FORMAT else day(bank.single("paid_on"))
+        paid = printed_day(bank,"paid_on") if version in DATE_FORMATS else day(bank.single("paid_on"))
         linked = all(contract.single(left) and contract.single(left) == bank.single(right)
                      for left,right in (("contract_id","contract_id"),("buyer","payer"),("seller","payee")))
         refs += contract.evidence("contract_id","buyer","seller")
         if not linked or not paid or bank.single("transfer_status") not in {"交易成功","转账成功","成功","已完成"} or len(matching) != 1:
             payment = result("H05","missing","需取得本合同关联的成功回单、付款日期及回单明列的对应期次。",refs,scope)
-            if version==FORMAT and bank.date("paid_on") and not paid:
+            if version in DATE_FORMATS and bank.date("paid_on") and not paid:
                 add_date_checks(payment,[date_check("payment","missing","请核对这笔款项实际支付日期的原始栏位及完整引文。",bank.evidence("paid_on"))])
             output.append(payment)
             continue
         row, check = matching[0]
         refs += check["evidence"] + contract.evidence("effect_on")
         scope += check["scope"]
-        effective = printed_day(contract,"effect_on") if version==FORMAT else day(contract.body("effect_on"))
+        effective = printed_day(contract,"effect_on") if version in DATE_FORMATS else day(contract.body("effect_on"))
         milestones = [("合同生效","effect_on",effective)]
+        if row["kind"]=="batch":
+            milestones.append((f"第{row['batch_index']}批验收","accepted_on",day(check["stage"]["batch_date"] or "")))
         if row["kind"] in ("acceptance","warranty"):
             milestones.append(("验收","accepted_on",accepted_on))
         if row["kind"] == "warranty":
@@ -714,7 +771,7 @@ def compute(graph, version=FORMAT):
         timing = []
         if any(point and point > paid for point in dates):
             status, detail = "risk","回单付款日早于本期所据的履约日期，请复核提前支付的授权和依据。"
-        elif version==FORMAT and row["kind"] in CONDITIONS and paid in dates:
+        elif version in DATE_FORMATS and (row["kind"] in CONDITIONS or row["kind"]=="batch") and paid in dates:
             events = [label for label,_,when in milestones if when==paid]
             fields = [field for _,field,when in milestones if when==paid]
             status, detail = "missing",f"付款与{'、'.join(events)}同为 {paid}，需核对当日具体时分，确认付款时已满足约定。"
@@ -759,10 +816,11 @@ def verify_findings(report, *, signing=False):
                 or saved.get("quality_change") != entry.get("quality_change")
                 or saved.get("acceptance_authority") != entry.get("acceptance_authority")
                 or saved.get("date_checks") != entry.get("date_checks")
+                or saved.get("batch_acceptance") != entry.get("batch_acceptance")
                 or (saved.get("id"),saved.get("version"),saved.get("title"),saved.get("basis")) !=
                 (f"{rule}-{position}",policy["version"],*RULES[rule])):
             raise ValueError("合同履约结论、期次或引文与证据图谱不符")
-    if signing and marker!=FORMAT and any(f["status"]=="ok" and f["rule"] in ("H01","H02","H05") for f in found):
+    if signing and marker not in DATE_FORMATS and any(f["status"]=="ok" and f["rule"] in ("H01","H02","H05") for f in found):
         old_ok = {(f["rule"],tuple(sorted(f["scope"]))) for f in found if f["status"]=="ok"}
         for current in compute(report["graph"],FORMAT):
             if current.get("date_checks") and any(rule==current["rule"] and set(scope)<=set(current["scope"]) for rule,scope in old_ok):
