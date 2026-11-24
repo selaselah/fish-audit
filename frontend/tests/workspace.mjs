@@ -33,8 +33,9 @@ const invoiceConflict = caseArgument('--invoice-conflict-case');
 const invoiceSource = caseArgument('--invoice-source-case');
 const invoiceApproval = caseArgument('--invoice-approval-case');
 const claimPairCase = caseArgument('--claim-pair-case');
+const invoiceCodeHistory = caseArgument('--invoice-code-case');
 const waitingCase = caseArgument('--waiting-case');
-const seeded = sampleDesk || paymentCase || supplementCase || peerCase || fieldCase || installmentCase || replayCase || recoveringCase || invoiceConflict || invoiceSource || invoiceApproval || claimPairCase || waitingCase;
+const seeded = sampleDesk || paymentCase || supplementCase || peerCase || fieldCase || installmentCase || replayCase || recoveringCase || invoiceConflict || invoiceSource || invoiceApproval || claimPairCase || invoiceCodeHistory || waitingCase;
 const root = waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN : recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
 if (recoveringCase || waitingCase) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
 const children = [];
@@ -114,6 +115,44 @@ try {
       assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && document.querySelector(".located").scrollWidth<=document.querySelector(".located").clientWidth+1'),'printed pair at '+width);
     }
     console.log('PASS · Printed claim pairs, exact labelled lines, visible model classification and six widths');
+  } else if (invoiceCodeHistory) {
+    const api=root+'/api/cases/'+invoiceCodeHistory;
+    const task=await (await fetch(api)).json();
+    assert.ok(task.title.startsWith('合成演练 · 跨案同号异代码'));
+    const {report,invoice_approval:approval}=await (await fetch(api+'/reports/'+task.rev)).json();
+    const finding=report.findings.find(f=>f.rule==='I02');
+    const parent=approval ? '.invoice-approval' : '[data-finding="'+finding.id+'"]';
+    const candidates=approval ? approval.screened : report.graph.prior_invoices;
+    assert.ok(candidates.some(c=>c.comparison==='different'));
+    await call('Page.navigate',{url:root+'/workpaper/'+invoiceCodeHistory+'?rev='+task.rev});
+    await wait('!!document.querySelector('+JSON.stringify(parent)+')','signed receipt or I02 finding');
+    if (approval) await evaluate('document.querySelector(".invoice-approval > summary").click()');
+    const foldTitle=approval?'查看签收时的同号候选':'核对前案签收依据';
+    await evaluate('[...document.querySelector('+JSON.stringify(parent)+').querySelectorAll("summary")].find(s=>s.textContent.startsWith('+JSON.stringify(foldTitle)+')).click()');
+    const cards=JSON.stringify(parent+' .invoice-source');
+    await wait('document.querySelectorAll('+cards+').length==='+candidates.length,'all same-number candidates');
+    const urls=[];
+    for (const [i,row] of candidates.entries()) {
+      const card='document.querySelectorAll('+cards+')['+i+']';
+      const contents=await evaluate(card+'.innerText');
+      const code=row.code_evidence[0];
+      assert.ok(contents.includes(row.quote) && contents.includes(code.quote) && contents.includes('第 '+code.line+' 行'));
+      assert.ok(contents.includes({same:'完整标识相同',different:'同号异代码，已排除'}[row.comparison]));
+      const href=await evaluate('[...'+card+'.querySelectorAll("a")].find(a=>a.textContent==="查看代码原文").href');
+      assert.equal(new URL(href).searchParams.get('fact'),code.fact);
+      assert.equal(new URL(href).searchParams.get('rev'),String(row.rev));
+      assert.equal(new URL(href).pathname.split('/').at(-1),row.case_id);
+      urls.push([href,code.quote]);
+    }
+    for (const width of [1440,1024,820,768,390,320]) {
+      await call('Emulation.setDeviceMetricsOverride',{width,height:860,deviceScaleFactor:1,mobile:false});
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll('+cards+')].every(e=>e.scrollWidth<=e.clientWidth+1)'),'signed codes at '+width);
+    }
+    for (const [url,quote] of urls) {
+      await call('Page.navigate',{url});
+      await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth && document.querySelector(".located")?.textContent.includes('+JSON.stringify(quote)+')','prior signed code at the exact page and row');
+    }
+    console.log('PASS · Signed code comparisons, historical code links and six widths');
   } else if (invoiceConflict) {
     const path=root+'/api/cases/'+invoiceConflict;
     const get=async suffix=>(await fetch(path+suffix)).json();

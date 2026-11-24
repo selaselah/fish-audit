@@ -4,8 +4,9 @@ from datetime import date
 from calculations import CalculationEvidence, in_yuan, money
 
 from config import BANK, PROFILE, RULE_VERSION, TRAVEL
-from graph import KINDS, audit_documents, compact, entity_id
+from graph import KINDS, audit_documents, compact
 from invoice_approval import FORMAT as INVOICE_APPROVAL_FORMAT
+from invoice_comparison import FORMAT as INVOICE_LOOKUP, check_history as check_invoice_history
 from invoice_identity import FORMAT as INVOICE_IDENTITY_FORMAT, InvoiceIdentities, identity_key, match_claim, within_case
 from invoice_proof import FORMAT as INVOICE_SOURCE_FORMAT
 from model import FIELDS, SIGNALS, expert_candidates
@@ -22,7 +23,7 @@ CATALOG = {
     "P02": ("合同编号关联", "沿各份资料的合同编号关系，验证三份资料是否指向同一合同。"),
     "P03": ("交易双方一致性", "从合同、发票和验收单的采购方和供应方关系核对交易主体全称。"),
     "I01": ("发票标识重叠", "按原页比较发票标识。八位号码结合同页已核代码，二十位号码按完整号码比对。"),
-    "I02": ("本工作区已归档票号比对", "按本案发票号码精确查找已归档资料中的已核原文，区分历史资料类型和验收决定，再核对报销或补件记录。"),
+    "I02": ("本工作区已归档票号比对", "在本企业签收底稿中检出相同号码，八位号码另核双方同页代码，按完整标识及单据归属判断。"),
     "M01": ("发票价税勾稽", "同一发票、相同人民币元口径下，不含税合计加税额合计应等于价税合计，精确到分。"),
     "C01": ("全额结算适用性", "从合同核对是否明确一次结清，分期、质保、红冲或变更转人工核对。"),
     "M02": ("合同、发票与验收金额", "相同合同、人民币元、一次全额结算范围内，比较合同、发票及验收含税总额。"),
@@ -39,7 +40,7 @@ CATALOG = {
 STATUS = {"ok": "相符", "issue": "发现问题", "risk": "风险待核", "missing": "证据不足"}
 VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING,
            "sources": SOURCES, "rule_sources": MAPPING, "invoice_sources": INVOICE_SOURCE_FORMAT,
-           "invoice_approval": INVOICE_APPROVAL_FORMAT,"invoice_identity":INVOICE_IDENTITY_FORMAT}
+           "invoice_approval": INVOICE_APPROVAL_FORMAT,"invoice_identity":INVOICE_IDENTITY_FORMAT,"invoice_lookup":INVOICE_LOOKUP}
 FULL_TERMS = {"验收后一次性全额结算", "验收后一次性付清", "一次性全额结算", "一次性付清",
               "验收合格后一次性支付全款", "一次性全额付款", "一次结清", "一次性结清", "一次付清"}
 FULL_ACCEPTANCE = {"合格", "验收合格", "通过", "验收通过", "全部合格"}
@@ -71,10 +72,12 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
         if edge["type"] in FIELDS:
             linked[(edge["from"], edge["type"])].extend(facts[ref] for ref in edge["evidence"])
 
-    def record(rule, status, observation, refs, scope=None):
+    def record(rule, status, observation, refs, scope=None, *, invoice_lookup=None):
         findings.append({"id": f"{rule}-{len(findings)+1}", "rule": rule, "version": RULE_VERSION,
                          "title": CATALOG[rule][0], "basis": CATALOG[rule][1], "status": status,
                          "detail": observation, "evidence": list(dict.fromkeys(refs)), "scope": scope or []})
+        if invoice_lookup is not None:
+            findings[-1]["invoice_lookup"] = invoice_lookup
         calculations = evidence.formulas(findings[-1])
         if calculations:
             findings[-1]["calculations"] = calculations
@@ -125,24 +128,10 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
         status,detail = within_case(number,members)
         record("I01",status,detail,ids(group)+[ref for i in members for ref in i["code_refs"]])
     if "prior_invoices" in graph:
-        prior = graph["prior_invoices"]
         if not numbers:
             record("I02", "missing", "缺少可比对的本案发票号码。", [], doc_ids)
         else:
-            by_number = defaultdict(list)
-            for row in prior:
-                by_number[row["number_key"]].append(row)
-            for number, group in numbers.items():
-                matches = by_number[entity_id("invoice_number", number)]
-                refs = ids(group) + [row["id"] for row in matches]
-                if matches:
-                    count = len({row["case_id"] for row in matches})
-                    scope_note = "部分历史资料的单据类型尚待核实。" if any(
-                        row["document_kind"] == "unclassified" for row in matches) else ""
-                    record("I02", "risk", f"号码 {number} 同时出现在 {count} 项已归档任务。{scope_note}"
-                           "请查看原案的验收决定，核实副本、补件或重复报销情况。", refs)
-                else:
-                    record("I02", "ok", f"号码 {number} 在本工作区当时已归档的发票证据中未发现相同号码。", refs)
+            check_invoice_history(graph,record)
 
     if profile == TRAVEL:
         check_travel(graph, linked, identities, values, record)

@@ -4,6 +4,11 @@ function graphIndex(graph) {
   let index = graphIndexes.get(graph);
   if (!index) {
     const prior = new Map((graph.prior_invoices || []).map(row=>[row.id,row]));
+    for (const row of graph.prior_invoices || []) {
+      for (const code of row.code_evidence || []) {
+        prior.set(code.id,{...code,label:'发票代码',case_id:row.case_id,rev:row.rev,title:row.title,decision:row.decision});
+      }
+    }
     const history = graph.payment_history;
     for (const match of [...(history?.matches || []),...(history?.installments?.matches || [])]) {
       for (const fact of match.evidence) {
@@ -32,7 +37,9 @@ function lazyFold(title, build) {
   return details;
 }
 
-function signedInvoiceSource(row) {
+const invoiceMatchLabel = {same:'完整标识相同',uncertain:'资料不足，需核对',different:'同号异代码，已排除'};
+
+function signedInvoiceSource(row, comparison=row.comparison) {
   const source = row.source;
   const basis = {native_line:'原生文字层匹配',field_check:'审计人员已核对原件与页图',
     historical_record:'历史底稿记载的票号',historical_confirmation:'历史人工确认记录'}[source.basis];
@@ -44,21 +51,36 @@ function signedInvoiceSource(row) {
     el('p','原件 SHA-256'),el('code',row.source_hash),el('p','页图 SHA-256'),el('code',row.page_hash),
     el('p','文字层 SHA-256'),el('code',source.text_sha256),el('p','签收底稿 SHA-256'),el('code',row.report_hash),
     el('p','人工签收 SHA-256'),el('code',row.signoff_hash)]);
-  return box('invoice-source',el('strong',row.title+' · R'+row.rev),
+  const panel=box('invoice-source',el('strong',row.title+' · R'+row.rev),
     el('small','人工决定 · '+statusName(row.decision)+' · '+time(source.signed_at),'small'),
-    el('blockquote',row.quote),el('small',basis+' · '+where,'small'),box('chips',origin,original),hashes);
+    el('blockquote',row.quote),el('small',basis+' · '+where,'small'),box('chips',origin,original));
+  if (comparison) panel.append(el('strong',invoiceMatchLabel[comparison]));
+  if (row.identity?.kind==='short_unresolved') panel.append(el('p','前案八位号码缺少可唯一核准的同页代码。','muted'));
+  for (const code of row.code_evidence || []) {
+    const jump=Team.paperLink('查看代码原文',row.case_id,'source-jump',new URLSearchParams({rev:row.rev,fact:code.fact}));
+    jump.target='_blank'; jump.rel='noopener';
+    const location='第 '+code.page+' 页'+(code.line?' · 第 '+code.line+' 行':'');
+    panel.append(box('line',el('blockquote',code.quote),el('small',location+' · '+statusName(code.status),'small'),jump));
+  }
+  panel.append(hashes);
+  return panel;
 }
 
 function invoiceApproval(check, digest) {
   const tasks = new Set(check.matches.map(m=>m.case_id));
+  const exact = new Set(check.matches.filter(m=>!m.comparison || m.comparison==='same').map(m=>m.case_id));
+  const uncertain = new Set(check.matches.filter(m=>m.comparison==='uncertain').map(m=>m.case_id));
   const label = check.outcome==='no_usable_number' ? '本版缺少可查的已核票号' :
-    '已查 '+check.numbers.length+' 个票号 · '+(tasks.size ? '命中 '+tasks.size+' 份已签收任务' : '未命中已签收任务');
+    check.outcome==='insufficient_identity' ? '八位票号的同页代码待核' :
+    check.outcome==='possible_match' ? tasks.size+' 份同号任务需核对代码或单据归属' :
+    '已查 '+check.numbers.length+(check.format==='invoice-approval-v1'?' 个票号':' 个票据标识')+' · '+
+      (exact.size ? '命中 '+exact.size+' 份已签收任务'+(uncertain.size?'，另有 '+uncertain.size+' 份含待核引文':'') : '未命中已签收任务');
   const panel = fold('签收时的同票检查',el('strong',label),
     el('p','查验范围为本企业当时已签收的任务。所据底稿 R'+check.source_rev+'，签收版 R'+check.signed_rev+'。','muted'));
   panel.classList.add('invoice-approval');
   const index = graphIndex(state.bundle.report.graph);
   for (const number of check.numbers) {
-    panel.append(box('line',el('strong',number.value),box('chips',...number.facts.map(citation))));
+    panel.append(box('line',el('strong',(number.code?number.code+' / ':'')+number.value),box('chips',...number.facts.map(citation))));
   }
   for (const match of check.matches) {
     const id='prior/'+match.case_id+'/r'+match.rev+'/'+match.fact;
@@ -68,6 +90,8 @@ function invoiceApproval(check, digest) {
   }
   panel.append(lazyFold('核对回执摘要',()=>[el('p','回执 SHA-256'),el('code',digest),
     el('p','查验底稿 SHA-256'),el('code',check.source_sha256),el('p','人工签收内容 SHA-256'),el('code',check.decision_sha256)]));
+  if (check.screened?.length) panel.append(lazyFold('查看签收时的同号候选（'+check.screened.length+'）',
+    ()=>check.screened.map(row=>signedInvoiceSource(row))));
   return panel;
 }
 
@@ -102,7 +126,8 @@ function traceEvidence(report, finding, index) {
   for (const rows of archived.values()) {
     const first = rows[0];
     panel.append(lazyFold(first.title+' · R'+first.rev+' · '+statusName(first.decision),()=>rows.map(row=>
-      row.source?.format==='signed-invoice-v1' ? signedInvoiceSource(row) : box('trace-quote',citation(row.id),el('blockquote',row.quote)))));
+      row.source?.format==='signed-invoice-v1' ? signedInvoiceSource(row,finding.invoice_lookup?.candidates.find(c=>c.id===row.id)?.comparison) :
+        box('trace-quote',citation(row.id),el('blockquote',row.quote)))));
   }
   if (other.length) panel.append(box('chips',...other));
   if (!groups.size && !archived.size && !other.length) {

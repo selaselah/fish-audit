@@ -9,8 +9,9 @@ from pathlib import Path
 from calculations import CalculationEvidence, SUPPORTED
 from field_receipts import verify_field_sources
 from installments import LIMIT as INSTALLMENT_LIMIT, calculate as calculate_installments, finding as installment_finding
-from invoice_approval import FORMAT as INVOICE_APPROVAL_FORMAT, validate as validate_invoice_approval
-from invoice_identity import FORMAT as INVOICE_IDENTITY_FORMAT, identity_relations, printed_claim_pair
+from invoice_approval import FORMAT as INVOICE_APPROVAL_FORMAT, LEGACY_FORMAT as LEGACY_APPROVAL, PROFILES as INVOICE_PROFILES, validate as validate_invoice_approval
+from invoice_comparison import FORMAT as INVOICE_LOOKUP, archived_identity, check_history as check_invoice_history, code_relations, lookup_numbers, screen
+from invoice_identity import FORMAT as INVOICE_IDENTITY_FORMAT, InvoiceIdentities, identity_relations, printed_claim_pair
 from invoice_proof import FORMAT as INVOICE_SOURCE_FORMAT, invoice_number_edges, source_record as invoice_source_record
 from payment_history import LIMIT, cited_facts, payment_record
 from peer_review import journal_decision, verify_referrals, verify_review
@@ -49,14 +50,32 @@ def replay_rules(report):
     require(outcome["state"]=="verified",outcome.get("message","本机程序复算结果与底稿不符。"))
 
 
-def verify_signed_invoices(bundle, hashes, report, journal, revision, nodes):
+def verify_signed_invoices(bundle, hashes, report, journal, revision, nodes, approval=None):
     graph = report["graph"]
     current_keys = {e["to"] for e in invoice_number_edges(graph)}
     history_edges = {(e["from"],e["to"]) for e in graph["edges"] if e["type"]=="archived_invoice" and e["evidence"]==[e["from"]]}
-    created = datetime.fromisoformat(next(r["created"] for r in journal["revisions"] if r["rev"]==revision))
-    matches = graph.get("prior_invoices",[])
-    require(len(matches) == len({m["id"] for m in matches}) and history_edges == {(m["id"],m["number_key"]) for m in matches},
-            "历史票号清单与跨案图谱关系不符")
+    if approval is None:
+        created = datetime.fromisoformat(next(r["created"] for r in journal["revisions"] if r["rev"]==revision))
+        matches = graph.get("prior_invoices",[])
+        require(history_edges == {(m["id"],m["number_key"]) for m in matches},"历史票号清单与跨案图谱关系不符")
+    else:
+        matches = approval["screened"]
+        created = datetime.fromisoformat(approval["signed_at"])
+    require(len(matches)==len({m["id"] for m in matches}),"同一历史票号引文重复")
+    combined = graph.get("invoice_lookup")==INVOICE_LOOKUP
+    if combined:
+        require(screen(lookup_numbers(graph),matches)==matches,"签收票号的同号候选分类不符")
+        if approval is None:
+            code_nodes,code_edges = code_relations(matches)
+            require(code_nodes==[n for n in graph["nodes"] if n["type"]=="archived_code"] and
+                    code_edges==[e for e in graph["edges"] if e["type"]=="supports_invoice_code"],"历史发票代码的证据关系不符")
+            if report["policy"]["profile"] in INVOICE_PROFILES and lookup_numbers(graph):
+                expected=[]
+                def record(rule,status,detail,refs,*,invoice_lookup):
+                    expected.append((status,detail,list(dict.fromkeys(refs)),invoice_lookup))
+                check_invoice_history(graph,record)
+                actual=[(f["status"],f["detail"],f["evidence"],f.get("invoice_lookup")) for f in report["findings"] if f["rule"]=="I02"]
+                require(actual==expected,"I02 发现与逐票核对的同号候选、代码或证据不符")
     groups = {}
     for match in matches:
         groups.setdefault((match["case_id"],match["rev"]),[]).append(match)
@@ -71,8 +90,10 @@ def verify_signed_invoices(bundle, hashes, report, journal, revision, nodes):
                 and signed_at.tzinfo and signed_at <= created, "历史票号签收的企业、版本、决定或时间不符")
         verify_peer_source(bundle,hashes,archived,signoff,root)
         verify_invoice_approval(bundle,hashes,archived,hashes[root+"report.json"],signoff,root)
-        verify_field_sources(bundle,hashes,archived,rev,folder=root,pages=root,selected={m["fact"] for m in group})
+        selected = {m["fact"] for m in group} | {c["fact"] for m in group for c in m.get("code_evidence",[])}
+        verify_field_sources(bundle,hashes,archived,rev,folder=root,pages=root,selected=selected)
         old = archived["graph"]
+        identities = InvoiceIdentities(old) if combined else None
         docs = {d["id"]:d for d in old["documents"]}
         facts = {f["id"]:f for f in old["facts"]}
         old_nodes = {n["id"]:n for n in old["nodes"]}
@@ -84,7 +105,8 @@ def verify_signed_invoices(bundle, hashes, report, journal, revision, nodes):
             doc,page,key = match["doc"],match["page"],match["number_key"]
             fact = facts[match["fact"]]
             ref = root+match["fact"]
-            require(match["id"]==ref and key in current_keys and nodes.get(ref)=={**match,"type":"archived_observation","label":match["title"]}
+            require(match["id"]==ref and key in current_keys and
+                    (approval is not None or nodes.get(ref)=={**match,"type":"archived_observation","label":match["title"]})
                     and match["document_kind"] in {"invoice","unclassified"}
                     and eligible.get((fact["id"],fact.get("unit",doc),key))==match["document_kind"],
                     "同票引用与本案、历史单据归属或编号不符")
@@ -103,12 +125,15 @@ def verify_signed_invoices(bundle, hashes, report, journal, revision, nodes):
             source = invoice_source_record(fact,node,page_texts[prefix],key,signoff["time"])
             require(match.get("source")==source and bool(match.get("checked_field"))==(source["basis"]=="field_check"),
                     "历史票号的原文定位或人工核图依据不符")
+            if combined:
+                archived_code = archived_identity(identities.describe(fact),fact,facts,node,page_texts[prefix],signoff)
+                require(all(match.get(k)==v for k,v in archived_code.items()),"历史发票代码或组合标识与签收原页不符")
 
 
 def verify_invoice_approval(bundle, hashes, report, checksum, signoff, root=""):
     path = root+"approval/invoices.json"
     require(hashes.get(path)==signoff.get("invoice_check_hash"), "同票检查回执与签收时留存的摘要不符")
-    validate_invoice_approval(report,checksum,signoff,bundle.read(path) if path in hashes else None)
+    return validate_invoice_approval(report,checksum,signoff,bundle.read(path) if path in hashes else None)
 
 
 def verify_payment_history(bundle, hashes, report, journal):
@@ -336,11 +361,16 @@ def verify(source, strict_rules=False, *, rule_checker=None):
             verify_peer_source(bundle, hashes, report, journal_decision(journal,revision))
         require(hashes["report.json"] == manifest["report_sha256"] and any(
             item["rev"] == revision and item["hash"] == hashes["report.json"] for item in journal["revisions"]), "底稿版本摘要不符")
-        has_approval_format = "invoice_approval.py" in report["policy"].get("code_sha256",{})
-        require(report["policy"].get("invoice_approval")== (INVOICE_APPROVAL_FORMAT if has_approval_format else None),
+        modules = report["policy"].get("code_sha256",{})
+        combined = "invoice_comparison.py" in modules
+        require(report["policy"].get("invoice_lookup")==report["graph"].get("invoice_lookup")==(INVOICE_LOOKUP if combined else None),
+                "跨案票号比较格式与程序版本不符")
+        required_approval = INVOICE_APPROVAL_FORMAT if combined else LEGACY_APPROVAL if "invoice_approval.py" in modules else None
+        require(report["policy"].get("invoice_approval")==required_approval,
                 "签收时的同票查验格式与发行程序不符")
+        approval = None
         if any(d["rev"]==revision for d in journal["decisions"]):
-            verify_invoice_approval(bundle,hashes,report,hashes["report.json"],journal_decision(journal,revision))
+            approval = verify_invoice_approval(bundle,hashes,report,hashes["report.json"],journal_decision(journal,revision))
         else:
             require("approval/invoices.json" not in hashes,"同票检查回执缺少对应的签收决定")
         graph = report["graph"]
@@ -360,6 +390,8 @@ def verify(source, strict_rules=False, *, rule_checker=None):
                 "签收票号的存证格式与当版程序不符")
         if full_invoices:
             verify_signed_invoices(bundle,hashes,report,journal,revision,nodes)
+            if approval and combined:
+                verify_signed_invoices(bundle,hashes,report,journal,revision,nodes,approval)
         for match in ([] if full_invoices else graph.get("prior_invoices", [])):
             path = f"prior/{match['case_id']}/r{match['rev']}/{match['doc']}/{match['page']}.jpg"
             require(hashes[path] == match["page_hash"] and match["id"] in nodes, "历史票号证据不符")

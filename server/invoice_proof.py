@@ -29,6 +29,11 @@ def source_record(fact, page_node, text, number_key, signed_at):
     if (fact["field"] != "invoice_id" or not value or value not in quote
             or number_key != "invoice_number-" + hashlib.sha256(value.encode()).hexdigest()[:18]):
         raise ValueError("历史发票号码与原版字段取值或引文不符")
+    return field_source(fact,page_node,text,signed_at)
+
+
+def field_source(fact,page_node,text,signed_at):
+    quote = normalized(fact["quote"])
     digest = hashlib.sha256(text.encode()).hexdigest()
     if "text_sha256" in page_node and page_node["text_sha256"] != digest:
         raise ValueError("历史发票文字层与原版摘要不符")

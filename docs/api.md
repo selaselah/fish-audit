@@ -50,7 +50,7 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 
 ## 核图与最终决定
 
-初审或独立复核提交 `approve` 时，服务端在同一写事务内重新读取本企业与本案已核发票号码匹配的签收记录。若与所选版底稿有出入，返回 409 和 `invoice_history`。其中 `count` 为变化的票号引文总数，`changes` 最多返回前八处，每处包含 `previous` 和 `current`。新增引用的 `previous` 为空，原引消失时 `current` 为空，有前后版本时两者均给出案件、版本、引文编号、原文和人工决定。此响应保留当前任务状态。初审可走原有重新审计接口，独立复核可在原转交版签收为退回。
+初审或独立复核提交 `approve` 时，服务端在同一写事务内重新读取本企业与本案已核发票号码匹配的签收记录。当前规则中，新增、消失或改变的相同标识与归属待核记录会返回 409 和 `invoice_history`。同号但双方已核代码不同的新增记录保存在签收回执中，审计人员可直接签收当版。旧版仍按出具时的号码检索口径验收。其中 `count` 为变化的票号引文总数，`changes` 最多返回前八处，每处包含 `previous` 和 `current`。新增引用的 `previous` 为空，原引消失时 `current` 为空，有前后版本时两者均给出案件、版本、引文编号、原文和人工决定。此响应保留当前任务状态。初审可走原有重新审计接口，独立复核可在原转交版签收为退回。
 
 核图请求使用 `application/json`。姓名与意见必填。决定可为 `confirm` 或 `dispute`，`facts` 取自当前版本的证据编号。
 
@@ -68,7 +68,7 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 
 最终决定的字段为 `rev`、`reviewer`、`decision`、`note`，决定可为 `approve`、`return` 或 `escalate`。已归档、正在重算或提交过期版本返回 409。下载及操作均以任务和版本为范围。错误响应采用 `{"error":"可读说明"}`。
 
-采购、差旅签收通过时，服务在写入人工决定的同一事务内保存同票检索回执。审计人员读取签收版 `GET /reports/{rev}` 响应的 `invoice_approval` 可见当时的工作区、原查验版与摘要、签收版、签收时间、查询票号、原文字段及命中的前案版本。`outcome` 取 `matched`、`no_match` 或 `no_usable_number`。其中 `no_match` 限于本企业当时已签收的任务。提交复核的原版及独立复核签收版各有版本号。报告正文的 SHA-256 与验收前一致。
+采购、差旅签收通过时，服务在写入人工决定的同一事务内保存同票检索回执。审计人员读取签收版 `GET /reports/{rev}` 响应的 `invoice_approval` 可见当时的工作区、原查验版与摘要、签收版、签收时间、查询票号、原文字段及命中的前案版本。首版回执的 `outcome` 取 `matched`、`no_match` 或 `no_usable_number`。其中 `no_match` 限于本企业当时已签收的任务。提交复核的原版及独立复核签收版各有版本号。报告正文的 SHA-256 与验收前一致。
 
 签收记录的 `invoice_check_hash` 固定 `approval/invoices.json` 的原始字节。回执的 `decision_sha256` 对应含案件、企业、标题、版本、签收人、决定、意见和时间的原始签收内容，计算时排除回执摘要本身。审计人员可在独立离线校验中重建票号与命中清单并核对人工意见。本版开始实际执行过签收的记录才会带回执。
 
@@ -119,3 +119,7 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 规则集 `2026.11.24.6` 开始返回 `graph.invoice_identity`。图中 `invoice_identity` 节点代表已获同页证据支持的完整票据标识，`identified_invoice` 边的 `evidence` 可定位到号码和配套代码。单笔代码字段为 `invoice_code`，报销单同一行明列的组合为 `claim_full_ref`。原件只列短号或代码有异议时，可从 I01、T02、T03 的状态和引用查看补证原因。
 
 `origin=printed_claim_pair` 的 `claim_full_ref` 保留 `model_field=claim_ref`。它记录模型逐字抄下代码和号码后，系统凭唯一可定位的原生文字行、明确印刷的组合标签及对应视觉复检作出的归类。离线校验会对照原始模型候选值、完整引文、标签与复检记录。
+
+规则集 `2026.11.24.8` 将同号初筛与完整标识比对分别记录。每笔 I02 的 `invoice_lookup.number` 保留本案标识、代码与原文编号，`candidates` 逐条指向前案引文，分类为 `same`、`different`、`uncertain`。同一前案与本案多张票据的比对结果可以不同。完整前案清单在 `graph.prior_invoices`，每条含 `identity` 和 `code_evidence`，可定位签收时的原页。上版仅留存八位号码时，本版提示人工核对前案代码。
+
+`invoice-approval-v2` 在 `screened` 留存签收时查看的全部同号引文，`matches` 仅列相同标识和判定依据不足的候选。`possible_match` 表示仅有待核候选，`insufficient_identity` 表示本案短号的代码待核。报告出具后新出现的排除项也能沿回执打开前案的代码原文。当前签收版导出的 ZIP 随附该次筛查直接引用的历史签收、底稿、原件、页图及文字层。离线工具能复核候选分类 和每个排除依据，检索范围以企业当时的数据库为准。

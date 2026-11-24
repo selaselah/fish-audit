@@ -157,6 +157,7 @@ def export_bundle(store, case_id, revision, stream):
             historic = store.files / match["case_id"] / match["doc"] / f"{match['page']}.jpg"
             path = f"prior/{match['case_id']}/r{match['rev']}/{match['doc']}/{match['page']}.jpg"
             write(path, historic.read_bytes(), match["page_hash"])
+        invoices.extend(bundle.get("invoice_approval",{}).get("screened",[]))
         payments = payment_matches_with_evidence(report["graph"].get("payment_history", {"matches":[]}))
         references = {}
         for match in [*invoices,*payments]:
@@ -166,7 +167,7 @@ def export_bundle(store, case_id, revision, stream):
                 group["text_hashes"][match["doc"],match["page"]] = match["source"]["text_sha256"]
             if "signoff_hash" in match:
                 group["signoff_hash"] = match["signoff_hash"]
-            for item in match.get("evidence",[match]):
+            for item in [*match.get("evidence",[match]),*match.get("code_evidence",[])]:
                 group["facts"].add(item["fact"])
                 group["pages"].add((item["doc"],item["page"]))
         for (prior, rev), group in references.items():

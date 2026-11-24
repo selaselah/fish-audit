@@ -362,7 +362,8 @@ function finding(item) {
   if (item.rule==='I02') {
     const index=graphIndex(state.bundle.report.graph);
     const sources=item.evidence.map(id=>index.prior.get(id)).filter(row=>row?.source?.format==='signed-invoice-v1');
-    if (sources.length) node.append(lazyFold('核对前案签收依据（'+sources.length+'）',()=>sources.map(signedInvoiceSource)));
+    if (sources.length) node.append(lazyFold('核对前案签收依据（'+sources.length+'）',()=>sources.map(row=>
+      signedInvoiceSource(row,item.invoice_lookup?.candidates.find(c=>c.id===row.id)?.comparison))));
   }
   if (item.evidence.length) node.append(lazyFold('查看本项全部引文（'+item.evidence.length+'）',()=>[box('chips',...item.evidence.map(citation))]));
   if (graphIndex(state.bundle.report.graph).nodes.has('finding/'+item.id)) node.append(action('查看证据路径',()=>{

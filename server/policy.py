@@ -46,8 +46,9 @@ MAPPING = {"B01":["purchase-records","evidence-quality"],"B02":["payment"],"B03"
            "P03": ["purchase-records"], "I01": ["vat-invoice-code","digital-invoice-number","voucher", "follow-up"], "M01": ["voucher"],
            "C01": ["payment"], "M02": ["purchase-records", "payment"], "D01": ["purchase-records"],
            "A01": ["receipt"], "S01": ["receipt"], "X01": ["follow-up"],
-           "T01": ["voucher"], "T02": ["evidence-quality"], "T03": ["voucher"],
-           "T04": ["evidence-quality"], "T05": ["evidence-quality"], "I02": ["electronic-vouchers", "voucher", "follow-up"]}
+           "T01": ["voucher"], "T02": ["vat-invoice-code","digital-invoice-number","evidence-quality"], "T03": ["voucher"],
+           "T04": ["evidence-quality"], "T05": ["evidence-quality"],
+           "I02": ["vat-invoice-code","digital-invoice-number","electronic-vouchers","voucher","follow-up"]}
 
 
 def link_sources(graph):

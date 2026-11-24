@@ -17,6 +17,8 @@ from field_sources import FieldSources, check_archived_files, check_cited_files,
 from graph import compact, invoice_number_edges
 from installments import LIMIT as INSTALLMENT_LIMIT, calculate as calculate_installments
 from invoice_approval import receipt as invoice_approval_receipt, validate as validate_invoice_approval
+from invoice_comparison import FORMAT as INVOICE_LOOKUP, actionables, archived_identity, lookup_numbers, screen
+from invoice_identity import InvoiceIdentities
 from invoice_history import INDEX_FIELDS, InvoiceHistoryChanged, differences as invoice_differences, indexed_invoices
 from invoice_proof import source_record as invoice_source_record
 from payment_history import LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_facts, payment_record
@@ -436,7 +438,7 @@ class Store:
                              fact["quote"], fact["source_sha256"], fact["page_sha256"], kind))
         return rows
 
-    def verify_invoice_sources(self,db,matches):
+    def verify_invoice_sources(self,db,matches,include_identity=True):
         groups = {}
         for match in matches:
             groups.setdefault((match["case_id"],match["rev"]),[]).append(match)
@@ -449,12 +451,19 @@ class Store:
             graph = archived["graph"]
             facts = {f["id"]:f for f in graph["facts"]}
             nodes = {n["id"]:n for n in graph["nodes"]}
-            check_cited_files(db,prior,self.files/prior,graph,[facts[m["fact"]] for m in group])
+            identities = {}
+            if include_identity:
+                reader = InvoiceIdentities(graph)
+                identities = {m["fact"]:reader.describe(facts[m["fact"]]) for m in group}
+            codes = {r for identity in identities.values() for r in identity["code_refs"]}
+            cited = {m["fact"] for m in group} | codes
+            check_cited_files(db,prior,self.files/prior,graph,[facts[ref] for ref in cited])
             selected = {m["fact"] for m in group if m["checked_field"]}
             observed = {m["fact"] for m in group if any((facts[m["fact"]].get(k) or {}).get("source_check")
                                                         for k in ("attestation","amendment"))}
             if selected != observed:
                 raise CaseError("同票索引与历史票号的人工核图存证不符。",409)
+            selected.update(codes)
             if selected:
                 self.check_graph_field_history(prior,rev,graph,selected)
             signature = hashlib.sha256(canonical(signoff)).hexdigest()
@@ -467,6 +476,9 @@ class Store:
                 try:
                     source = invoice_source_record(facts[match["fact"]],nodes[f"{doc}/p{page}"],texts[doc,page],
                                                    match["number_key"],signoff["time"])
+                    if include_identity:
+                        match.update(archived_identity(identities[match["fact"]],facts[match["fact"]],facts,
+                                                       nodes[f"{doc}/p{page}"],texts[doc,page],signoff))
                 except (KeyError,TypeError,ValueError) as error:
                     raise CaseError("已签收票号的原文依据不符，无法引用前案。",409) from error
                 match.update(source=source,signoff_hash=signature)
@@ -627,8 +639,14 @@ class Store:
         if graph.get("profile",paper["policy"].get("profile")) != BANK:
             keys = sorted({edge["to"] for edge in invoice_number_edges(graph)})
             current = indexed_invoices(db,case_id,keys)
-            self.verify_invoice_sources(db,current)
-            changes = invoice_differences(graph.get("prior_invoices",[]),current)
+            combined = paper["policy"].get("invoice_lookup")==INVOICE_LOOKUP
+            self.verify_invoice_sources(db,current,include_identity=combined)
+            previous = graph.get("prior_invoices",[])
+            if combined:
+                current = screen(lookup_numbers(graph),current)
+                changes = invoice_differences(actionables(previous),actionables(current))
+            else:
+                changes = invoice_differences(previous,current)
             if changes:
                 raise InvoiceHistoryChanged(changes,peer)
             return invoice_approval_receipt(graph,current,revision,row["hash"],signoff)

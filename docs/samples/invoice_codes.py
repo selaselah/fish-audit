@@ -2,10 +2,12 @@
 
 import argparse
 import hashlib
+import json
+from urllib.error import HTTPError
 from reportlab.pdfgen import canvas
 
 from generate import ROOT, draw_pdf_page, embedded_font, pdf
-from run import BASE, get, submit, wait
+from run import BASE, get, post, submit, wait
 
 
 def materials(run_id):
@@ -58,9 +60,61 @@ def exercise(run_id,run):
     print(BASE+"/workpaper/"+cid+"?rev="+str(get("/api/cases/"+cid)["rev"])+"&finding="+results["T03"]["id"],number,results["T03"]["status"])
 
 
+def cross_case(run_id):
+    run_id += "-cross"
+    number,codes,_,singles = materials(run_id)
+    ids=[]
+    names=("甲","乙","甲票副本")
+    for tag,files in zip(names,[*singles,singles[0]]):
+        title="合成演练 · 跨案同号异代码 · "+tag+" · "+number
+        cid=submit(title,files,run_id+"-"+str(len(ids)),"cn-travel-reimbursement/v1")
+        case=get("/api/cases/"+cid)
+        assert case["title"]==title and {f["sha256"] for f in case["documents"]}=={hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
+        ids.append(cid)
+    for cid in ids:
+        wait(cid)
+        r1=get("/api/cases/"+cid+"/reports/1")["report"]
+        assert r1["policy"]["invoice_lookup"]=="signed-invoice-identity-v1" and r1["graph"]["prior_invoices"]==[]
+        assert r1["result"]["verdict"]=="pass", [(f["rule"],f["status"]) for f in r1["findings"] if f["status"]!="ok"]
+    for i in (0,1):
+        base="/api/cases/"+ids[i]
+        if get(base)["status"]=="ready":
+            post(base+"/signoff",{"rev":1,"decision":"approve","reviewer":"演练审计员"+names[i],
+                 "note":"已核水印资料，同页代码 "+codes[i]+"，号码 "+number+"，金额与本笔演练申请一致。"})
+        checked=get(base+"/reports/1")["invoice_approval"]
+        assert checked["outcome"]=="no_match" and checked["matches"]==[] and checked["numbers"][0]["code"]==codes[i]
+        assert [(r["case_id"],r["comparison"]) for r in checked["screened"]]==([(ids[0],"different")] if i else [])
+    base="/api/cases/"+ids[2]
+    if get(base)["rev"]==1:
+        try:
+            post(base+"/signoff",{"rev":1,"decision":"approve","reviewer":"演练复查员","note":"验证重复申请在签收时能否发现前案。"})
+        except HTTPError as error:
+            assert error.code==409
+            changes=json.load(error)["invoice_history"]["changes"]
+            assert [r["current"]["case_id"] for r in changes]==[ids[0]]
+        else:
+            raise AssertionError("同代码同号码的副本通过了过期的签收检查")
+        assert get(base)["decisions"]==[]
+        post(base+"/rerun",{"rev":1})
+        wait(ids[2])
+    paper=get(base+"/reports/2")["report"]
+    finding=next(f for f in paper["findings"] if f["rule"]=="I02")
+    assert finding["status"]=="risk" and paper["result"]["verdict"]=="review"
+    assert {r["case_id"]:r["comparison"] for r in paper["graph"]["prior_invoices"]}=={ids[0]:"same",ids[1]:"different"}
+    assert all(r["code_evidence"][0]["id"] in finding["evidence"] for r in paper["graph"]["prior_invoices"])
+    assert get(base)["decisions"]==[]
+    print("同号异代码签收",BASE+"/workpaper/"+ids[1]+"?rev=1")
+    print("相同组合待核",BASE+"/workpaper/"+ids[2]+"?rev=2&finding="+finding["id"])
+
+
 if __name__=="__main__":
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-id",default="synthetic-invoice-series-v1")
-    parser.add_argument("--run",action="store_true")
+    modes=parser.add_mutually_exclusive_group()
+    modes.add_argument("--run",action="store_true")
+    modes.add_argument("--cross",action="store_true",help="签收两组同号异代码水印资料，并检查第三份同票副本")
     args=parser.parse_args()
-    exercise(args.run_id,args.run)
+    if args.cross:
+        cross_case(args.run_id)
+    else:
+        exercise(args.run_id,args.run)

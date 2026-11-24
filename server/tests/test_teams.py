@@ -203,6 +203,91 @@ class EnterpriseFlow(unittest.TestCase):
         self.assertEqual(admin.post(cases+second+"/signoff",headers=headers,json=choice).status_code,409)
         self.assertEqual(admin.get(cases+second).json["decisions"],[])
 
+    def test_same_serial_different_codes_at_issuance_and_at_signature(self):
+        admin,wid,headers=self.register("printed-codes")
+        base="/api/w/"+wid+"/cases/"
+        number="00001234"
+        def publish(key,code):
+            entries=[("invoice","采购发票","采购发票"),("invoice_id",number,"发票号码："+number)]
+            if code:
+                entries.append(("invoice_code",code,"发票代码："+code))
+            def native(*args,**kwargs):
+                pages=prepare(*args,**kwargs)
+                pages[0].update(text="\n".join(quote for _,_,quote in entries),layer={"type":"text","lines":{
+                    str(i+1):[[.1,.2,.6,.23]] for i in range(len(entries))}})
+                return pages
+            facts=[{"field":k,"value":v,"quote":q,"region":"top"} for k,v,q in entries]
+            output={"facts":facts,"quality":"readable"}
+            trace={"model":"fixture","output":output,"check":{"model":"fixture","output":{"checks":[]}}}
+            cid=self.submit(admin,wid,headers,key)
+            with patch("jobs.prepare",native), patch.object(self.worker,"extract",return_value=(output,trace)):
+                self.worker.run(self.store.claim())
+            return cid
+        a=publish("printed-code-A","099926001011")
+        b=publish("printed-code-B","099926002011")
+        c=publish("printed-code-copy","099926001011")
+        unknown=publish("printed-code-unknown",None)
+        choice={"rev":1,"decision":"approve","note":"水印演练。"}
+        sign=lambda cid,body:admin.post(base+cid+"/signoff",headers=headers,json=body)
+        self.assertEqual(sign(a,choice).status_code,200)
+        self.assertEqual(sign(b,choice).status_code,200)
+        receipt=admin.get(base+b+"/reports/1").json["invoice_approval"]
+        self.assertEqual((receipt["outcome"],receipt["matches"]),("no_match",[]))
+        self.assertEqual([(r["case_id"],r["comparison"]) for r in receipt["screened"]],[(a,"different")])
+        self.assertEqual(receipt["screened"][0]["code_evidence"][0]["line"],3)
+        self.assertFalse(self.store.report(b,1)["report"]["graph"]["prior_invoices"])
+        with admin.get(base+b+"/reports/1/bundle") as response:
+            self.assertEqual(verify(io.BytesIO(response.data),True)[:2],(b,1))
+            with zipfile.ZipFile(io.BytesIO(response.data)) as bundle:
+                self.assertIn(f"prior/{a}/r1/originals/d01.jpg",bundle.namelist())
+        self.assertEqual(sign(unknown,{**choice,"decision":"return"}).status_code,200)
+        stale=sign(c,choice)
+        self.assertEqual(stale.status_code,409)
+        self.assertEqual({r["current"]["case_id"] for r in stale.json["invoice_history"]["changes"]},{a,unknown})
+        self.assertEqual(admin.post(base+c+"/rerun",headers=headers,json={"rev":1}).status_code,202)
+        self.worker.run(self.store.claim())
+        paper=self.store.report(c,2)["report"]
+        rows=paper["graph"]["prior_invoices"]
+        self.assertEqual({r["case_id"]:r["comparison"] for r in rows},{a:"same",b:"different",unknown:"uncertain"})
+        finding=next(f for f in paper["findings"] if f["rule"]=="I02")
+        self.assertEqual(finding["status"],"risk")
+        self.assertTrue(all(code["id"] in finding["evidence"] for row in rows for code in row["code_evidence"]))
+        with admin.get(base+c+"/reports/2/bundle") as response:
+            self.assertEqual(verify(io.BytesIO(response.data),True)[:2],(c,2))
+            with zipfile.ZipFile(io.BytesIO(response.data)) as archive:
+                files={name:archive.read(name) for name in archive.namelist()}
+        # Keep all public checksums consistent after moving the purported code to the number's line.
+        altered=json.loads(files["report.json"])
+        graph=altered["graph"]
+        excluded=next(r for r in graph["prior_invoices"] if r["comparison"]=="different")
+        code=excluded["code_evidence"][0]
+        code["line"]=2
+        for node in graph["nodes"]:
+            if node["id"]==excluded["id"]:
+                node["code_evidence"]=[code]
+            if node["id"]==code["id"]:
+                node["line"]=2
+        files["report.json"]=json.dumps(altered,ensure_ascii=False).encode()
+        checksum=hashlib.sha256(files["report.json"]).hexdigest()
+        journal=json.loads(files["journal.json"])
+        next(r for r in journal["revisions"] if r["rev"]==2)["hash"]=checksum
+        files["journal.json"]=json.dumps(journal).encode()
+        manifest=json.loads(files.pop("manifest.json"))
+        manifest.update(report_sha256=checksum,files=[{"path":k,"bytes":len(v),"sha256":hashlib.sha256(v).hexdigest()} for k,v in files.items()])
+        tampered=io.BytesIO()
+        with zipfile.ZipFile(tampered,"w") as archive:
+            for path,content in files.items():
+                archive.writestr(path,content)
+            archive.writestr("manifest.json",json.dumps(manifest))
+        with self.assertRaisesRegex(ValueError,"组合标识与签收原页不符"):
+            verify(tampered)
+        d=publish("printed-code-unseen","099926003011")
+        item=next(f for f in self.store.report(d,1)["report"]["findings"] if f["rule"]=="I02")
+        self.assertEqual(item["status"],"missing")
+        self.assertEqual(sign(d,choice).status_code,200)
+        checked=admin.get(base+d+"/reports/1").json["invoice_approval"]
+        self.assertEqual((checked["outcome"],[m["case_id"] for m in checked["matches"]]),("possible_match",[unknown]))
+
     def test_historical_invoice_source_describes_the_available_line_or_confirmation(self):
         from graph import entity_id
         key = entity_id("invoice_number","YL-01")

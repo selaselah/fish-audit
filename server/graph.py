@@ -3,6 +3,7 @@ import re
 import unicodedata
 from collections import defaultdict
 
+from invoice_comparison import FORMAT as INVOICE_LOOKUP, code_relations, lookup_numbers, screen
 from invoice_identity import CLAIM_PAIR_LABELS, FORMAT as IDENTITY_FORMAT, SHORT, identity_relations, printed_claim_pair
 from invoice_proof import invoice_number_edges
 from model import FIELDS
@@ -230,6 +231,7 @@ def build_graph(docs, pages, attestations, amendments=()):
              "documents_by_kind": dict(by_kind), "gaps": gaps, "cautions": cautions, "documents": docs}
     partition_documents(graph, pages)
     graph["invoice_identity"] = IDENTITY_FORMAT
+    graph["invoice_lookup"] = INVOICE_LOOKUP
     identities,links = identity_relations(graph)
     graph["nodes"].extend(identities)
     graph["edges"].extend(links)
@@ -336,11 +338,13 @@ def link_procedures(graph, findings, calls):
 
 
 def attach_prior_invoices(graph, matches):
-    history = []
-    for row in matches:
-        ref = f"prior/{row['case_id']}/r{row['rev']}/{row['fact']}"
-        history.append({**row, "id": ref})
+    history = screen(lookup_numbers(graph),matches)
+    for row in history:
+        ref = row["id"]
         graph["nodes"].append({"id": ref, "type": "archived_observation", "label": row["title"], **row})
         graph["edges"].append({"from": ref, "to": row["number_key"], "type": "archived_invoice",
                                "evidence": [ref]})
     graph["prior_invoices"] = history
+    nodes,edges = code_relations(history)
+    graph["nodes"].extend(nodes)
+    graph["edges"].extend(edges)
