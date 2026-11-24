@@ -122,12 +122,17 @@ def page_sources(graph,read_text):
                          "seller_signature","quantity_agreed","acceptance_criteria","delivery_batch","batch_clause","payment_term","payment_stage",
                          "total","net","tax","currency","unit"}
         def contract_row(field,value,quote):
+            if field=="payment_deadline":
+                from payment_windows import scoped_row
+                return scoped_row(quote) and covers(field,value,quote)
             if field in ("warranty_period","warranty_condition"):
                 from warranty_terms import dedicated
                 return dedicated(quote) and covers(field,value,quote)
             return covers(field,value,quote)
         if "warranty_sources" in graph:
             contract_fields.update(("warranty_period","warranty_condition"))
+        if "payment_window_sources" in graph:
+            contract_fields.add("payment_deadline")
         coverage=covered_rows(graph,read_text,contracts,contract_fields,contract_row,"分批合同")
         coverage+=covered_rows(graph,read_text,receipts,set(RECEIPT_FIELDS),covers,"分批验收材料")
         def release_field(field,value,quote):

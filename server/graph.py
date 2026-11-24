@@ -18,6 +18,7 @@ from contract_changes import NUMBER_TYPES as ADDENDUM_NUMBERS, TITLES as ADDENDU
 import delivery_batches
 import contract_effect
 import warranty_terms
+import payment_windows
 from acceptance_authority import CLAUSE as AUTHORITY_CLAUSE, SIGNER as ACCEPTANCE_SIGNATURE, attach as record_signatories, witness_edges
 
 
@@ -72,6 +73,7 @@ FIELD_START = {field: re.compile(r"^(?:" + "|".join(sorted(LABELS[field], key=le
                for field in SCALAR | PERFORMANCE_LABELS.keys()}
 FIELD_START["payment_stage"] = re.compile(STAGE_PREFIX.pattern + r"|^付款期次:")
 FIELD_START["effect_clause"] = re.compile(FIELD_START["effect_clause"].pattern + r"|^本合同.{0,80}生效")
+FIELD_START[payment_windows.FIELD]=re.compile("^(?:"+payment_windows.LABELED.pattern+"):")
 TERMS = re.compile(r"分期|分[两二三四五六七八九十\d]+期|预付|质保金|保留款|分批|定金|订金|尾款|部分交付|红字|冲销|红冲|退款|退汇|冲正|撤销|抵扣|扣减|变更单|补充协议")
 PERFORMANCE_CAUTION = re.compile(r"解除|终止|待审批|待批准|授权委托|另附|另行约定|第[两一二三四五六七八九十\d]+期")
 
@@ -287,7 +289,7 @@ def build_graph(docs, pages, attestations, amendments=()):
             if field in ADDENDUM_NUMBERS:
                 target, entity_label = number_target(field,value,quote,fact_id)
                 kind = ADDENDUM_NUMBERS[field]
-            if field in (AUTHORITY_CLAUSE,ACCEPTANCE_SIGNATURE) or field in delivery_batches.LABELS or field in warranty_terms.LABELS:
+            if field in (AUTHORITY_CLAUSE,ACCEPTANCE_SIGNATURE,payment_windows.FIELD) or field in delivery_batches.LABELS or field in warranty_terms.LABELS:
                 target = fact_id
             if target!=fact_id:
                 nodes[target] = {"id": target, "type": kind, "label": entity_label}
@@ -298,6 +300,7 @@ def build_graph(docs, pages, attestations, amendments=()):
     partition_documents(graph, pages)
     withhold_partial_numbers(graph)
     texts = {(page["doc"],page["number"]):page["text"] for page in pages}
+    graph["payment_window_sources"]=payment_windows.sources(graph,lambda doc,number:texts[doc,number])
     graph["contract_effect_sources"]=contract_effect.sources(graph,lambda doc,number:texts[doc,number])
     graph["warranty_sources"]=warranty_terms.sources(graph,lambda doc,number:texts[doc,number])
     record_mandate_pages(graph, lambda doc, number: texts[doc, number])
@@ -380,6 +383,7 @@ def link_procedures(graph, findings, calls):
     edges.extend(witness_edges(findings))
     edges.extend(delivery_batches.evidence_edges(findings))
     edges.extend(warranty_terms.edges(findings))
+    edges.extend(payment_windows.edges(findings))
     expert_id = "model/expert"
     nodes.append({"id": expert_id, "type": "model_call", "label": "专家追加程序",
                   "response_id": calls["expert"].get("response_id"), "model": calls["expert"]["model"]})

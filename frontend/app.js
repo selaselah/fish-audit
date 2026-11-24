@@ -303,8 +303,13 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     const source=warranty.lines.find(s=>s.doc===docId && s.page===pageNumber && s.line===lineHint);
     if (source) gaps.push({...source,quality:'warranty_reference'});
   }
+  const windows=state.bundle?.report.graph.payment_window_sources;
+  if (windows && lineHint && !gaps.some(g=>g.line===lineHint)) {
+    const source=windows.lines.find(s=>s.doc===docId && s.page===pageNumber && s.line===lineHint);
+    if (source) gaps.push({...source,quality:'payment_window_reference'});
+  }
   for (const gap of gaps) {
-    const label = {addendum_reference:'补充协议所据原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',warranty_reference:'质保金所据原文'}[gap.quality] || '待核的原文字层';
+    const label = {addendum_reference:'补充协议所据原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文'}[gap.quality] || '待核的原文字层';
     const section = box('evidence-row',el('h4',label+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
     section.dataset.gapLine = String(gap.line);
     if (gap.line===lineHint) {
@@ -355,6 +360,13 @@ function citation(ref) {
     return Team.paperLink(label,prior.case_id,'button ref',new URLSearchParams({rev:String(prior.rev),fact:prior.fact}));
   }
   const source = index?.nodes.get(ref);
+  if (source?.type==='method_reference') {
+    const method=state.bundle.report.policy.sources?.[ref.slice('source/'.length)];
+    if (!method || method.url!==source.url || !method.url.startsWith('https://')) return el('span','制度来源待核','small');
+    const anchor=link(method.edition+' · '+method.title,method.url,'button ref');
+    anchor.target='_blank'; anchor.rel='noopener noreferrer';
+    return anchor;
+  }
   if (source?.type === 'document' || source?.type === 'document_section') {
     const doc = source.source || ref;
     const page = source.page || 1;
@@ -487,6 +499,7 @@ function finding(item) {
     if (clauses) node.append(clauses);
   }
   if (item.warranty_check) node.append(warrantyPanel(item,state.bundle.report.graph));
+  if (item.payment_window) node.append(paymentWindowPanel(item,state.bundle.report.graph));
   if (item.batch_acceptance) {
     const {graph,findings}=state.bundle.report;
     node.append(deliveryBatchPanel(item.batch_acceptance,graph,findings.filter(f=>f.rule==='H04')));
@@ -583,6 +596,17 @@ function graphPanel() {
   const panel = box('panel', el('h2', '本案证据关系'), el('p', graph.nodes.length + ' 个节点 · ' +
     graph.edges.length + ' 条关系 · ' + graph.facts.length + ' 条提取记录', 'muted'));
   const grouped = new Map();
+  const comparisons=graph.edges.filter(e=>e.type==='payment_window_comparison');
+  if (comparisons.length) {
+    const list=lazyFold('付款期限与实付凭据（'+comparisons.length+'）',()=>comparisons.map(edge=>{
+      const row=box('line',el('strong',({within:'期内付款',early:'早于起算日',late:'晚于付款末日',same_day:'同日待核时分',extension_unknown:'顺延口径待核'})[edge.outcome]));
+      for (const id of [edge.from,edge.to]) row.append(box('batch-source',el('q',facts.get(id).quote),citation(id)));
+      row.dataset.windowWitness=edge.from+'>'+edge.to;
+      return row;
+    }));
+    list.classList.add('payment-window-relations');
+    panel.append(list);
+  }
   const warranties=graph.edges.filter(e=>e.type==='warranty_release_basis');
   if (warranties.length) {
     const links=lazyFold('质保金期次与期满确认（'+warranties.length+'）',()=>warranties.map(edge=>{

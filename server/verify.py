@@ -28,6 +28,7 @@ from acceptance_authority import verify_sources as verify_acceptance_authority
 from delivery_batches import verify_sources as verify_delivery_batches
 from contract_effect import verify as verify_contract_effect
 from warranty_terms import verify as verify_warranty
+from payment_windows import verify as verify_payment_windows
 from contract_changes import verify_sources as verify_addendum_sources
 from delegation import verify_sources as verify_delegation_sources
 from protocol import canonical, response_request
@@ -241,6 +242,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
     verify_delivery_batches(report,page_text)
     verify_contract_effect(report,page_text)
     verify_warranty(report,page_text)
+    verify_payment_windows(report,page_text)
     if "conclusions.py" in report["policy"].get("code_sha256",{}):
         verify_result(report)
     graph = report["graph"]
@@ -252,7 +254,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
     for trace in report["calls"]["pages"]:
         doc, page = trace["doc"], trace["page"]
         page_node = nodes[f"{doc}/p{page}"]
-        inspected = [*graph.get("quality_addenda",{}).get("pages",[]),*graph.get("acceptance_authority_sources",{}).get("pages",[]),*graph.get("delivery_batch_sources",{}).get("pages",[]),*graph.get("contract_effect_sources",{}).get("pages",[]),*graph.get("warranty_sources",{}).get("pages",[])]
+        inspected = [*graph.get("quality_addenda",{}).get("pages",[]),*graph.get("acceptance_authority_sources",{}).get("pages",[]),*graph.get("delivery_batch_sources",{}).get("pages",[]),*graph.get("contract_effect_sources",{}).get("pages",[]),*graph.get("warranty_sources",{}).get("pages",[]),*graph.get("payment_window_sources",{}).get("pages",[])]
         if report["policy"].get("quality_addenda") and ("clause_text_only" in trace or
                 any(p["doc"]==doc and p["page"]==page for p in inspected)):
             require(isinstance(trace.get("clause_text_only"),bool) and trace["clause_text_only"] is page_node.get("clause_text_only"),

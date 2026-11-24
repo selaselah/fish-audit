@@ -144,6 +144,16 @@ server/.venv/bin/python docs/samples/delivery_batches.py --run --run-id syntheti
 server/.venv/bin/python docs/samples/warranty_release.py --run --run-id synthetic-warranty-20261124-31
 ```
 
+### 有付款期限的预付款和验收款
+
+九组水印采购案使用相同的总价及 30%、60%、10% 三期比例。可核对按期支付、提前付款、固定日期后的晚付、跨国庆假期的工作日末日、末日当天转账、工作日口径待核、验收影像的附加约定、以到账为准及合同生效后的首期预付。每案包括合同、验收、质保确认和银行回单四份 PDF。
+
+```sh
+server/.venv/bin/python docs/samples/payment_deadlines.py --run --run-id synthetic-deadline-20261125-01
+```
+
+`--cases national boundary` 只运行末日相同、分别在末日当天及两天后转账的两案。省略 `--run` 可只生成原件。联机演练对生成文件的摘要和原行做比对，在对应水印页模拟核图并保留各版记录。
+
 ### 复现首次读图的编号误分类
 
 运行 `server/.venv/bin/python docs/samples/quality_readback.py --run`，可用上述复验后付款案例的 R1 重测。脚本校验原版本证据包，把两份 PDF 与固定种子重新生成的水印样本逐字节比较，并检查重渲染的页图和文字层。随后只将两张水印页图连同真实初读候选送入视觉复检，将回执另存入演练目录。原底稿仍可照常打开。

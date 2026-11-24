@@ -11,7 +11,7 @@ from calculations import normalized
 from contract_changes import labelled_sources
 from delegation import complete_id, covered_rows
 from delivery_batches import one, ordinal, raw_body
-from performance_versions import FORMAT as CURRENT
+from performance_versions import WARRANTY_FORMAT, WARRANTY_FORMATS
 from reinspection import LINK_KEYS, linked
 
 
@@ -315,7 +315,7 @@ def edges(findings):
 def verify(report,read_text,*,signing=False):
     policy,graph=report["policy"],report["graph"]
     if not policy.get("warranty_checks"):
-        if "warranty_terms.py" in policy.get("code_sha256",{}) or "warranty_sources" in graph or policy.get("performance_checks")==CURRENT:
+        if "warranty_terms.py" in policy.get("code_sha256",{}) or "warranty_sources" in graph or policy.get("performance_checks") in WARRANTY_FORMATS:
             raise ValueError("质保核对程序标记缺失")
         if signing:
             positives=[f for f in report["findings"] if f["rule"] in ("H04","H05") and f["status"]=="ok"
@@ -323,13 +323,13 @@ def verify(report,read_text,*,signing=False):
             if positives:
                 from performance import compute
                 ledger=sources(graph,read_text)
-                current=compute({**graph,"warranty_sources":ledger},CURRENT)
+                current=compute({**graph,"warranty_sources":ledger},WARRANTY_FORMAT)
                 for old in positives:
                     if not any(f.get("warranty_check",{}).get("status")==f["status"]=="ok" and f["rule"]==old["rule"]
                                and f["stage"]==old["stage"] and set(old["scope"])<=set(f["scope"]) for f in current):
                         raise ValueError("旧版质保金的约定、确认主体或整页依据尚待现行程序复核，请重新审计后签收。")
         return
-    if policy["warranty_checks"]!=FORMAT or policy.get("performance_checks")!=CURRENT or graph.get("warranty_sources")!=sources(graph,read_text):
+    if policy["warranty_checks"]!=FORMAT or policy.get("performance_checks") not in WARRANTY_FORMATS or graph.get("warranty_sources")!=sources(graph,read_text):
         raise ValueError("质保条款、确认记录或原页版式与归档不符")
     if [e for e in graph["edges"] if e["type"]=="warranty_release_basis"]!=edges(report["findings"]):
         raise ValueError("质保金期次所据的期满确认关系与归档不符")

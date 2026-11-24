@@ -1,5 +1,7 @@
 """Curated methodological references. Rule applicability is defined separately."""
 
+from cn_workdays import SOURCE as WORKDAY_NOTICE, SOURCE_KEY as WORKDAY_KEY
+
 ACCOUNTING = {"title": "《中华人民共和国会计法》（2024年修正）第十四条",
               "url": "https://kjs.mof.gov.cn/zhengcefabu/202408/t20240812_3941615.htm",
               "scope": "原始凭证审核的一般背景。各项勾稽条件为本系统采购检查程序。"}
@@ -10,6 +12,11 @@ EVIDENCE = {"title": "《中国注册会计师审计准则第1301号——审计
             "url": "https://www.cicpa.org.cn/ztzl1/Professional_standards/xxzztx/zyzz/sjzz/202105/P020240412542695263912.pdf",
             "edition": "2022-12-22 修订", "scope": "注册会计师审计的方法参考，用于说明证据评估与追加程序思路。"}
 SOURCES = {
+    WORKDAY_KEY:WORKDAY_NOTICE,
+    "payment-time":{"title":"《中华人民共和国民法典》","edition":"2020-05-28 通过",
+        "url":"https://www.court.gov.cn/zixun/xiangqing/233181.html","locator":"第二百条至第二百零四条、第六百二十八条",
+        "scope":"依本案约定核对价款支付时间及期间起止。以合同明确采用的口径及实际履约材料确定比较基准。",
+        "summary":"按约定时间支付价款，审查起算事件、末日顺延、截止时刻和特别约定。"},
     "contract-change": {"title":"《中华人民共和国民法典》","edition":"2020-05-28 通过",
         "url":"https://tjca.miit.gov.cn/zwgk/zcwj/flfg/art/2020/art_20cf1a2e1b854924b5caa744c8045d1f.html",
         "locator":"第五百四十三、五百四十四条","scope":"当事人协商变更合同及变更内容不明确时的法律背景。",
@@ -72,7 +79,8 @@ SOURCES = {
                   "summary": "不同来源的材料相互矛盾或可靠性存疑时，应考虑调整检查或追加程序。"},
 }
 MAPPING = {"H01":["contract-effect","written-mandate","contract-signing","purchase-records"],"H02":["receipt","acceptance-roles","contract-change","batch-delivery","evidence-quality"],
-           "H03":["payment","purchase-records"],"H04":["payment","receipt","contract-change","batch-delivery","warranty-period"],"H05":["payment","evidence-quality","warranty-period"],
+           "H03":["payment","purchase-records"],"H04":["payment","receipt","contract-change","batch-delivery","warranty-period","payment-time"],
+           "H05":["payment","evidence-quality","warranty-period","payment-time"],
            "B01":["purchase-records","evidence-quality"],"B02":["payment"],"B03":["payment","follow-up"],
            "B08":["installment-tracking","follow-up"],
            "B04":["payment","voucher"],"B05":["evidence-quality","follow-up"],
@@ -88,6 +96,8 @@ MAPPING = {"H01":["contract-effect","written-mandate","contract-signing","purcha
 def link_sources(graph):
     used = {node["label"]: node["id"] for node in graph["nodes"] if node["type"] == "control"}
     keys = {key for rule in used for key in MAPPING[rule]}
+    if any(e["type"]=="supports_result" and e["from"]=="source/"+WORKDAY_KEY for e in graph["edges"]):
+        keys.add(WORKDAY_KEY)
     for key in sorted(keys):
         source = SOURCES[key]
         graph["nodes"].append({"id": "source/" + key, "type": "method_reference",

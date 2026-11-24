@@ -244,6 +244,72 @@ function contractEffectPanel(finding,graph) {
   return panel;
 }
 
+function paymentWindowPanel(finding,graph) {
+  const w=finding.payment_window;
+  const {facts,documents}=graphIndex(graph);
+  const panel=box('payment-window',el('h4','付款时限复算'));
+  panel.dataset.windowState=w.outcome || w.state;
+  panel.dataset.status=finding.status;
+  const dates=el('dl','','warranty-dates');
+  function addDate(title,value) {
+    dates.append(box('warranty-date',el('dt',title),el('dd',value || '待核',value?'':'muted')));
+  }
+  addDate('履约起算日',w.trigger_on);
+  addDate(w.state==='nominal'?'顺延前日历末日':'按约复算末日',w.calendar_end);
+  if (finding.rule==='H05') addDate('回单付款日',w.paid_on);
+  panel.append(dates);
+  if (w.state==='nominal' && !finding.detail.includes('顺延'))
+    panel.append(el('p','实际末日还需核对休假日顺延及合同约定。','small'));
+  if (['unresolved','conflict'].includes(w.state) && w.detail && !finding.detail.includes(w.detail))
+    panel.append(el('p',w.detail,'small'));
+  const located=new Set();
+  for (const item of w.lines) {
+    const fact=item.facts.map(id=>facts.get(id)).find(f=>f?.quote===item.quote);
+    const title=(documents.get(item.doc)?.name || '原件')+' · 第 '+item.page+' 页'+(item.line?' · 第 '+item.line+' 行':'');
+    const ref=action(title,()=>openPage(item.doc,item.page,fact?.id,fact?null:item.line),'ref');
+    const row=box('batch-source',el('q',item.quote),ref);
+    row.dataset.windowSource=fact?.id || item.doc+'/p'+item.page+'/l'+item.line;
+    panel.append(row);
+    if (fact) located.add(fact.id);
+  }
+  for (const id of [w.trigger_ref,w.paid_ref]) {
+    const fact=facts.get(id);
+    if (!fact || located.has(id)) continue;
+    const row=box('batch-source',el('q',fact.source_line?.text || fact.quote),citation(id));
+    row.dataset.windowSource=id;
+    panel.append(row);
+  }
+  for (const p of w.mixed_pages) {
+    const ref=action((documents.get(p.doc)?.name || '原件')+' · 第 '+p.page+' 页',()=>openPage(p.doc,p.page),'ref');
+    ref.dataset.windowPage=p.doc+'/p'+p.page;
+    panel.append(box('batch-source',el('strong','通读整页影像及附注'),ref));
+  }
+  if (w.calendar_source) {
+    if (w.days.length) {
+      const trace=lazyFold('逐日核对工作日（已计 '+w.days.at(-1).total+' 天）',()=>{
+        const table=el('table','','workday-table');
+        const heads=table.createTHead().insertRow();
+        for (const name of ['日期','日历安排','累计工作日']) {
+          const th=el('th',name); th.scope='col'; heads.append(th);
+        }
+        const rows=table.createTBody();
+        for (const d of w.days) {
+          const row=rows.insertRow();
+          row.classList.toggle('workday-counted',d.counted);
+          for (const value of [d.date,d.kind,String(d.total)]) row.insertCell().textContent=value;
+        }
+        return [table];
+      });
+      trace.classList.add('workday-trace');
+      panel.append(trace);
+    }
+    const source=citation('source/'+w.calendar_source);
+    source.dataset.workdaySource=w.calendar_source;
+    panel.append(box('batch-source',el('strong','本次采用的日历'),source));
+  }
+  return panel;
+}
+
 function warrantyPanel(finding,graph) {
   const entry=finding.warranty_check;
   const {facts,documents}=graphIndex(graph);

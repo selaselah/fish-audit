@@ -223,6 +223,49 @@ try {
     const authority=report.findings.find(f=>f.rule==='H02')?.acceptance_authority;
     const effect=report.findings.find(f=>f.rule==='H01')?.effect_review;
     const warranty=phases.find(f=>f.warranty_check);
+    const windows=report.findings.filter(f=>f.payment_window);
+    const windowPanel=f=>'document.querySelector('+JSON.stringify('[data-finding="'+f.id+'"] .payment-window')+')';
+    for (const finding of windows) {
+      const w=finding.payment_window, panel=windowPanel(finding);
+      const dates=[w.trigger_on,w.calendar_end];
+      if (finding.rule==='H05') dates.push(w.paid_on);
+      assert.deepEqual(await evaluate('[...'+panel+'.querySelectorAll("dd")].map(e=>e.textContent)'),dates.map(d=>d || '待核'));
+      assert.equal(await evaluate(panel+'.dataset.windowState'),w.outcome || w.state);
+      const citations=new Map();
+      for (const item of w.lines) {
+        const fact=item.facts.map(id=>report.graph.facts.find(f=>f.id===id)).find(f=>f?.quote===item.quote);
+        citations.set(fact?.id || item.doc+'/p'+item.page+'/l'+item.line,{quote:item.quote,fact:fact?.id,line:item.line});
+      }
+      for (const id of [w.trigger_ref,w.paid_ref].filter(Boolean)) {
+        const fact=report.graph.facts.find(f=>f.id===id);
+        if (!citations.has(id)) citations.set(id,{quote:fact.source_line?.text || fact.quote,fact:id});
+      }
+      for (const [ref,original] of citations) {
+        const row=panel+'.querySelector('+JSON.stringify('[data-window-source="'+ref+'"]')+')';
+        assert.equal(await evaluate(row+'.querySelector("q").textContent'),original.quote);
+        await evaluate(row+'.querySelector("button").click()');
+        const locator=original.fact?'document.querySelector(".located")?.dataset.fact==='+JSON.stringify(original.fact):
+          'document.querySelector(".located[data-gap-line] blockquote")?.textContent==='+JSON.stringify(original.quote);
+        await wait('document.querySelector("#page-dialog").open && '+locator+' && document.querySelector("#page-dialog img")?.naturalWidth>0','original payment-window evidence');
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
+      for (const page of w.mixed_pages) {
+        const button=panel+'.querySelector('+JSON.stringify('[data-window-page="'+page.doc+'/p'+page.page+'"]')+')';
+        await evaluate(button+'.click()');
+        await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth>0','whole payment-window page');
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
+      if (w.calendar_source) {
+        assert.equal(await evaluate(panel+'.querySelector("[data-workday-source]").href'),report.policy.sources[w.calendar_source].url);
+        if (w.days.length) {
+          await evaluate(panel+'.querySelector(".workday-trace").open=true');
+          await wait(panel+'.querySelectorAll(".workday-table tbody tr").length==='+w.days.length,'full workday calculation');
+          assert.deepEqual(await evaluate('[...'+panel+'.querySelectorAll("tbody tr")].map(r=>[...Array.from(r.cells,c=>c.textContent),r.classList.contains("workday-counted")])'),
+            w.days.map(d=>[d.date,d.kind,String(d.total),d.counted]));
+          await evaluate(panel+'.querySelector(".workday-trace").open=false');
+        }
+      }
+    }
     if (warranty) {
       const entry=warranty.warranty_check;
       const panel='document.querySelector(".warranty-review")';
@@ -518,6 +561,16 @@ try {
           await writeFile(join(process.env.AUDIT_UI_SHOTS,'warranty-'+performanceCase+'-'+width+'.png'),Buffer.from(capture.data,'base64'));
         }
       }
+      if (windows.length) {
+        const panel=windowPanel(windows.find(f=>f.rule==='H05') || windows[0]);
+        await evaluate(panel+'.querySelector(".workday-trace")?.setAttribute("open","")');
+        assert.ok(await evaluate('[...document.querySelectorAll(".payment-window,details[open] .workday-table")].every(e=>e.clientWidth>0 && e.scrollWidth<=e.clientWidth+1)'),'payment window at '+width);
+        if (process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
+          await evaluate(panel+'.scrollIntoView({block:"start"});window.scrollBy(0,-54)');
+          const capture=await call('Page.captureScreenshot',{format:'png'});
+          await writeFile(join(process.env.AUDIT_UI_SHOTS,'payment-window-'+performanceCase+'-'+width+'.png'),Buffer.from(capture.data,'base64'));
+        }
+      }
       if (effect && (effect.conditions.length || effect.mixed_pages.length) && process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
         await evaluate('document.querySelector(".effect-review").scrollIntoView({block:"start"});window.scrollBy(0,-45)');
         assert.ok(await evaluate('document.querySelector(".effect-review").scrollWidth<=document.querySelector(".effect-review").clientWidth+1'));
@@ -543,6 +596,20 @@ try {
     const target=report.findings.find(f=>f.rule==='H02');
     await click('查看证据路径','document.querySelector('+JSON.stringify('[data-finding="'+target.id+'"]')+')');
     await wait('document.querySelector("#trace-select")?.value==='+JSON.stringify(target.id),'acceptance evidence graph');
+    if (windows.length) {
+      const links=report.graph.edges.filter(e=>e.type==='payment_window_comparison');
+      assert.equal(await evaluate('!!document.querySelector(".payment-window-relations")'),!!links.length);
+      if (links.length) await evaluate('document.querySelector(".payment-window-relations").open=true');
+      for (const edge of links) {
+        const row='document.querySelector('+JSON.stringify('[data-window-witness="'+edge.from+'>'+edge.to+'"]')+')';
+        await wait(row+'?.querySelectorAll("button").length===2','payment term and bank receipt');
+        for (const [index,id] of [edge.from,edge.to].entries()) {
+          await evaluate(row+'.querySelectorAll("button")['+index+'].click()');
+          await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(id),'payment-window graph citation');
+          await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+        }
+      }
+    }
     if (warranty) {
       const links=report.graph.edges.filter(e=>e.type==='warranty_release_basis');
       assert.equal(await evaluate('!!document.querySelector(".warranty-relations")'),!!links.length);

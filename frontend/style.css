@@ -124,6 +124,15 @@ textarea { width: 100%; resize: vertical; }
 .warranty-date dd { margin:2px 0 0; font-weight:600; font-variant-numeric:tabular-nums; }
 .warranty-conflict { margin:9px 0; padding-inline-start:10px; border-inline-start:2px solid #aa7939; }
 .warranty-review details { max-width:100%; }
+.payment-window { margin:14px 0; padding:12px 14px; border-inline-start:3px solid var(--green); background:var(--soft); min-width:0; }
+.payment-window:is([data-status="risk"],[data-status="missing"]) { border-inline-start-color:#946421; background:#fbf7ed; }
+.payment-window[data-status="issue"] { border-inline-start-color:#903a30; background:#fbf2ef; }
+.payment-window h4 { margin:0 0 8px; }
+.workday-trace { margin:10px 0; }
+.workday-table { width:100%; border-collapse:collapse; margin-top:6px; font-size:.86rem; font-variant-numeric:tabular-nums; }
+.workday-table th,.workday-table td { text-align:left; padding:4px 6px; border-bottom:1px solid var(--line); }
+.workday-table th:last-child,.workday-table td:last-child { text-align:right; }
+.workday-counted { font-weight:600; color:var(--green); }
 .delivery-batches { margin:16px 0; padding:clamp(10px,2vw,20px); border:1px solid var(--line); border-radius:6px; background:#f7f9f5; }
 .batch-heading,.batch-record > .flow { display:flex; align-items:baseline; flex-wrap:wrap; gap:4px 10px; }
 .batch-heading { justify-content:space-between; margin-bottom:6px; }

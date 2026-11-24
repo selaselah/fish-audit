@@ -85,6 +85,9 @@ def covers(field, value, quote):
         return line==value and line in TITLES[field]
     if field=="payment_stage" and STAGE_PREFIX.match(line):
         return bool(value and value in (line,normalized(body).rstrip("。")))
+    if field=="payment_deadline":
+        from payment_windows import label_matches
+        return label_matches(label) and bool(value and body) and value in (line,normalized(body).rstrip("。"))
     names = performance_labels.get(field,SCALARS.get(field,()))
     return label in names and bool(value) and value in (line,normalized(body).rstrip("。"))
 

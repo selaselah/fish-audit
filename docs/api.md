@@ -224,6 +224,21 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 
 `graph.warranty_sources.pages` 记录合同、验收及期满确认原页的文字和影像覆盖，`lines` 保留日历口径、释放条件、确认及未核原文。原生文字可按 `doc/page/line` 定位，影像观察保留事实编号并可打开页图。`warranty_release_basis` 从已获支持的付款期次指向确认单原文。归档复算重读原页文字和关系，签收重新核验所据原件。旧底稿可按原版复算，旧正向结论遇到现行质保程序核不清的条款或记录时，签收返回 HTTP 409。
 
+## 逐期付款时限与回单日期
+
+规则 `2026.11.25.01` 的 `policy.performance_checks` 为 `contract-performance-v13`，`policy.payment_windows` 为 `phase-payment-window-v1`。遇到付款时限原文或相关页需核图时，H04 和已识别期次的 H05 可附 `payment_window`。H04 说明触发日期和该期付款条件，H05 核对某份回单的实际日期。各条发现的 `status` 和整案的 `result.verdict` 分别保存。
+
+| 字段 | 含义 |
+| --- | --- |
+| `state` | `fixed` 表示可据约定计算末日，`nominal` 表示已算出顺延前的日历末日，`unresolved` 表示依据待核，`conflict` 表示原件日期冲突 |
+| `terms` | 识别到的条款，包括 `basis`（固定日、自然日或工作日等，分别为 `fixed`、`calendar`、`working`）、期限及日历口径 |
+| `term_ref`、`trigger_ref`、`trigger_on`、`calendar_end` | 合同付款条款与履约日期事实编号、起算日期、复算末日。缺少依据用 `null` |
+| `lines`、`mixed_pages` | 相关原文及需要查看整页的材料。原文保留文件、页、可用行号、引文和事实编号，未被读成字段的原生文字也可定位 |
+| `calendar_source`、`days` | 所用调休日历来源键及逐日的 `date`、`kind`、`counted`、累计 `total`。来源键指向 `policy.sources` 的年度通知 |
+| H05 的 `paid_ref`、`paid_on`、`outcome`、`days_late` | 回单日期依据与取值。比较结果为 `within`、`early`、`late`、`same_day`、`extension_unknown` 或 `unresolved`。仅 `late` 给出晚于可核末日的自然日数 |
+
+`graph.payment_window_sources` 逐页保存原件覆盖及付款时限原文。`payment_window_comparison` 关联付款期限条款与回单日期，两端均带证据编号。核验归档时可按当版方法重算全部日期和日历。提交通过决定时会重查相关原件，旧底稿曾判相符、现可定位到相冲突或待核的付款条件时返回 HTTP 409。
+
 ## 履约日期核对
 
 规则 `2026.11.24.28` 使用 `contract-performance-v9`。涉及日期疑点的 H01、H02 或 H05 附有 `date_checks[]`。每一项保存 `event`（`contract_period`、`acceptance`、`reinspection` 或 `payment`）、`status`（`risk` 或 `missing`）、案情说明 `detail` 和引用 `evidence`。原生日期的证据可定位到逐字引文和文字层原行，人工核图的日期可以回到其核图回执。H04 继承该期所据的签署、验收或质保条件。历史底稿保留当时的程序，申请签收时会重新检查原为相符的日期判断。

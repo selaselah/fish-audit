@@ -55,6 +55,14 @@ def recognized(raw,facts):
 
 
 def sources(graph,read_text):
+    def effect_signal(raw):
+        if not relevant(raw):
+            return False
+        if "payment_window_sources" in graph:
+            from payment_windows import spec
+            if spec(raw):
+                return False
+        return True
     contracts=set(graph["documents_by_kind"].get("contract",[]))
     sections={(d["source"],d["page"]):d["id"] for d in graph.get("audit_documents",[]) if "source" in d}
     observations=defaultdict(list)
@@ -78,7 +86,7 @@ def sources(graph,read_text):
             line=fact.get("source_line")
             if native and line:
                 by_line[line["number"],line["text"]].append(fact)
-            elif relevant(fact["quote"]):
+            elif effect_signal(fact["quote"]):
                 conditions.append({**place,"line":None,"quote":fact["quote"],"facts":[fact["id"]]})
         if native:
             text=read_text(doc,page)
@@ -86,7 +94,7 @@ def sources(graph,read_text):
                 raise ValueError("合同生效条件所据的整页文字与底稿不符")
             for number,raw in enumerate(text.splitlines(),1):
                 matches=by_line[number,raw]
-                if relevant(raw) and not recognized(raw,matches):
+                if effect_signal(raw) and not recognized(raw,matches):
                     conditions.append({**place,"line":number,"quote":raw,"facts":[f["id"] for f in matches]})
     return {"format":FORMAT,"pages":pages,"conditions":conditions}
 
