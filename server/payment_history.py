@@ -28,6 +28,18 @@ def unmasked(value):
 def payment_record(graph, findings):
     record = receipt_keys(graph,findings)
     record["installment"] = installment_record(graph,findings,record["payer"],record["reference"])
+    if graph.get("transfer_references",{}).get("facts"):
+        record["installment"]["partial_reference"] = True
+    return record
+
+
+def comparable_record(graph, findings, marked):
+    """Apply today's visible-source check to citations from any signed version, retaining its issued report."""
+    record = payment_record(graph,findings)
+    record["full_refs"] = list(dict.fromkeys([*record["full_refs"],*record["same_refs"]]))
+    if marked:
+        record.update(payer=None,reference=None,settlement=None)
+        record["installment"].update(entry=None,partial_reference=True)
     return record
 
 
@@ -108,13 +120,15 @@ def check_history(signature, history, record, scope):
         if not signature[required]:
             detail = ("请核实单份回单的完整付款户名和交易流水号。" if key == "same" else
                       "核对同合同多笔全额付款需要已核实的收付主体、账户、一次全额条款、正金额、币种、交易状态及日期。")
+            if signature["installment"].get("partial_reference"):
+                detail = "原回单仅提供部分流水号。取得完整流水后可核对已签收回单。" if key=="same" else "本案流水号待补全，暂缓核对同合同的其他全额付款。"
             record(rule, "missing", detail, refs, scope)
             continue
         matches = [m for m in history["matches"] if m["kind"] == key]
         count = history["counts"][key]
         if key == "same":
             detail = (f"同一付款户名及流水号「{signature['reference']}」出现在 {count} 份已签收底稿中。请核对是否为补件、回单副本或重复申请。"
-                      if count else "在本工作区已签收的付款底稿中，未找到相同付款户名和流水号。")
+                      if count else "在本工作区已签收、可核对完整流水号的付款底稿中，未找到相同付款户名和流水号。")
         else:
             detail = (f"有 {count} 份已人工通过的底稿记载同一合同、同一收付双方、相同人民币全额及另一成功流水。请核对银行对账单、冲正及退款。"
                       if count else "在本工作区已人工通过且可比的付款底稿中，未找到同合同、同主体、同全额的其他成功流水。")

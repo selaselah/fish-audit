@@ -91,6 +91,8 @@ def installment_record(graph, findings, payer, reference):
 
 
 def calculate(current, history):
+    if current.get("partial_reference"):
+        return {"state":"missing","reason":"本案回单流水号有遮盖或只列尾号，请取得完整流水后复算分期付款。"}
     if not current["entry"]:
         return {"state":"missing","reason":"请核对合同分期条款、原件、固定总额、收款账户、成功流水及人民币元金额。"}
     if history["count"] != len(history["matches"]):
@@ -100,6 +102,8 @@ def calculate(current, history):
     rows = [(first,"")]
     for match in history["matches"]:
         item = match["entry"]
+        if match.get("incomplete_references"):
+            return {"state":"missing","reason":f"历史底稿「{match['title']}」的回单流水号有遮盖或只列尾号，请核对完整流水后复算。"}
         if not item or any(item[k]!=first[k] for k in ("contract_sha256","contract_total","account")):
             return {"state":"conflict","reason":f"历史底稿「{match['title']}」的合同原件、金额口径或回单依据与本次无法比对。"}
         rows.append((item,f"prior/{match['case_id']}/r{match['rev']}/"))

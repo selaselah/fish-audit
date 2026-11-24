@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from copy import deepcopy
 import io
 import json
@@ -6,6 +7,7 @@ from pathlib import Path
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 import zipfile
 
 from PIL import Image
@@ -31,7 +33,7 @@ class PaymentHistoryTests(unittest.TestCase):
         self.root = Path(temp.name)
         self.store = Store(self.root)
 
-    def workpaper(self, case_id, *, fresh=True, history=True, workspace="local", user=None, contract_variant=0, **fields):
+    def workpaper(self, case_id, *, fresh=True, history=True, workspace="local", user=None, contract_variant=0, legacy=False, **fields):
         docs, pages = receipt_material(**fields)
         for doc, page in zip(docs, pages):
             # The controlled extractor supplies the text layer. The bundle still carries real image bytes.
@@ -49,17 +51,24 @@ class PaymentHistoryTests(unittest.TestCase):
             self.store.create(case_id, "演练 "+case_id, docs, case_id, case_id, BANK, workspace, user)
             for doc, page in zip(docs, pages):
                 self.store.put_pages(case_id, doc["id"], [page])
-        graph = build_graph(docs, pages, self.store.attestations(case_id), self.store.amendments(case_id))
+        with patch("graph.attach_payment_references") if legacy else nullcontext():
+            graph = build_graph(docs, pages, self.store.attestations(case_id), self.store.amendments(case_id))
         graph["profile"] = BANK
         lookup = (lambda signature: self.store.payment_history(case_id, signature)) if history else None
         findings = execute(graph, BANK, lookup)
         calls = {"expert": {"model": "fixture", "output": {"followups": []}}, "pages": [
-            {"model":"fixture", "doc":p["doc"], "page":1, "page_sha256":p["sha256"]} for p in pages]}
+            {"model":"fixture", "doc":p["doc"], "page":1, "page_sha256":p["sha256"],
+             "output":p["extraction"]["output"]} for p in pages]}
         link_procedures(graph, findings, calls)
         link_sources(graph)
         policy = {**VERSION, "profile": BANK, "code_sha256": CODE_DIGESTS, "calculations": FORMAT, "archived_methods": True}
+        methods = METHODS
+        if legacy:
+            policy.pop("payment_references")
+            policy["code_sha256"] = {k:v for k,v in CODE_DIGESTS.items() if k!="payment_reference.py"}
+            methods = {k:v for k,v in METHODS.items() if k!="payment_reference.py"}
         report = {"case_id": case_id, "graph": graph, "findings": findings, "result": conclusion(findings), "policy": policy, "calls": calls}
-        self.store.save_report(case_id, report, sha(encode(report).encode()), METHODS)
+        self.store.save_report(case_id, report, sha(encode(report).encode()), methods)
         return report
 
     def sign(self, case, decision="approve"):
@@ -427,7 +436,7 @@ class PaymentHistoryTests(unittest.TestCase):
         with self.store.connect() as db:
             self.assertIsNone(db.execute("SELECT 1 FROM contract_payments WHERE case_id='other'").fetchone())
             self.assertIsNotNone(db.execute("SELECT 1 FROM payment_index_pending WHERE case_id='other'").fetchone())
-            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 6)
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 7)
 
     def test_damaged_signed_payment_archive_cannot_silently_disappear(self):
         self.installment("signed")
@@ -438,3 +447,76 @@ class PaymentHistoryTests(unittest.TestCase):
         with self.assertRaisesRegex(CaseError,"归档摘要不符"):
             self.installment("later",reference="YL-NEXT")
         self.assertEqual(self.store.detail("later")["rev"],0)
+
+    def test_historical_partial_receipt_is_visible_but_cannot_supply_an_amount_or_match(self):
+        note = "交易流水号说明：仅显示后四位"
+        # Issue the old rows as they stood before qualification was added, then open the upgraded store.
+        with patch("payment_index.checked_references",return_value=[]):
+            original = self.installment("historical",reference="0042",reference_note=note,legacy=True)
+            self.sign("historical")
+        with self.store.connect(True) as db:
+            db.execute("ALTER TABLE payment_index DROP COLUMN reference_eligible")
+            db.execute("PRAGMA user_version=6")
+        self.store = Store(self.root)
+        new = self.installment("complete",reference="0042")
+        history = new["graph"]["payment_history"]
+        self.assertEqual(history["counts"],{"same":0,"full":0})
+        window = history["installments"]
+        self.assertEqual((window["count"],window["calculation"]["state"]),(1,"missing"))
+        self.assertNotIn("paid_total",window["calculation"])
+        match = window["matches"][0]
+        self.assertIsNone(match["entry"])
+        self.assertEqual(match["incomplete_references"][0]["lines"][-1]["text"],note)
+        self.assertEqual(self.store.report("historical",1)["report"],original)
+        with self.store.connect() as db:
+            row = db.execute("SELECT reference,reference_eligible FROM payment_index WHERE case_id='historical'").fetchone()
+            self.assertEqual(tuple(row),("0042",0))
+        bundle = io.BytesIO()
+        export_bundle(self.store,"complete",1,bundle)
+        self.assertEqual(verify(bundle,True)[:2],("complete",1))
+        with zipfile.ZipFile(bundle) as archive:
+            hashes={e["path"]:e["sha256"] for e in json.loads(archive.read("manifest.json"))["files"]}
+            journal=json.loads(archive.read("journal.json"))
+            changed=deepcopy(new)
+            item=changed["graph"]["payment_history"]["installments"]["matches"][0]
+            item["incomplete_references"][0]["lines"][-1]["number"]-=1
+            with self.assertRaisesRegex(ValueError,"历史回单遮盖提示"):
+                verify_payment_history(archive,hashes,changed,journal)
+
+    def test_legacy_initial_and_peer_approval_check_current_and_previously_counted_partial_references(self):
+        from payment_index import LegacyPartialTransfer
+        with patch("payment_index.checked_references",return_value=[]):
+            old = self.installment("masked-pending",reference="26XX0042",legacy=True)
+            peer = self.installment("masked-peer",reference="26XX0042",legacy=True)
+            self.sign("masked-peer","escalate")
+            self.installment("paid",reference="0042",reference_note="银行流水号说明：仅显示末4位",legacy=True)
+            self.sign("paid")
+            total = self.installment("old-total",amount="4350.00",reference="OTHER-43",legacy=True)
+        self.assertEqual(total["graph"]["payment_history"]["installments"]["calculation"]["paid_total"],"8550.00")
+        with self.store.connect(True) as db:
+            db.execute("UPDATE payment_index SET reference_eligible=NULL")
+        with self.assertRaises(LegacyPartialTransfer) as blocked:
+            self.sign("masked-pending")
+        self.assertEqual(blocked.exception.fields[0]["value"],"26XX0042")
+        self.assertEqual(old,self.store.report("masked-pending",1)["report"])
+        pin=self.store.detail("masked-peer")["referrals"][0]
+        finding=next(f["id"] for f in peer["findings"] if f["rule"]=="B05")
+        with self.assertRaisesRegex(LegacyPartialTransfer,"退回补件"):
+            self.store.resolve_referral("masked-peer",1,pin["report_hash"],pin["signoff_hash"],"独立复核","复核凭证","approve",[finding])
+        with self.assertRaisesRegex(LegacyPartialTransfer,"旧版累计金额") as historical:
+            self.sign("old-total")
+        self.assertEqual((historical.exception.case_id,historical.exception.revision),("paid",1))
+        self.assertEqual(self.store.detail("old-total")["status"],"ready")
+
+    def test_corrupt_reference_eligibility_or_native_text_cannot_release_a_payment_report(self):
+        self.installment("first")
+        self.sign("first")
+        with self.store.connect(True) as db:
+            db.execute("UPDATE payment_index SET reference_eligible=0 WHERE case_id='first'")
+        with self.assertRaisesRegex(CaseError,"历史付款索引"):
+            self.installment("bad-flag",reference="YL-NEXT")
+        with self.store.connect(True) as db:
+            db.execute("UPDATE payment_index SET reference_eligible=1 WHERE case_id='first'")
+            db.execute("UPDATE pages SET text=text||' ' WHERE case_id='first' AND doc='d02'")
+        with self.assertRaisesRegex(CaseError,"流水的原文"):
+            self.installment("bad-text",reference="YL-NEXT")

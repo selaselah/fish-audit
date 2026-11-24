@@ -7,7 +7,7 @@ from controls import conclusion, execute
 from graph import build_graph
 
 
-def receipt_material(**overrides):
+def receipt_material(*, reference_note=None, reference_quote=None, **overrides):
     accounts = "000000000000000081"
     shared = [("currency","币种","人民币"),("unit","金额单位","元"),("contract_id","合同编号","YL-081")]
     rows = [
@@ -25,9 +25,14 @@ def receipt_material(**overrides):
             value=overrides.get(field,value)
             if value is not None:
                 facts.append({"field":field,"value":value,"quote":label+"："+value if label else value,"region":"top"})
+        if n==2 and reference_quote:
+            next(f for f in facts if f["field"]=="transfer_ref")["quote"] = reference_quote
+        lines = [f["quote"] for f in facts]
+        if n==2 and reference_note:
+            lines.append(reference_note)
         docs.append({"id":doc,"name":doc,"sha256":"synthetic"})
-        pages.append({"doc":doc,"number":1,"sha256":"page","text":"\n".join(f["quote"] for f in facts),
-                      "layer":{"type":"text","lines":{str(i):[[0,.1,.9,.12]] for i in range(1,len(facts)+1)}},
+        pages.append({"doc":doc,"number":1,"sha256":"page","text":"\n".join(lines),
+                      "layer":{"type":"text","lines":{str(i):[[0,.1,.9,.12]] for i in range(1,len(lines)+1)}},
                       "extraction":{"output":{"quality":"readable","facts":facts}}})
     return docs, pages
 
@@ -78,3 +83,45 @@ class ReceiptControls(unittest.TestCase):
         masked=self.evaluate(payee_account="****0081")
         self.assertIn(("B03","missing"),[(r["rule"],r["status"]) for r in masked])
         self.assertEqual(conclusion(masked)["verdict"],"review")
+
+    def test_visible_masks_and_field_specific_printed_notes(self):
+        rows = (
+            ("26XX0042",None,None,True),
+            ("0042","交易流水号（尾号）：0042",None,True),
+            ("0042","交易流水号：0042（仅显示后四位）",None,True),
+            ("0042",None,"银行流水号说明：仅显示后4位",True),
+            ("0042",None,"本回单仅显示交易流水号后四位。",True),
+            ("0042",None,"收款账户仅显示后四位。",False),
+            ("TX-XX-0042",None,None,False),
+            ("00000042",None,None,False),
+        )
+        for ref,quote,note,partial in rows:
+            with self.subTest(ref=ref,quote=quote,note=note):
+                findings=self.evaluate(transfer_ref=ref,reference_quote=quote,reference_note=note)
+                fact=next(f for f in self.graph["facts"] if f["field"]=="transfer_ref")
+                self.assertEqual(fact["status"],"anchored")
+                self.assertEqual(fact["value"],ref)
+                marked=self.graph["transfer_references"]["facts"]
+                self.assertEqual(bool(marked),partial)
+                if partial:
+                    self.assertEqual(marked[0]["fact"],fact["id"])
+                    if note:
+                        self.assertEqual(marked[0]["lines"][-1]["text"],note)
+                edge=next(e for e in self.graph["edges"] if e["from"]=="d02" and e["evidence"]==[fact["id"]])
+                self.assertEqual(edge["type"],"incomplete_transfer_ref" if partial else "transfer_ref")
+                self.assertEqual([(f["rule"],f["status"]) for f in findings if f["rule"] in {"B05","B04"}],
+                                 [("B05","missing"),("B04","missing")] if partial else [("B05","ok"),("B04","ok")])
+
+    def test_confirmed_photo_keeps_visible_tail_and_ignores_another_pages_note(self):
+        docs,pages=receipt_material(transfer_ref="0042",reference_quote="交易流水号：尾号0042")
+        photo=pages[1]
+        photo.update(text="",layer={"type":"image","lines":{}})
+        attestations={f"d02/p1/f{i}":{"decision":"confirm"} for i in range(1,len(photo["extraction"]["output"]["facts"])+1)}
+        graph=build_graph(docs,pages,attestations)
+        marked=graph["transfer_references"]["facts"]
+        self.assertEqual([(r["value"],r["lines"]) for r in marked],[("0042",[])])
+        findings=execute(graph,BANK)
+        self.assertEqual(next(f for f in findings if f["rule"]=="B05")["status"],"missing")
+        docs,pages=receipt_material(transfer_ref="0042")
+        pages[0]["text"]+="\n回单交易流水号说明：仅显示后四位"
+        self.assertEqual(build_graph(docs,pages,{})["transfer_references"]["facts"],[])

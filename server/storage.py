@@ -22,7 +22,7 @@ from invoice_identity import InvoiceIdentities
 from invoice_history import (INDEX_FIELDS, InvoiceHistoryChanged, check_legacy_masks, differences as invoice_differences,
                              indexed_invoices, install_index_guard, pending_signed_indexes)
 from invoice_proof import source_record as invoice_source_record
-from payment_history import LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_facts, payment_record
+from payment_history import LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_facts, comparable_record, payment_record
 import payment_index
 from peer_review import different_reviewers, review_record, valid_findings, verify_review
 from supplements import compare_return
@@ -198,6 +198,7 @@ class Store:
                 settlement TEXT, FOREIGN KEY(case_id,rev) REFERENCES reports(case_id,rev))""")
             db.execute("CREATE INDEX IF NOT EXISTS payment_reference ON payment_index(payer,reference)")
             db.execute("CREATE INDEX IF NOT EXISTS payment_settlement ON payment_index(settlement) WHERE settlement IS NOT NULL")
+            new_reference_column = payment_index.prepare_reference_column(db)
             db.execute("""CREATE TABLE IF NOT EXISTS contract_payments(
                        case_id TEXT PRIMARY KEY, rev INTEGER NOT NULL, contract_key TEXT NOT NULL,
                        FOREIGN KEY(case_id,rev) REFERENCES reports(case_id,rev))""")
@@ -211,7 +212,7 @@ class Store:
                     self.index_payment(db, row["id"], row["rev"], json.loads(row["content"]))
                 db.execute("PRAGMA user_version=4")
             install_index_guard(db)
-            payment_index.install(db)
+            payment_index.install(db,new_column=new_reference_column)
             install_capacity(db)
         os.chmod(self.path, 0o600)
 
@@ -531,18 +532,20 @@ class Store:
         if report["graph"].get("profile") != BANK:
             return
         signature = payment_record(report["graph"], report["findings"])
-        payment_index.update(db, case_id, revision, signature, reconcile=False)
+        marked = payment_index.checked_references(db,case_id,report)
+        payment_index.update(db, case_id, revision, signature, eligible=not marked, reconcile=False)
 
     @staticmethod
     def reconcile_payment(db, case_id, revision, paper):
         if paper.get("case_id") != case_id or paper["graph"].get("profile") != BANK:
             raise CaseError("付款底稿的案件归属或审计范围与检索记录不一致。", 409)
         signature = payment_record(paper["graph"], paper["findings"])
-        added = payment_index.update(db, case_id, revision, signature, reconcile=True)
+        marked = payment_index.checked_references(db,case_id,paper)
+        added = payment_index.update(db, case_id, revision, signature, eligible=not marked, reconcile=True)
         if added:
             event(db, case_id, "payment_index", f"已按留存底稿 R{revision} 补全{'、'.join(added)}检索记录。")
         db.execute("DELETE FROM payment_index_pending WHERE case_id=?", (case_id,))
-        return signature
+        return signature,marked
 
     def reconcile_signed_payments(self, db, case_id):
         for prior, revision in payment_index.pending_signed(db, case_id).fetchall():
@@ -577,7 +580,7 @@ class Store:
                                   JOIN signoffs s ON s.case_id=i.case_id AND s.rev=i.rev
                                   JOIN reports r ON r.case_id=i.case_id AND r.rev=i.rev
                                   WHERE c.workspace=(SELECT workspace FROM cases WHERE id=?) AND c.status IN ('closed','in_review')
-                                  AND c.id<>? AND c.profile=? AND s.time<=? AND {predicate}
+                                  AND c.id<>? AND c.profile=? AND i.reference_eligible=1 AND s.time<=? AND {predicate}
                                   ORDER BY s.time DESC,i.case_id LIMIT ?""",
                               (case_id, case_id, BANK, as_of, *params, PAYMENT_HISTORY_LIMIT))
             for row in rows:
@@ -635,7 +638,8 @@ class Store:
                 prior, rev = match["case_id"], match["rev"]
                 content, signoff = self.signed_source(db, case_id, prior, rev)
                 report = json.loads(content)
-                record = payment_record(report["graph"], report["findings"])
+                marked = payment_index.checked_references(db,prior,report)
+                record = comparable_record(report["graph"],report["findings"],marked)
                 indexed = db.execute("SELECT payer,reference,settlement FROM payment_index WHERE case_id=? AND rev=?",
                                      (prior, rev)).fetchone()
                 if any(record[field] != indexed[field] for field in indexed.keys()):
@@ -652,11 +656,14 @@ class Store:
                     prior,rev = match["case_id"],match["rev"]
                     content,signoff = self.signed_source(db,case_id,prior,rev)
                     paper = json.loads(content)
-                    source = payment_record(paper["graph"],paper["findings"])["installment"]
+                    marked = payment_index.checked_references(db,prior,paper)
+                    source = comparable_record(paper["graph"],paper["findings"],marked)["installment"]
                     if source["key"] != current["key"]:
                         raise CaseError("累计付款索引与历史合同及收付主体的原文不一致。",409)
                     self.check_graph_field_history(prior,rev,paper["graph"],set(source["refs"]))
                     match["entry"] = source["entry"]
+                    if marked:
+                        match["incomplete_references"] = marked
                     match["signoff_hash"] = hashlib.sha256(canonical(signoff)).hexdigest()
                     match["evidence"] = cited_facts(paper["graph"],prior,rev,source["refs"])
                     check_cited_files(db,prior,self.files/prior,paper["graph"],match["evidence"])
@@ -702,7 +709,10 @@ class Store:
             if changes:
                 raise InvoiceHistoryChanged(changes,peer)
             return invoice_approval_receipt(graph,current,revision,row["hash"],signoff)
-        signature = self.reconcile_payment(db,case_id,revision,paper)
+        signature,marked = self.reconcile_payment(db,case_id,revision,paper)
+        if marked and "transfer_references" not in graph and (signature["reference"] or
+                any(f["rule"]=="B05" and f["status"]=="ok" for f in paper["findings"])):
+            raise payment_index.LegacyPartialTransfer(case_id,revision,marked,peer)
         installment = signature["installment"]
         if not signature["reference"] and not (installment["requested"] and installment["key"]):
             return
@@ -717,6 +727,13 @@ class Store:
         if installment["key"] and installment["requested"]:
             prior = previous.get("installments",{"count":0,"matches":[]})
             latest = self.installment_matches(db,case_id,installment["key"],now)
+            if "transfer_references" not in graph and prior.get("calculation",{}).get("state")=="calculated":
+                for match in prior["matches"]:
+                    source_id,rev = match["case_id"],match["rev"]
+                    raw,_ = self.signed_source(db,case_id,source_id,rev)
+                    fields = payment_index.checked_references(db,source_id,json.loads(raw))
+                    if fields:
+                        raise payment_index.LegacyPartialTransfer(source_id,rev,fields,peer,historical=True)
             def pins(window):
                 return [(m["case_id"],m["rev"],m["report_hash"],m["signed_at"]) for m in window["matches"]]
             changed = changed or latest["count"]!=prior["count"] or pins(latest)!=pins(prior)

@@ -12,6 +12,7 @@ from invoice_masks import FORMAT as MASK_FORMAT, withheld_invoices
 from invoice_proof import FORMAT as INVOICE_SOURCE_FORMAT
 from model import FIELDS, SIGNALS, expert_candidates
 from payment_history import HISTORY_RULES, attach_history, check_history, payment_record
+from payment_reference import FORMAT as PAYMENT_REFERENCE_FORMAT
 from policy import ACCOUNTING, MAPPING, SOURCES
 from transfers import RULES as TRANSFER_RULES, check_transfers
 
@@ -42,7 +43,7 @@ STATUS = {"ok": "相符", "issue": "发现问题", "risk": "风险待核", "miss
 VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING,
            "sources": SOURCES, "rule_sources": MAPPING, "invoice_sources": INVOICE_SOURCE_FORMAT,
            "invoice_approval": INVOICE_APPROVAL_FORMAT,"invoice_identity":INVOICE_IDENTITY_FORMAT,"invoice_lookup":INVOICE_LOOKUP,
-           "invoice_number_masks":MASK_FORMAT}
+           "invoice_number_masks":MASK_FORMAT,"payment_references":PAYMENT_REFERENCE_FORMAT}
 FULL_TERMS = {"验收后一次性全额结算", "验收后一次性付清", "一次性全额结算", "一次性付清",
               "验收合格后一次性支付全款", "一次性全额付款", "一次结清", "一次性结清", "一次付清"}
 FULL_ACCEPTANCE = {"合格", "验收合格", "通过", "验收通过", "全部合格"}

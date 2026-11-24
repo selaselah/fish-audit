@@ -175,6 +175,13 @@ function openPage(docId, pageNumber, highlight) {
     if (fact.origin === 'printed_claim_pair') row.append(el('small','模型原列为随附票号。原页同一行明列代码和号码，逐项读图复检已核对这段引文。','small'));
     if (state.bundle.report.graph.number_masks?.facts.some(m=>m.fact===fact.id))
       row.append(el('small','原文含遮盖位或只列尾号。取得完整票号后可重新核对。','small'));
+    const partialTransfer = state.bundle.report.graph.transfer_references?.facts.find(m=>m.fact===fact.id);
+    if (partialTransfer) {
+      row.append(el('strong','流水号待补全'));
+      for (const line of partialTransfer.lines.filter(l=>l.number!==fact.source_line?.number))
+        row.append(el('blockquote','本页第 '+line.number+' 行 · '+line.text));
+      row.append(el('small','取得完整流水后可查找相同回单、复算累计付款。','small'));
+    }
     if (fact.visual_check) row.append(el('small', '模型二次读图 · ' +
       ({clear:'可辨认', conflict:'存在差异', unreadable:'无法核实'}[fact.visual_check] || fact.visual_check), 'small'));
     if (fact.source_line?.rects?.length) row.append(action('定位原文', () => locate(fact), 'ref'));
@@ -329,7 +336,10 @@ function ruleReplayPanel(bundle) {
 function installmentDetails(history) {
   const calc = history.calculation;
   if (calc.state!=='calculated') return lazyFold('核对累计范围',()=>[
-    el('p',calc.reason),...history.matches.map(m=>Team.paperLink(m.title+' · R'+m.rev,m.case_id,'source-jump',new URLSearchParams({rev:m.rev})))]);
+    el('p',calc.reason),...history.matches.flatMap(m=>m.incomplete_references?.length
+      ? m.incomplete_references.map(field=>Team.paperLink(m.title+' · R'+m.rev+' · 流水 '+field.value,m.case_id,'source-jump',
+          new URLSearchParams({rev:m.rev,fact:field.fact})))
+      : [Team.paperLink(m.title+' · R'+m.rev,m.case_id,'source-jump',new URLSearchParams({rev:m.rev}))])]);
   return lazyFold('逐笔复算分期付款',()=>{
     const ledger = box('installment-ledger');
     const display = value=>value.replace(/\B(?=(\d{3})+\.)/g,',')+' 元';
@@ -656,10 +666,11 @@ function showInvoiceReviewConflict(container,problem,choice) {
       anchor.target='_blank'; anchor.rel='noopener';
       const row=el('li');
       row.append(el('strong',field.value),anchor);
+      for (const line of field.lines || []) row.append(el('small','第 '+line.number+' 行 · '+line.text,'small'));
       list.append(row);
     }
     container.replaceChildren(el('strong',problem.message),list);
-    if (partial.count>partial.facts.length) container.append(el('p','本版共 '+partial.count+' 处不完整票号。','small'));
+    if (partial.count>partial.facts.length) container.append(el('p','本版共 '+partial.count+' 处号码待补全。','small'));
     return;
   }
   const source = (item,label)=>{

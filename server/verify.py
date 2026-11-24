@@ -14,7 +14,8 @@ from invoice_comparison import FORMAT as INVOICE_LOOKUP, archived_identity, chec
 from invoice_identity import FORMAT as INVOICE_IDENTITY_FORMAT, InvoiceIdentities, identity_relations, printed_claim_pair
 from invoice_masks import FIELDS as NUMBER_FIELDS, FORMAT as MASK_FORMAT, verify_masks, withheld_invoices
 from invoice_proof import FORMAT as INVOICE_SOURCE_FORMAT, invoice_number_edges, source_record as invoice_source_record
-from payment_history import LIMIT, cited_facts, payment_record
+from payment_history import LIMIT, cited_facts, comparable_record, payment_record
+from payment_reference import FORMAT as REFERENCE_FORMAT, marked_fields as partial_transfers, verify as verify_references
 from peer_review import journal_decision, verify_referrals, verify_review
 from protocol import canonical, response_request
 from rule_replay import check_receipt, replay_from_git, replay_installed
@@ -179,6 +180,13 @@ def verify_payment_history(bundle, hashes, report, journal):
                 and signoff["time"] == match["signed_at"] and signed_at.tzinfo is not None and signed_at <= as_of, "历史人工决定或时点不符")
         old_graph = previous["graph"]
         old = payment_record(old_graph, previous["findings"])
+        if report["policy"].get("payment_references")==REFERENCE_FORMAT:
+            marked = partial_transfers(old_graph,lambda doc,page: bundle.read(f"{root}/{doc}/{page}.txt").decode())
+            if "payment_reference.py" in previous["policy"].get("code_sha256",{}):
+                verify_references(old_graph,marked)
+            require(not marked or kind=="installment","历史回单的部分流水号进入了完整流水比对")
+            require(match.get("incomplete_references",[])==marked,"历史回单遮盖提示与签收原页不符")
+            old = comparable_record(old_graph,previous["findings"],marked)
         if kind == "installment":
             source = old["installment"]
             require(signoff["decision"]=="approve" and source["key"]==current["installment"]["key"]
@@ -265,20 +273,23 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
                 texts[path] = bundle.read(path).decode().splitlines()
             text = texts[path]
             require(1 <= line["number"] <= len(text) and text[line["number"]-1] == line["text"], "引文定位与原文字层不符")
-        if report["policy"].get("invoice_number_masks")==MASK_FORMAT and fact["field"] in NUMBER_FIELDS:
+        invoice_number = report["policy"].get("invoice_number_masks")==MASK_FORMAT and fact["field"] in NUMBER_FIELDS
+        transfer_number = report["policy"].get("payment_references")==REFERENCE_FORMAT and fact["field"]=="transfer_ref"
+        if invoice_number or transfer_number:
+            subject = "票号" if invoice_number else "流水号"
             if fact["status"]=="anchored":
                 require(line and line["rects"] and nodes[f"{fact['doc']}/p{fact['page']}"].get("layer")=="text" and
                         normalized(line["text"]).strip("。;；")==normalized(fact["quote"]).strip("。;；") and
-                        normalized(fact["value"]) in normalized(fact["quote"]),"已定位的票号与原生文字行不符")
+                        normalized(fact["value"]) in normalized(fact["quote"]),"已定位的"+subject+"与原生文字行不符")
             raw_candidate=fact.get("amendment")
             if not raw_candidate:
                 candidates=page_calls[fact["doc"],fact["page"]]["output"]["facts"]
                 index=fact["id"].rsplit("/f",1)[-1]
-                require(index.isdecimal() and 1<=int(index)<=len(candidates),"票号缺少原始抄录记录")
+                require(index.isdecimal() and 1<=int(index)<=len(candidates),subject+"缺少原始抄录记录")
                 raw_candidate=candidates[int(index)-1]
             expected_field="claim_ref" if fact.get("origin")=="printed_claim_pair" else fact["field"]
             require(raw_candidate["field"]==expected_field and raw_candidate["value"].strip()==fact["value"] and
-                    raw_candidate["quote"].strip()==fact["quote"],"票号与当时模型抄录或人工补正不符")
+                    raw_candidate["quote"].strip()==fact["quote"],subject+"与当时模型抄录或人工补正不符")
         if fact.get("origin")=="printed_claim_pair" or (fact["field"]=="claim_full_ref" and not fact.get("amendment")):
             trace = page_calls[fact["doc"],fact["page"]]
             index = fact["id"].rsplit("/f",1)[-1]
@@ -393,6 +404,16 @@ def verify(source, strict_rules=False, *, rule_checker=None):
             for name, expected in report["policy"]["code_sha256"].items():
                 require(hashes.get("methods/" + name) == expected, "执行程序版本不符：" + name)
         nodes = verify_workpaper_sources(bundle, hashes, report, "pages")
+        reference_format = REFERENCE_FORMAT if "payment_reference.py" in modules else None
+        require(graph.get("transfer_references",{}).get("format")==report["policy"].get("payment_references")==reference_format,
+                "流水完整性核验格式与程序版本不符")
+        if reference_format:
+            marked = partial_transfers(graph,lambda doc,page: bundle.read(f"pages/{doc}/{page}.txt").decode())
+            verify_references(graph,marked)
+            if marked and graph.get("profile")=="cn-bank-contract-payment/v1":
+                dependent = {"B04","B05","B06","B07","B08"}
+                require(all(f["status"]=="missing" and not f.get("calculations") for f in report["findings"]
+                            if f["rule"] in dependent),"部分流水号被用作已核实付款或金额结论")
         guarded = "invoice_masks.py" in modules
         mask_format = graph.get("number_masks",{}).get("format")
         require(mask_format==report["policy"].get("invoice_number_masks")== (MASK_FORMAT if guarded else None),

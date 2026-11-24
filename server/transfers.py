@@ -49,7 +49,14 @@ def check_transfers(graph, docs, values, record, parsed_date):
         else:
             record("B03","ok" if a == b else "risk",f"合同约定账号尾号 {a[-4:]}，回单收款账号尾号 {b[-4:]}。"+
                    ("两个完整账号一致。" if a == b else "两个完整账号不同，请核验变更授权及对方确认记录。"),refs)
-    trace = values("B05",[(bank,"transfer_ref"),(bank,"transfer_status"),(contract,"signed_on"),(bank,"paid_on")])
+    partial = [m for m in graph.get("transfer_references",{}).get("facts",[]) if m["unit"]==bank]
+    trace = None
+    if partial:
+        refs = [m["fact"] for m in partial]
+        basis.extend(refs)
+        record("B05","missing","回单流水号有遮盖或只列尾号。请取得完整流水号，核对交易状态和付款日期。",refs,[bank])
+    else:
+        trace = values("B05",[(bank,"transfer_ref"),(bank,"transfer_status"),(contract,"signed_on"),(bank,"paid_on")])
     settled = False
     if trace:
         ref,status,signed,paid = trace

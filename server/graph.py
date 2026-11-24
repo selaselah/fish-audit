@@ -8,6 +8,7 @@ from invoice_identity import CLAIM_PAIR_LABELS, FORMAT as IDENTITY_FORMAT, SHORT
 from invoice_masks import withhold_partial_numbers
 from invoice_proof import invoice_number_edges
 from model import FIELDS
+from payment_reference import attach as attach_payment_references, printed_partial_value
 
 
 KINDS = {"invoice": "发票", "contract": "合同", "acceptance": "验收单"}
@@ -68,6 +69,8 @@ def index_lines(raw_text):
 
 def labelled(field, value, quote):
     value, quote = compact(value), compact(quote)
+    if field=="transfer_ref" and printed_partial_value(quote,value):
+        return True
     if field in TITLE_FIELDS:
         word = "验收" if field == "acceptance" else TITLE_FIELDS[field]
         return value == quote and word in value and len(value) <= 48 and not any(
@@ -232,6 +235,8 @@ def build_graph(docs, pages, attestations, amendments=()):
              "documents_by_kind": dict(by_kind), "gaps": gaps, "cautions": cautions, "documents": docs}
     partition_documents(graph, pages)
     withhold_partial_numbers(graph)
+    texts = {(page["doc"],page["number"]):page["text"] for page in pages}
+    attach_payment_references(graph, lambda doc, number: texts[doc,number])
     graph["invoice_identity"] = IDENTITY_FORMAT
     graph["invoice_lookup"] = INVOICE_LOOKUP
     identities,links = identity_relations(graph)

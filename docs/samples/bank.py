@@ -8,7 +8,7 @@ from run import BASE, submit, wait
 
 
 def write_bank_pair(folder, ident, account, reference, changed=False, paid_on="2026年10月19日", *,
-                    term="一次性全额结算", payment_amount=None):
+                    term="一次性全额结算", payment_amount=None, reference_note=None):
     font = embedded_font("BankSampleCJK")
     folder.mkdir(exist_ok=True,parents=True)
     buyer,seller = "青岚演练商贸中心","石桥演练设备中心"
@@ -19,6 +19,8 @@ def write_bank_pair(folder, ident, account, reference, changed=False, paid_on="2
     bank = [("合同编号",ident),("付款户名",buyer),("收款户名",seller),
             ("收款账号","000000000000000092" if changed else account),("付款金额",payment_amount or ("8,550.00" if changed else "8,400.00")),
             ("交易流水号",reference),("交易状态","交易成功"),("付款日期",paid_on),*currency]
+    if reference_note:
+        bank.append(("交易流水号说明",reference_note))
     pdf(folder/"采购合同.pdf","采购合同",contract,font=font)
     pdf(folder/"银行付款回单.pdf","银行付款回单",bank,font=font)
 

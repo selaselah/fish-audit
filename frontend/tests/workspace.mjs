@@ -36,13 +36,16 @@ const claimPairCase = caseArgument('--claim-pair-case');
 const invoiceCodeHistory = caseArgument('--invoice-code-case');
 const maskedInvoice = caseArgument('--masked-invoice-case');
 const legacyMask = caseArgument('--legacy-mask-case');
+const legacyTransfer = caseArgument('--legacy-transfer-case');
+const partialTransfer = caseArgument('--partial-transfer-case');
 const waitingCase = caseArgument('--waiting-case');
 const seeded = [sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
-                invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,waitingCase].some(Boolean);
-const root = legacyMask ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
+                invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,waitingCase].some(Boolean);
+const legacyCase = legacyMask || legacyTransfer;
+const root = legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
   recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
-if (recoveringCase || waitingCase || legacyMask) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
-if (legacyMask) assert.ok(!['8000','8010'].includes(new URL(root).port));
+if (recoveringCase || waitingCase || legacyCase) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
+if (legacyCase) assert.ok(!['8000','8010'].includes(new URL(root).port));
 const children = [];
 const faults = [];
 function start(binary, args, env = process.env) {
@@ -120,22 +123,25 @@ try {
       assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && document.querySelector(".located").scrollWidth<=document.querySelector(".located").clientWidth+1'),'printed pair at '+width);
     }
     console.log('PASS · Printed claim pairs, exact labelled lines, visible model classification and six widths');
-  } else if (legacyMask) {
-    const api=root+'/api/cases/'+legacyMask;
+  } else if (legacyCase) {
+    const api=root+'/api/cases/'+legacyCase;
     const get=async suffix=>(await fetch(api+suffix)).json();
     const task=await get(''),original=await get('/reports/1');
-    assert.ok(task.title.startsWith('合成演练 · 遮盖票号的费用申请') && task.rev===1 && task.status==='ready');
-    assert.ok(!original.report.graph.number_masks && original.report.result.verdict==='pass');
-    const fields=original.report.graph.facts.filter(f=>['invoice_id','claim_ref'].includes(f.field) && f.value.includes('****'));
-    assert.equal(fields.length,2);
-    await call('Page.navigate',{url:root+'/workpaper/'+legacyMask+'?rev=1'});
+    assert.ok(task.title.startsWith(legacyTransfer?'合成演练 · 流水':'合成演练 · 遮盖票号的费用申请') && task.rev===1 && task.status==='ready');
+    const {graph,findings}=original.report;
+    if (legacyTransfer) assert.ok(!graph.transfer_references && findings.some(f=>f.rule==='B06' && f.status==='ok'));
+    else assert.ok(!graph.number_masks && original.report.result.verdict==='pass');
+    const fields=graph.facts.filter(f=>legacyTransfer ? f.field==='transfer_ref' && ['anchored','confirmed'].includes(f.status)
+      : ['invoice_id','claim_ref'].includes(f.field) && f.value.includes('****'));
+    assert.ok(fields.length>0);
+    await call('Page.navigate',{url:root+'/workpaper/'+legacyCase+'?rev=1'});
     await wait('[...document.querySelectorAll("button")].some(b=>b.textContent==="填写验收意见")','legacy review available');
     await click('填写验收意见');
-    await evaluate('document.querySelector("#reviewer").value="演练核验员";document.querySelector("#review-decision").value="approve";document.querySelector("#review-note").value="核对含遮盖票号的旧底稿。";document.querySelector("#review-form").requestSubmit()');
-    await wait('document.querySelectorAll("#review-error a").length===2','both masked references');
+    await evaluate('document.querySelector("#reviewer").value="演练核验员";document.querySelector("#review-decision").value="approve";document.querySelector("#review-note").value="已核对本次演练的旧底稿。";document.querySelector("#review-form").requestSubmit()');
+    await wait('document.querySelectorAll("#review-error a").length==='+fields.length,'original masked references');
     const links=await evaluate('[...document.querySelectorAll("#review-error a")].map(a=>a.href)');
     assert.deepEqual(links.map(url=>new URL(url).searchParams.get('fact')).sort(),fields.map(f=>f.id).sort());
-    assert.ok(await evaluate('document.querySelector("#review-decision option[value=approve]").disabled && document.querySelector("#review-note").value==="核对含遮盖票号的旧底稿。"'));
+    assert.ok(await evaluate('document.querySelector("#review-decision option[value=approve]").disabled && document.querySelector("#review-note").value==="已核对本次演练的旧底稿。"'));
     for (const width of [1440,1024,820,768,390,320]) {
       await call('Emulation.setDeviceMetricsOverride',{width,height:860,deviceScaleFactor:1,mobile:false});
       assert.ok(await evaluate('document.querySelector("#review-dialog").scrollWidth<=document.querySelector("#review-dialog").clientWidth+1'),'legacy approval at '+width);
@@ -146,6 +152,30 @@ try {
     assert.equal((await get('/reports/2')).report.result.verdict,'review');
     assert.equal((await get('/reports/1')).sha256,original.sha256);
     console.log('PASS · Legacy decision withheld, original citations, preserved note, six widths and reviewed R2');
+  } else if (partialTransfer) {
+    const api=root+'/api/cases/'+partialTransfer;
+    const task=await (await fetch(api)).json();
+    assert.ok(task.title.startsWith('合成演练 · 流水'));
+    const {report}=await (await fetch(api+'/reports/'+task.rev)).json();
+    const [field]=report.graph.transfer_references.facts;
+    const source=report.graph.facts.find(f=>f.id===field.fact);
+    await call('Page.navigate',{url:root+'/workpaper/'+partialTransfer+'?'+new URLSearchParams({rev:task.rev,fact:field.fact})});
+    await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth && document.querySelector(".located")?.textContent.includes("流水号待补全")','visible partial reference on its original page');
+    const shown=await evaluate('document.querySelector(".located").textContent');
+    assert.ok(shown.includes(source.quote));
+    for (const line of field.lines) assert.ok(shown.includes(line.text));
+    await call('Page.navigate',{url:root+'/workpaper/'+partialTransfer+'?rev='+task.rev});
+    for (const [rule,detail] of [['B05','只列尾号'],['B06','部分流水号'],['B08','复算分期付款']]) {
+      const finding=report.findings.find(f=>f.rule===rule);
+      assert.equal(finding.status,'missing');
+      assert.ok(finding.evidence.includes(field.fact));
+      await wait('document.querySelector('+JSON.stringify('[data-finding="'+finding.id+'"]')+')?.textContent.includes('+JSON.stringify(detail)+')',rule+' visible review finding');
+    }
+    for (const width of [1440,1024,820,768,390,320]) {
+      await call('Emulation.setDeviceMetricsOverride',{width,height:860,deviceScaleFactor:1,mobile:false});
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),'partial receipt at '+width);
+    }
+    console.log('PASS · Original receipt, printed qualification, withheld payment controls and six widths');
   } else if (maskedInvoice) {
     const api=root+'/api/cases/'+maskedInvoice;
     const task=await (await fetch(api)).json();
