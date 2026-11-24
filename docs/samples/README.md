@@ -136,6 +136,14 @@ server/.venv/bin/python docs/samples/delivery_batches.py --run --run-id syntheti
 
 `server/.venv/bin/python docs/samples/contract_effect.py --run` 上传三笔水印采购案。`approved` 随合同提交约定的董事会批准决议，`written` 在合同页末印有另须取得书面批准的条件，`image` 把同一条件写在嵌入的影像框内。三案分别核对 H01 及履约付款条件。脚本仅对摘要一致的合成原件模拟字段补录、签认及人工核图。
 
+### 同一笔质保金在什么条件下可以释放
+
+八组水印资料的合同总价均为 100,000 元，分三期支付 30%、60% 和 10%，回单均写第三期 10,000 元。对照相对质保期间届满、明确约定的截止日、十二个月尚未届满、遗留故障、供应方不符、同日签认付款、影像附注暂缓返还、缺少清结记录。脚本仅对与本次生成件摘要一致的演练文件模拟原页核对。专家对测试水印另有提示时，保留整案的人工校验建议。最终业务验收决定留给审计人员。
+
+```sh
+server/.venv/bin/python docs/samples/warranty_release.py --run --run-id synthetic-warranty-20261124-31
+```
+
 ### 复现首次读图的编号误分类
 
 运行 `server/.venv/bin/python docs/samples/quality_readback.py --run`，可用上述复验后付款案例的 R1 重测。脚本校验原版本证据包，把两份 PDF 与固定种子重新生成的水印样本逐字节比较，并检查重渲染的页图和文字层。随后只将两张水印页图连同真实初读候选送入视觉复检，将回执另存入演练目录。原底稿仍可照常打开。

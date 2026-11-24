@@ -18,7 +18,7 @@ from storage import encode
 
 
 METHODS = {name: (SERVER / name).read_bytes() for name in
-           ("acceptance_authority.py", "calculations.py", "capacity.py", "conclusions.py", "config.py", "contract_changes.py", "contract_effect.py", "controls.py", "delegation.py", "delivery_batches.py", "documents.py", "field_receipts.py", "field_sources.py", "graph.py", "installments.py", "invoice_approval.py", "invoice_comparison.py", "invoice_history.py", "invoice_identity.py", "invoice_masks.py", "invoice_proof.py", "jobs.py", "model.py", "payment_checks.py", "payment_history.py", "payment_index.py", "payment_notes.py", "payment_reference.py", "payment_visibility.py", "peer_review.py", "performance.py", "policy.py", "protocol.py", "quality_labels.py", "quality_references.py", "reinspection.py", "storage.py", "supplements.py", "transfers.py", "work_progress.py")}
+           ("acceptance_authority.py", "calculations.py", "capacity.py", "conclusions.py", "config.py", "contract_changes.py", "contract_effect.py", "controls.py", "delegation.py", "delivery_batches.py", "documents.py", "field_receipts.py", "field_sources.py", "graph.py", "installments.py", "invoice_approval.py", "invoice_comparison.py", "invoice_history.py", "invoice_identity.py", "invoice_masks.py", "invoice_proof.py", "jobs.py", "model.py", "payment_checks.py", "payment_history.py", "payment_index.py", "payment_notes.py", "payment_reference.py", "payment_visibility.py", "peer_review.py", "performance.py", "performance_versions.py", "policy.py", "protocol.py", "quality_labels.py", "quality_references.py", "reinspection.py", "storage.py", "supplements.py", "transfers.py", "warranty_terms.py", "work_progress.py")}
 CODE_DIGESTS = {name: digest(source) for name, source in METHODS.items()}
 
 
@@ -26,7 +26,7 @@ def refresh_addendum_layout(store, case_id, docs, pages):
     legacy = {p["doc"] for p in pages if (p.get("layer") or {}).get("type")=="text" and "clause_text_only" not in p["layer"]}
     if not legacy:
         return
-    if not any(any(f["field"]=="contract" for f in p["extraction"]["output"]["facts"]) or CHANGE_MENTION.search(normalized(p["text"])) or BATCH_HINT.search(normalized(p["text"])) or any(mentions_acceptance_clause(line) for line in p["text"].splitlines()) or
+    if not any(any(f["field"] in ("contract","warranty") for f in p["extraction"]["output"]["facts"]) or CHANGE_MENTION.search(normalized(p["text"])) or BATCH_HINT.search(normalized(p["text"])) or any(mentions_acceptance_clause(line) for line in p["text"].splitlines()) or
                any(f["field"] in ADDENDUM_FIELDS or f["field"] in ("contract_addendum",ACCEPTANCE_CLAUSE) or BATCH_HINT.search(normalized(f["quote"])) or mentions_acceptance_clause(f["quote"]) or CHANGE_MENTION.search(normalized(f["quote"]))
                    for f in p["extraction"]["output"]["facts"]) for p in pages):
         return

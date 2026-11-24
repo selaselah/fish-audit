@@ -6,6 +6,7 @@ import unicodedata
 from collections import defaultdict
 
 from calculations import normalized
+from performance_versions import NATIVE_FORMATS
 from quality_references import incomplete_number
 
 
@@ -235,7 +236,7 @@ def verify_sources(report, read_text, *, signing=False):
         coverage["agent_holds"] = holds
         withheld = {h["fact"] for h in holds}
     versions = {LEGACY_FORMAT:("contract-performance-v4",), NAME_FORMAT:("contract-performance-v5",),
-                FORMAT:("contract-performance-v6","contract-performance-v7","contract-performance-v8","contract-performance-v9","contract-performance-v10","contract-performance-v11")}
+                FORMAT:NATIVE_FORMATS}
     if (policy.get("performance_checks") not in versions.get(marker,()) or graph.get("delegation_coverage")!=coverage
             or coverage_gaps(pages) != [g for g in graph["gaps"] if g["quality"]=="mandate_clause"]):
         raise ValueError("授权委托书的已核页面或未覆盖条款与原页不符")

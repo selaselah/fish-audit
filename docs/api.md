@@ -210,6 +210,20 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 
 `policy.delivery_batches` 标记为 `contract-delivery-batches-v1`。`graph.delivery_batch_sources` 保存分批线索、各页已覆盖范围、漏提的原行和影像观察。`delivery_batch_acceptance` 关系由交付批次条款指向验收范围，`batch_payment_basis` 由当期付款条款指向同一份验收记录。签收前及离线复算均核对这些关系和原文。证据包支持 `--render-performance` 从版本中的原件重现相关页图和条款版式。
 
+## 质保金释放依据
+
+规则 `2026.11.24.31` 使用 `policy.performance_checks=contract-performance-v12` 和 `policy.warranty_checks=contract-warranty-release-v1`。合同履约、采购及回单核对中，已识别的质保期次 H04 和对应成功回单 H05 附有 `warranty_check`。外层 `status` 还受签署、生效、验收及分期安排约束。
+
+| 字段 | 含义 |
+| --- | --- |
+| `accepted_on`、`calendar_end`、`confirmed_on` | 经核对的合格终验或复验日、可复算的日历末日、已关联签认的期满记录日。缺证用 `null` |
+| `period` | 原条款给出的单位、数量或固定日期，`unadjusted` 表示合同明确约定不顺延 |
+| `requires_defect_clearance`、`defect_open` | 已定位的释放前提明确要求缺陷清结、确认单明确记载未解决问题。需结合 `status` 和原文判断 |
+| `term_ref`、`condition_ref`、`confirmation_ref`、`defect_ref` | 指回原条款及确认记录的事实编号 |
+| `identity_conflicts`、`problems`、`scope`、`evidence` | 所列主体或标的不一致的两端事实、待核原因、相关资料和引用 |
+
+`graph.warranty_sources.pages` 记录合同、验收及期满确认原页的文字和影像覆盖，`lines` 保留日历口径、释放条件、确认及未核原文。原生文字可按 `doc/page/line` 定位，影像观察保留事实编号并可打开页图。`warranty_release_basis` 从已获支持的付款期次指向确认单原文。归档复算重读原页文字和关系，签收重新核验所据原件。旧底稿可按原版复算，旧正向结论遇到现行质保程序核不清的条款或记录时，签收返回 HTTP 409。
+
 ## 履约日期核对
 
 规则 `2026.11.24.28` 使用 `contract-performance-v9`。涉及日期疑点的 H01、H02 或 H05 附有 `date_checks[]`。每一项保存 `event`（`contract_period`、`acceptance`、`reinspection` 或 `payment`）、`status`（`risk` 或 `missing`）、案情说明 `detail` 和引用 `evidence`。原生日期的证据可定位到逐字引文和文字层原行，人工核图的日期可以回到其核图回执。H04 继承该期所据的签署、验收或质保条件。历史底稿保留当时的程序，申请签收时会重新检查原为相符的日期判断。

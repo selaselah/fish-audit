@@ -244,6 +244,73 @@ function contractEffectPanel(finding,graph) {
   return panel;
 }
 
+function warrantyPanel(finding,graph) {
+  const entry=finding.warranty_check;
+  const {facts,documents}=graphIndex(graph);
+  const panel=box('warranty-review',el('h4','质保金释放依据'));
+  const units=new Set(entry.scope);
+  const lines=graph.warranty_sources.lines.filter(s=>units.has(s.unit));
+  const dates=el('dl','','warranty-dates');
+  function addDate(label,value) {
+    dates.append(box('warranty-date',el('dt',label),el('dd',value || '待核',value?'':'muted')));
+  }
+  addDate('合格终验或复验日',entry.accepted_on);
+  addDate('合同日历末日',entry.calendar_end);
+  addDate('期满确认日',entry.confirmed_on);
+  const cited=finding.evidence.map(ref=>facts.get(ref)).filter(Boolean);
+  const transfers=cited.filter(f=>f.field==='paid_on');
+  if (finding.rule==='H05') addDate('实际付款日',transfers[0]?.source_line?.text.split(/[:：]/u).slice(1).join('：').trim());
+  panel.append(dates);
+  if (!entry.period && !lines.some(s=>s.kind==='warranty_period') && entry.confirmed_on)
+    panel.append(el('p','本案确认日取自签认记录，未取得可独立复算的期限条款。','small'));
+  for (const pair of entry.identity_conflicts) {
+    const proof=box('warranty-conflict',el('strong','合同与确认单的'+facts.get(pair.contract_ref).label+'不同'));
+    for (const ref of [pair.contract_ref,pair.release_ref])
+      proof.append(box('batch-source',el('q',facts.get(ref).source_line.text),citation(ref)));
+    panel.append(proof);
+  }
+  const originals=fold('核对质保条款与履约原文');
+  originals.open=finding.rule==='H04';
+  const unitOrder=['contract','acceptance','reinspection','warranty','bank_receipt'].flatMap(k=>graph.documents_by_kind[k] || []);
+  const rows=[];
+  function record(unit,page,line,row) {
+    const position=unitOrder.indexOf(unit);
+    rows.push({position:position<0?unitOrder.length:position,page,line:line ?? Infinity,row});
+  }
+  const addFact=fact => {
+    const row=box('batch-source',el('q',fact.source_line?.text || fact.quote),citation(fact.id));
+    if (fact.field==='acceptance_signer') row.append(tag(fact.status));
+    row.dataset.warrantySource=fact.id;
+    record(fact.unit || fact.doc,fact.page,fact.source_line?.number,row);
+  };
+  const listed=new Set(lines.flatMap(s=>s.facts));
+  const confirmations=new Set(graph.documents_by_kind.warranty || []);
+  for (const fact of cited.filter(f=>['accepted_on','paid_on'].includes(f.field) || f.id===finding.stage.clause_ref ||
+      f.field==='acceptance_signer' && confirmations.has(f.unit || f.doc)))
+    if (!listed.has(fact.id)) addFact(fact);
+  for (const item of lines) {
+    const fact=item.facts.map(id=>facts.get(id)).find(f=>f?.quote===item.quote);
+    const page=item.doc+'/p'+item.page;
+    const title=(documents.get(item.doc)?.name || '原件')+' · 第 '+item.page+' 页'+(item.line?' · 第 '+item.line+' 行':'');
+    const ref=action(title,()=>openPage(item.doc,item.page,fact?.id,fact?null:item.line),'ref');
+    const row=box('batch-source',el('q',item.quote),ref);
+    row.dataset.warrantySource=fact?.id || page+'/l'+item.line;
+    if (item.kind==='unresolved' || item.kind==='observation') row.append(el('small','需核对原件','small'));
+    record(item.unit,item.page,item.line,row);
+  }
+  for (const page of graph.warranty_sources.pages.filter(p=>units.has(p.unit) && (!p.native || !p.text_only))) {
+    const ref=action((documents.get(page.doc)?.name || '原件')+' · 第 '+page.page+' 页',()=>openPage(page.doc,page.page),'ref');
+    ref.dataset.warrantyPage=page.doc+'/p'+page.page;
+    record(page.unit,page.page,null,box('batch-source',el('strong','通读整页影像及附注'),ref));
+  }
+  rows.sort((a,b)=>a.position-b.position || a.page-b.page || a.line-b.line);
+  originals.append(...rows.map(item=>item.row));
+  for (const problem of entry.problems)
+    if (!finding.detail.includes(problem.detail)) originals.append(el('p',problem.detail,'small'));
+  panel.append(originals);
+  return panel;
+}
+
 function qualityChangePanel(change, graph) {
   const index = graphIndex(graph);
   const facts = change.evidence.map(id=>index.facts.get(id)).filter(Boolean);

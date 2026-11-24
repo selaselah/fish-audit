@@ -8,6 +8,7 @@ from acceptance_authority import covers, parts, signed_name
 from calculations import normalized
 from contract_changes import labelled_sources
 from delegation import complete_id, covered_rows
+from performance_versions import BATCH_FORMATS
 from reinspection import LINK_KEYS, linked
 
 
@@ -120,14 +121,24 @@ def page_sources(graph,read_text):
         contract_fields={"contract",*LINK_KEYS,"signed_on","effect_on","valid_until","effect_clause","contract_state","buyer_signature",
                          "seller_signature","quantity_agreed","acceptance_criteria","delivery_batch","batch_clause","payment_term","payment_stage",
                          "total","net","tax","currency","unit"}
-        coverage=covered_rows(graph,read_text,contracts,contract_fields,covers,"分批合同")
+        def contract_row(field,value,quote):
+            if field in ("warranty_period","warranty_condition"):
+                from warranty_terms import dedicated
+                return dedicated(quote) and covers(field,value,quote)
+            return covers(field,value,quote)
+        if "warranty_sources" in graph:
+            contract_fields.update(("warranty_period","warranty_condition"))
+        coverage=covered_rows(graph,read_text,contracts,contract_fields,contract_row,"分批合同")
         coverage+=covered_rows(graph,read_text,receipts,set(RECEIPT_FIELDS),covers,"分批验收材料")
         def release_field(field,value,quote):
             if field=="warranty":
                 return normalized(value)==normalized(quote) and normalized(quote) in {"质保期满确认单","质保期满确认书"}
             return covers(field,value,quote)
+        release_fields={"warranty",*LINK_KEYS,"warranty_release","acceptance_signer"}
+        if "warranty_sources" in graph:
+            release_fields.add("warranty_defects")
         coverage+=covered_rows(graph,read_text,set(graph["documents_by_kind"].get("warranty",[])),
-                              {"warranty",*LINK_KEYS,"warranty_release","acceptance_signer"},release_field,"质保确认材料")
+                              release_fields,release_field,"质保确认材料")
         mixed=set()
         for p in coverage:
             p["text_only"]=pages[f"{p['doc']}/p{p['page']}"].get("clause_text_only") is True
@@ -395,13 +406,13 @@ def evidence_edges(findings):
 def verify_sources(report,read_text,*,signing=False):
     policy,graph=report["policy"],report["graph"]
     if not policy.get("delivery_batches"):
-        if "delivery_batches.py" in policy.get("code_sha256",{}) or "delivery_batch_sources" in graph or policy.get("performance_checks") in ("contract-performance-v10","contract-performance-v11"):
+        if "delivery_batches.py" in policy.get("code_sha256",{}) or "delivery_batch_sources" in graph or policy.get("performance_checks") in BATCH_FORMATS:
             raise ValueError("分批验收程序标记缺失")
         if signing and any(f["rule"]=="H02" and f["status"]=="ok" for f in report["findings"]) and page_sources(graph,read_text)["signals"]:
             raise ValueError("旧版终验尚未逐批核对，请按现行程序重审后签收。")
         return
     source=page_sources(graph,read_text)
-    if (policy["delivery_batches"]!=FORMAT or policy.get("performance_checks") not in ("contract-performance-v10","contract-performance-v11") or
+    if (policy["delivery_batches"]!=FORMAT or policy.get("performance_checks") not in BATCH_FORMATS or
         graph.get("delivery_batch_sources")!=source or gaps(source)!=[g for g in graph["gaps"] if g["quality"]=="delivery_batch_clause"]):
         raise ValueError("分批条款原文、资料归属或页内覆盖与归档不符")
     edges=[e for e in graph["edges"] if e["type"] in ("delivery_batch_acceptance","batch_payment_basis")]

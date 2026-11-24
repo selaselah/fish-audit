@@ -11,26 +11,14 @@ from contract_changes import LABELS as ADDENDUM_FIELDS, LIMIT, SOURCE_LABELS, ca
 from acceptance_authority import LABELS as AUTHORITY_FIELDS, SIGN_LABELS, check as check_acceptance_authority
 import delivery_batches
 import contract_effect
+import warranty_terms
+from performance_versions import (FIRST_FORMAT, BOARD_FORMAT, REINSPECTION_FORMAT, DELEGATION_FORMAT, IDENTITY_FORMAT,
+                                  NATIVE_FORMAT, ADDENDUM_FORMAT, SIGNATORY_FORMAT, DATE_FORMAT, BATCH_FORMAT, FORMAT,
+                                  EFFECT_FORMATS, BATCH_FORMATS, DATE_FORMATS, SIGNATORY_FORMATS, ADDENDUM_FORMATS,
+                                  MANDATE_FORMATS, SUPPORTED)
 
 
 PROFILE = "cn-contract-performance/v1"
-FIRST_FORMAT = "contract-performance-v1"
-BOARD_FORMAT = "contract-performance-v2"
-REINSPECTION_FORMAT = "contract-performance-v3"
-DELEGATION_FORMAT = "contract-performance-v4"
-IDENTITY_FORMAT = "contract-performance-v5"
-NATIVE_FORMAT = "contract-performance-v6"
-ADDENDUM_FORMAT = "contract-performance-v7"
-SIGNATORY_FORMAT = "contract-performance-v8"
-DATE_FORMAT = "contract-performance-v9"
-BATCH_FORMAT = "contract-performance-v10"
-FORMAT = contract_effect.PERFORMANCE
-BATCH_FORMATS = (BATCH_FORMAT,FORMAT)
-DATE_FORMATS = (DATE_FORMAT,*BATCH_FORMATS)
-SIGNATORY_FORMATS = (SIGNATORY_FORMAT,*DATE_FORMATS)
-ADDENDUM_FORMATS = (ADDENDUM_FORMAT,*SIGNATORY_FORMATS)
-MANDATE_FORMATS = (DELEGATION_FORMAT, IDENTITY_FORMAT, NATIVE_FORMAT, *ADDENDUM_FORMATS)
-SUPPORTED = (FIRST_FORMAT, BOARD_FORMAT, REINSPECTION_FORMAT, *MANDATE_FORMATS)
 RULES = {
     "H01": ("合同签署与约定生效条件", "核对合同双方、签订日期、生效条款和签署栏的人工核图记录，保留附加条件及状态疑点。"),
     "H02": ("交付范围与验收质量", "按合同编号、标的和采购方关联验收资料，核对日期、验收范围、结论、签认和遗留事项。"),
@@ -44,6 +32,7 @@ LABELS = {
     **ADDENDUM_FIELDS,
     **AUTHORITY_FIELDS,
     **delivery_batches.LABELS,
+    **warranty_terms.LABELS,
     "effect_clause": ("生效条款", "合同生效条件", "生效条件", "合同生效条款"),
     **PARTY_SIGNATURES,
     "contract_state": ("合同状态", "协议状态"),
@@ -468,7 +457,7 @@ def stage_terms(text):
     return ratio[0] if len(ratio) == 1 else "", "", ""
 
 
-def schedule(contract):
+def schedule(contract, *, warranty_checks=False):
     fields = ("payment_term","payment_stage","adjustment")
     refs = contract.evidence("contract",*fields)
     rows, counts, issues = [], set(), []
@@ -493,6 +482,11 @@ def schedule(contract):
                 label = prefix[0][:-1]
                 part = part[prefix.end():]
             share, kind, condition = stage_terms(part)
+            if warranty_checks and fact["field"]=="payment_stage" and delivery_batches.raw_body(fact):
+                inline=warranty_terms.inline_condition(fact["source_line"]["text"])
+                if inline and part==inline[0]:
+                    condition,share=inline.groups()
+                    kind="warranty"
             rows.append(dict(index=index, label=label, share=share, kind=kind, condition=condition,
                              text=part, ref=fact["id"]))
     if rows and all(r["index"] is not None for r in rows):
@@ -511,7 +505,7 @@ def schedule(contract):
     if contract.fields["adjustment"] or contract.incomplete(*fields):
         issues.append("付款条款存在变更或原页覆盖缺口")
     uncovered = [n for n in contract.notes if re.search(r"分期|分[两二三四五六七八九十\d]+期|预付|尾款|质保金|保留款|第.+期|补充协议|另附|另行约定",n["quote"])
-                 and norm(n["quote"]) not in seen_lines]
+                 and norm(n["quote"]) not in seen_lines and not (warranty_checks and warranty_terms.dedicated(n["quote"]))]
     if uncovered:
         refs += [n["page_id"] for n in uncovered]
         issues.append("另有待归入付款安排的原文")
@@ -561,7 +555,7 @@ def compute(graph, version=FORMAT):
     approvals = materials("contract_approval") if version != FIRST_FORMAT else []
     grants = materials("power_of_attorney") if version in MANDATE_FORMATS else ()
     signed = effect(contract, approvals, version, grants)
-    if version==FORMAT:
+    if version in EFFECT_FORMATS:
         contract_effect.review(signed,graph.get("contract_effect_sources",{}),contract.unit)
     if version in DATE_FORMATS:
         add_date_checks(signed,period_checks(contract))
@@ -591,10 +585,10 @@ def compute(graph, version=FORMAT):
     else:
         accepted = acceptance(contract, receipts)
         accepted_on = day(receipts[0].single("accepted_on")) if accepted["status"]=="ok" else None
-    plan, rows = schedule(contract)
+    plan, rows = schedule(contract,warranty_checks=version==FORMAT)
     batch = None
     if version in BATCH_FORMATS:
-        batch = delivery_batches.inspect(graph,contract,receipts,native_spacing=version==FORMAT,
+        batch = delivery_batches.inspect(graph,contract,receipts,native_spacing=version in EFFECT_FORMATS,
                     other_terms=bool(signed["status"]!="ok" or extra_units or change or authority or repairs or retests or
                                      any(r.fields[k] or k in r.uncertain for r in receipts for k in ("original_acceptance","repair_number","defect_closure"))))
     batch_rows = {r["index"]:r for r in batch["batches"]} if batch else {}
@@ -696,10 +690,18 @@ def compute(graph, version=FORMAT):
     if not rows:
         output.append(result("H04","missing","缺少可逐期核对的付款约定。",plan["evidence"],plan["scope"]))
         return output
-    expiry, warranty_refs = warranty(contract, releases, accepted_on)
-    if batch and (len(releases)!=1 or not same_contract(contract,releases[0]) or
-                  not labelled_sources(releases[0],LINK_KEYS) or not delivery_batches.readable(graph["delivery_batch_sources"],releases[0].unit)):
-        expiry = None
+    expiry,warranty_refs,release_check=None,[],None
+    if version==FORMAT:
+        warranty_stages=[r["ref"] for r in rows if r["kind"]=="warranty"]
+        if warranty_stages:
+            release_check=warranty_terms.assess(graph,contract,releases,[*receipts,*retests],accepted,accepted_on,warranty_stages)
+            expiry=day(release_check["confirmed_on"] or "")
+            warranty_refs=release_check["evidence"]
+    else:
+        expiry,warranty_refs=warranty(contract,releases,accepted_on)
+        if batch and (len(releases)!=1 or not same_contract(contract,releases[0]) or
+                      not labelled_sources(releases[0],LINK_KEYS) or not delivery_batches.readable(graph["delivery_batch_sources"],releases[0].unit)):
+            expiry=None
     stages = []
     for idx, row in enumerate(rows, 1):
         kind = row["kind"]
@@ -736,11 +738,15 @@ def compute(graph, version=FORMAT):
                 status,detail="missing","本期明列的批次尚未与合同交付明细对应。"
         elif kind in ("acceptance","warranty") and accepted["status"] != "ok":
             status, detail = "risk" if accepted["status"] in ("issue","risk") else "missing","现有验收资料不足以支持本期付款。"
+        elif kind=="warranty" and release_check:
+            status,detail=release_check["status"],release_check["detail"]
         elif kind == "warranty" and not expiry:
             status, detail = "missing","缺少同一合同已签认的质保期满记录，请核对届满时间和放款前提。"
         else:
             status, detail = "ok","已提交资料支持本期所列的“" + row["condition"] + "”条件。"
         check = result("H04",status,detail,refs,scope,stage)
+        if kind=="warranty" and release_check:
+            check["warranty_check"]=release_check
         output.append(check)
         stages.append((row,check))
 
@@ -754,6 +760,8 @@ def compute(graph, version=FORMAT):
         paid = printed_day(bank,"paid_on") if version in DATE_FORMATS else day(bank.single("paid_on"))
         linked = all(contract.single(left) and contract.single(left) == bank.single(right)
                      for left,right in (("contract_id","contract_id"),("buyer","payer"),("seller","payee")))
+        if release_check and any(row["kind"]=="warranty" for row,_ in matching):
+            linked=linked and warranty_terms.bank_identity(contract,bank)
         refs += contract.evidence("contract_id","buyer","seller")
         if not linked or not paid or bank.single("transfer_status") not in {"交易成功","转账成功","成功","已完成"} or len(matching) != 1:
             payment = result("H05","missing","需取得本合同关联的成功回单、付款日期及回单明列的对应期次。",refs,scope)
@@ -772,10 +780,17 @@ def compute(graph, version=FORMAT):
             milestones.append(("验收","accepted_on",accepted_on))
         if row["kind"] == "warranty":
             milestones.append(("质保期满确认","warranty_release",expiry))
+            if release_check and signed["status"]==plan["status"]=="ok" and release_check["calendar_end"]:
+                milestones.append(("合同质保期间最后一日","warranty_period",day(release_check["calendar_end"])))
         dates = [when for _,_,when in milestones]
         timing = []
         if any(point and point > paid for point in dates):
             status, detail = "risk","回单付款日早于本期所据的履约日期，请复核提前支付的授权和依据。"
+            if row["kind"]=="warranty" and release_check:
+                future=[f"{label} {when}" for label,_,when in milestones if when and paid<when]
+                detail=f"回单付款日 {paid} 早于{'、'.join(future)}，请核查提前支付的依据。"
+        elif row["kind"]=="warranty" and release_check and release_check["defect_open"] and expiry and paid>=expiry:
+            status,detail="risk","付款所据确认单载有未解决质量问题，需核实付款前是否已关闭及返还依据。"
         elif version in DATE_FORMATS and (row["kind"] in CONDITIONS or row["kind"]=="batch") and paid in dates:
             events = [label for label,_,when in milestones if when==paid]
             fields = [field for _,field,when in milestones if when==paid]
@@ -792,6 +807,8 @@ def compute(graph, version=FORMAT):
         else:
             status, detail = "ok","回单列明本期，付款日期达到所据履约日期。"
         payment = result("H05",status,detail,refs,scope,check["stage"])
+        if row["kind"]=="warranty" and release_check:
+            payment["warranty_check"]=release_check
         add_date_checks(payment,timing)
         output.append(payment)
     return output
@@ -823,6 +840,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("date_checks") != entry.get("date_checks")
                 or saved.get("batch_acceptance") != entry.get("batch_acceptance")
                 or saved.get("effect_review") != entry.get("effect_review")
+                or saved.get("warranty_check") != entry.get("warranty_check")
                 or (saved.get("id"),saved.get("version"),saved.get("title"),saved.get("basis")) !=
                 (f"{rule}-{position}",policy["version"],*RULES[rule])):
             raise ValueError("合同履约结论、期次或引文与证据图谱不符")

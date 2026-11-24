@@ -17,6 +17,7 @@ from delegation import ENTITY_TYPES as DELEGATION_ENTITIES, TITLES as MANDATE_TI
 from contract_changes import NUMBER_TYPES as ADDENDUM_NUMBERS, TITLES as ADDENDUM_TITLES, attach as record_addenda, number_target
 import delivery_batches
 import contract_effect
+import warranty_terms
 from acceptance_authority import CLAUSE as AUTHORITY_CLAUSE, SIGNER as ACCEPTANCE_SIGNATURE, attach as record_signatories, witness_edges
 
 
@@ -286,7 +287,7 @@ def build_graph(docs, pages, attestations, amendments=()):
             if field in ADDENDUM_NUMBERS:
                 target, entity_label = number_target(field,value,quote,fact_id)
                 kind = ADDENDUM_NUMBERS[field]
-            if field in (AUTHORITY_CLAUSE,ACCEPTANCE_SIGNATURE) or field in delivery_batches.LABELS:
+            if field in (AUTHORITY_CLAUSE,ACCEPTANCE_SIGNATURE) or field in delivery_batches.LABELS or field in warranty_terms.LABELS:
                 target = fact_id
             if target!=fact_id:
                 nodes[target] = {"id": target, "type": kind, "label": entity_label}
@@ -298,6 +299,7 @@ def build_graph(docs, pages, attestations, amendments=()):
     withhold_partial_numbers(graph)
     texts = {(page["doc"],page["number"]):page["text"] for page in pages}
     graph["contract_effect_sources"]=contract_effect.sources(graph,lambda doc,number:texts[doc,number])
+    graph["warranty_sources"]=warranty_terms.sources(graph,lambda doc,number:texts[doc,number])
     record_mandate_pages(graph, lambda doc, number: texts[doc, number])
     record_addenda(graph, lambda doc, number: texts[doc, number])
     delivery_batches.attach(graph, lambda doc, number: texts[doc,number])
@@ -377,6 +379,7 @@ def link_procedures(graph, findings, calls):
     edges = graph["edges"]
     edges.extend(witness_edges(findings))
     edges.extend(delivery_batches.evidence_edges(findings))
+    edges.extend(warranty_terms.edges(findings))
     expert_id = "model/expert"
     nodes.append({"id": expert_id, "type": "model_call", "label": "专家追加程序",
                   "response_id": calls["expert"].get("response_id"), "model": calls["expert"]["model"]})

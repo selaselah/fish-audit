@@ -5,6 +5,7 @@ import re
 from collections import defaultdict
 
 from acceptance_authority import parts
+from performance_versions import EFFECT_FORMATS
 from calculations import normalized
 
 
@@ -112,13 +113,13 @@ def verify(report,read_text,*,signing=False):
     graph,policy=report["graph"],report["policy"]
     if not policy.get("contract_effect"):
         if ("contract_effect.py" in policy.get("code_sha256",{}) or "contract_effect_sources" in graph or
-                policy.get("performance_checks")==PERFORMANCE):
+                policy.get("performance_checks") in EFFECT_FORMATS):
             raise ValueError("合同附加生效条件的程序标记缺失")
         if signing and any(f["rule"]=="H01" and f["status"]=="ok" for f in report["findings"]):
             ledger=sources(graph,read_text)
             if ledger["conditions"] or any(not p["native"] or not p["text_only"] for p in ledger["pages"]):
                 raise ValueError("旧版合同尚有附加生效约定或待核的整页版式，请按现行程序重审后签收。")
         return
-    if (policy["contract_effect"]!=FORMAT or policy.get("performance_checks")!=PERFORMANCE or
+    if (policy["contract_effect"]!=FORMAT or policy.get("performance_checks") not in EFFECT_FORMATS or
             graph.get("contract_effect_sources")!=sources(graph,read_text)):
         raise ValueError("合同生效所据的整页记录、附加条件或引文与归档不符")

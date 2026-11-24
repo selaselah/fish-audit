@@ -21,11 +21,13 @@ from payment_notes import note_refs
 from payment_reference import LEGACY_FORMAT as FIRST_REFERENCE_FORMAT, SUPPORTED as REFERENCE_FORMATS, check as check_references, issued_format
 from peer_review import journal_decision, verify_referrals, verify_review
 from performance import LABELS as PERFORMANCE_FIELDS, verify_findings as verify_performance
+from performance_versions import DATE_FORMATS
 from quality_labels import verify_report as verify_quality_numbers
 from quality_references import verify_report as verify_quality_references
 from acceptance_authority import verify_sources as verify_acceptance_authority
 from delivery_batches import verify_sources as verify_delivery_batches
 from contract_effect import verify as verify_contract_effect
+from warranty_terms import verify as verify_warranty
 from contract_changes import verify_sources as verify_addendum_sources
 from delegation import verify_sources as verify_delegation_sources
 from protocol import canonical, response_request
@@ -238,6 +240,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
     verify_acceptance_authority(report,page_text)
     verify_delivery_batches(report,page_text)
     verify_contract_effect(report,page_text)
+    verify_warranty(report,page_text)
     if "conclusions.py" in report["policy"].get("code_sha256",{}):
         verify_result(report)
     graph = report["graph"]
@@ -249,7 +252,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
     for trace in report["calls"]["pages"]:
         doc, page = trace["doc"], trace["page"]
         page_node = nodes[f"{doc}/p{page}"]
-        inspected = [*graph.get("quality_addenda",{}).get("pages",[]),*graph.get("acceptance_authority_sources",{}).get("pages",[]),*graph.get("delivery_batch_sources",{}).get("pages",[]),*graph.get("contract_effect_sources",{}).get("pages",[])]
+        inspected = [*graph.get("quality_addenda",{}).get("pages",[]),*graph.get("acceptance_authority_sources",{}).get("pages",[]),*graph.get("delivery_batch_sources",{}).get("pages",[]),*graph.get("contract_effect_sources",{}).get("pages",[]),*graph.get("warranty_sources",{}).get("pages",[])]
         if report["policy"].get("quality_addenda") and ("clause_text_only" in trace or
                 any(p["doc"]==doc and p["page"]==page for p in inspected)):
             require(isinstance(trace.get("clause_text_only"),bool) and trace["clause_text_only"] is page_node.get("clause_text_only"),
@@ -383,7 +386,7 @@ def render_addendum_sources(bundle, report, nodes):
     selected.update(p["doc"] for p in graph.get("acceptance_authority_sources",{}).get("pages",[]))
     units = {d["id"]:d.get("source",d["id"]) for d in graph.get("audit_documents",graph["documents"])}
     selected.update(units[u] for f in report["findings"] if f.get("quality_change") or f.get("acceptance_authority") for u in f["scope"])
-    if report["policy"].get("performance_checks") in ("contract-performance-v9","contract-performance-v10","contract-performance-v11"):
+    if report["policy"].get("performance_checks") in DATE_FORMATS:
         selected.update(units[u] for f in report["findings"] if f["rule"] in ("H01","H02","H04","H05") for u in f["scope"])
     require(selected,"本版底稿没有可按合同日期、补充协议或具名签认程序重新分页的原件。")
     try:

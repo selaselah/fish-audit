@@ -8,11 +8,12 @@ from collections import defaultdict
 from calculations import normalized
 from contract_changes import SOURCE_LABELS, labelled_sources
 from delegation import agent_kind, complete_id, covered_rows
+from performance_versions import SIGNATORY_FORMATS
 from reinspection import LINK_KEYS, linked
 
 
 FORMAT = "named-acceptance-signatures-v1"
-PERFORMANCE_FORMATS = ("contract-performance-v8","contract-performance-v9","contract-performance-v10","contract-performance-v11")
+PERFORMANCE_FORMATS = SIGNATORY_FORMATS
 CLAUSE = "acceptance_signing_clause"
 SIGNER = "acceptance_signer"
 LABELS = {CLAUSE:("验收签认约定","验收签署约定","验收签字要求","终验签认约定","指定验收人","甲方指定验收人")}
@@ -97,6 +98,7 @@ def page_evidence(graph, read_text):
     kinds = graph["documents_by_kind"]
     contracts = set(kinds.get("contract",[]))
     receipts = set(kinds.get("acceptance",[])) | set(kinds.get("reinspection",[]))
+    releases = set(kinds.get("warranty",[])) if "warranty_sources" in graph else set()
     rules, signatures = [], []
     for ref,page in pages.items():
         doc, suffix = ref.rsplit("/p",1)
@@ -112,6 +114,8 @@ def page_evidence(graph, read_text):
         def record(raw, line, facts, native):
             label,body = parts(raw)
             clause = mentions(raw) or any(f["field"]==CLAUSE for f in facts) or unit in contracts and label in SIGN_LABELS
+            if unit in releases and label in SIGN_LABELS and not re.search(r"终验|复验|验收|合同",body):
+                clause=False
             signature = unit in receipts and (label in SIGN_LABELS or any(f["field"]==SIGNER for f in facts))
             for active,field,rows in ((clause,CLAUSE,rules),(signature,SIGNER,signatures)):
                 if not active:

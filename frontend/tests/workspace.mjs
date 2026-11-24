@@ -222,6 +222,36 @@ try {
     const change=report.findings.find(f=>f.rule==='H02')?.quality_change;
     const authority=report.findings.find(f=>f.rule==='H02')?.acceptance_authority;
     const effect=report.findings.find(f=>f.rule==='H01')?.effect_review;
+    const warranty=phases.find(f=>f.warranty_check);
+    if (warranty) {
+      const entry=warranty.warranty_check;
+      const panel='document.querySelector(".warranty-review")';
+      assert.deepEqual(await evaluate('[...'+panel+'.querySelectorAll("dd")].map(d=>d.textContent)'),
+        [entry.accepted_on,entry.calendar_end,entry.confirmed_on].map(d=>d || '待核'));
+      assert.equal(await evaluate(panel+'.querySelectorAll(".warranty-conflict").length'),entry.identity_conflicts.length);
+      for (const source of report.graph.warranty_sources.lines.filter(s=>entry.scope.includes(s.unit))) {
+        const fact=report.graph.facts.find(f=>source.facts.includes(f.id) && f.quote===source.quote);
+        const ref=fact?.id || source.doc+'/p'+source.page+'/l'+source.line;
+        const row=panel+'.querySelector('+JSON.stringify('[data-warranty-source="'+ref+'"]')+')';
+        assert.equal(await evaluate(row+'.querySelector("q").textContent'),source.quote);
+        await evaluate(row+'.querySelector("button").click()');
+        const where=fact?'document.querySelector(".located")?.dataset.fact==='+JSON.stringify(fact.id):
+          'document.querySelector(".located")?.dataset.gapLine==='+JSON.stringify(String(source.line));
+        await wait('document.querySelector("#page-dialog").open && '+where+' && document.querySelector("#page-dialog img")?.naturalWidth>0','warranty original line');
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
+      for (const p of report.graph.warranty_sources.pages.filter(p=>entry.scope.includes(p.unit) && (!p.native || !p.text_only))) {
+        const button=panel+'.querySelector('+JSON.stringify('[data-warranty-page="'+p.doc+'/p'+p.page+'"]')+')';
+        await evaluate(button+'.click()');
+        await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth>0','warranty full page');
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
+      for (const finding of report.findings.filter(f=>f.rule==='H05' && f.warranty_check)) {
+        const payment='document.querySelector('+JSON.stringify('[data-finding="'+finding.id+'"] .warranty-review')+')';
+        const bank=report.graph.facts.find(f=>f.field==='paid_on' && finding.evidence.includes(f.id));
+        assert.equal(await evaluate(payment+'.querySelector(".warranty-date:last-child dd").textContent'),bank.source_line.text.split(/[:：]/u).at(-1).trim());
+      }
+    }
     if (effect) {
       const panel='document.querySelector(".effect-review")';
       assert.equal(await evaluate('!!'+panel),Boolean(effect.conditions.length || effect.mixed_pages.length));
@@ -479,6 +509,15 @@ try {
         const capture=await call('Page.captureScreenshot',{format:'png'});
         await writeFile(join(process.env.AUDIT_UI_SHOTS,'batches-'+performanceCase+'-'+width+'.png'),Buffer.from(capture.data,'base64'));
       }
+      if (warranty) {
+        const panel='document.querySelector(".warranty-review")';
+        assert.ok(await evaluate(panel+'.clientWidth>0 && '+panel+'.scrollWidth<='+panel+'.clientWidth+1'));
+        if (process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
+          await evaluate(panel+'.scrollIntoView({block:"start"});window.scrollBy(0,-50)');
+          const capture=await call('Page.captureScreenshot',{format:'png'});
+          await writeFile(join(process.env.AUDIT_UI_SHOTS,'warranty-'+performanceCase+'-'+width+'.png'),Buffer.from(capture.data,'base64'));
+        }
+      }
       if (effect && (effect.conditions.length || effect.mixed_pages.length) && process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
         await evaluate('document.querySelector(".effect-review").scrollIntoView({block:"start"});window.scrollBy(0,-45)');
         assert.ok(await evaluate('document.querySelector(".effect-review").scrollWidth<=document.querySelector(".effect-review").clientWidth+1'));
@@ -504,6 +543,20 @@ try {
     const target=report.findings.find(f=>f.rule==='H02');
     await click('查看证据路径','document.querySelector('+JSON.stringify('[data-finding="'+target.id+'"]')+')');
     await wait('document.querySelector("#trace-select")?.value==='+JSON.stringify(target.id),'acceptance evidence graph');
+    if (warranty) {
+      const links=report.graph.edges.filter(e=>e.type==='warranty_release_basis');
+      assert.equal(await evaluate('!!document.querySelector(".warranty-relations")'),!!links.length);
+      if (links.length) await evaluate('document.querySelector(".warranty-relations").open=true');
+      for (const edge of links) {
+        const row='document.querySelector('+JSON.stringify('[data-warranty-witness="'+edge.from+'>'+edge.to+'"]')+')';
+        await wait(row+'?.querySelectorAll("button").length===2','warranty clause and dated confirmation');
+        for (const [index,id] of [edge.from,edge.to].entries()) {
+          await evaluate(row+'.querySelectorAll("button")['+index+'].click()');
+          await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(id),'warranty graph citation');
+          await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+        }
+      }
+    }
     if (batches) {
       const edges=report.graph.edges.filter(e=>['delivery_batch_acceptance','batch_payment_basis'].includes(e.type));
       assert.equal(await evaluate('!!document.querySelector(".batch-relations")'),!!edges.length);

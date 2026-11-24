@@ -1,0 +1,23 @@
+"""Compatibility boundaries for replaying issued contract workpapers."""
+
+FIRST_FORMAT = "contract-performance-v1"
+BOARD_FORMAT = "contract-performance-v2"
+REINSPECTION_FORMAT = "contract-performance-v3"
+DELEGATION_FORMAT = "contract-performance-v4"
+IDENTITY_FORMAT = "contract-performance-v5"
+NATIVE_FORMAT = "contract-performance-v6"
+ADDENDUM_FORMAT = "contract-performance-v7"
+SIGNATORY_FORMAT = "contract-performance-v8"
+DATE_FORMAT = "contract-performance-v9"
+BATCH_FORMAT = "contract-performance-v10"
+EFFECT_FORMAT = "contract-performance-v11"
+FORMAT = "contract-performance-v12"
+
+EFFECT_FORMATS = (EFFECT_FORMAT,FORMAT)
+BATCH_FORMATS = (BATCH_FORMAT,*EFFECT_FORMATS)
+DATE_FORMATS = (DATE_FORMAT,*BATCH_FORMATS)
+SIGNATORY_FORMATS = (SIGNATORY_FORMAT,*DATE_FORMATS)
+ADDENDUM_FORMATS = (ADDENDUM_FORMAT,*SIGNATORY_FORMATS)
+NATIVE_FORMATS = (NATIVE_FORMAT,*ADDENDUM_FORMATS)
+MANDATE_FORMATS = (DELEGATION_FORMAT,IDENTITY_FORMAT,*NATIVE_FORMATS)
+SUPPORTED = (FIRST_FORMAT,BOARD_FORMAT,REINSPECTION_FORMAT,*MANDATE_FORMATS)

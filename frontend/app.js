@@ -298,8 +298,13 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     const source=effect.conditions.find(s=>s.doc===docId && s.page===pageNumber && s.line===lineHint);
     if (source) gaps.push({...source,quality:'effect_reference'});
   }
+  const warranty=state.bundle?.report.graph.warranty_sources;
+  if (warranty && lineHint && !gaps.some(g=>g.line===lineHint)) {
+    const source=warranty.lines.find(s=>s.doc===docId && s.page===pageNumber && s.line===lineHint);
+    if (source) gaps.push({...source,quality:'warranty_reference'});
+  }
   for (const gap of gaps) {
-    const label = {addendum_reference:'补充协议所据原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文'}[gap.quality] || '待核的原文字层';
+    const label = {addendum_reference:'补充协议所据原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',warranty_reference:'质保金所据原文'}[gap.quality] || '待核的原文字层';
     const section = box('evidence-row',el('h4',label+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
     section.dataset.gapLine = String(gap.line);
     if (gap.line===lineHint) {
@@ -481,6 +486,7 @@ function finding(item) {
     const clauses=contractEffectPanel(item,state.bundle.report.graph);
     if (clauses) node.append(clauses);
   }
+  if (item.warranty_check) node.append(warrantyPanel(item,state.bundle.report.graph));
   if (item.batch_acceptance) {
     const {graph,findings}=state.bundle.report;
     node.append(deliveryBatchPanel(item.batch_acceptance,graph,findings.filter(f=>f.rule==='H04')));
@@ -577,6 +583,17 @@ function graphPanel() {
   const panel = box('panel', el('h2', '本案证据关系'), el('p', graph.nodes.length + ' 个节点 · ' +
     graph.edges.length + ' 条关系 · ' + graph.facts.length + ' 条提取记录', 'muted'));
   const grouped = new Map();
+  const warranties=graph.edges.filter(e=>e.type==='warranty_release_basis');
+  if (warranties.length) {
+    const links=lazyFold('质保金期次与期满确认（'+warranties.length+'）',()=>warranties.map(edge=>{
+      const row=box('line');
+      for (const id of [edge.from,edge.to]) row.append(box('batch-source',el('q',facts.get(id).quote),citation(id)));
+      row.dataset.warrantyWitness=edge.from+'>'+edge.to;
+      return row;
+    }));
+    links.classList.add('warranty-relations');
+    panel.append(links);
+  }
   const batchEdges=graph.edges.filter(e=>['delivery_batch_acceptance','batch_payment_basis'].includes(e.type));
   if (batchEdges.length) {
     const list=lazyFold('分批验收与付款依据（'+batchEdges.length+'）',()=>batchEdges.map(edge=>{

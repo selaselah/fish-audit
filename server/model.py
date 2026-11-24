@@ -83,7 +83,7 @@ unit 单独抄明示的金额单位（如“金额单位：元”），value 抄
 合同中各批交付明细逐行归 delivery_batch，保留批序、数量、单位及逐台设备编号。分批独立验收付款及是否另作终验的条款归 batch_clause。验收报告明确的本批范围归 acceptance_scope，验收设备编号或序列号归 delivered_serials，验收单自己的编号归 acceptance_number。以原页栏目为据，保留限定、尾号和字符间隔。
 合同付款总约定用 payment_term，分列的各期文字逐行用 payment_stage，quote 从“第一期”“首付款”等行首抄到末尾，value 保留整期条件、比例、期限及例外。单行有多期应保留整行。回单所列款项用途/对应期次用 payment_designation，不从金额反推。
 合同或附件所列的“验收签认约定”“验收签署约定”“验收签字要求”“甲方指定验收人”等，用 acceptance_signing_clause 抄录整条，保留“共同”“任选”“仅终验”“复验”等限定。此字段描述规定谁签字。验收记录上每位实际签字人的独立签认行分别用 acceptance_signer，quote 逐字保留完整行，签名栏的代签、岗位、遮盖、空格与附注照实抄录。多人写在同一栏的保留整栏，禁止拆成各人独立签字。
-验收资料除日期、结论外逐行抄验收范围(acceptance_scope)、验收人签认(acceptance_signer)、遗留/整改/保留事项(acceptance_exception)，保留“初验”“仅本批次”“有条件”等限定。质保期满确认单标题用 warranty，其已发生的质保期满记录用 warranty_release。合同对将来质保期的约定仍作为付款条款。
+验收资料除日期、结论外逐行抄验收范围(acceptance_scope)、验收人签认(acceptance_signer)、遗留/整改/保留事项(acceptance_exception)，保留“初验”“仅本批次”“有条件”等限定。质保期满确认单标题用 warranty，其已发生的质保期满记录用 warranty_release。合同约定的质保起点、期限、单位、固定截止日和顺延口径逐行抄入 warranty_period；单列的质保金返还前提用 warranty_condition；若条件与期次金额同一行，整行只用 payment_stage。确认单上遗留缺陷或明确无未结事项用 warranty_defects。区分约定、已发生的确认和缺陷记录，不自行推算日期或推断缺陷已关闭。
 明列的合同有效截止日用 valid_until。合同约定交付数量和验收标准分别用 quantity_agreed 和 acceptance_criteria，验收材料上的实际验收数量、实测标准分别用 quantity_accepted 和 inspection_basis。数量连同单位完整抄录。
 验收报告的实测结果用 measured_result，逐字抄录指标、数值、正负号及单位，与检验依据分别记录。
 合同审批单或董事会合同审批记录的抬头用 contract_approval；审批记录与被审批的合同是两种资料。审批机构、签认、决定及决定日期分别用 approval_authority、approval_signer、approval_result、approved_on。保留决定中的否定、暂缓及其他条件。
