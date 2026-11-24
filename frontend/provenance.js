@@ -121,8 +121,16 @@ function qualityChangePanel(change, graph) {
   panel.dataset.qualityChange = change.state;
   if (change.applied_criterion) panel.append(el('p',change.applied_criterion,'quality-standard'));
   const docUnit = f => f.unit || f.doc;
+  const originalPage = (fact,short=false) => {
+    const page='第 '+fact.page+' 页';
+    const location=fact.name+' · '+page;
+    const button=action(short?page+'原文':location,()=>openPage(fact.doc,fact.page,fact.id),'ref');
+    button.setAttribute('aria-label',location+' · '+fact.label);
+    button.title=location+' · '+fact.label;
+    return button;
+  };
   const sourceRow = fact => {
-    const row = box('change-source',el('q',fact.quote),citation(fact.id));
+    const row = box('change-source',el('q',fact.quote),originalPage(fact));
     row.dataset.changeFact = fact.id;
     return row;
   };
@@ -141,7 +149,7 @@ function qualityChangePanel(change, graph) {
     const value=el('dd');
     value.append(el('span',change[key] || '待核'));
     const fields=key==='effective_on'?['change_effect_clause']:[key];
-    for (const f of facts.filter(f=>fields.includes(f.field))) value.append(citation(f.id));
+    for (const f of facts.filter(f=>fields.includes(f.field))) value.append(originalPage(f,true));
     dates.append(box('',el('dt',title),value));
   }
   const fields = new Set(['addendum_number','base_contract_ref','previous_criterion','change_scope','change_timing',

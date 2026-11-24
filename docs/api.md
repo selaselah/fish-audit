@@ -1,13 +1,5 @@
 # 本机审计接口
 
-## 补充协议与验收标准
-
-规则 2026.11.24.25 使用 `contract-performance-v7`。涉及补充协议的 H02 发现附有 `quality_change`。其中 `state` 可取 `applied`（本次终验适用变更后标准）、`original`（本次终验适用原标准）、`pending`（需人工核对）。`original_criterion`、`revised_criterion` 和 `applied_criterion` 分别记录原约定、新约定和本次实际采用的标准。待核的采用值为 `null`。
-
-`buyer_sealed_on`、`seller_sealed_on`、`effective_on`、`accepted_on` 使用 ISO 日期或 `null`。`scope_clear` 记录已能确认变更只涉及验收标准。`units` 表示涉及变更的资料，`evidence` 指向字段或原页。图谱的 `quality_addenda` 保留原件中的变更线索、编号展示限制、协议各页的文字和版式覆盖情况，以及尚待核对的行号与引文。每期 H04 及每张回单 H05 单独出具状态。
-
-下载证据包后，使用 `server/.venv/bin/python server/verify.py --rules-from-git main --render-addenda 证据包.zip` 可以从本地可信提交复算结论，并从提交的原合同、补充协议及本次终验所据资料重新分页，核对页图、文字、引文位置及版式。重新分页使用与该版底稿匹配的本机分页程序和依赖。常规包校验也可以直接用系统 Python 执行。
-
 基础地址为 `http://127.0.0.1:8000`。接口与前端同源。审计资料只在当前电脑的本地工作区共享。所有时间戳以 UTC 保存，网页按北京时间显示。
 
 创建任务时可提交 `profile=cn-contract-performance/v1` 审查合同履约与分期。当前规则在采购及银行回单范围也执行 H01–H05。报告的 `findings` 保留各程序的 `status`、`evidence` 和 `scope`。已识别的 H04/H05 期次还包含 `stage.name`（期名）、`share`（百分数文本）、`clause`（本期条款）和 `clause_ref`（完整原文的证据编号）。缺少证明的项目仍进入报告。
@@ -180,3 +172,13 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 可选值为 `complete` 和 `partial`。省略这一字段表示只确认引文。同一请求内某项无效时会整批退回。只有所选的付款回单任务流水字段支持该意见。原生文字可精确定位、原件已变化、已登记的印刷限定位与完整意见冲突时，可根据接口返回原因处理。独立说明仍待核时，也需先处理说明。
 
 流水字段的 `attestation.source_check.reference_visibility` 留存意见、字段编号、当时的取值和逐字引文。外层回执保存核图时的底稿、原件与页图摘要。人工确认部分展示时会返回 `reviewed_partial`，若另有印刷限定，底稿继续保留其逐行来源。引用历史回单时，证据包另附所引原页的核图登记摘录 `field-checks/reference-visibility.json`。
+
+## 补充协议与验收标准
+
+自规则 2026.11.24.25 起使用 `contract-performance-v7`。涉及补充协议的 H02 发现附有 `quality_change`。其中 `state` 可取 `applied`（本次终验适用变更后标准）、`original`（本次终验适用原标准）、`pending`（需人工核对）。`original_criterion`、`revised_criterion` 和 `applied_criterion` 分别记录原约定、新约定和本次实际采用的标准。待核的采用值为 `null`。
+
+`buyer_sealed_on`、`seller_sealed_on`、`effective_on`、`accepted_on` 使用 ISO 日期或 `null`。`scope_clear` 记录已能确认变更只涉及验收标准。`units` 表示涉及变更的资料，`evidence` 指向字段或原页。图谱的 `quality_addenda` 保留原件中的变更线索、编号展示限制、协议各页的文字和版式覆盖情况，以及尚待核对的行号与引文。每期 H04 及每张回单 H05 单独出具状态。
+
+下载证据包后，使用 `server/.venv/bin/python server/verify.py --rules-from-git main --render-addenda 证据包.zip` 可以从本地可信提交复算结论，并从提交的原合同、补充协议及本次终验所据资料重新分页，核对页图、文字、引文位置及版式。重新分页使用与该版底稿匹配的本机分页程序和依赖。常规包校验也可以直接用系统 Python 执行。
+
+规则 2026.11.24.26 对已有文字定位的旧案按需补充版式记录。遇到补充协议线索时，使用原件重新分页，逐项比较旧页图摘要、文字及坐标，匹配后记录该页是否包含图片或批注。旧版原页无法重现时，相应补充协议继续要求人工通读。

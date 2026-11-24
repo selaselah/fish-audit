@@ -1,11 +1,14 @@
 import copy
 import unittest
+from pathlib import Path
+from unittest.mock import Mock, patch
 import pypdfium2 as pdfium
 from PIL import Image
 
 from contract_changes import verify_sources
 from controls import VERSION, execute
 from documents import clause_text_only, layer_type
+from jobs import refresh_addendum_layout
 from performance import NATIVE_FORMAT, compute, verify_findings
 from test_performance import CONTRACT, RECEIPT, WARRANTY, BANK_DOC, material
 
@@ -158,3 +161,22 @@ class ContractChangeTests(unittest.TestCase):
         verify_sources(old,read)
         with self.assertRaisesRegex(ValueError,"旧版"):
             verify_sources(old,read,signing=True)
+
+    def test_refresh_only_enriches_matching_archived_pages_of_amendment_cases(self):
+        store=Mock(files=Path("/synthetic"))
+        docs=[{"id":"d01","ext":".pdf"}]
+        page={"doc":"d01","text":"采购发票","number":1,"sha256":"issued","layer":{"type":"text","lines":{}},
+              "extraction":{"output":{"facts":[]}}}
+        with patch("jobs.prepare") as render:
+            refresh_addendum_layout(store,"test",docs,[page])
+            render.assert_not_called()
+            page["text"]="采购合同补充协议"
+            fresh={**page,"layer":{**page["layer"],"clause_text_only":True}}
+            render.return_value=[{**fresh,"sha256":"different"}]
+            refresh_addendum_layout(store,"test",docs,[page])
+            store.add_layers.assert_not_called()
+            self.assertNotIn("clause_text_only",page["layer"])
+            render.return_value=[fresh]
+            refresh_addendum_layout(store,"test",docs,[page])
+            store.add_layers.assert_called_once_with("test","d01",[fresh])
+            self.assertTrue(page["layer"]["clause_text_only"])
