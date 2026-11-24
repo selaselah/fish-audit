@@ -459,6 +459,10 @@ function finding(item) {
   node.dataset.finding = item.id;
   node.tabIndex = -1;
   if (item.stage) node.insertBefore(box('clause-source',el('q',item.stage.clause), citation(item.stage.clause_ref)),node.children[1]);
+  if (item.date_checks) {
+    const dates = dateEvidencePanel(item,state.bundle.report.graph);
+    if (dates) node.append(dates);
+  }
   if (item.reinspection) node.append(reinspectionTrail(item.reinspection,state.bundle.report.graph));
   if (item.delegations) node.append(mandatePanel(item.delegations, state.bundle.report.graph));
   if (item.quality_change) node.append(qualityChangePanel(item.quality_change, state.bundle.report.graph));

@@ -197,3 +197,9 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 `graph.acceptance_authority_sources` 按原件及页码保留条款 `clauses`、签字行 `signatures`、覆盖页 `pages` 和影像线索 `visual_notes`。签字行记录精确原文、原生行号及 `confirmed`。一条 `named_acceptance_signature` 关系将该份合同的条款连到一个经独立核图并符合约定的签字栏。签认相符证明所列人员与条款对应，交付数量、质量、缺陷关闭及付款时点仍需分别核验。
 
 本机通过决定会核对相关原件、页图、签认记录和来源。旧版曾给出终验相符并有未经检查的签认约定时，签收返回 409，请按当前规则重审。离线校验可用 `server/.venv/bin/python server/verify.py --rules-from-git main --render-performance 证据包.zip` 重新分页并复算指定版本的发现。
+
+## 履约日期核对
+
+规则 `2026.11.24.28` 使用 `contract-performance-v9`。涉及日期疑点的 H01、H02 或 H05 附有 `date_checks[]`。每一项保存 `event`（`contract_period`、`acceptance`、`reinspection` 或 `payment`）、`status`（`risk` 或 `missing`）、案情说明 `detail` 和引用 `evidence`。原生日期的证据可定位到逐字引文和文字层原行，人工核图的日期可以回到其核图回执。H04 继承该期所据的签署、验收或质保条件。历史底稿保留当时的程序，申请签收时会重新检查原为相符的日期判断。
+
+`--render-performance` 可从 v9 本案的合同、审批、验收、质保、回单等履约程序所据原件重现分页，同时校核文字、定位和版式。使用 `--rules-from-git main` 可按当时的程序重算各版结论。

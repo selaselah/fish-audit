@@ -317,7 +317,7 @@ def audit_graph(graph, controls):
     procedures = [{"rule": item["rule"], "status": item["status"], "observation": item["detail"],
                    "evidence": item["evidence"], "methods": MAPPING[item["rule"]]} for item in controls]
     for procedure, finding in zip(procedures, controls):
-        for key in ("stage","reinspection","delegations","quality_change","acceptance_authority"):
+        for key in ("stage","reinspection","delegations","quality_change","acceptance_authority","date_checks"):
             if key in finding:
                 procedure[key] = finding[key]
     method_ids = {key for row in procedures for key in row["methods"]}

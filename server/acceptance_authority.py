@@ -12,6 +12,7 @@ from reinspection import LINK_KEYS, linked
 
 
 FORMAT = "named-acceptance-signatures-v1"
+PERFORMANCE_FORMATS = ("contract-performance-v8","contract-performance-v9")
 CLAUSE = "acceptance_signing_clause"
 SIGNER = "acceptance_signer"
 LABELS = {CLAUSE:("验收签认约定","验收签署约定","验收签字要求","终验签认约定","指定验收人","甲方指定验收人")}
@@ -169,7 +170,7 @@ def attach(graph, read_text):
     graph["gaps"].extend(coverage_gaps(source))
 
 
-def check(graph, contract, receipts, retests, *, contract_supported, other_terms=False):
+def check(graph, contract, receipts, retests, *, contract_supported, other_terms=False, name_records=False):
     source = graph.get("acceptance_authority_sources",{})
     if not source.get("clauses") and not source.get("signatures"):
         return None
@@ -240,6 +241,8 @@ def check(graph, contract, receipts, retests, *, contract_supported, other_terms
         cited.extend(evidence)
     status = "risk" if any(r["status"]=="risk" for r in records) else "ok" if records and all(r["status"]=="ok" for r in records) else "missing"
     detail = reason or (" ".join(dict.fromkeys(r["detail"] for r in records)) if records else "缺少本合同对应的终验签认原件。")
+    if name_records and len(records)>1 and not reason:
+        detail = " ".join(("整改复验" if r["role"]=="reinspection" else "原验收")+"（"+(r["date"] or "日期待核")+"）"+r["detail"] for r in records)
     return {"mode":mode,"applies_to":scope,"required":required,"clause_evidence":[ref for s in clauses for ref in refs(s)],
             "contract_evidence":contract_refs,
             "units":units,"status":status,"detail":detail,"records":records,"evidence":list(dict.fromkeys(cited))}
@@ -264,7 +267,7 @@ def verify_sources(report,read_text,*,signing=False):
     policy,graph=report["policy"],report["graph"]
     marker=policy.get("acceptance_authority")
     if not marker:
-        if "acceptance_authority.py" in policy.get("code_sha256",{}) or "acceptance_authority_sources" in graph or policy.get("performance_checks")=="contract-performance-v8":
+        if "acceptance_authority.py" in policy.get("code_sha256",{}) or "acceptance_authority_sources" in graph or policy.get("performance_checks") in PERFORMANCE_FORMATS:
             raise ValueError("缺少底稿所据的具名验收签认程序")
         if signing and any(f["rule"]=="H02" and f["status"]=="ok" for f in report["findings"]):
             legacy=page_evidence(graph,read_text)
@@ -272,7 +275,7 @@ def verify_sources(report,read_text,*,signing=False):
                 raise ValueError("旧版终验有具名签认约定或待辨签字栏，请按现行程序重审后签收。")
         return
     source=page_evidence(graph,read_text)
-    if (marker!=FORMAT or policy.get("performance_checks")!="contract-performance-v8" or graph.get("acceptance_authority_sources")!=source or
+    if (marker!=FORMAT or policy.get("performance_checks") not in PERFORMANCE_FORMATS or graph.get("acceptance_authority_sources")!=source or
             coverage_gaps(source)!=[g for g in graph["gaps"] if g["quality"]=="acceptance_authority_clause"]):
         raise ValueError("验收签认条款、签字原行或版式覆盖与提交材料不符")
     expected=sorted((f.get("unit",f["doc"]),f["id"],f["field"],(f["id"],)) for f in graph["facts"] if f["field"] in (CLAUSE,SIGNER)

@@ -720,13 +720,13 @@ class Store:
             paper = json.loads(row["content"])
             graph = paper["graph"]
             if row["profile"]!=BANK:
-                checks = [f for f in paper["findings"] if f.get("delegations") or f.get("quality_change") or f.get("acceptance_authority")]
+                checks = [f for f in paper["findings"] if f.get("delegations") or f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks")]
                 if not checks:
                     return None
                 named = {ref for f in checks for ref in f["evidence"]}
                 units = {d["id"]:d.get("source", d["id"]) for d in graph.get("audit_documents", graph["documents"])}
                 originals = {units[unit] for finding in checks for unit in finding["scope"]}
-                full_pages = any(f.get("quality_change") or f.get("acceptance_authority") for f in checks)
+                full_pages = any(f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") for f in checks)
                 fields = [f["id"] for f in graph["facts"] if f["id"] in named or full_pages and f["doc"] in originals]
                 pages = {(p["doc"],p["page"]) for p in paper["calls"]["pages"] if p["doc"] in originals}
                 registered = {(r["doc"],r["number"]) for r in db.execute("SELECT doc,number FROM pages WHERE case_id=?",(case_id,))
@@ -815,12 +815,12 @@ class Store:
         if "conclusions.py" in paper["policy"].get("code_sha256",{}):
             try:
                 verify_result(paper)
-                verify_performance(paper)
                 def page_text(doc,page):
                     row = db.execute("SELECT text FROM pages WHERE case_id=? AND doc=? AND number=?",(case_id,doc,page)).fetchone()
                     return row[0] if row else None
                 verify_quality_numbers(paper,page_text)
                 try:
+                    verify_performance(paper,signing=True)
                     verify_quality_references(paper, page_text, signing=True)
                     verify_delegation_sources(paper, page_text, signing=True)
                     verify_addendum_sources(paper, page_text, signing=True)
@@ -839,18 +839,21 @@ class Store:
         graph = paper["graph"]
         changed = any(f.get("quality_change") for f in paper["findings"])
         named_acceptance = any(f.get("acceptance_authority") for f in paper["findings"])
-        if graph.get("profile")!=BANK and (changed or named_acceptance or any(f.get("delegations") for f in paper["findings"])):
+        chronology = any(f.get("date_checks") for f in paper["findings"])
+        if graph.get("profile")!=BANK and (changed or named_acceptance or chronology or any(f.get("delegations") for f in paper["findings"])):
             if not payment_sources or len(payment_sources)!=1:
                 raise CaseError("签收前需重新核对合同及所据履约附件原件。",409)
             source = payment_sources[0][0]
             if (source.case_id,source.revision,source.report_hash)!=(case_id,revision,row["hash"]):
                 raise CaseError("履约原件所据的签收版已变化。",409)
             source.guard(db)
+            if chronology:
+                event(db,case_id,"contract_date_sources",f"签收前核对 R{revision} 的合同、履约或付款日期及相关原页，共 {len(source.files)} 个文件。")
             if named_acceptance:
                 event(db,case_id,"acceptance_signature_sources",f"签收前核对 R{revision} 的具名条款、验收签字及相关页图，共 {len(source.files)} 个文件。")
             if changed:
                 event(db,case_id,"addendum_sources",f"签收前核对 R{revision} 合同、补充协议、验收原件和相关页图，共 {len(source.files)} 个文件。")
-            elif not named_acceptance:
+            elif not named_acceptance and not chronology:
                 event(db,case_id,"mandate_sources",f"签收前核对 R{revision} 的合同签字、委托书及相关页图，共 {len(source.files)} 个文件。")
         if graph.get("profile") == PERFORMANCE:
             return None

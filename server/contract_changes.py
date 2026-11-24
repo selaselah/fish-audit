@@ -151,14 +151,14 @@ def verify_sources(report, read_text, *, signing=False):
     policy, graph = report["policy"], report["graph"]
     if not policy.get("quality_addenda"):
         if ("contract_changes.py" in policy.get("code_sha256",{}) or "quality_addenda" in graph
-                or policy.get("performance_checks") in ("contract-performance-v7","contract-performance-v8")):
+                or policy.get("performance_checks") in ("contract-performance-v7","contract-performance-v8","contract-performance-v9")):
             raise ValueError("缺少对应的补充协议核对程序")
         if signing and any(f["rule"]=="H02" and f["status"]=="ok" for f in report["findings"]):
             if observed_units(graph) or page_signals(graph,read_text)[0]:
                 raise ValueError("旧版终验底稿存在补充协议线索，请按现行程序复核适用标准后签收。")
         return
     current = ledger(graph,read_text)
-    if (policy["quality_addenda"]!=FORMAT or policy.get("performance_checks") not in ("contract-performance-v7","contract-performance-v8")
+    if (policy["quality_addenda"]!=FORMAT or policy.get("performance_checks") not in ("contract-performance-v7","contract-performance-v8","contract-performance-v9")
             or graph.get("quality_addenda")!=current or gaps(current)!=[g for g in graph["gaps"] if g["quality"]=="addendum_clause"]):
         raise ValueError("补充协议的原页、变更条款或未覆盖的约定与底稿不符")
     nodes = {n["id"]:n for n in graph["nodes"]}

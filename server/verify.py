@@ -379,7 +379,9 @@ def render_addendum_sources(bundle, report, nodes):
     selected.update(p["doc"] for p in graph.get("acceptance_authority_sources",{}).get("pages",[]))
     units = {d["id"]:d.get("source",d["id"]) for d in graph.get("audit_documents",graph["documents"])}
     selected.update(units[u] for f in report["findings"] if f.get("quality_change") or f.get("acceptance_authority") for u in f["scope"])
-    require(selected,"本版底稿没有可按补充协议或具名验收签认程序重新分页的原件。")
+    if report["policy"].get("performance_checks")=="contract-performance-v9":
+        selected.update(units[u] for f in report["findings"] if f["rule"] in ("H01","H02","H04","H05") for u in f["scope"])
+    require(selected,"本版底稿没有可按合同日期、补充协议或具名签认程序重新分页的原件。")
     try:
         from documents import CaseError, prepare
     except ImportError as error:
@@ -541,7 +543,7 @@ def verify(source, strict_rules=False, *, rule_checker=None, render_addenda=Fals
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="离线核对 Fish Audit 导出包的文件与引用。")
     parser.add_argument("--render-performance","--render-addenda",dest="render_addenda",action="store_true",
-                        help="从补充协议、具名验收和终验所据的原件重新生成页图，核对文字、引文位置和版式")
+                        help="从合同及各版履约程序所据原件重新生成页图，核对文字、引文位置和版式")
     parser.add_argument("bundle", type=Path)
     rules = parser.add_mutually_exclusive_group()
     rules.add_argument("--rules", action="store_true", help="使用与底稿一致的本机程序，从图谱完整复算规则、追加程序及总建议")

@@ -124,7 +124,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
     def with_performance():
         for item in performance:
             record(item["rule"],item["status"],item["detail"],item["evidence"],item["scope"])
-            for key in ("stage","reinspection","delegations","quality_change","acceptance_authority"):
+            for key in ("stage","reinspection","delegations","quality_change","acceptance_authority","date_checks"):
                 if key in item:
                     findings[-1][key] = item[key]
         return findings

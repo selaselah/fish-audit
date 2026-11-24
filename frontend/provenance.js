@@ -91,8 +91,8 @@ function performanceOverview(findings, graph) {
 
 function performanceComparison(finding, graph) {
   const comparisons = {
-    H01: ['对照生效条件与签署依据',['effect_clause','buyer_signature','seller_signature','contract_state','approval_authority','approval_result','approved_on','approval_signer']],
-    H02: ['对照验收范围、标准与结果',['acceptance_scope','quantity_agreed','quantity_accepted','acceptance_criteria','inspection_basis','measured_result','acceptance_result','acceptance_exception','acceptance_signer']],
+    H01: ['对照生效条件与签署依据',['effect_clause','signed_on','effect_on','valid_until','buyer_signature','seller_signature','contract_state','approval_authority','approval_result','approved_on','approval_signer']],
+    H02: ['对照验收范围、标准与结果',['accepted_on','acceptance_scope','quantity_agreed','quantity_accepted','acceptance_criteria','inspection_basis','measured_result','acceptance_result','acceptance_exception','acceptance_signer']],
     H05: ['对照付款和履约日期',['payment_designation','paid_on','effect_on','approved_on','accepted_on','warranty_release']],
   };
   const spec = comparisons[finding.rule];
@@ -110,6 +110,24 @@ function performanceComparison(finding, graph) {
   details.classList.add('performance-comparison');
   details.open = ['risk','issue'].includes(finding.status);
   return details;
+}
+
+function dateEvidencePanel(finding, graph) {
+  const fields = new Set(['signed_on','effect_on','valid_until','approved_on','accepted_on','paid_on','warranty_release']);
+  const index = graphIndex(graph);
+  const refs = new Set(finding.date_checks.flatMap(check=>check.evidence));
+  const panel = box('contract-date-evidence',el('h4','核对日期原文'));
+  for (const check of finding.date_checks) {
+    if (!finding.detail.includes(check.detail)) panel.append(box('flow',tag(check.status),el('p',check.detail)));
+  }
+  for (const ref of refs) {
+    const fact = index.facts.get(ref);
+    if (!fields.has(fact?.field)) continue;
+    const row = box('change-source',el('q',fact.source_line?.text || fact.quote),citation(ref));
+    row.dataset.dateFact = ref;
+    panel.append(row);
+  }
+  return panel.children.length>1 ? panel : null;
 }
 
 function qualityChangePanel(change, graph) {

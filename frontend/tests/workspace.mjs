@@ -203,6 +203,21 @@ try {
     })()`);
     assert.deepEqual(sharedClause,[0,1],'a receipt belongs only to its named phase when two phases share one contract line');
     const chain=report.findings.find(f=>f.rule==='H02')?.reinspection;
+    for (const finding of report.findings.filter(f=>f.date_checks)) {
+      const panel='document.querySelector('+JSON.stringify('[data-finding="'+finding.id+'"] .contract-date-evidence')+')';
+      const dates=new Set(finding.date_checks.flatMap(c=>c.evidence));
+      const relevant=report.graph.facts.filter(f=>dates.has(f.id) && ['signed_on','effect_on','valid_until','approved_on','accepted_on','paid_on','warranty_release'].includes(f.field));
+      assert.equal(await evaluate(panel+'.querySelectorAll("[data-date-fact]").length'),relevant.length);
+      for (const check of finding.date_checks.filter(c=>!finding.detail.includes(c.detail)))
+        assert.ok(await evaluate(panel+'.textContent.includes('+JSON.stringify(check.detail)+')'));
+      for (const fact of relevant) {
+        const row=panel+'.querySelector('+JSON.stringify('[data-date-fact="'+fact.id+'"]')+')';
+        assert.equal(await evaluate(row+'.querySelector("q").textContent'),fact.source_line?.text || fact.quote);
+        await evaluate(row+'.querySelector("button").click()');
+        await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(fact.id)+' && document.querySelector("#page-dialog img")?.naturalWidth>0','chronology source');
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
+    }
     const change=report.findings.find(f=>f.rule==='H02')?.quality_change;
     const authority=report.findings.find(f=>f.rule==='H02')?.acceptance_authority;
     if (authority) {
@@ -391,7 +406,12 @@ try {
     }
     for (const width of [1440,1024,820,768,390,320]) {
       await call('Emulation.setDeviceMetricsOverride',{width,height:880,deviceScaleFactor:1,mobile:false});
-      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll(".phase-summary li,.phase-results,.clause-source,.mandate-dates,.mandate-side,.quality-change,.change-comparison,.change-source,.acceptance-authority,.signature-record,.signer-source")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'performance layout at '+width);
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll(".phase-summary li,.phase-results,.clause-source,.mandate-dates,.mandate-side,.quality-change,.change-comparison,.change-source,.acceptance-authority,.signature-record,.signer-source,.contract-date-evidence")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'performance layout at '+width);
+      if (report.findings.some(f=>f.date_checks) && process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
+        await evaluate('document.querySelector(".contract-date-evidence").scrollIntoView({block:"start"});window.scrollBy(0,-140)');
+        const capture=await call('Page.captureScreenshot',{format:'png'});
+        await writeFile(join(process.env.AUDIT_UI_SHOTS,'contract-dates-'+performanceCase+'-'+width+'.png'),Buffer.from(capture.data,'base64'));
+      }
       if (authority && process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
         await evaluate('document.querySelector(".acceptance-authority").scrollIntoView({block:"start"});window.scrollBy(0,-54)');
         const capture=await call('Page.captureScreenshot',{format:'png'});
