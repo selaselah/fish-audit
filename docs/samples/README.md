@@ -72,3 +72,7 @@ PYTHONPATH=server server/.venv/bin/python -m unittest discover -s server/tests -
 ### 对照原照片核准票号
 
 `server/.venv/bin/python docs/samples/field_confirmation.py --run` 上传一张带水印的合成发票照片。脚本核对上传原件的摘要，按生成时印入的票号模拟确认、更正或补录，只签认票号。模糊的金额保留待核。完成后会输出可直接打开该字段的底稿链接。用 `node frontend/tests/workspace.mjs --field-case 案件编号` 可在 Chrome 验证原版底稿链接，读取实际原件与页图比对摘要，并检查六档屏幕宽度下的核图记录。
+
+### 八位同号的两张电子普通发票
+
+`server/.venv/bin/python docs/samples/invoice_codes.py --run` 生成两张带水印的虚构发票，代码分别为 099926001011、099926002011，票号相同，金额分别为 212 元和 424 元。一份合订 PDF 载两张发票，另一份报销单逐项列出组合。脚本核对 I01 的票据标识，并检查缺少可核申请引文时 T03 暂缓计算。

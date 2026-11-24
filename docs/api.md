@@ -115,3 +115,5 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 | `GET /evidence` | `q`、`status=verified/pending/all`、`page`。返回本企业最新版本中命中的原文、证据编号、任务、文件、页码、核验状态及版本。需审计或管理权限 |
 
 版本引用可使用 `/w/{企业编号}/workpaper/{任务编号}?rev=版本&fact=证据编号`，本机使用 `/workpaper/{任务编号}`。浏览器会进入对应工作区和原页，服务端按登录账号核验资料访问权限。
+
+规则集 `2026.11.24.6` 开始返回 `graph.invoice_identity`。图中 `invoice_identity` 节点代表已获同页证据支持的完整票据标识，`identified_invoice` 边的 `evidence` 可定位到号码和配套代码。单笔代码字段为 `invoice_code`，报销单同一行明列的组合为 `claim_full_ref`。原件只列短号或代码有异议时，可从 I01、T02、T03 的状态和引用查看补证原因。

@@ -6,6 +6,7 @@ from calculations import CalculationEvidence, in_yuan, money
 from config import BANK, PROFILE, RULE_VERSION, TRAVEL
 from graph import KINDS, audit_documents, compact, entity_id
 from invoice_approval import FORMAT as INVOICE_APPROVAL_FORMAT
+from invoice_identity import FORMAT as INVOICE_IDENTITY_FORMAT, InvoiceIdentities, identity_key, match_claim, within_case
 from invoice_proof import FORMAT as INVOICE_SOURCE_FORMAT
 from model import FIELDS, SIGNALS, expert_candidates
 from payment_history import HISTORY_RULES, attach_history, check_history, payment_record
@@ -20,7 +21,7 @@ CATALOG = {
     "P01": ("采购资料完整性", "单合同、一次全额验收结算范围内需要一份合同、一份发票和一份验收资料。"),
     "P02": ("合同编号关联", "沿各份资料的合同编号关系，验证三份资料是否指向同一合同。"),
     "P03": ("交易双方一致性", "从合同、发票和验收单的采购方和供应方关系核对交易主体全称。"),
-    "I01": ("发票号码重叠", "在本案提交的发票间比较号码，重号需区分副本和重复申请。"),
+    "I01": ("发票标识重叠", "按原页比较发票标识。八位号码结合同页已核代码，二十位号码按完整号码比对。"),
     "I02": ("本工作区已归档票号比对", "按本案发票号码精确查找已归档资料中的已核原文，区分历史资料类型和验收决定，再核对报销或补件记录。"),
     "M01": ("发票价税勾稽", "同一发票、相同人民币元口径下，不含税合计加税额合计应等于价税合计，精确到分。"),
     "C01": ("全额结算适用性", "从合同核对是否明确一次结清，分期、质保、红冲或变更转人工核对。"),
@@ -38,7 +39,7 @@ CATALOG = {
 STATUS = {"ok": "相符", "issue": "发现问题", "risk": "风险待核", "missing": "证据不足"}
 VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING,
            "sources": SOURCES, "rule_sources": MAPPING, "invoice_sources": INVOICE_SOURCE_FORMAT,
-           "invoice_approval": INVOICE_APPROVAL_FORMAT}
+           "invoice_approval": INVOICE_APPROVAL_FORMAT,"invoice_identity":INVOICE_IDENTITY_FORMAT}
 FULL_TERMS = {"验收后一次性全额结算", "验收后一次性付清", "一次性全额结算", "一次性付清",
               "验收合格后一次性支付全款", "一次性全额付款", "一次结清", "一次性结清", "一次付清"}
 FULL_ACCEPTANCE = {"合格", "验收合格", "通过", "验收通过", "全部合格"}
@@ -117,11 +118,12 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
             numbers[compact(found[0]["value"])].extend(found)
     if not kinds.get("invoice"):
         record("I01", "missing", "缺少可核发票，无法比较票号。", [], doc_ids)
+    identifier = InvoiceIdentities(graph)
+    identities = {f["id"]:identifier.describe(f) for group in numbers.values() for f in group}
     for number, group in numbers.items():
-        duplicated = len(group) > 1
-        record("I01", "risk" if duplicated else "ok",
-               f"号码 {number} 出现在本案 {len(group)} 份已识别发票中。"
-               + ("请核对原票、副本及实际报销次数。" if duplicated else ""), ids(group))
+        members = [identities[f["id"]] for f in group]
+        status,detail = within_case(number,members)
+        record("I01",status,detail,ids(group)+[ref for i in members for ref in i["code_refs"]])
     if "prior_invoices" in graph:
         prior = graph["prior_invoices"]
         if not numbers:
@@ -143,7 +145,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
                     record("I02", "ok", f"号码 {number} 在本工作区当时已归档的发票证据中未发现相同号码。", refs)
 
     if profile == TRAVEL:
-        check_travel(graph, linked, numbers, values, record)
+        check_travel(graph, linked, identities, values, record)
         return findings
     titles = [fact for fact in facts.values() if fact["field"] in KINDS and fact["status"] in ("anchored", "confirmed")]
     assignment = [doc for kind in KINDS for doc in kinds.get(kind, [])]
@@ -172,7 +174,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
     if not complete:
         multi = False
         if len(kinds.get("contract", [])) == 1 and len(kinds.get("acceptance", [])) == 1 and len(kinds.get("invoice", [])) > 1:
-            multi = check_multi_invoice(graph, kinds, linked, numbers, amounts_valid, values, record)
+            multi = check_multi_invoice(graph, kinds, linked, identities, amounts_valid, values, record)
         for rule in ("P02", "P03", "C01", "M02", "D01", "A01", "S01"):
             if rule == "M02" and multi:
                 continue
@@ -233,7 +235,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
     return findings
 
 
-def check_multi_invoice(graph, kinds, linked, numbers, amounts_valid, values, record):
+def check_multi_invoice(graph, kinds, linked, identities, amounts_valid, values, record):
     contract = kinds["contract"][0]
     acceptance = kinds["acceptance"][0]
     invoices = kinds["invoice"]
@@ -252,18 +254,19 @@ def check_multi_invoice(graph, kinds, linked, numbers, amounts_valid, values, re
     units = all(in_yuan(fact) for fact in by_field["currency"]) and all(
         compact(fact["value"]) in ("元", "人民币元") for fact in by_field["unit"])
     amounts = [money(fact) for fact in by_field["total"]]
-    refs = ids(facts, *(linked[doc, "invoice_id"] for doc in invoices))
+    refs = ids(facts, *(linked[doc, "invoice_id"] for doc in invoices)) + [ref for i in identities.values() for ref in i["code_refs"]]
+    keys = {identity_key(i) for i in identities.values()}
     if (not unique or not units or None in amounts or min(amounts) < 0 or
-            len(numbers) != len(invoices) or not all(amounts_valid.get(doc) for doc in invoices)):
+            None in keys or len(keys) != len(invoices) or not all(amounts_valid.get(doc) for doc in invoices)):
         record("M02", "missing", "多票汇总缺少一致的关联、币种、计量单位、唯一票号或正确价税数据，暂不累计。", refs)
         return True
     invoiced = sum(amounts[2:])
-    detail = f"同合同 {len(invoices)} 张不同号码发票合计 {invoiced:,.2f} 元，合同 {amounts[0]:,.2f} 元，验收 {amounts[1]:,.2f} 元。"
+    detail = f"同合同 {len(invoices)} 张不同标识发票合计 {invoiced:,.2f} 元，合同 {amounts[0]:,.2f} 元，验收 {amounts[1]:,.2f} 元。"
     record("M02", "risk", detail + "请核对分票分摊、付款批次与合同变更。", refs)
     return True
 
 
-def check_travel(graph, linked, numbers, values, record):
+def check_travel(graph, linked, identities, values, record):
     kinds = graph["documents_by_kind"]
     claims, invoices = kinds.get("claim", []), kinds.get("invoice", [])
     docs = [doc["id"] for doc in audit_documents(graph)]
@@ -277,14 +280,14 @@ def check_travel(graph, linked, numbers, values, record):
             record(rule, "missing", "尚未建立单份报销申请与所附发票的资料集合。", ids(titles), docs)
         return
     claim = claims[0]
-    listed = linked[claim, "claim_ref"]
-    keys = {compact(fact["value"]) for fact in listed}
-    invoice_evidence = [fact for group in numbers.values() for fact in group]
-    matching = bool(keys) and keys == set(numbers) and len(numbers) == len(invoices)
-    number_refs = ids(listed, invoice_evidence)
-    record("T02", "ok" if matching else "missing",
-           "申请列示：" + ("、".join(sorted(keys)) or "缺少票号") + "。附件发票：" +
-           ("、".join(sorted(numbers)) or "缺少票号") + "。", number_refs, docs)
+    listed = linked[claim,"claim_ref"] + linked[claim,"claim_full_ref"]
+    pending = [f["id"] for f in graph["facts"] if f.get("unit",f["doc"])==claim and f["field"] in {"claim_ref","claim_full_ref"}
+               and f["status"] not in {"confirmed","anchored"}]
+    pending += [g["id"] for g in graph["gaps"] if g.get("field") in {"claim_ref","claim_full_ref"}]
+    matching,detail = match_claim(listed,identities.values())
+    matching = matching and len(identities)==len(invoices) and not pending
+    number_refs = ids(listed) + list(identities) + [ref for i in identities.values() for ref in i["code_refs"]] + pending
+    record("T02","ok" if matching else "missing",detail,number_refs,docs)
     amount_pairs = [(claim, "claim_total")] + [(doc, "total") for doc in invoices]
     fields = values("T03", amount_pairs + [(doc, field) for field in ("currency", "unit") for doc in docs])
     if fields:

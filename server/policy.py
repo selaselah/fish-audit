@@ -10,6 +10,14 @@ EVIDENCE = {"title": "《中国注册会计师审计准则第1301号——审计
             "url": "https://www.cicpa.org.cn/ztzl1/Professional_standards/xxzztx/zyzz/sjzz/202105/P020240412542695263912.pdf",
             "edition": "2022-12-22 修订", "scope": "注册会计师审计的方法参考，用于说明证据评估与追加程序思路。"}
 SOURCES = {
+    "vat-invoice-code": {"title":"国家税务总局《关于推行通过增值税电子发票系统开具的增值税电子普通发票有关问题的公告》",
+        "edition":"国家税务总局公告2015年第84号","url":"https://fgk.chinatax.gov.cn/zcfgk/c100012/c5194596/content.html",
+        "locator":"第四条","scope":"传统增值税电子普通发票的代码和号码编制口径，用于企业资料勾稽。",
+        "summary":"该票种的十二位代码与八位顺序号码分别编制。比对时同时核对票面记载的代码和号码。"},
+    "digital-invoice-number": {"title":"国家税务总局《关于推广应用全面数字化电子发票的公告》",
+        "edition":"国家税务总局公告2024年第11号","url":"https://fgk.chinatax.gov.cn/zcfgk/c100012/c5236067/content.html",
+        "locator":"第一、三、四条","scope":"数电发票的统一赋号和票面要素。票据真伪另行查验。",
+        "summary":"数电发票使用二十位号码。程序保留整串及前导零，依据原页进行全号比较。"},
     "electronic-vouchers": {"title":"财政部、国家档案局《关于规范电子会计凭证报销入账归档的通知》",
         "edition":"财会〔2020〕6号","url":"https://www.mof.gov.cn/zcsjtsgb/gfxwj/202003/t20200323_3583778.htm",
         "locator":"第三条第（三）项","scope":"仅使用外部电子会计凭证报销入账归档时的制度背景。同票比对是企业内部复核线索。",
@@ -35,7 +43,7 @@ MAPPING = {"B01":["purchase-records","evidence-quality"],"B02":["payment"],"B03"
            "B08":["installment-tracking","follow-up"],
            "B04":["payment","voucher"],"B05":["evidence-quality","follow-up"],
            "B06":["payment","follow-up"],"B07":["payment","follow-up"],"E01": ["voucher", "evidence-quality"], "P01": ["purchase-records"], "P02": ["purchase-records"],
-           "P03": ["purchase-records"], "I01": ["voucher", "follow-up"], "M01": ["voucher"],
+           "P03": ["purchase-records"], "I01": ["vat-invoice-code","digital-invoice-number","voucher", "follow-up"], "M01": ["voucher"],
            "C01": ["payment"], "M02": ["purchase-records", "payment"], "D01": ["purchase-records"],
            "A01": ["receipt"], "S01": ["receipt"], "X01": ["follow-up"],
            "T01": ["voucher"], "T02": ["evidence-quality"], "T03": ["voucher"],

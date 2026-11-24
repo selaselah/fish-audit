@@ -10,6 +10,7 @@ from calculations import CalculationEvidence, SUPPORTED
 from field_receipts import verify_field_sources
 from installments import LIMIT as INSTALLMENT_LIMIT, calculate as calculate_installments, finding as installment_finding
 from invoice_approval import FORMAT as INVOICE_APPROVAL_FORMAT, validate as validate_invoice_approval
+from invoice_identity import FORMAT as INVOICE_IDENTITY_FORMAT, identity_relations
 from invoice_proof import FORMAT as INVOICE_SOURCE_FORMAT, invoice_number_edges, source_record as invoice_source_record
 from payment_history import LIMIT, cited_facts, payment_record
 from peer_review import journal_decision, verify_referrals, verify_review
@@ -333,6 +334,12 @@ def verify(source, strict_rules=False, *, rule_checker=None):
             for name, expected in report["policy"]["code_sha256"].items():
                 require(hashes.get("methods/" + name) == expected, "执行程序版本不符：" + name)
         nodes = verify_workpaper_sources(bundle, hashes, report, "pages")
+        if "invoice_identity.py" in report["policy"].get("code_sha256",{}):
+            require(report["policy"].get("invoice_identity")==graph.get("invoice_identity")==INVOICE_IDENTITY_FORMAT,
+                    "发票标识的比对格式与程序版本不符")
+            derived,relations = identity_relations(graph)
+            require(derived==[n for n in graph["nodes"] if n["type"]=="invoice_identity"]
+                    and relations==[e for e in graph["edges"] if e["type"]=="identified_invoice"],"发票标识与原页字段关系不符")
         verify_field_sources(bundle,hashes,report,revision,journal=journal)
         full_invoices = "invoice_proof.py" in report["policy"].get("code_sha256",{})
         require(report["policy"].get("invoice_sources") == (INVOICE_SOURCE_FORMAT if full_invoices else None),

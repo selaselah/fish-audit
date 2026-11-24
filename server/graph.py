@@ -3,6 +3,7 @@ import re
 import unicodedata
 from collections import defaultdict
 
+from invoice_identity import FORMAT as IDENTITY_FORMAT, SHORT, identity_relations
 from invoice_proof import invoice_number_edges
 from model import FIELDS
 
@@ -25,6 +26,7 @@ LABELS = {
     "buyer": ("采购方", "购方", "购买方", "甲方", "买方", "需方", "采购单位", "验收单位"),
     "seller": ("供应方", "销方", "销售方", "乙方", "卖方", "供方", "供应商", "供货单位"),
     "contract_id": ("合同编号", "合同号"), "invoice_id": ("发票号码", "票据号码", "发票号"),
+    "invoice_code": ("发票代码",), "claim_full_ref": ("随附发票代码及号码","随附发票代码和号码","随附发票代码/号码"),
     "net": ("不含税金额", "不含税合计", "不含税价款", "金额合计"),
     "tax": ("税额", "税款"), "total": ("价税合计", "含税总额", "含税总价", "含税金额", "含税合计"),
     "currency": ("币种", "货币种类", "结算货币"),
@@ -41,7 +43,7 @@ LABELS = {
     "service_on": ("费用发生日期", "乘车日期", "消费日期", "住宿日期"),
     "claim_ref": ("随附发票号码", "附件票号", "报销所附票号"),
 }
-SCALAR = {"contract_id", "invoice_id", "net", "tax", "total", "buyer", "seller", "signed_on",
+SCALAR = {"contract_id", "invoice_id", "invoice_code", "claim_full_ref", "net", "tax", "total", "buyer", "seller", "signed_on",
           "accepted_on", "issued_on", "acceptance_result", "subject", "currency", "unit", "payment_term",
           "claim_total", "traveler", "trip_start", "trip_end", "service_on", "claim_ref","payer","payee","contract_account","payee_account",
           "transfer_amount","paid_on","transfer_ref","transfer_status"}
@@ -216,6 +218,10 @@ def build_graph(docs, pages, attestations, amendments=()):
     graph = {"nodes": list(nodes.values()), "edges": edges, "facts": evidence,
              "documents_by_kind": dict(by_kind), "gaps": gaps, "cautions": cautions, "documents": docs}
     partition_documents(graph, pages)
+    graph["invoice_identity"] = IDENTITY_FORMAT
+    identities,links = identity_relations(graph)
+    graph["nodes"].extend(identities)
+    graph["edges"].extend(links)
     return graph
 
 
@@ -238,6 +244,7 @@ def partition_documents(graph, pages):
     for doc in graph["documents"]:
         source = doc["id"]
         titles, invoice_numbers = {}, set()
+        short_pages = defaultdict(set)
         for number in page_numbers[source]:
             verified = [f for f in by_page[source, number] if f["status"] in ("anchored", "confirmed")]
             titles[number] = {f["field"] for f in verified if f["field"] in TITLE_FIELDS}
@@ -245,8 +252,11 @@ def partition_documents(graph, pages):
                 numbers = {compact(f["value"]) for f in verified if f["field"] == "invoice_id"}
                 if len(numbers) == 1:
                     invoice_numbers.update(numbers)
+                    for printed_number in numbers:
+                        if SHORT.fullmatch(printed_number):
+                            short_pages[printed_number].add(number)
         kinds = {kind for number, group in titles.items() for kind in group | hints[source, number]}
-        if len(kinds) <= 1 and len(invoice_numbers) <= 1:
+        if len(kinds) <= 1 and len(invoice_numbers) <= 1 and not any(len(p)>1 for p in short_pages.values()):
             units.append(doc)
             continue
         for group in assignments.values():

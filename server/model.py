@@ -16,7 +16,7 @@ from protocol import canonical, response_request
 
 FIELDS = {
     "invoice": "发票标题", "contract": "合同标题", "acceptance": "验收单标题",
-    "contract_id": "合同编号", "invoice_id": "发票号码", "buyer": "采购方",
+    "contract_id": "合同编号", "invoice_id": "发票号码", "invoice_code":"发票代码", "buyer": "采购方",
     "seller": "供应方", "total": "含税总额", "net": "不含税合计", "tax": "税额合计",
     "currency": "币种", "unit": "金额单位", "issued_on": "开票日期", "signed_on": "签约日期",
     "accepted_on": "验收日期", "acceptance_result": "验收结论",
@@ -24,7 +24,7 @@ FIELDS = {
     "subject": "采购标的", "other": "其他有待核实的记载",
     "claim": "报销单标题", "claim_total": "申请报销金额", "traveler": "出差人员",
     "trip_start": "出差开始日期", "trip_end": "出差结束日期", "service_on": "费用发生日期",
-    "claim_ref": "随附发票号码",
+    "claim_ref": "随附发票号码", "claim_full_ref":"随附发票代码及号码",
     "bank_receipt":"银行回单标题", "payer":"付款户名", "payee":"收款户名", "contract_account":"合同约定收款账号",
     "payee_account":"实际收款账号", "transfer_amount":"回单付款金额", "paid_on":"付款日期",
     "transfer_ref":"交易流水号", "transfer_status":"回单交易状态",
@@ -65,14 +65,14 @@ quality：主体信息可读则 readable；有裁切、涂抹、模糊或关键�
 facts 只收录明确的记载。quote 逐字抄录同一位置连续的字段标签及值。保留标点、币种、单位和格式，不拼接相隔的内容。
 value 必须是 quote 的连续子串。每页如有明确印刷的单据抬头，先单列一条标题事实，完整抄下抬头本身，包括没有“标题”标签的居中大字。发票、合同、验收单的标题分别用 invoice/contract/acceptance。
 银行付款回单/转账回单的明确抬头归 bank_receipt。银行回单上的付款户名/收款户名是 payer/payee；完整收款账号是 payee_account，付款金额是 transfer_amount，交易流水号、交易状态、付款日期分别是 transfer_ref/transfer_status/paid_on。采购合同上标明的约定收款账号用 contract_account。照抄账户的前导零与掩码，不推测隐藏位。不要把交易状态、流水号或金额解释成银行验真结果。
-contract_id 是资料明确记载的合同编号（包括在发票、验收单中的合同编号）；invoice_id 仅为发票号码。
+contract_id 是资料明确记载的合同编号（包括在发票、验收单中的合同编号）。发票票面明列的发票代码和发票号码要分别抄为 invoice_code、invoice_id，保留所有前导零。二十位票号应完整抄为一个 invoice_id。不要从票号、税号、校验码、章或二维码推算代码。
 buyer/seller 抄全称。total 是整张单据的含税总额，net/tax 是整票不含税合计与税额合计；禁止以单价、行金额、执行进度代替合计。
 金额 value 抄印刷的小写数字（含小数、千位符）；quote 保留量纲。currency 需看到确切币种（人民币、CNY等），不要从地域推断。
 unit 单独抄明示的金额单位（如“金额单位：元”），value 抄“元”“万元”等，不从币种推断单位。每个有标签的字段应抄录整行，尤其保留否定、附加条件和金额尾数。
 日期区分签订、开票、验收；acceptance_result 抄原文验收结果。标的、付款条件、红冲、变更条款只在原文有相关记载时收录。
 按页面实际印刷的单据标题确定类型。住宿服务发票、运输服务发票等标题用 invoice；只有报销申请人填写的报销单标题才用 claim。同属一次差旅不改变票据本身的类型。
 申请报销金额用 claim_total，出差人或旅客姓名用 traveler。差旅起止日期分为 trip_start、trip_end；
-发票或行程凭据上明确的消费日期、乘车日期、费用发生日期用 service_on（开票日期另用 issued_on）。报销单列出的随附发票号码逐项分别用 claim_ref，区分发票本身的 invoice_id。
+发票或行程凭据上明确的消费日期、乘车日期、费用发生日期用 service_on（开票日期另用 issued_on）。报销单列出的随附发票号码逐项分别用 claim_ref；同一行明列“随附发票代码及号码”的，只提取一个 claim_full_ref，value 照抄代码、分隔符和号码，quote 抄整行。不拼接分散的代码和号码。
 相同字段存在不同值或条件就分别抄录。region 是本段在图上的位置。不要解释，不生成评价、法规、身份证明、签章真伪、税率推断或缺失的文件。
 演练水印只是资料属性，照常审阅可见数据。"""
 AUDIT = """你是中国大陆采购与费用报销财会审计的辅助审计代理，负责对已构建的证据图谱执行补充风险排查。
