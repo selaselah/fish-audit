@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 from backup import MARKER
 from capacity import admit, install as install_capacity, settings
+from conclusions import verify_result
 from config import BANK, CaseError, PROFILE
 from field_receipts import field_actions, validate_field_actions
 from field_sources import FieldSources, PaymentSourceError, SourceFileError, check_cited_files, check_text_hashes, source_row
@@ -22,10 +23,11 @@ from invoice_identity import InvoiceIdentities
 from invoice_history import (INDEX_FIELDS, InvoiceHistoryChanged, check_legacy_masks, differences as invoice_differences,
                              indexed_invoices, install_index_guard, pending_signed_indexes)
 from invoice_proof import source_record as invoice_source_record
-from payment_history import (LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_facts, comparable_record,
-                             payment_matches_with_evidence, payment_record)
+from payment_checks import comparison_refs, verify_findings as verify_payment_findings
+from payment_history import LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_facts, comparable_record, payment_record
 import payment_index
 from peer_review import different_reviewers, review_record, valid_findings, verify_review
+from payment_reference import FORMAT as PAYMENT_REFERENCE_FORMAT
 from supplements import compare_return
 from work_progress import checkpoints, install as install_progress, set_activity
 from workbench import prepare_index, project
@@ -679,7 +681,8 @@ class Store:
         try:
             check_cited_files(db,case_id,self.files/case_id,graph,citations,field_actions=actions)
         except SourceFileError as error:
-            raise PaymentSourceError(case_id,revision,graph["facts"],error) from error
+            named = {item["fact"] for item in citations}
+            raise PaymentSourceError(case_id,revision,(f for f in graph["facts"] if f["id"] in named),error) from error
 
     @staticmethod
     def installment_matches(db, case_id, key, as_of):
@@ -701,7 +704,7 @@ class Store:
         with self.connect() as db:
             db.execute("BEGIN")
             authorize_case_write(db,case_id,actor)
-            row = db.execute("""SELECT r.content,r.hash FROM cases c JOIN reports r ON r.case_id=c.id AND r.rev=c.rev
+            row = db.execute("""SELECT r.content,r.hash,r.created FROM cases c JOIN reports r ON r.case_id=c.id AND r.rev=c.rev
                               WHERE c.id=? AND c.rev=? AND c.profile=? AND c.status=?""",
                              (case_id,revision,BANK,"in_review" if peer else "ready")).fetchone()
             if row is None:
@@ -718,25 +721,37 @@ class Store:
             fields = {f["id"] for f in graph["facts"]}
             current = FieldSources.from_graph(db,self.files/case_id,case_id,revision,row["hash"],graph,fields,pages,check_text=True)
             sources = [(current,None)]
-            history = graph.get("payment_history",{"matches":[]})
+            signature = payment_record(graph,paper["findings"])
+            try:
+                as_of,comparisons = verify_payment_findings(signature,graph.get("payment_history"),paper["findings"],paper["policy"],
+                                                           issued_at=row["created"])
+            except (TypeError,ValueError,KeyError) as error:
+                raise CaseError(f"本版付款发现与出具时的逐笔核对不符。{error}",409) from error
             groups = {}
-            for match in payment_matches_with_evidence(history):
-                groups.setdefault((match["case_id"],match["rev"]),[]).append(match)
+            for kind,match in comparisons:
+                groups.setdefault((match["case_id"],match["rev"]),[]).append((kind,match))
             for (prior,rev),matches in groups.items():
                 raw,decision = self.signed_source(db,case_id,prior,rev)
                 report_hash,signoff_hash = source_hashes(raw,decision)
-                archived = json.loads(raw)["graph"]
+                previous = json.loads(raw)
+                archived = previous["graph"]
+                marked = None
+                if paper["policy"].get("payment_references")==PAYMENT_REFERENCE_FORMAT:
+                    marked = payment_index.checked_references(db,prior,previous)
+                    record = comparable_record(archived,previous["findings"],marked)
+                else:
+                    record = payment_record(archived,previous["findings"])
                 refs = set()
-                for match in matches:
+                for kind,match in matches:
                     if (match["report_hash"],match["signoff_hash"])!=(report_hash,signoff_hash):
                         raise CaseError("付款所引历史底稿或签收决定与出具时的摘要不符。",409)
-                    named = [item["fact"] for item in match["evidence"]]
                     try:
+                        named = comparison_refs(signature,record,kind,match,decision,as_of,marked=marked)
                         citations = cited_facts(archived,prior,rev,named)
-                    except KeyError as error:
-                        raise CaseError("历史付款底稿缺少本版所引的原页字段。",409) from error
+                    except (KeyError,TypeError,ValueError) as error:
+                        raise CaseError(f"历史付款底稿与本版所引的付款依据不符。{error}",409) from error
                     if match["evidence"]!=citations:
-                        raise CaseError("付款所引历史字段与签收原文不符。",409)
+                        raise CaseError("历史付款引文清单与签收原版应引用的完整字段不符。",409)
                     refs.update(named)
                 source = FieldSources.from_graph(db,self.files/prior,prior,rev,report_hash,archived,refs,check_text=True)
                 sources.append((source,signoff_hash))
@@ -767,6 +782,11 @@ class Store:
         if not row or hashlib.sha256(row["content"].encode()).hexdigest()!=row["hash"]:
             raise CaseError("待签收底稿与留存的版本摘要不符。",409)
         paper = json.loads(row["content"])
+        if "conclusions.py" in paper["policy"].get("code_sha256",{}):
+            try:
+                verify_result(paper)
+            except (KeyError,TypeError,ValueError) as error:
+                raise CaseError("本版审计建议与逐项发现不一致，请核对所据底稿。",409) from error
         graph = paper["graph"]
         if graph.get("profile",paper["policy"].get("profile")) != BANK:
             check_legacy_masks(graph,case_id,revision,peer)

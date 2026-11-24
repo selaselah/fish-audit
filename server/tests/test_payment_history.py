@@ -67,6 +67,10 @@ class PaymentHistoryTests(unittest.TestCase):
             policy.pop("payment_references")
             policy["code_sha256"] = {k:v for k,v in CODE_DIGESTS.items() if k!="payment_reference.py"}
             methods = {k:v for k,v in METHODS.items() if k!="payment_reference.py"}
+        if not history or legacy:
+            policy.pop("payment_checks")
+            policy["code_sha256"] = {k:v for k,v in policy["code_sha256"].items() if k!="payment_checks.py"}
+            methods = {k:v for k,v in methods.items() if k!="payment_checks.py"}
         report = {"case_id": case_id, "graph": graph, "findings": findings, "result": conclusion(findings), "policy": policy, "calls": calls}
         self.store.save_report(case_id, report, sha(encode(report).encode()), methods)
         return report
@@ -609,3 +613,97 @@ class PaymentHistoryTests(unittest.TestCase):
         self.assertEqual(self.store.detail("approval")["decisions"],[])
         path.write_bytes(original)
         self.sign("approval")
+
+    def replace_draft(self, draft):
+        raw=encode(draft)
+        with self.store.connect(True) as db:
+            db.execute("UPDATE reports SET content=?,hash=? WHERE case_id=? AND rev=1",
+                       (raw,sha(raw.encode()),draft["case_id"]))
+
+    def test_initial_and_offline_checks_reconstruct_the_full_signed_citation_list(self):
+        self.workpaper("signed")
+        self.sign("signed")
+        original=self.workpaper("later",transfer_ref="YL-SECOND")
+        bundle=io.BytesIO()
+        export_bundle(self.store,"later",1,bundle)
+        with zipfile.ZipFile(bundle) as archive:
+            hashes={e["path"]:e["sha256"] for e in json.loads(archive.read("manifest.json"))["files"]}
+            journal=json.loads(archive.read("journal.json"))
+            for change in ("omit citation","status","wording","duplicate","early cutoff","future cutoff"):
+                draft=deepcopy(original)
+                finding=next(f for f in draft["findings"] if f["rule"]=="B07")
+                if change=="omit citation":
+                    match=draft["graph"]["payment_history"]["matches"][0]
+                    omitted=match["evidence"].pop()
+                    finding["evidence"].remove(omitted["id"])
+                elif change=="status":
+                    finding["status"]="ok"
+                elif change=="wording":
+                    finding["detail"]="演练：没有查到另一笔付款。"
+                elif change=="duplicate":
+                    draft["findings"].append(deepcopy(finding))
+                else:
+                    history=draft["graph"]["payment_history"]
+                    old=history["as_of"]
+                    history["as_of"]="2000-01-01T00:00:00+00:00" if change=="early cutoff" else "2099-01-01T00:00:00+00:00"
+                    for item in draft["findings"]:
+                        item["detail"]=item["detail"].replace(old,history["as_of"])
+                self.replace_draft(draft)
+                with self.subTest(change=change):
+                    with self.assertRaises(CaseError) as rejected:
+                        self.sign("later")
+                    self.assertEqual(rejected.exception.status,409)
+                    with self.assertRaises(ValueError):
+                        verify_payment_history(archive,hashes,draft,journal,issued_at=journal["revisions"][0]["created"])
+                    self.assertEqual(self.store.detail("later")["decisions"],[])
+        self.replace_draft(original)
+        self.sign("later")
+
+    def test_peer_compares_even_an_internally_consistent_total_to_the_signed_payment(self):
+        from installments import calculate, finding as installment_finding
+        from payment_history import payment_record
+        self.installment("first")
+        self.sign("first")
+        draft=self.installment("second","4350.00","YL-SECOND")
+        history=draft["graph"]["payment_history"]
+        window=history["installments"]
+        basis=payment_record(draft["graph"],draft["findings"])["installment"]
+        window["matches"][0]["entry"]["amount"]="4000.00"
+        window["calculation"]=calculate(basis,window)
+        self.assertEqual(window["calculation"]["paid_total"],"8350.00")
+        rule=next(f for f in draft["findings"] if f["rule"]=="B08")
+        status,detail,refs=installment_finding(basis,window,history["as_of"])
+        rule.update(status=status,detail=detail,evidence=list(dict.fromkeys(refs)))
+        draft["result"]=conclusion(draft["findings"])
+        self.replace_draft(draft)
+        self.sign("second","escalate")
+        pin=self.store.detail("second")["referrals"][0]
+        args=("second",1,pin["report_hash"],pin["signoff_hash"],"独立复核","逐笔复算两期回单")
+        with self.assertRaisesRegex(CaseError,"金额与已签收底稿不符"):
+            self.store.resolve_referral(*args,"approve",[rule["id"]])
+        self.assertEqual(self.store.detail("second")["status"],"in_review")
+        self.assertEqual(self.store.resolve_referral(*args,"return",[rule["id"]]),2)
+
+    def test_approval_and_standalone_bundle_compare_the_review_summary_and_check_scope(self):
+        self.workpaper("signed")
+        self.sign("signed")
+        original=self.workpaper("later",transfer_ref="YL-DIFFERENT")
+        for field in ("verdict","human_required","counts","history"):
+            draft=deepcopy(original)
+            if field=="history":
+                del draft["graph"]["payment_history"]
+            elif field=="counts":
+                draft["result"]["counts"]["risk"]=0
+            else:
+                draft["result"][field]="pass" if field=="verdict" else False
+            self.replace_draft(draft)
+            with self.subTest(field=field):
+                with self.assertRaises(CaseError) as blocked:
+                    self.sign("later")
+                self.assertEqual(blocked.exception.status,409)
+                package=io.BytesIO()
+                export_bundle(self.store,"later",1,package)
+                with self.assertRaisesRegex(ValueError,"人工核验要求|缺少出具时的跨案"):
+                    verify(package)
+        self.replace_draft(original)
+        self.sign("later")

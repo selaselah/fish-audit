@@ -4,6 +4,7 @@ from datetime import date
 from calculations import CalculationEvidence, in_yuan, money
 
 from config import BANK, PROFILE, RULE_VERSION, TRAVEL
+from conclusions import STATUS, conclusion
 from graph import KINDS, audit_documents, compact
 from invoice_approval import FORMAT as INVOICE_APPROVAL_FORMAT
 from invoice_comparison import FORMAT as INVOICE_LOOKUP, check_history as check_invoice_history
@@ -12,6 +13,7 @@ from invoice_masks import FORMAT as MASK_FORMAT, withheld_invoices
 from invoice_proof import FORMAT as INVOICE_SOURCE_FORMAT
 from model import FIELDS, SIGNALS, expert_candidates
 from payment_history import HISTORY_RULES, attach_history, check_history, payment_record
+from payment_checks import FORMAT as PAYMENT_CHECKS
 from payment_reference import FORMAT as PAYMENT_REFERENCE_FORMAT
 from policy import ACCOUNTING, MAPPING, SOURCES
 from transfers import RULES as TRANSFER_RULES, check_transfers
@@ -39,11 +41,10 @@ CATALOG = {
     "T04": ("差旅期间核对", "逐张检查费用实际发生日期是否落入申报行程的起止期间。"),
     "T05": ("出差人员关联", "对照报销单与具名票据中的出差人，缺姓名、别名和不一致均交人工。"),
 }
-STATUS = {"ok": "相符", "issue": "发现问题", "risk": "风险待核", "missing": "证据不足"}
 VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING,
            "sources": SOURCES, "rule_sources": MAPPING, "invoice_sources": INVOICE_SOURCE_FORMAT,
            "invoice_approval": INVOICE_APPROVAL_FORMAT,"invoice_identity":INVOICE_IDENTITY_FORMAT,"invoice_lookup":INVOICE_LOOKUP,
-           "invoice_number_masks":MASK_FORMAT,"payment_references":PAYMENT_REFERENCE_FORMAT}
+           "invoice_number_masks":MASK_FORMAT,"payment_references":PAYMENT_REFERENCE_FORMAT,"payment_checks":PAYMENT_CHECKS}
 FULL_TERMS = {"验收后一次性全额结算", "验收后一次性付清", "一次性全额结算", "一次性付清",
               "验收合格后一次性支付全款", "一次性全额付款", "一次结清", "一次性结清", "一次付清"}
 FULL_ACCEPTANCE = {"合格", "验收合格", "通过", "验收通过", "全部合格"}
@@ -357,10 +358,3 @@ def additional(graph, proposals):
                          f"{invalid} 条建议引用与本案证据不匹配，已隔离。请核阅模型调用记录。",
                          "evidence": [], "scope": [doc["id"] for doc in graph["documents"]]})
     return findings
-
-
-def conclusion(findings):
-    status = {finding["status"] for finding in findings}
-    verdict = "reject" if "issue" in status else ("review" if status - {"ok"} or not status else "pass")
-    return {"verdict": verdict, "human_required": verdict != "pass", "signoff_required": True,
-            "counts": {key: sum(finding["status"] == key for finding in findings) for key in STATUS}}

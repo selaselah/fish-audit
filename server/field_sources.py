@@ -137,7 +137,9 @@ class FieldSources:
                 raise CaseError("更正记录与所选原页不匹配。",400)
         else:
             addresses = {address}
-        return cls.from_graph(db,folder,case_id,revision,row["hash"],report["graph"],selected or (),addresses)
+        sources = cls.from_graph(db,folder,case_id,revision,row["hash"],report["graph"],selected or (),addresses)
+        sources.facts = facts
+        return sources
 
     @classmethod
     def from_graph(cls, db, folder, case_id, revision, checksum, graph, selected, addresses=(), *, check_text=False):
@@ -161,7 +163,8 @@ class FieldSources:
             fact = facts[key]
             if pages[fact["doc"],fact["page"]][1:] != (fact["source_sha256"],fact["page_sha256"]):
                 raise CaseError("字段的来源摘要与所选原页不符。",409)
-        result = cls(case_id,revision,checksum,facts,pages,files,{})
+        selected_ids = set(selected)
+        result = cls(case_id,revision,checksum,{k:v for k,v in facts.items() if k in selected_ids},pages,files,{})
         check_registry(db,case_id,pages)
         if check_text:
             result.text_hashes = {(doc,page):value for doc,page in addresses
