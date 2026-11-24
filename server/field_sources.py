@@ -4,7 +4,7 @@ import hashlib
 import json
 import os
 import stat
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from config import CaseError
@@ -28,19 +28,39 @@ def fingerprint(info):
     return (info.st_dev,info.st_ino,info.st_size,info.st_mtime_ns,info.st_ctime_ns)
 
 
+class SourceFileError(CaseError):
+    def __init__(self, path, message):
+        self.path = path
+        super().__init__(message,409)
+
+
+class PaymentSourceError(CaseError):
+    def __init__(self, case_id, revision, facts, error):
+        doc = error.path.parent.name
+        original = error.path.name.startswith("original.")
+        page = None if original else int(error.path.stem)
+        candidates = [f for f in facts if f["doc"]==doc and (page is None or f["page"]==page)]
+        fact = next((f for f in candidates if f["field"]=="transfer_ref"),next(iter(candidates),None))
+        name = fact.get("name",doc) if fact else doc
+        self.source = {"case_id":case_id,"rev":revision,"doc":doc,"page":page,"name":name,
+                       "fact":fact["id"] if fact else None,"file":"original" if original else "page"}
+        location = "原件" if original else f"第 {page} 页"
+        super().__init__(f"R{revision}《{name}》{location}核验失败。{error}",409)
+
+
 def check_file(path, expected):
     try:
         flags = os.O_RDONLY | getattr(os,"O_NOFOLLOW",0) | getattr(os,"O_NONBLOCK",0)
         with os.fdopen(os.open(path,flags),"rb") as file:
             before = os.fstat(file.fileno())
             if not stat.S_ISREG(before.st_mode):
-                raise CaseError("待核原件或页图不是普通文件。",409)
+                raise SourceFileError(path,"待核原件或页图不是普通文件。")
             checksum = hashlib.file_digest(file,"sha256").hexdigest()
             if checksum != expected or fingerprint(before) != fingerprint(os.fstat(file.fileno())):
-                raise CaseError("原件或页图与所选底稿的来源摘要不符，请核对原始资料或备份。",409)
+                raise SourceFileError(path,"原件或页图与所选底稿的来源摘要不符，请核对原始资料或备份。")
             return fingerprint(before)
     except OSError as error:
-        raise CaseError("待核原件或页图缺失或无法读取，请核对原始资料或备份。",409) from error
+        raise SourceFileError(path,"待核原件或页图缺失或无法读取，请核对原始资料或备份。") from error
 
 
 def check_registry(db, case_id, pages):
@@ -51,11 +71,21 @@ def check_registry(db, case_id, pages):
         raise CaseError("登记的原件或页图与所选底稿版本不一致。",409)
 
 
+def check_text_hashes(db, case_id, hashes):
+    for (doc,page),expected in hashes.items():
+        row = db.execute("SELECT text FROM pages WHERE case_id=? AND doc=? AND number=?", (case_id,doc,page)).fetchone()
+        if row is None or hashlib.sha256(row[0].encode()).hexdigest()!=expected:
+            raise CaseError(f"所引文件 {doc} 第 {page} 页的文字层与归档摘要不符。",409)
+
+
 def check_archived_files(db, case_id, folder, observations):
     pages,files = {},{}
     for receipt,ext in observations:
         doc,page = receipt["doc"],receipt["page"]
-        pages[doc,page] = (ext,receipt["original_sha256"],receipt["page_sha256"])
+        source = (ext,receipt["original_sha256"],receipt["page_sha256"])
+        if (doc,page) in pages and pages[doc,page]!=source:
+            raise CaseError("同一原页的字段存证与所引底稿摘要冲突。",409)
+        pages[doc,page] = source
         files[folder/doc/("original"+ext)] = receipt["original_sha256"]
         files[folder/doc/(str(page)+".jpg")] = receipt["page_sha256"]
     if pages:
@@ -64,10 +94,10 @@ def check_archived_files(db, case_id, folder, observations):
             check_file(path,expected)
 
 
-def check_cited_files(db, case_id, folder, graph, citations):
+def check_cited_files(db, case_id, folder, graph, citations, *, field_actions=()):
     docs = {d["id"]:d for d in graph["documents"]}
     nodes = {n["id"]:n for n in graph["nodes"]}
-    observations = []
+    observations = list(field_actions)
     for item in citations:
         doc,page = item["doc"],item["page"]
         if (docs[doc]["sha256"] != item["source_sha256"] or nodes[doc]["sha256"] != item["source_sha256"]
@@ -88,6 +118,7 @@ class FieldSources:
     files: dict
     signatures: dict
     checked_at: str = ""
+    text_hashes: dict = field(default_factory=dict)
 
     @classmethod
     def prepare(cls, db, folder, case_id, revision, selected, address):
@@ -106,8 +137,16 @@ class FieldSources:
                 raise CaseError("更正记录与所选原页不匹配。",400)
         else:
             addresses = {address}
-        docs = {d["id"]:d for d in report["graph"]["documents"]}
-        nodes = {node["id"]:node for node in report["graph"]["nodes"]}
+        return cls.from_graph(db,folder,case_id,revision,row["hash"],report["graph"],selected or (),addresses)
+
+    @classmethod
+    def from_graph(cls, db, folder, case_id, revision, checksum, graph, selected, addresses=(), *, check_text=False):
+        facts = {f["id"]:f for f in graph["facts"]}
+        if set(selected)-facts.keys():
+            raise CaseError("留存底稿中缺少所引用的原页字段。",409)
+        addresses = set(addresses) | {(facts[ref]["doc"],facts[ref]["page"]) for ref in selected}
+        docs = {d["id"]:d for d in graph["documents"]}
+        nodes = {node["id"]:node for node in graph["nodes"]}
         files,pages = {},{}
         for doc, page in sorted(addresses):
             meta, parent, node = docs.get(doc),nodes.get(doc),nodes.get(f"{doc}/p{page}")
@@ -122,8 +161,12 @@ class FieldSources:
             fact = facts[key]
             if pages[fact["doc"],fact["page"]][1:] != (fact["source_sha256"],fact["page_sha256"]):
                 raise CaseError("字段的来源摘要与所选原页不符。",409)
-        result = cls(case_id,revision,row["hash"],facts,pages,files,{})
+        result = cls(case_id,revision,checksum,facts,pages,files,{})
         check_registry(db,case_id,pages)
+        if check_text:
+            result.text_hashes = {(doc,page):value for doc,page in addresses
+                                  if (value:=nodes[f"{doc}/p{page}"].get("text_sha256"))}
+            check_text_hashes(db,case_id,result.text_hashes)
         return result
 
     def read_files(self):
@@ -135,11 +178,13 @@ class FieldSources:
         if not row or row["hash"] != self.report_hash or hashlib.sha256(row["content"].encode()).hexdigest() != self.report_hash:
             raise CaseError("核图期间底稿版本的内容发生变化。",409)
         check_registry(db,self.case_id,self.pages)
-        try:
-            if any(fingerprint(path.stat(follow_symlinks=False)) != saved for path,saved in self.signatures.items()):
-                raise CaseError("提交核图意见时原件或页图已变更，请重新核对。",409)
-        except OSError as error:
-            raise CaseError("提交核图意见时原件或页图已不可用。",409) from error
+        check_text_hashes(db,self.case_id,self.text_hashes)
+        for path,saved in self.signatures.items():
+            try:
+                if fingerprint(path.stat(follow_symlinks=False)) != saved:
+                    raise SourceFileError(path,"提交核验意见时原件或页图已变更，请重新核对。")
+            except OSError as error:
+                raise SourceFileError(path,"提交核验意见时原件或页图已不可用。") from error
 
     def receipt(self, doc, page, operation):
         _,original,image = self.pages[doc,page]

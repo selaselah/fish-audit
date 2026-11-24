@@ -13,7 +13,7 @@ from backup import MARKER
 from capacity import admit, install as install_capacity, settings
 from config import BANK, CaseError, PROFILE
 from field_receipts import field_actions, validate_field_actions
-from field_sources import FieldSources, check_archived_files, check_cited_files, source_row
+from field_sources import FieldSources, PaymentSourceError, SourceFileError, check_cited_files, check_text_hashes, source_row
 from graph import compact, invoice_number_edges
 from installments import LIMIT as INSTALLMENT_LIMIT, calculate as calculate_installments
 from invoice_approval import receipt as invoice_approval_receipt, validate as validate_invoice_approval
@@ -22,7 +22,8 @@ from invoice_identity import InvoiceIdentities
 from invoice_history import (INDEX_FIELDS, InvoiceHistoryChanged, check_legacy_masks, differences as invoice_differences,
                              indexed_invoices, install_index_guard, pending_signed_indexes)
 from invoice_proof import source_record as invoice_source_record
-from payment_history import LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_facts, comparable_record, payment_record
+from payment_history import (LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_facts, comparable_record,
+                             payment_matches_with_evidence, payment_record)
 import payment_index
 from peer_review import different_reviewers, review_record, valid_findings, verify_review
 from supplements import compare_return
@@ -647,8 +648,8 @@ class Store:
                 match["signoff_hash"] = hashlib.sha256(canonical(signoff)).hexdigest()
                 refs = record["same_refs" if match["kind"] == "same" else "full_refs"]
                 verified = self.check_graph_field_history(prior,rev,report["graph"],set(refs))
-                check_archived_files(db,prior,self.files/prior,verified)
                 match["evidence"] = cited_facts(report["graph"], prior, rev, refs)
+                self.check_payment_files(db,prior,rev,report["graph"],match["evidence"],verified)
             current = signature["installment"]
             if current["requested"]:
                 window = self.installment_matches(db,case_id,current["key"],history["as_of"])
@@ -660,16 +661,25 @@ class Store:
                     source = comparable_record(paper["graph"],paper["findings"],marked)["installment"]
                     if source["key"] != current["key"]:
                         raise CaseError("累计付款索引与历史合同及收付主体的原文不一致。",409)
-                    self.check_graph_field_history(prior,rev,paper["graph"],set(source["refs"]))
+                    verified = self.check_graph_field_history(prior,rev,paper["graph"],set(source["refs"]))
                     match["entry"] = source["entry"]
                     if marked:
                         match["incomplete_references"] = marked
                     match["signoff_hash"] = hashlib.sha256(canonical(signoff)).hexdigest()
                     match["evidence"] = cited_facts(paper["graph"],prior,rev,source["refs"])
-                    check_cited_files(db,prior,self.files/prior,paper["graph"],match["evidence"])
+                    self.check_payment_files(db,prior,rev,paper["graph"],match["evidence"],verified)
                 window["calculation"] = calculate_installments(current,window)
                 history["installments"] = window
             return history
+
+    def check_payment_files(self, db, case_id, revision, graph, citations, actions):
+        pages = {(item["doc"],item["page"]) for item in citations}
+        nodes = {node["id"]:node for node in graph["nodes"] if node["type"]=="page"}
+        check_text_hashes(db,case_id,{(doc,page):value for doc,page in pages if (value:=nodes[f"{doc}/p{page}"].get("text_sha256"))})
+        try:
+            check_cited_files(db,case_id,self.files/case_id,graph,citations,field_actions=actions)
+        except SourceFileError as error:
+            raise PaymentSourceError(case_id,revision,graph["facts"],error) from error
 
     @staticmethod
     def installment_matches(db, case_id, key, as_of):
@@ -686,7 +696,73 @@ class Store:
             del row["total"]
         return {"count":count,"matches":rows}
 
-    def recheck_approval(self, db, case_id, revision, signoff, *, peer=False):
+    def payment_approval_sources(self, case_id, revision, actor, *, peer=False):
+        # Read each distinct source file before opening the signature's write transaction.
+        with self.connect() as db:
+            db.execute("BEGIN")
+            authorize_case_write(db,case_id,actor)
+            row = db.execute("""SELECT r.content,r.hash FROM cases c JOIN reports r ON r.case_id=c.id AND r.rev=c.rev
+                              WHERE c.id=? AND c.rev=? AND c.profile=? AND c.status=?""",
+                             (case_id,revision,BANK,"in_review" if peer else "ready")).fetchone()
+            if row is None:
+                return None
+            if hashlib.sha256(row["content"].encode()).hexdigest()!=row["hash"]:
+                raise CaseError("待签收底稿与留存的版本摘要不符。",409)
+            paper = json.loads(row["content"])
+            graph = paper["graph"]
+            pages = {(p["doc"],p["page"]) for p in paper["calls"]["pages"]}
+            registered = {(r["doc"],r["number"]) for r in db.execute("SELECT doc,number FROM pages WHERE case_id=?",(case_id,))}
+            documents = {r[0] for r in db.execute("SELECT id FROM docs WHERE case_id=?",(case_id,))}
+            if pages!=registered or {doc for doc,_ in pages}!=documents or {d["id"] for d in graph["documents"]}!=documents:
+                raise CaseError("本次付款底稿的原件及页图清单与入库记录不一致。",409)
+            fields = {f["id"] for f in graph["facts"]}
+            current = FieldSources.from_graph(db,self.files/case_id,case_id,revision,row["hash"],graph,fields,pages,check_text=True)
+            sources = [(current,None)]
+            history = graph.get("payment_history",{"matches":[]})
+            groups = {}
+            for match in payment_matches_with_evidence(history):
+                groups.setdefault((match["case_id"],match["rev"]),[]).append(match)
+            for (prior,rev),matches in groups.items():
+                raw,decision = self.signed_source(db,case_id,prior,rev)
+                report_hash,signoff_hash = source_hashes(raw,decision)
+                archived = json.loads(raw)["graph"]
+                refs = set()
+                for match in matches:
+                    if (match["report_hash"],match["signoff_hash"])!=(report_hash,signoff_hash):
+                        raise CaseError("付款所引历史底稿或签收决定与出具时的摘要不符。",409)
+                    named = [item["fact"] for item in match["evidence"]]
+                    try:
+                        citations = cited_facts(archived,prior,rev,named)
+                    except KeyError as error:
+                        raise CaseError("历史付款底稿缺少本版所引的原页字段。",409) from error
+                    if match["evidence"]!=citations:
+                        raise CaseError("付款所引历史字段与签收原文不符。",409)
+                    refs.update(named)
+                source = FieldSources.from_graph(db,self.files/prior,prior,rev,report_hash,archived,refs,check_text=True)
+                sources.append((source,signoff_hash))
+        for source,_ in sources:
+            try:
+                source.read_files()
+            except SourceFileError as error:
+                raise PaymentSourceError(source.case_id,source.revision,source.facts.values(),error) from error
+        return sources
+
+    def guard_payment_approval(self, db, case_id, revision, sources):
+        if not sources:
+            raise CaseError("付款底稿状态已更新，请重新打开并核对原件。",409)
+        for source,signoff_hash in sources:
+            try:
+                source.guard(db)
+            except SourceFileError as error:
+                raise PaymentSourceError(source.case_id,source.revision,source.facts.values(),error) from error
+            if signoff_hash:
+                _,decision = self.signed_source(db,case_id,source.case_id,source.revision)
+                if hashlib.sha256(canonical(decision)).hexdigest()!=signoff_hash:
+                    raise CaseError("核对付款原件期间历史签收决定发生变化。",409)
+        count = sum(len(source.files) for source,_ in sources)
+        event(db,case_id,"payment_sources",f"通过前核对 R{revision} 与 {len(sources)-1} 份历史签收底稿，共 {count} 个原件及页图文件。")
+
+    def recheck_approval(self, db, case_id, revision, signoff, *, peer=False, payment_sources=None):
         row = db.execute("SELECT content,hash FROM reports WHERE case_id=? AND rev=?",(case_id,revision)).fetchone()
         if not row or hashlib.sha256(row["content"].encode()).hexdigest()!=row["hash"]:
             raise CaseError("待签收底稿与留存的版本摘要不符。",409)
@@ -709,6 +785,11 @@ class Store:
             if changes:
                 raise InvoiceHistoryChanged(changes,peer)
             return invoice_approval_receipt(graph,current,revision,row["hash"],signoff)
+        self.recheck_payment_history(db,case_id,revision,paper,peer)
+        self.guard_payment_approval(db,case_id,revision,payment_sources)
+
+    def recheck_payment_history(self, db, case_id, revision, paper, peer):
+        graph = paper["graph"]
         signature,marked = self.reconcile_payment(db,case_id,revision,paper)
         if marked and "transfer_references" not in graph and (signature["reference"] or
                 any(f["rule"]=="B05" and f["status"]=="ok" for f in paper["findings"])):
@@ -742,9 +823,9 @@ class Store:
                 raise CaseError("底稿生成后出现了新的已签收付款线索。请退回补件，沿用原件提交重审并核对最新付款记录。", 409)
             raise CaseError("底稿生成后出现了新的已签收付款线索。请在执行记录中选择「保留此版并重新审计」，核对最新凭证后再通过。", 409)
 
-    def prepare_signoff(self, db, signoff, source_rev, *, peer=False):
+    def prepare_signoff(self, db, signoff, source_rev, *, peer=False, payment_sources=None):
         if signoff["decision"]=="approve":
-            receipt = self.recheck_approval(db,signoff["case_id"],source_rev,signoff,peer=peer)
+            receipt = self.recheck_approval(db,signoff["case_id"],source_rev,signoff,peer=peer,payment_sources=payment_sources)
             if receipt is not None:
                 raw = encode(receipt)
                 return {**signoff,"invoice_check_hash":hashlib.sha256(raw.encode()).hexdigest()},raw
@@ -936,6 +1017,7 @@ class Store:
 
     def review(self, case_id, revision, reviewer, note, decision, fact_ids=None, actor=None):
         sources = self.check_field_sources(case_id,revision,fact_ids,None,actor) if fact_ids is not None and decision=="confirm" else None
+        payment_sources = self.payment_approval_sources(case_id,revision,actor) if fact_ids is None and decision=="approve" else None
         with self.connect(True) as db:
             workspace = authorize_case_write(db, case_id, actor)
             if fact_ids is not None:
@@ -968,7 +1050,7 @@ class Store:
             else:
                 signoff = {"case_id":case_id,"workspace":workspace,"title":case["title"],"rev":revision,"decision":decision,
                            "reviewer":reviewer,"note":note,"time":now,"actor":actor}
-                signoff,raw = self.prepare_signoff(db,signoff,revision)
+                signoff,raw = self.prepare_signoff(db,signoff,revision,payment_sources=payment_sources)
                 self.save_signoff(db,signoff,raw)
                 db.execute("UPDATE cases SET status='closed',message='人工验收已归档',updated=? WHERE id=?", (now, case_id))
                 if decision == "escalate":
@@ -987,6 +1069,7 @@ class Store:
                       WHERE id=? AND rev=? AND status='closed'""", key)
 
     def resolve_referral(self, case_id, revision, report_hash, signoff_hash, reviewer, note, decision, findings, actor=None):
+        payment_sources = self.payment_approval_sources(case_id,revision,actor,peer=True) if decision=="approve" else None
         with self.connect(True) as db:
             authorize_case_write(db, case_id, actor)
             referral = db.execute("""SELECT f.*,c.rev AS latest,c.status FROM case_referrals f JOIN cases c ON c.id=f.case_id
@@ -1017,7 +1100,7 @@ class Store:
                 raise CaseError(f"复核已由 {actual['reviewer']} 完成，请查看 R{next_rev}。", 409)
             if referral["latest"] != revision or referral["status"] != "in_review":
                 raise CaseError("此版本已不在待复核队列。", 409)
-            second,checked = self.prepare_signoff(db,second,revision,peer=True)
+            second,checked = self.prepare_signoff(db,second,revision,peer=True,payment_sources=payment_sources)
             try:
                 report["peer_review"] = review_record(source, first, second, findings)
             except (ValueError, KeyError, TypeError) as exc:

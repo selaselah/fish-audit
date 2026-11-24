@@ -520,3 +520,92 @@ class PaymentHistoryTests(unittest.TestCase):
             db.execute("UPDATE pages SET text=text||' ' WHERE case_id='first' AND doc='d02'")
         with self.assertRaisesRegex(CaseError,"流水的原文"):
             self.installment("bad-text",reference="YL-NEXT")
+
+    def test_native_same_reference_and_full_settlement_require_the_cited_original_and_page(self):
+        self.workpaper("paid")
+        self.sign("paid")
+        for case,reference,doc,name in (("copy","YL-081-A","d02","original.jpg"),("another","YL-OTHER","d01","1.jpg")):
+            with self.subTest(case=case):
+                path = self.store.files/"paid"/doc/name
+                original = path.read_bytes()
+                path.write_bytes(b"replaced synthetic file")
+                with self.assertRaisesRegex(CaseError,"来源摘要不符"):
+                    self.workpaper(case,transfer_ref=reference)
+                self.assertEqual(self.store.detail(case)["rev"],0)
+                path.write_bytes(original)
+                self.assert_controls(self.workpaper(case,fresh=False,transfer_ref=reference),
+                                     "risk" if case=="copy" else "ok","ok" if case=="copy" else "risk")
+
+    def test_initial_and_peer_approval_verify_pinned_files_and_signoff_again(self):
+        from field_sources import PaymentSourceError
+        self.workpaper("prior")
+        self.sign("prior")
+        self.workpaper("next",transfer_ref="YL-NEXT")
+        peer = self.workpaper("peer",transfer_ref="YL-PEER")
+        self.sign("peer","escalate")
+        pin = self.store.detail("peer")["referrals"][0]
+        fid = next(f["id"] for f in peer["findings"] if f["rule"]=="B07")
+        path = self.store.files/"prior"/"d02"/"1.jpg"
+        original = path.read_bytes()
+        path.unlink()
+        with self.assertRaisesRegex(PaymentSourceError,"无法读取") as missing:
+            self.sign("next")
+        cited = missing.exception.source
+        self.assertEqual((cited["case_id"],cited["rev"],cited["doc"],cited["page"],cited["file"]),("prior",1,"d02",1,"page"))
+        self.assertTrue(cited["fact"].startswith("d02/p1/"))
+        with self.assertRaisesRegex(CaseError,"无法读取"):
+            self.store.resolve_referral("peer",1,pin["report_hash"],pin["signoff_hash"],"复核人乙","比对前案付款","approve",[fid])
+        self.assertEqual(self.store.detail("next")["status"],"ready")
+        self.assertEqual(self.store.detail("peer")["status"],"in_review")
+        path.write_bytes(original)
+        with self.store.connect(True) as db:
+            db.execute("UPDATE signoffs SET note='签收文本变化' WHERE case_id='prior'")
+        with self.assertRaisesRegex(CaseError,"签收决定与出具时的摘要"):
+            self.sign("next")
+        with self.store.connect(True) as db:
+            db.execute("UPDATE signoffs SET note='合成底稿回归' WHERE case_id='prior'")
+        self.sign("next")
+        messages = [e["message"] for e in self.store.detail("next")["events"] if e["stage"]=="payment_sources"]
+        self.assertEqual(len(messages),1)
+        self.assertIn("1 份历史签收底稿，共 8 个原件及页图",messages[0])
+
+    def test_otherwise_valid_pdf_and_page_do_not_override_a_changed_contract_text_layer(self):
+        self.workpaper("prior")
+        self.sign("prior")
+        self.workpaper("issued",transfer_ref="YL-ISSUED")
+        with self.store.connect(True) as db:
+            db.execute("UPDATE pages SET text=text||' ' WHERE case_id='prior' AND doc='d01'")
+        with self.assertRaisesRegex(CaseError,"文字层与归档摘要"):
+            self.workpaper("next",transfer_ref="YL-NEXT")
+        with self.assertRaisesRegex(CaseError,"文字层与归档摘要"):
+            self.sign("issued")
+        self.assertEqual(self.store.detail("issued")["decisions"],[])
+
+    def test_approval_hashes_outside_writer_and_detects_file_change_before_decision(self):
+        import sqlite3
+        from field_sources import FieldSources
+        self.workpaper("approval")
+        hashed,resume = threading.Event(),threading.Event()
+        read = FieldSources.read_files
+        def stall(source):
+            read(source)
+            hashed.set()
+            if not resume.wait(timeout=5):
+                raise AssertionError("timed out waiting for test")
+        path = self.store.files/"approval"/"d02"/"original.jpg"
+        original = path.read_bytes()
+        with patch.object(FieldSources,"read_files",stall), ThreadPoolExecutor(max_workers=1) as pool:
+            attempt = pool.submit(self.sign,"approval")
+            try:
+                self.assertTrue(hashed.wait(timeout=5))
+                with sqlite3.connect(self.store.path,timeout=.2) as db:
+                    db.execute("BEGIN IMMEDIATE")
+                    db.execute("UPDATE cases SET title=title WHERE id='approval'")
+                path.write_bytes(original+b"changed during review")
+            finally:
+                resume.set()
+            with self.assertRaisesRegex(CaseError,"页图已变更"):
+                attempt.result(timeout=5)
+        self.assertEqual(self.store.detail("approval")["decisions"],[])
+        path.write_bytes(original)
+        self.sign("approval")

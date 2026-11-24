@@ -127,3 +127,7 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 规则集 `2026.11.24.10` 起，`graph.number_masks.facts` 保留含明确遮盖符或尾号提示的已核引文、页码和可见原值。相应的 `incomplete_invoice_id`、`incomplete_claim_ref` 或 `incomplete_claim_full_ref` 边分别连回各自的观察记录。I02 的 `invoice_lookup.withheld` 列出本次无法作精确查重的发票字段。签收回执的 `withheld` 保留查验范围缺口，`incomplete_number` 表示本次有票号不全且没有相同或待判定的前案候选。
 
 对于尚待签收、使用旧规则的底稿，若其中已核的遮盖号码仍以可精确匹配的票号进入图谱，初审或独立复核选择通过会返回 409。`incomplete_numbers` 包含原案件、版本、涉及字段的 `count` 及前八条 `facts`。每条含证据编号、实际可见值和页码。初审可在原对话框查看引文，保留原版后重新审计。独立复核人可选择退回补件。已签收的历史版本仍可导出并复算当时的结论。
+
+## 付款原件核验与签收
+
+付款案初审或独立复核选择通过时，服务核验本案原件及页图，并按底稿中所引历史版本检查前案的签收决定、逐字段引文、原件、相关页图和归档文字层。原件或页图缺失、文件摘要不符或核验期间文件发生变化会返回 409。响应中的 `payment_source` 提供工作区内的 `case_id`、`rev`、`doc`、文件名 `name`、`file`（`original` 或 `page`）及可定位的 `fact`。页图另含页码 `page`。工作台保留审计员已填的意见，可跳到对应版底稿。成功通过后执行记录的 `payment_sources` 事件列出核对的历史底稿数和文件数。

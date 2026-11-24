@@ -38,14 +38,15 @@ const maskedInvoice = caseArgument('--masked-invoice-case');
 const legacyMask = caseArgument('--legacy-mask-case');
 const legacyTransfer = caseArgument('--legacy-transfer-case');
 const partialTransfer = caseArgument('--partial-transfer-case');
+const brokenPayment = caseArgument('--payment-source-case');
 const waitingCase = caseArgument('--waiting-case');
 const seeded = [sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
-                invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,waitingCase].some(Boolean);
+                invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
-const root = legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
+const root = brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
   recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
-if (recoveringCase || waitingCase || legacyCase) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
-if (legacyCase) assert.ok(!['8000','8010'].includes(new URL(root).port));
+if (recoveringCase || waitingCase || legacyCase || brokenPayment) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
+if (legacyCase || brokenPayment) assert.ok(!['8000','8010'].includes(new URL(root).port));
 const children = [];
 const faults = [];
 function start(binary, args, env = process.env) {
@@ -152,6 +153,32 @@ try {
     assert.equal((await get('/reports/2')).report.result.verdict,'review');
     assert.equal((await get('/reports/1')).sha256,original.sha256);
     console.log('PASS · Legacy decision withheld, original citations, preserved note, six widths and reviewed R2');
+  } else if (brokenPayment) {
+    const api=root+'/api/cases/'+brokenPayment;
+    const get=async suffix=>(await fetch(api+suffix)).json();
+    const task=await get('');
+    assert.ok(task.title.startsWith('合成演练 · 同合同另一笔全额付款') && task.status==='ready');
+    const {report}=await get('/reports/'+task.rev);
+    const prior=report.graph.payment_history.matches.find(m=>m.kind==='full');
+    const ref=prior.evidence.find(f=>f.field==='transfer_ref');
+    await call('Page.navigate',{url:root+'/workpaper/'+brokenPayment+'?rev='+task.rev});
+    await wait('[...document.querySelectorAll("button")].some(b=>b.textContent==="填写验收意见")','initial review');
+    await click('填写验收意见');
+    await evaluate('document.querySelector("#reviewer").value="回单演练员";document.querySelector("#review-decision").value="approve";document.querySelector("#review-note").value="复核前案成功流水。";document.querySelector("#review-form").requestSubmit()');
+    await wait('document.querySelector("#review-error a") && document.querySelector("#review-error").textContent.includes("原件核验失败")','missing original with its pinned reference');
+    const link=new URL(await evaluate('document.querySelector("#review-error a").href'));
+    assert.equal(link.pathname,'/workpaper/'+prior.case_id);
+    assert.equal(link.searchParams.get('rev'),String(prior.rev));
+    assert.equal(link.searchParams.get('fact'),ref.fact);
+    assert.ok(await evaluate('document.querySelector("#review-dialog").open && document.querySelector("#review-note").value==="复核前案成功流水。"'));
+    for (const width of [1440,1024,820,768,390,320]) {
+      await call('Emulation.setDeviceMetricsOverride',{width,height:860,deviceScaleFactor:1,mobile:false});
+      assert.ok(await evaluate('document.querySelector("#review-dialog").scrollWidth<=document.querySelector("#review-dialog").clientWidth+1'),'missing payment source at '+width);
+    }
+    assert.equal((await get('')).decisions.length,0);
+    await call('Page.navigate',{url:link.href});
+    await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.textContent.includes('+JSON.stringify(ref.quote)+')','prior preserved page and cited reference');
+    console.log('PASS · Unavailable original blocked approval, preserved note and linked pinned receipt at six widths');
   } else if (partialTransfer) {
     const api=root+'/api/cases/'+partialTransfer;
     const task=await (await fetch(api)).json();

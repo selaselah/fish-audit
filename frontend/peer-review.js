@@ -83,6 +83,10 @@ const PeerReview = {
           reviewer:$('#peer-reviewer').value,note:$('#peer-note').value});
         $('#peer-dialog').close(); chooseRevision(saved.rev); state.tab='report'; await refresh();
       } catch (failure) {
+        if (failure.paymentSource) {
+          showPaymentSourceError(error,failure);
+          return;
+        }
         if (failure.invoiceHistory || failure.incompleteNumbers) {
           showInvoiceReviewConflict(error,failure,$('#peer-decision'));
           error.append(action('选择退回补件',()=>{

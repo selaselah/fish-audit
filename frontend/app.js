@@ -69,6 +69,7 @@ async function api(url, options = {}) {
     problem.status = response.status;
     problem.invoiceHistory = data.invoice_history;
     problem.incompleteNumbers = data.incomplete_numbers;
+    problem.paymentSource = data.payment_source;
     throw problem;
   }
   return data;
@@ -653,6 +654,15 @@ function chooseRevision(rev = 0) {
   state.pinned = rev;
   history.replaceState(null,'',Team.hash('case/'+state.detail.id+(rev ? '?rev='+rev : '')));
 }
+function showPaymentSourceError(container, problem) {
+  const source=problem.paymentSource;
+  const params=new URLSearchParams({rev:String(source.rev)});
+  if (source.fact) params.set('fact',source.fact);
+  const anchor=Team.paperLink('查看 R'+source.rev+' 所据底稿',source.case_id,'source-jump',params);
+  anchor.target='_blank'; anchor.rel='noopener';
+  container.replaceChildren(el('strong',problem.message),anchor);
+}
+
 function showInvoiceReviewConflict(container,problem,choice) {
   const history = problem.invoiceHistory;
   choice.querySelector('option[value="approve"]').disabled=true;
@@ -764,6 +774,10 @@ $('#review-form').addEventListener('submit', async event => {
     $('#review-dialog').close(); chooseRevision(); await refresh();
   } catch (error) {
     const message = $('#review-error');
+    if (error.paymentSource) {
+      showPaymentSourceError(message,error);
+      return;
+    }
     if (error.invoiceHistory || error.incompleteNumbers) {
       showInvoiceReviewConflict(message,error,$('#review-decision'));
       message.append(action('保留 R'+pending.rev+' 并重新审计',async e=>{

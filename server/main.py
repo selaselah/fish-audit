@@ -30,6 +30,7 @@ from evidence import export_bundle
 from graph import compact
 from jobs import Worker
 from invoice_history import InvoiceHistoryChanged, LegacyMaskedInvoice
+from field_sources import PaymentSourceError
 from payment_index import LegacyPartialTransfer
 from model import FIELDS
 from review import review_text
@@ -220,6 +221,8 @@ def create_app(store, worker):
 
     @app.errorhandler(CaseError)
     def known_error(error):
+        if isinstance(error,PaymentSourceError):
+            return jsonify(error=str(error),payment_source=error.source),error.status
         if isinstance(error,InvoiceHistoryChanged):
             return jsonify(error=str(error),invoice_history={"count":len(error.differences),"changes":error.differences[:8]}),error.status
         if isinstance(error,(LegacyMaskedInvoice,LegacyPartialTransfer)):
