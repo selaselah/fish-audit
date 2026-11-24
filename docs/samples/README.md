@@ -94,3 +94,8 @@ PYTHONPATH=server server/.venv/bin/python -m unittest discover -s server/tests -
 ### 账号抄录与原页对照
 
 在带水印的付款任务上运行 `node frontend/tests/workspace.mjs --account-review-case 案件编号 --account-revision 版本号`，检查 B03 的合同和回单引文、逐位差异、原图定位以及缩窄窗口后的可读性。该工具同时验证预览加载失败后的原页重试。省略 `--account-revision` 可检查最新底稿。
+## 合同履约演练
+
+运行 `server/.venv/bin/python docs/samples/contract_milestones.py --run` 生成三组水印 PDF，上传本机工作台，从多模态提取一直执行到逐期审查。脚本仅对与生成件摘要、原页文字均一致的虚构签署栏写入演练核图记录。
+
+三组合同价均为 10 万元，分 30%、60%、10% 三期，回单均记载第二期 6 万元。第一组在终验前付款，且缺少质保到期确认。第二组报告写“合格”，实测柜温 8℃ 超过约定上限 4℃。第三组实测 3℃，终验后付款，同时提交质保期满确认。旧版样本的历史结论保留在相应版本；以新方法重算时，缺少履约证据的样本会提示人工校验。

@@ -52,7 +52,9 @@ class ReceiptControls(unittest.TestCase):
         return findings
 
     def test_settled_receipt_and_mismatched_accounts(self):
-        self.assertEqual(conclusion(self.evaluate())["verdict"],"pass")
+        matched = self.evaluate()
+        self.assertEqual(conclusion(matched)["verdict"],"review")
+        self.assertIn(("B04","ok"),[(r["rule"],r["status"]) for r in matched])
         # Same last four digits do not prove that the full beneficiary account is the same.
         findings=self.evaluate(payee_account="000100000000000081",transfer_amount="8,550.00")
         self.assertEqual(conclusion(findings)["verdict"],"reject")

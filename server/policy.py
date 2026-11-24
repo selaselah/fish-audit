@@ -10,6 +10,11 @@ EVIDENCE = {"title": "《中国注册会计师审计准则第1301号——审计
             "url": "https://www.cicpa.org.cn/ztzl1/Professional_standards/xxzztx/zyzz/sjzz/202105/P020240412542695263912.pdf",
             "edition": "2022-12-22 修订", "scope": "注册会计师审计的方法参考，用于说明证据评估与追加程序思路。"}
 SOURCES = {
+    "contract-effect": {"title":"《中华人民共和国民法典》","edition":"2020-05-28 通过",
+        "url":"https://fjca.miit.gov.cn/zwgk/zcwj/wjfb/art/2020/art_9f0ef44677164c5eb3a5585bf82a07cb.html",
+        "locator":"第一百四十三条、第四百九十条、第五百零二条",
+        "scope":"合同成立和效力的一般法律背景。行为能力、授权、实际履行、审批及争议由审计人员结合个案核实。",
+        "summary":"法律区分成立与生效，签署、履行接受以及当事人所约条件均可能相关。本项检查限定为提交材料对所约生效条件的支持。"},
     "vat-invoice-code": {"title":"国家税务总局《关于推行通过增值税电子发票系统开具的增值税电子普通发票有关问题的公告》",
         "edition":"国家税务总局公告2015年第84号","url":"https://fgk.chinatax.gov.cn/zcfgk/c100012/c5194596/content.html",
         "locator":"第四条","scope":"传统增值税电子普通发票的代码和号码编制口径，用于企业资料勾稽。",
@@ -39,7 +44,9 @@ SOURCES = {
     "follow-up": {**EVIDENCE, "locator": "第十五条",
                   "summary": "不同来源的材料相互矛盾或可靠性存疑时，应考虑调整检查或追加程序。"},
 }
-MAPPING = {"B01":["purchase-records","evidence-quality"],"B02":["payment"],"B03":["payment","follow-up"],
+MAPPING = {"H01":["contract-effect","purchase-records"],"H02":["receipt","evidence-quality"],
+           "H03":["payment","purchase-records"],"H04":["payment","receipt"],"H05":["payment","evidence-quality"],
+           "B01":["purchase-records","evidence-quality"],"B02":["payment"],"B03":["payment","follow-up"],
            "B08":["installment-tracking","follow-up"],
            "B04":["payment","voucher"],"B05":["evidence-quality","follow-up"],
            "B06":["payment","follow-up"],"B07":["payment","follow-up"],"E01": ["voucher", "evidence-quality"], "P01": ["purchase-records"], "P02": ["purchase-records"],

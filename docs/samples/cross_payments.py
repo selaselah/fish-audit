@@ -46,7 +46,8 @@ def exercise(run_id, run):
         detail = get("/api/cases/"+cid)
         archived = {d["name"]: d["sha256"] for d in detail["documents"]}
         generated = {f.name: hashlib.sha256(f.read_bytes()).hexdigest() for f in first.glob("*.pdf")}
-        assert detail["title"] == title and archived == generated and report["result"]["verdict"] == "pass"
+        expected_verdict = "review" if report["policy"].get("performance_checks") else "pass"
+        assert detail["title"] == title and archived == generated and report["result"]["verdict"] == expected_verdict
         printed = {f["field"]: f["value"] for f in report["graph"]["facts"] if f["status"] in {"anchored", "confirmed"}}
         assert printed["contract_id"] == contract and printed["transfer_ref"] == first_ref
         assert printed["contract_account"] == printed["payee_account"] == ACCOUNT

@@ -49,8 +49,9 @@ def wait(case_id):
 def verify(index, report):
     result = report["result"]
     statuses = {(item["rule"], item["status"]) for item in report["findings"]}
+    basic_verdict = "review" if report["policy"].get("performance_checks") else "pass"
     if index == 0:
-        assert result["verdict"] == "pass", statuses
+        assert result["verdict"] == basic_verdict and ("M02","ok") in statuses, statuses
     elif index == 1:
         assert result["verdict"] == "reject" and {("I01", "risk"), ("M01", "issue")} <= statuses
         assert any("-2,000.00" in item["detail"] for item in report["findings"])
@@ -69,7 +70,7 @@ def verify(index, report):
                    for row in report["graph"]["prior_invoices"]), "需先归档已核图的原演练票号"
     elif index == 6:
         graph = report["graph"]
-        assert result["verdict"] == "pass" and len(graph["documents"]) == 1
+        assert result["verdict"] == basic_verdict and len(graph["documents"]) == 1
         assert [unit["page"] for unit in graph["audit_documents"]] == [1,2,3]
         assert len({fact["page"] for fact in graph["facts"] if fact["field"] == "total" and fact.get("unit")}) == 3
 

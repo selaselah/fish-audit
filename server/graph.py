@@ -8,20 +8,23 @@ from invoice_identity import CLAIM_PAIR_LABELS, FORMAT as IDENTITY_FORMAT, SHORT
 from invoice_masks import withhold_partial_numbers
 from invoice_proof import invoice_number_edges
 from model import FIELDS
+from performance import LABELS as PERFORMANCE_LABELS, STAGE_PREFIX, complete_line
 from payment_reference import attach as attach_payment_references, partial_line, printed_partial_value
 
 
 KINDS = {"invoice": "发票", "contract": "合同", "acceptance": "验收单"}
-TITLE_FIELDS = {**KINDS, "claim": "报销", "bank_receipt":"回单"}
+TITLE_FIELDS = {**KINDS, "claim": "报销", "bank_receipt":"回单", "warranty":"质保期满确认"}
 PRINTED_TITLES = {label: field for field, labels in {
     "invoice": ("发票", "采购发票", "住宿服务发票", "增值税专用发票", "增值税普通发票", "增值税电子普通发票",
                 "电子发票(普通发票)", "电子发票(增值税专用发票)"),
     "contract": ("采购合同", "设备采购合同", "购销合同", "采购协议"),
     "acceptance": ("验收单", "到货验收单", "验收报告", "采购验收单", "设备验收单"),
+    "warranty": ("质保期满确认单", "质保期满确认书"),
     "bank_receipt": ("银行付款回单", "银行转账回单", "电子银行回单", "银行电子回单", "转账回单"),
     "claim": ("报销单", "差旅报销单", "差旅费报销单", "费用报销单"),
 }.items() for label in labels}
 LABELS = {
+    **PERFORMANCE_LABELS,
     "payer": ("付款户名","付款人名称","付款人户名"), "payee": ("收款户名","收款人名称","收款人户名"),
     "contract_account": ("约定收款账号","合同收款账号"), "payee_account": ("收款账号","收款人账号"),
     "transfer_amount": ("付款金额","转账金额","交易金额"), "paid_on": ("付款日期","转账日期","交易日期"),
@@ -51,8 +54,11 @@ SCALAR = {"contract_id", "invoice_id", "invoice_code", "claim_full_ref", "net", 
           "claim_total", "traveler", "trip_start", "trip_end", "service_on", "claim_ref","payer","payee","contract_account","payee_account",
           "transfer_amount","paid_on","transfer_ref","transfer_status"}
 FIELD_START = {field: re.compile(r"^(?:" + "|".join(sorted(LABELS[field], key=len, reverse=True)) + r")[:(（]")
-               for field in SCALAR}
+               for field in SCALAR | PERFORMANCE_LABELS.keys()}
+FIELD_START["payment_stage"] = re.compile(STAGE_PREFIX.pattern + r"|^付款期次:")
+FIELD_START["effect_clause"] = re.compile(FIELD_START["effect_clause"].pattern + r"|^本合同.{0,80}生效")
 TERMS = re.compile(r"分期|分[两二三四五六七八九十\d]+期|预付|质保金|保留款|分批|定金|订金|尾款|部分交付|红字|冲销|红冲|退款|退汇|冲正|撤销|抵扣|扣减|变更单|补充协议")
+PERFORMANCE_CAUTION = re.compile(r"解除|终止|待审批|待批准|授权委托|另附|另行约定|第[两一二三四五六七八九十\d]+期")
 
 
 def compact(value):
@@ -79,6 +85,8 @@ def labelled(field, value, quote):
             label in value for label in ("号码", "编号", "结论", "日期", "参见", "附录", "附件清单", "提交", "缺少"))
     if field == "other":
         return False
+    if field in PERFORMANCE_LABELS:
+        return complete_line(field, value, quote)
     if field == "total" and any(token in quote for token in ("不含税", "未税", "单价")):
         return False
     terms = LABELS[field]
@@ -125,6 +133,7 @@ def heading_candidates(page):
 def build_graph(docs, pages, attestations, amendments=()):
     nodes = {}
     edges, evidence, gaps, cautions = [], [], [], []
+    performance_cautions = []
     by_kind = defaultdict(list)
     inventory = {doc["id"]: doc for doc in docs}
     edits = defaultdict(dict)
@@ -179,9 +188,12 @@ def build_graph(docs, pages, attestations, amendments=()):
                                  "line":index, "quote":line, "title_hint":title_hint})
             if TERMS.search(compact(line)):
                 cautions.append({"page_id": page_id, "line": index, "quote": line, "doc": doc})
+            if PERFORMANCE_CAUTION.search(compact(line)):
+                performance_cautions.append({"page_id":page_id, "line":index, "quote":line, "doc":doc})
             if layer["type"] == "text":
                 missing = [field for field, pattern in FIELD_START.items() if pattern.match(compact(line)) and not any(
-                    item["field"] == field and compact(item["quote"]) == compact(line) for item in observations.values())]
+                    (item["field"] == field or {item["field"],field} == {"payment_stage","payment_term"}) and
+                    compact(item["quote"]) == compact(line) for item in observations.values())]
                 if missing:
                     gaps.append({"doc": doc, "page": number, "id": page_id, "quality": "uncovered", "line": index,
                                  "quote": line, "field": missing[0] if len(missing) == 1 else None})
@@ -234,7 +246,8 @@ def build_graph(docs, pages, attestations, amendments=()):
             nodes[target] = {"id": target, "type": kind, "label": value}
             edges.append({"from": doc, "to": target, "type": field, "evidence": [fact_id]})
     graph = {"nodes": list(nodes.values()), "edges": edges, "facts": evidence,
-             "documents_by_kind": dict(by_kind), "gaps": gaps, "cautions": cautions, "documents": docs}
+             "documents_by_kind": dict(by_kind), "gaps": gaps, "cautions": cautions,
+             "performance_cautions":performance_cautions, "documents": docs}
     partition_documents(graph, pages)
     withhold_partial_numbers(graph)
     texts = {(page["doc"],page["number"]):page["text"] for page in pages}

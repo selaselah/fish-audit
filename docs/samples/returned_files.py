@@ -59,7 +59,8 @@ def exercise(run_id, mode):
     assert lineage["retained"] == [{"parent_doc": original["id"], "doc": "d01"}]
     before = next(g for g in lineage["comparisons"] if g["rule"] == "B01")
     assert [f["status"] for f in before["before"]] == ["missing"] and [f["status"] for f in before["after"]] == ["ok"]
-    assert current["result"]["verdict"] == "pass", [(f["rule"], f["detail"]) for f in current["findings"] if f["status"] != "ok"]
+    expected_verdict = "review" if current["policy"].get("performance_checks") else "pass"
+    assert current["result"]["verdict"] == expected_verdict, [(f["rule"], f["detail"]) for f in current["findings"] if f["status"] != "ok"]
     assert get(url)["revisions"][0]["hash"] == old_hash
     print("通过 · 原退回版本、原件摘要、B01 对照及独立补件结论", flush=True)
 

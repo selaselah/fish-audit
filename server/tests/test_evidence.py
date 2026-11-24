@@ -71,8 +71,9 @@ class ControlsTests(unittest.TestCase):
     def test_tied_sources_and_decimal_math(self):
         graph = case_graph()
         result = conclusion(execute(graph))
-        self.assertEqual(result["verdict"], "pass")
-        self.assertFalse(result["human_required"])
+        self.assertEqual(result["verdict"], "review")
+        self.assertTrue(result["human_required"])
+        self.assertEqual(next(f["status"] for f in execute(graph) if f["rule"]=="M02"),"ok")
         self.assertTrue(result["signoff_required"])
         self.assertTrue(all(fact["source_line"]["rects"] for fact in graph["facts"]))
         mismatch = case_graph(lambda kind, entry: fact("tax", "13.01", "税额合计：13.01")
@@ -144,7 +145,8 @@ class ControlsTests(unittest.TestCase):
 
     def test_bound_packet_pages_and_unassigned_continuation(self):
         graph = case_graph(packet=True)
-        self.assertEqual(conclusion(execute(graph))["verdict"], "pass")
+        self.assertEqual(conclusion(execute(graph))["verdict"], "review")
+        self.assertEqual(next(f["status"] for f in execute(graph) if f["rule"]=="P02"),"ok")
         self.assertEqual({row["source"] for row in graph["audit_documents"]}, {"d01"})
         self.assertEqual(graph["documents_by_kind"]["invoice"], ["unit/d01/p2"])
         self.assertEqual({f["unit"] for f in graph["facts"] if f["page"]==2}, {"unit/d01/p2"})

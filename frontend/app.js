@@ -13,7 +13,8 @@ const labels = {
 const tabs = {report: '审计结论', evidence: '原件与引文', graph: '知识图谱', activity: '执行记录'};
 const travelProfile = 'cn-travel-reimbursement/v1';
 const bankProfile = 'cn-bank-contract-payment/v1';
-const profileName = profile => ({[travelProfile]:'差旅报销',[bankProfile]:'付款回单核对','cn-procurement-full-settlement/v1':'采购与付款'}[profile] || profile);
+const performanceProfile = 'cn-contract-performance/v1';
+const profileName = profile => ({[travelProfile]:'差旅报销',[bankProfile]:'付款回单核对',[performanceProfile]:'合同履约与分期','cn-procurement-full-settlement/v1':'采购与付款'}[profile] || profile);
 const tone = {ready: 'risk', in_review: 'risk', closed: 'ok', failed: 'issue', pass: 'ok', review: 'risk', reject: 'issue',
   visual: 'risk', unsupported: 'issue', disputed: 'issue', confirmed: 'ok', anchored: 'ok'};
 const statusName = value => labels[value] || value;
@@ -278,6 +279,12 @@ function citation(ref) {
     const label = prior.title+' · R'+prior.rev+' 第 '+prior.page+' 页 · '+(prior.label || '发票号码');
     return Team.paperLink(label,prior.case_id,'button ref',new URLSearchParams({rev:String(prior.rev),fact:prior.fact}));
   }
+  const source = index?.nodes.get(ref);
+  if (source?.type === 'document' || source?.type === 'document_section') {
+    const doc = source.source || ref;
+    const page = source.page || 1;
+    return action(source.label + ' · 查看原件', () => openPage(doc,page), 'ref');
+  }
   const [doc, rawPage] = ref.split('/');
   const page = Number((rawPage || '').slice(1));
   const item = index?.documents.get(doc) || state.detail.documents.find(document => document.id === doc);
@@ -385,10 +392,13 @@ function installmentDetails(history) {
 }
 
 function finding(item) {
-  const node = box('finding', box('flow', tag(item.status), el('h3', item.title), el('span', item.rule, 'mono')),
+  const heading = item.stage ? item.stage.name + (item.stage.share ? ' · ' + item.stage.share + '%' : '') +
+    (item.rule === 'H05' ? ' 实付时点' : ' 付款条件') : item.title;
+  const node = box('finding', box('flow', tag(item.status), el('h3', heading), el('span', item.rule, 'mono')),
     el('p', item.detail), el('p', '执行依据 · ' + item.basis, 'muted'));
   node.dataset.finding = item.id;
   node.tabIndex = -1;
+  if (item.stage) node.insertBefore(box('clause-source',el('q',item.stage.clause), citation(item.stage.clause_ref)),node.children[1]);
   if (item.scope.length) node.append(el('small', '检查范围 · ' + item.scope.map(id =>
     state.bundle.report.graph.audit_documents?.find(doc => doc.id === id)?.name ||
     state.detail.documents.find(doc => doc.id === id)?.name || id).join('、'), 'small'));
@@ -418,15 +428,17 @@ function finding(item) {
 }
 function reportPanel() {
   const report = state.bundle.report;
-  const passed = report.findings.filter(item => item.status === 'ok');
-  const exceptions = report.findings.filter(item => item.status !== 'ok');
+  const performance = report.findings.filter(item => /^H0[1-5]$/.test(item.rule));
+  const other = report.findings.filter(item => !performance.includes(item));
+  const passed = other.filter(item => item.status === 'ok');
+  const exceptions = other.filter(item => item.status !== 'ok');
   const conclusion = box('panel', box('panel-head', el('h2', '审计建议'), tag(report.result.verdict)),
     el('p', '专项人工校验：' + (report.result.human_required ? '需要' : '无待核项') + ' · 最终决定由审计人员验收。'),
     el('p', report.result.counts.issue + ' 项问题 · ' + report.result.counts.risk + ' 项风险 · ' +
       report.result.counts.missing + ' 项证据不足', 'muted'));
-  const findings = box('panel', el('h2', '风险与问题'));
+  const findings = box('panel', el('h2', performance.length ? '其他检查程序' : '风险与问题'));
   if (exceptions.length) findings.append(...exceptions.map(finding));
-  else findings.append(el('p', '本次已执行的检查程序均相符。'));
+  else if (!performance.length) findings.append(el('p', '本次已执行的检查程序均相符。'));
   if (passed.length) findings.append(fold('展开相符的检查程序（' + passed.length + '）', ...passed.map(finding)));
   const human = box('panel', el('h2', report.peer_review ? '复核签收决定' : '审计人员验收'));
   const decision = state.detail.decisions.find(item => item.rev === state.bundle.rev);
@@ -444,6 +456,11 @@ function reportPanel() {
     fold('底稿 SHA-256', el('code', state.bundle.sha256)));
   const review = box('', conclusion);
   if (report.supplement) review.append(returnComparison(report,state.bundle.rev));
+  if (performance.length) {
+    const conditions = box('panel performance-panel',el('h2','合同履约审查'));
+    for (const entry of performance) conditions.append(finding(entry));
+    review.append(conditions);
+  }
   review.append(findings);
   const side = box('', human);
   const peer = PeerReview.panel(state.detail,state.bundle);
@@ -866,12 +883,16 @@ $('#upload-files').addEventListener('change', () => {
 $('#upload-title').addEventListener('input', () => { state.key = null; });
 function profileChanged() {
   state.key = null;
+  if ($('#upload-profile').value === performanceProfile) {
+    $('#profile-note').textContent = '上传一份合同，可附验收单、质保期满确认单和列明期次的回单。逐项查看生效约定、验收范围、整改事项及每期付款前提。';
+    return;
+  }
   if ($('#upload-profile').value === bankProfile) {
     $('#profile-note').textContent = '每个任务上传一份合同和一张银行回单。可核对收款账户、重复流水及全额差额，分期付款可与本企业已签收的回单累计比较。';
     return;
   }
   $('#profile-note').textContent = $('#upload-profile').value === travelProfile ?
-    '按一份差旅报销单和所附具名发票勾稽，检查票号、实际发生日期和申请金额。' : '按单合同、一次全额结算核对。';
+    '按一份差旅报销单和所附具名发票勾稽，检查票号、实际发生日期和申请金额。' : '核对合同签署、交付验收与付款约定，并勾稽发票及全额结算资料。';
 }
 $('#upload-profile').addEventListener('change', profileChanged);
 $('#upload-form').addEventListener('submit', async event => {

@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from backup import MARKER
 from capacity import admit, install as install_capacity, settings
 from conclusions import verify_result
-from config import BANK, CaseError, PROFILE
+from config import BANK, PERFORMANCE, CaseError, PROFILE
 from field_receipts import field_actions, validate_field_actions
 from field_sources import FieldSources, PaymentSourceError, SourceFileError, check_cited_files, check_text_hashes, source_row
 from graph import compact, invoice_number_edges
@@ -26,6 +26,7 @@ from invoice_proof import source_record as invoice_source_record
 from payment_checks import comparison_refs, verify_findings as verify_payment_findings
 from payment_history import LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_facts, comparable_record, payment_record
 import payment_index
+from performance import verify_findings as verify_performance
 from peer_review import different_reviewers, review_record, valid_findings, verify_review
 from payment_reference import FORMAT as PAYMENT_REFERENCE_FORMAT, SUPPORTED as REFERENCE_FORMATS
 from supplements import compare_return
@@ -787,9 +788,12 @@ class Store:
         if "conclusions.py" in paper["policy"].get("code_sha256",{}):
             try:
                 verify_result(paper)
+                verify_performance(paper)
             except (KeyError,TypeError,ValueError) as error:
                 raise CaseError("本版审计建议与逐项发现不一致，请核对所据底稿。",409) from error
         graph = paper["graph"]
+        if graph.get("profile") == PERFORMANCE:
+            return None
         if graph.get("profile",paper["policy"].get("profile")) != BANK:
             check_legacy_masks(graph,case_id,revision,peer)
             keys = sorted({edge["to"] for edge in invoice_number_edges(graph)})

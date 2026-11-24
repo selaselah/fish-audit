@@ -3,7 +3,7 @@ from collections import defaultdict
 from datetime import date
 from calculations import CalculationEvidence, in_yuan, money
 
-from config import BANK, PROFILE, RULE_VERSION, TRAVEL
+from config import BANK, PERFORMANCE, PROFILE, RULE_VERSION, TRAVEL
 from conclusions import STATUS, conclusion
 from graph import KINDS, audit_documents, compact
 from invoice_approval import FORMAT as INVOICE_APPROVAL_FORMAT
@@ -15,11 +15,13 @@ from model import FIELDS, SIGNALS, expert_candidates
 from payment_history import HISTORY_RULES, attach_history, check_history, payment_record
 from payment_checks import FORMAT as PAYMENT_CHECKS
 from payment_reference import FORMAT as PAYMENT_REFERENCE_FORMAT
+from performance import RULES as PERFORMANCE_RULES, compute as check_performance
 from policy import ACCOUNTING, MAPPING, SOURCES
 from transfers import RULES as TRANSFER_RULES, check_transfers
 
 
 CATALOG = {
+    **PERFORMANCE_RULES,
     **TRANSFER_RULES,
     **HISTORY_RULES,
     "E01": ("原件与证据覆盖", "每页均可辨读，关键字段具备可定位文字或人工核图记录。"),
@@ -41,7 +43,7 @@ CATALOG = {
     "T04": ("差旅期间核对", "逐张检查费用实际发生日期是否落入申报行程的起止期间。"),
     "T05": ("出差人员关联", "对照报销单与具名票据中的出差人，缺姓名、别名和不一致均交人工。"),
 }
-VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING,
+VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING, "performance_checks":"contract-performance-v1",
            "sources": SOURCES, "rule_sources": MAPPING, "invoice_sources": INVOICE_SOURCE_FORMAT,
            "invoice_approval": INVOICE_APPROVAL_FORMAT,"invoice_identity":INVOICE_IDENTITY_FORMAT,"invoice_lookup":INVOICE_LOOKUP,
            "invoice_number_masks":MASK_FORMAT,"payment_references":PAYMENT_REFERENCE_FORMAT,"payment_checks":PAYMENT_CHECKS}
@@ -109,6 +111,15 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
     record("E01", "missing" if gaps or unverified else "ok",
            f"共 {len(facts)} 条提取记录，{len(unverified)} 条待核或有异议，{len(set(gaps))} 页存在辨读或覆盖缺口。",
            gaps + ids(unverified), doc_ids)
+    def with_performance():
+        for item in check_performance(graph):
+            record(item["rule"],item["status"],item["detail"],item["evidence"],item["scope"])
+            if "stage" in item:
+                findings[-1]["stage"] = item["stage"]
+        return findings
+
+    if profile == PERFORMANCE:
+        return with_performance()
     if profile == BANK:
         check_transfers(graph, docs, values, record, parsed_date)
         signature = payment_record(graph, findings)
@@ -116,7 +127,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
             attach_history(graph, payment_lookup(signature))
         if "payment_history" in graph:
             check_history(signature, graph["payment_history"], record, doc_ids)
-        return findings
+        return with_performance()
     numbers = defaultdict(list)
     amounts_valid = {}
     masked = withheld_invoices(graph)
@@ -178,7 +189,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
             if rule == "M02" and multi:
                 continue
             record(rule, "missing", "单合同、单发票、单验收单的资料集合尚未建立。", ids(titles), doc_ids)
-        return findings
+        return with_performance()
 
     contract, invoice, acceptance = (kinds[kind][0] for kind in ("contract", "invoice", "acceptance"))
     ordered = [contract, invoice, acceptance]
@@ -231,7 +242,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
     if result:
         accepted = compact(result[0]["value"]).rstrip("。") in FULL_ACCEPTANCE
         record("A01", "ok" if accepted else "risk", "验收结论记载为“" + result[0]["value"] + "”。", ids(result))
-    return findings
+    return with_performance()
 
 
 def check_multi_invoice(graph, kinds, linked, identities, amounts_valid, values, record):

@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+from performance import PROFILE as PERFORMANCE
 
 
 SERVER = Path(__file__).resolve().parent
@@ -18,9 +19,9 @@ FORMATS = {".pdf", ".docx", ".doc", ".png", ".jpg", ".jpeg", ".webp", ".tif", ".
 PROFILE = "cn-procurement-full-settlement/v1"
 TRAVEL = "cn-travel-reimbursement/v1"
 BANK = "cn-bank-contract-payment/v1"
-PROFILES = {PROFILE: "采购与付款", TRAVEL: "差旅报销", BANK: "付款回单核对"}
-RULE_VERSION = "2026.11.24.16"
-PROMPT_VERSION = "2026.11.24.3"
+PROFILES = {PROFILE: "采购与付款", PERFORMANCE: "合同履约与分期", TRAVEL: "差旅报销", BANK: "付款回单核对"}
+RULE_VERSION = "2026.11.24.17"
+PROMPT_VERSION = "2026.11.24.4"
 RECHECK_EVIDENCE = os.getenv("OPENAI_RECHECK_EVIDENCE", "1").strip().lower() in {"1", "true", "yes"}
 
 

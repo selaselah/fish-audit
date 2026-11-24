@@ -19,6 +19,7 @@ from payment_history import cited_facts, comparable_record, payment_record
 from payment_notes import note_refs
 from payment_reference import LEGACY_FORMAT as FIRST_REFERENCE_FORMAT, SUPPORTED as REFERENCE_FORMATS, check as check_references, issued_format
 from peer_review import journal_decision, verify_referrals, verify_review
+from performance import LABELS as PERFORMANCE_FIELDS, verify_findings as verify_performance
 from protocol import canonical, response_request
 from rule_replay import check_receipt, replay_from_git, replay_installed
 from supplements import compare_return
@@ -217,6 +218,7 @@ def verify_transcription(fact, page_calls, nodes, subject, *, note_policy=None):
 
 
 def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
+    verify_performance(report)
     if "conclusions.py" in report["policy"].get("code_sha256",{}):
         verify_result(report)
     graph = report["graph"]
@@ -269,6 +271,12 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
             verify_transcription(fact,page_calls,nodes,"流水展示说明",note_policy=report["policy"])
         elif invoice_number or (version in REFERENCE_FORMATS and fact["field"]=="transfer_ref"):
             verify_transcription(fact,page_calls,nodes,"票号" if invoice_number else "流水号")
+        elif report["policy"].get("performance_checks") and fact["field"] in PERFORMANCE_FIELDS:
+            verify_transcription(fact,page_calls,nodes,"履约条款与签认")
+            decision = fact.get("attestation") or {}
+            require((fact["status"]=="confirmed") == (decision.get("decision")=="confirm"),"履约字段与核图决定不符")
+            if fact["status"]=="confirmed":
+                require(decision.get("source_check"),"履约字段缺少当时的原页核图回执")
         if fact.get("origin")=="printed_claim_pair" or (fact["field"]=="claim_full_ref" and not fact.get("amendment")):
             trace = page_calls[fact["doc"],fact["page"]]
             index = fact["id"].rsplit("/f",1)[-1]

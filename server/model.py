@@ -10,11 +10,13 @@ from urllib.request import Request, urlopen
 
 from capacity import CURRENT_JOB, request_attempt
 from config import AUDITOR_MODEL, CaseError, MODEL, PROMPT_VERSION
+from performance import FIELD_NAMES as PERFORMANCE_FIELDS, compute as performance_checks
 from policy import MAPPING, SOURCES
 from protocol import canonical, response_request
 
 
 FIELDS = {
+    **PERFORMANCE_FIELDS, "warranty":"质保期满确认单标题",
     "invoice": "发票标题", "contract": "合同标题", "acceptance": "验收单标题",
     "contract_id": "合同编号", "invoice_id": "发票号码", "invoice_code":"发票代码", "buyer": "采购方",
     "seller": "供应方", "total": "含税总额", "net": "不含税合计", "tax": "税额合计",
@@ -33,6 +35,9 @@ SIGNALS = {
     "installments": ("payment_term", "核对分期、预付款或质保金与本次结算的对应关系。"),
     "amendment": ("adjustment", "调取变更单或红字凭证，核对调整范围及生效条件。"),
     "qualification": ("acceptance_result", "复查附条件验收、整改或保留事项。"),
+    "effect_approval": ("effect_clause", "按合同条款调取审批、授权或登记材料，核对生效条件。"),
+    "acceptance_defect": ("acceptance_exception", "调取本项遗留事项的整改记录和签认的复验结论。"),
+    "stage_condition": ("payment_stage", "按本期原文核对担保、发票、审批或其他附加付款条件。"),
     "subject_scope": ("subject", "核对采购标的、规格或服务范围与验收明细。"),
     "unclear_clause": ("other", "请审计人员阅读该处原文并确认对本案的影响。"),
 }
@@ -71,6 +76,11 @@ buyer/seller 抄全称。total 是整张单据的含税总额，net/tax 是整�
 金额 value 抄印刷的小写数字（含小数、千位符）；quote 保留量纲。currency 需看到确切币种（人民币、CNY等），不要从地域推断。
 unit 单独抄明示的金额单位（如“金额单位：元”），value 抄“元”“万元”等，不从币种推断单位。每个有标签的字段应抄录整行，尤其保留否定、附加条件和金额尾数。
 日期区分签订、开票、验收；acceptance_result 抄原文验收结果。标的、付款条件、红冲、变更条款只在原文有相关记载时收录。
+合同逐项读取生效条件(effect_clause)、合同状态(contract_state)、实际生效日期(effect_on)、双方签署栏(buyer_signature/seller_signature)。逐字保留附审批、签字并盖章等限定。只抄可见姓名、签章等文字，不能把印章图案、空栏或印刷的公司名改写为“已盖章”或“已签字”。
+合同付款总约定用 payment_term，分列的各期文字逐行用 payment_stage，quote 从“第一期”“首付款”等行首抄到末尾，value 保留整期条件、比例、期限及例外。单行有多期应保留整行。回单所列款项用途/对应期次用 payment_designation，不从金额反推。
+验收资料除日期、结论外逐行抄验收范围(acceptance_scope)、验收人签认(acceptance_signer)、遗留/整改/保留事项(acceptance_exception)，保留“初验”“仅本批次”“有条件”等限定。质保期满确认单标题用 warranty，其已发生的质保期满记录用 warranty_release。合同对将来质保期的约定仍作为付款条款。
+明列的合同有效截止日用 valid_until。合同约定交付数量和验收标准分别用 quantity_agreed 和 acceptance_criteria，验收材料上的实际验收数量、实测标准分别用 quantity_accepted 和 inspection_basis。数量连同单位完整抄录。
+验收报告的实测结果用 measured_result，逐字抄录指标、数值、正负号及单位，与检验依据分别记录。
 按页面实际印刷的单据标题确定类型。住宿服务发票、运输服务发票等标题用 invoice；只有报销申请人填写的报销单标题才用 claim。同属一次差旅不改变票据本身的类型。
 申请报销金额用 claim_total，出差人或旅客姓名用 traveler。差旅起止日期分为 trip_start、trip_end；
 发票或行程凭据上明确的消费日期、乘车日期、费用发生日期用 service_on（开票日期另用 issued_on）。报销单列出的随附发票号码逐项分别用 claim_ref；同一行明列“随附发票代码及号码”的，只提取一个 claim_full_ref，value 照抄代码、分隔符和号码，quote 抄整行。不拼接分散的代码和号码。
@@ -84,6 +94,7 @@ methods 列出规则参考文献中的位置及适用范围；不能把内部程
 facts 数组仅填 evidence 中原样的 id，如 d01/p1/f2。你只能建议有事实触发的追加程序，编号和触发证据必须对应。installments 只用于明确分期/预付/质保金；
 amendment 只用于明确变更或红冲；qualification 只用于有保留的验收；subject_scope 只用于可辨认的标的不一致，此时引两份资料；
 unclear_clause 只用于确有其他可疑记载。在核验无发现、常规条款、全额一次结算或没有触发证据时返回空列表。
+effect_approval、acceptance_defect、stage_condition 分别核对有原文触发的生效条件、验收遗留事项和本期付款附加条件。查看 H01 至 H05 的已执行结果和期次，不重复提出已有充分证据的条件。
 不要编造事实、制度、条文或结论。只输出规定的结构。"""
 
 
@@ -181,10 +192,22 @@ def expert_candidates(graph):
                 paths[ref] = (contract, edge["to"])
     paths = {ref: path for ref, path in paths.items() if len(by_contract[path[0]]) > 1}
     eligible = []
+    resolved_plan = False
+    if graph.get("profile") in ("cn-contract-performance/v1","cn-bank-contract-payment/v1","cn-procurement-full-settlement/v1"):
+        phase_checks = [f for f in performance_checks(graph) if f["rule"] in ("H03","H04")]
+        resolved_plan = bool(phase_checks) and all(f["status"]=="ok" for f in phase_checks)
     for fact in graph["facts"]:
         if fact["status"] not in ("anchored", "confirmed"):
             continue
         field, quote = fact["field"], fact["quote"]
+        if field == "payment_term" and resolved_plan:
+            continue
+        if field == "effect_clause" and not any(word in quote for word in ("批准","审批","授权","登记","备案","追认","附条件")):
+            continue
+        if field == "payment_stage" and not any(word in quote for word in ("担保","审批","发票","另行","变更","整改","扣留")):
+            continue
+        if field == "acceptance_exception" and fact["value"].split("：")[-1].strip("。 ") in ("无","无遗留事项","无保留事项","无整改事项","无异常"):
+            continue
         if field == "subject" and fact["id"] not in paths:
             continue
         if field == "payment_term" and not any(word in quote for word in ("分期", "每期", "两期", "预付", "质保", "保留", "分批", "定金", "订金", "尾款", "首期", "余款")):
@@ -246,8 +269,9 @@ def attach_check(path, trace):
 
 def audit_graph(graph, controls):
     fields = {field for field, name in SIGNALS.values()}
+    context_fields = fields | set(PERFORMANCE_FIELDS) | {"buyer","seller","contract_id","subject","accepted_on","signed_on"}
     facts = [{key: fact[key] for key in ("id", "doc", "unit", "field", "value", "quote", "status") if key in fact} for fact in graph["facts"]
-             if fact["field"] in fields]
+             if fact["field"] in context_fields]
     candidates, _ = expert_candidates(graph)
     candidates = [fact for fact in candidates if fact["field"] in fields]
     options = []
@@ -262,7 +286,7 @@ def audit_graph(graph, controls):
         options.append(object_schema({"procedure": choice(["no_trigger"]), "facts": array(STRING)}))
     item_schema = options[0] if len(options) == 1 else {"anyOf": options}
     schema = object_schema({"followups": array(item_schema)})
-    context_fields = fields | {"buyer", "seller", "contract_id", "invoice_id", "claim_ref", "traveler"}
+    context_fields |= {"invoice_id", "claim_ref", "traveler"}
     relations = [edge for edge in graph["edges"] if edge["type"] in context_fields]
     target_ids = {edge["to"] for edge in relations}
     entities = {node["id"]: node["label"] for node in graph["nodes"] if node["id"] in target_ids}

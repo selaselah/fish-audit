@@ -39,7 +39,7 @@ def check(report, changed):
     amount = next((c for f in findings if f["rule"]=="B04" for c in f.get("calculations",[])), None)
     if not accounts or not amount or Decimal(amount["result"]) != (150 if changed else 0):
         raise AssertionError([(r["rule"],r["status"],r["detail"]) for r in findings if r["status"]!="ok"])
-    expected = "reject" if changed else "pass"
+    expected = "reject" if changed else ("review" if report["policy"].get("performance_checks") else "pass")
     if report["result"]["verdict"] != expected:
         raise AssertionError(report["result"])
 

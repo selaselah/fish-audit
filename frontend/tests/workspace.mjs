@@ -40,10 +40,11 @@ const legacyTransfer = caseArgument('--legacy-transfer-case');
 const partialTransfer = caseArgument('--partial-transfer-case');
 const visibilityCase = caseArgument('--visibility-case');
 const accountReview = caseArgument('--account-review-case');
+const performanceCase = caseArgument('--performance-case');
 const brokenPayment = caseArgument('--payment-source-case');
 const waitingCase = caseArgument('--waiting-case');
 const seeded = [sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
-                invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,brokenPayment,waitingCase].some(Boolean);
+                invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
 const root = brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
   recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
@@ -108,7 +109,38 @@ try {
   const click = (label, container='document') => evaluate('[...'+container+'.querySelectorAll("button,a")].find(b=>b.textContent==='+JSON.stringify(label)+' && b.getClientRects().length).click()');
   await call('Runtime.enable');
   await call('Page.navigate',{url:root});
-  if (claimPairCase) {
+  if (performanceCase) {
+    const api = root+'/api/cases/'+performanceCase;
+    const task = await (await fetch(api)).json();
+    assert.ok(task.title.startsWith('合成演练 · ') && task.profile==='cn-contract-performance/v1');
+    const {report} = await (await fetch(api+'/reports/'+task.rev)).json();
+    const phases = report.findings.filter(f=>f.rule==='H04');
+    assert.deepEqual(phases.map(f=>f.stage.share),['30','60','10']);
+    await wait('!!document.querySelector("#new-case")','new audit');
+    await evaluate('document.querySelector("#new-case").click()');
+    await evaluate('const p=document.querySelector("#upload-profile");p.value="cn-contract-performance/v1";p.dispatchEvent(new Event("change"));');
+    assert.ok(await evaluate('document.querySelector("#profile-note").textContent.includes("质保期满确认单")'));
+    await call('Page.navigate',{url:root+'/workpaper/'+performanceCase+'?rev='+task.rev});
+    await wait('!!document.querySelector(".performance-panel .clause-source")','contract performance report');
+    for (const phase of phases) {
+      const selector='[data-finding="'+phase.id+'"]';
+      const node='document.querySelector('+JSON.stringify(selector)+')';
+      assert.ok(await evaluate(node+'.innerText.includes('+JSON.stringify(phase.detail)+')'));
+      assert.ok(await evaluate(node+'.querySelector("h3").innerText.includes('+JSON.stringify(phase.stage.share+'%')+')'));
+      await evaluate(node+'.querySelector(".clause-source button").click()');
+      const fact=report.graph.facts.find(f=>f.id===phase.stage.clause_ref);
+      await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.textContent.includes('+JSON.stringify(fact.quote)+')','pinned contract clause');
+      await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+    }
+    for (const width of [1440,1024,820,768,390,320]) {
+      await call('Emulation.setDeviceMetricsOverride',{width,height:880,deviceScaleFactor:1,mobile:false});
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll(".clause-source")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'performance layout at '+width);
+    }
+    const target=report.findings.find(f=>f.rule==='H02');
+    await click('查看证据路径','document.querySelector('+JSON.stringify('[data-finding="'+target.id+'"]')+')');
+    await wait('document.querySelector("#trace-select")?.value==='+JSON.stringify(target.id),'acceptance evidence graph');
+    console.log('PASS · Contract scope, three phase decisions, original clauses and evidence path at six widths');
+  } else if (claimPairCase) {
     const api=root+'/api/cases/'+claimPairCase;
     const task=await (await fetch(api)).json();
     assert.ok(task.title.startsWith('合成演练 · 八位同号异代码双票'));
