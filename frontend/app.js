@@ -172,6 +172,8 @@ function openPage(docId, pageNumber, highlight) {
     if (fact.source_line) row.append(fold('对照本机文字层', el('blockquote', fact.source_line.text)));
     if (fact.origin === 'verified_printed_heading') row.append(el('small','标题来自可定位文字层，经模型对照页图复检。','small'));
     if (fact.origin === 'printed_claim_pair') row.append(el('small','模型原列为随附票号。原页同一行明列代码和号码，逐项读图复检已核对这段引文。','small'));
+    if (state.bundle.report.graph.number_masks?.facts.some(m=>m.fact===fact.id))
+      row.append(el('small','原文含遮盖位或只列尾号。取得完整票号后可重新核对。','small'));
     if (fact.visual_check) row.append(el('small', '模型二次读图 · ' +
       ({clear:'可辨认', conflict:'存在差异', unreadable:'无法核实'}[fact.visual_check] || fact.visual_check), 'small'));
     if (fact.source_line?.rects?.length) row.append(action('定位原文', () => locate(fact), 'ref'));
@@ -426,7 +428,7 @@ function graphPanel() {
   }
   const groups = [...grouped].sort((left, right) => right[1].length - left[1].length);
   if (groups.length) panel.append(lazyFold('查看实体与单据关联（'+groups.length+'）',()=>groups.map(([target, edges])=>
-    lazyFold(nodes.get(target).label+' · '+edges.length+' 条关联',()=>edges.map(edge=>box('line',
+    lazyFold((edges[0].type.startsWith('incomplete_') ? facts.get(target).value+' · 号码待补全' : nodes.get(target).label)+' · '+edges.length+' 条关联',()=>edges.map(edge=>box('line',
       el('strong',nodes.get(edge.from).label),el('span','记载'+(facts.get(edge.evidence[0])?.label || edge.type)),
       box('chips',...edge.evidence.map(citation))))))));
   if (!groups.length) panel.append(el('p', '请在原件与引文中核对待确认记录，核图后系统会重建关系。'));

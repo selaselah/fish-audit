@@ -2,8 +2,10 @@ import unittest
 
 from config import TRAVEL
 from controls import execute
-from graph import build_graph
+from graph import attach_prior_invoices, build_graph
+from invoice_approval import receipt
 from invoice_identity import InvoiceIdentities, identity_relations
+from invoice_masks import verify_masks
 
 
 CODES = ("099926001011","099926002011")
@@ -37,6 +39,44 @@ def materials(codes=CODES, *, numbers=None, claim=None, packet=False):
 
 
 class InvoiceIdentityTests(unittest.TestCase):
+    def test_repeating_visible_masks_does_not_establish_an_invoice_or_a_total(self):
+        for value in ("26****1234","26＊＊90","00XXXX1234","尾号1234","26…1234","□□□□","XXXX"):
+            with self.subTest(value=value):
+                g=build_graph(*materials([None],numbers=[value],claim=[("claim_ref",value)]),{})
+                attach_prior_invoices(g,[])
+                verify_masks(g)
+                f={r["rule"]:r for r in execute(g,TRAVEL)}
+                self.assertTrue(all(f[rule]["status"]=="missing" for rule in ("I01","I02","T02","T03")))
+                self.assertNotIn("calculations",f["T03"])
+                refs={m["fact"] for m in g["number_masks"]["facts"]}
+                self.assertEqual(len(refs),2)
+                self.assertTrue(refs<=set(f["T03"]["evidence"]))
+                self.assertFalse(any(n["type"]=="invoice_number" for n in g["nodes"]))
+                signed={"case_id":"test","workspace":"local","rev":1,"time":"t"}
+                checked=receipt(g,[],1,"r",signed)
+                self.assertEqual((checked["outcome"],checked["numbers"],checked["withheld"][0]["value"]),("incomplete_number",[],value))
+                next(e for e in g["edges"] if e["type"]=="incomplete_invoice_id")["type"]="invoice_id"
+                with self.assertRaisesRegex(ValueError,"精确匹配"):
+                    verify_masks(g)
+
+    def test_extra_masked_claim_blocks_summing_otherwise_matching_invoice(self):
+        valid="YL-XX-1234"
+        g=build_graph(*materials([None],numbers=[valid],claim=[("claim_ref",valid),("claim_ref","26****1234")]),{})
+        attach_prior_invoices(g,[])
+        checks={r["rule"]:r for r in execute(g,TRAVEL)}
+        self.assertEqual([checks[r]["status"] for r in ("I01","I02","T02","T03")],["ok","ok","missing","missing"])
+        self.assertNotIn("calculations",checks["T03"])
+        docs,pages=materials([None],numbers=[valid],claim=[("claim_ref",valid)])
+        page=pages[1]
+        value="26****1234"
+        item={"field":"invoice_id","value":value,"quote":"发票号码："+value,"region":"top"}
+        page["extraction"]["output"]["facts"].append(item)
+        page["text"]+="\n"+item["quote"]
+        page["layer"]["lines"][str(len(page["text"].splitlines()))]=[[.1,.2,.9,.23]]
+        g=build_graph(docs,pages,{})
+        self.assertFalse(any(e["type"]=="invoice_id" for e in g["edges"]))
+        verify_masks(g)
+
     def test_model_classification_requires_the_same_printed_line_and_checked_image(self):
         docs,pages=materials()
         page=pages[0]

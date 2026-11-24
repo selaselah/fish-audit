@@ -6,7 +6,7 @@ import json
 from urllib.error import HTTPError
 from reportlab.pdfgen import canvas
 
-from generate import ROOT, draw_pdf_page, embedded_font, pdf
+from generate import ROOT, draw_pdf_page, embedded_font, pdf, scan
 from run import BASE, get, post, submit, wait
 
 
@@ -107,14 +107,84 @@ def cross_case(run_id):
     print("相同组合待核",BASE+"/workpaper/"+ids[2]+"?rev=2&finding="+finding["id"])
 
 
+def confirm_marked_photo(cid,source,number):
+    base="/api/cases/"+cid
+    case=get(base)
+    assert case["title"].startswith("合成演练 · 遮盖票号照片 · ")
+    sha=hashlib.sha256(source.read_bytes()).hexdigest()
+    doc=next(d["id"] for d in case["documents"] if d["sha256"]==sha)
+    fields={"invoice":("住宿服务发票","住宿服务发票"),"invoice_id":(number,"发票号码："+number)}
+    for _ in range(4):
+        rev=get(base)["rev"]
+        paper=get(base+"/reports/"+str(rev))["report"]
+        raw=[f for f in paper["graph"]["facts"] if f["doc"]==doc]
+        action={"rev":rev,"reviewer":"演练核图许澄","note":"对照脚本生成的水印照片核对抬头及可见字符，星号原样保留。"}
+        confirming=[]
+        for field,(value,quote) in fields.items():
+            entries=[f for f in raw if f["field"]==field]
+            assert len(entries)<=1
+            if not entries or entries[0]["value"]!=value or entries[0]["quote"].replace(":", "：")!=quote:
+                post(base+"/amend",{**action,"doc":doc,"page":1,"target":entries[0]["id"] if entries else None,
+                                    "field":field,"value":value,"quote":quote,"region":"top"})
+                break
+            if entries[0]["status"]!="confirmed":
+                confirming.append(entries[0]["id"])
+            else:
+                assert entries[0]["attestation"]["source_check"]["original_sha256"]==sha
+        else:
+            if not confirming:
+                return paper
+            post(base+"/attest",{**action,"facts":confirming,"decision":"confirm"})
+        wait(cid)
+    raise AssertionError("未取得水印照片上两项可见引文的确认")
+
+
+def masked_case(run_id,photo=False):
+    run_id += "-mask-photo" if photo else "-mask"
+    number,_,_,singles=materials(run_id)
+    folder=singles[0][0].parent
+    masked="26****90"+number
+    font=embedded_font("InvoiceSeriesCJK")
+    shared=[("出差人员","演练林川"),("币种","人民币"),("金额单位","元")]
+    claim,invoice=folder/"遮盖票号的报销申请.pdf",folder/"遮盖号码的发票.pdf"
+    pdf(claim,"差旅报销单",[*shared,("出差开始日期","2026年10月12日"),("出差结束日期","2026年10月15日"),
+                        ("申请报销金额","636.00"),("随附发票号码",masked)],font=font)
+    amounts=[("费用发生日期","2026年10月13日"),("含税总额","636.00")]
+    if photo:
+        invoice=folder/"号码有遮盖的水印照片.jpg"
+        scan(invoice,"住宿服务发票",[("发票号码",masked),*shared,*amounts])
+    else:
+        pdf(invoice,"住宿服务发票",[*shared,("发票号码",masked),*amounts],font=font)
+    title="合成演练 · "+("遮盖票号照片" if photo else "遮盖票号的费用申请")+" · "+number
+    cid=submit(title,[claim,invoice],run_id,"cn-travel-reimbursement/v1")
+    print(BASE+"/workpaper/"+cid,flush=True)
+    paper=wait(cid)
+    if photo:
+        paper=confirm_marked_photo(cid,invoice,masked)
+    fields=[f for f in paper["graph"]["facts"] if f["field"] in {"claim_ref","invoice_id"}]
+    assert len(fields)==2 and all(f["value"]==masked and f["status"] in {"anchored","confirmed"} for f in fields)
+    assert "number_masks" in paper["graph"],"请在支持遮盖号码核对的版本复算此案"
+    checks={f["rule"]:f for f in paper["findings"]}
+    assert all(checks[key]["status"]=="missing" for key in ("I01","I02","T02","T03"))
+    assert paper["result"]["verdict"]=="review" and "calculations" not in checks["T03"]
+    assert {f["id"] for f in fields}<=set(checks["T02"]["evidence"])
+    if not photo:
+        assert {f["id"] for f in fields}<=set(checks["T03"]["evidence"])
+    print(masked,paper["result"]["verdict"],flush=True)
+
+
 if __name__=="__main__":
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run-id",default="synthetic-invoice-series-v1")
     modes=parser.add_mutually_exclusive_group()
     modes.add_argument("--run",action="store_true")
     modes.add_argument("--cross",action="store_true",help="签收两组同号异代码水印资料，并检查第三份同票副本")
+    modes.add_argument("--masked",action="store_true",help="生成申请与附件均列相同遮盖票号的合成案例")
+    modes.add_argument("--masked-photo",action="store_true",help="仅确认水印照片的可见抬头和带遮盖位的号码")
     args=parser.parse_args()
-    if args.cross:
+    if args.masked or args.masked_photo:
+        masked_case(args.run_id,args.masked_photo)
+    elif args.cross:
         cross_case(args.run_id)
     else:
         exercise(args.run_id,args.run)

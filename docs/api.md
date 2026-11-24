@@ -123,3 +123,5 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 规则集 `2026.11.24.8` 将同号初筛与完整标识比对分别记录。每笔 I02 的 `invoice_lookup.number` 保留本案标识、代码与原文编号，`candidates` 逐条指向前案引文，分类为 `same`、`different`、`uncertain`。同一前案与本案多张票据的比对结果可以不同。完整前案清单在 `graph.prior_invoices`，每条含 `identity` 和 `code_evidence`，可定位签收时的原页。上版仅留存八位号码时，本版提示人工核对前案代码。
 
 `invoice-approval-v2` 在 `screened` 留存签收时查看的全部同号引文，`matches` 仅列相同标识和判定依据不足的候选。`possible_match` 表示仅有待核候选，`insufficient_identity` 表示本案短号的代码待核。报告出具后新出现的排除项也能沿回执打开前案的代码原文。当前签收版导出的 ZIP 随附该次筛查直接引用的历史签收、底稿、原件、页图及文字层。离线工具能复核候选分类 和每个排除依据，检索范围以企业当时的数据库为准。
+
+规则集 `2026.11.24.10` 起，`graph.number_masks.facts` 保留含明确遮盖符或尾号提示的已核引文、页码和可见原值。相应的 `incomplete_invoice_id`、`incomplete_claim_ref` 或 `incomplete_claim_full_ref` 边分别连回各自的观察记录。I02 的 `invoice_lookup.withheld` 列出本次无法作精确查重的发票字段。签收回执的 `withheld` 保留查验范围缺口，`incomplete_number` 表示本次有票号不全且没有相同或待判定的前案候选。

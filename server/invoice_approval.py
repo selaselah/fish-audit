@@ -5,6 +5,7 @@ import json
 from collections import defaultdict
 
 from invoice_comparison import FORMAT as LOOKUP_FORMAT, actionables, lookup_numbers, screen
+from invoice_masks import withheld_invoices
 from invoice_proof import invoice_number_edges
 from protocol import canonical
 
@@ -25,15 +26,21 @@ def receipt(graph, matches, source_rev, report_hash, signoff):
         if len({r["id"] for r in screened})!=len(screened):
             raise ValueError("同票查验回执重复引用同一字段")
         pins = lookup_pins(screened)
+        partial = withheld_invoices(graph)
         if any(m["comparison"]=="same" for m in pins):
             outcome = "matched"
         elif pins:
             outcome = "possible_match"
+        elif partial:
+            outcome = "incomplete_number"
         elif any(n["kind"]=="short_unresolved" for n in numbers):
             outcome = "insufficient_identity"
         else:
             outcome = "no_match" if numbers else "no_usable_number"
-        return {**header,"format":FORMAT,"numbers":numbers,"matches":pins,"screened":screened,"outcome":outcome}
+        result = {**header,"format":FORMAT,"numbers":numbers,"matches":pins,"screened":screened,"outcome":outcome}
+        if partial:
+            result["withheld"] = partial
+        return result
     by_number = defaultdict(set)
     facts = {f["id"]:f for f in graph["facts"]}
     for edge in invoice_number_edges(graph):

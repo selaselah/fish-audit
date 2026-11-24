@@ -71,6 +71,7 @@ function invoiceApproval(check, digest) {
   const exact = new Set(check.matches.filter(m=>!m.comparison || m.comparison==='same').map(m=>m.case_id));
   const uncertain = new Set(check.matches.filter(m=>m.comparison==='uncertain').map(m=>m.case_id));
   const label = check.outcome==='no_usable_number' ? '本版缺少可查的已核票号' :
+    check.outcome==='incomplete_number' ? '有票号仅列部分字符，签收时无法完整查重' :
     check.outcome==='insufficient_identity' ? '八位票号的同页代码待核' :
     check.outcome==='possible_match' ? tasks.size+' 份同号任务需核对代码或单据归属' :
     '已查 '+check.numbers.length+(check.format==='invoice-approval-v1'?' 个票号':' 个票据标识')+' · '+
@@ -81,6 +82,9 @@ function invoiceApproval(check, digest) {
   const index = graphIndex(state.bundle.report.graph);
   for (const number of check.numbers) {
     panel.append(box('line',el('strong',(number.code?number.code+' / ':'')+number.value),box('chips',...number.facts.map(citation))));
+  }
+  for (const item of check.withheld || []) {
+    panel.append(box('line',el('strong',item.value+' · 号码待补全'),citation(item.fact)));
   }
   for (const match of check.matches) {
     const id='prior/'+match.case_id+'/r'+match.rev+'/'+match.fact;

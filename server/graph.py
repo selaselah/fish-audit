@@ -5,6 +5,7 @@ from collections import defaultdict
 
 from invoice_comparison import FORMAT as INVOICE_LOOKUP, code_relations, lookup_numbers, screen
 from invoice_identity import CLAIM_PAIR_LABELS, FORMAT as IDENTITY_FORMAT, SHORT, identity_relations, printed_claim_pair
+from invoice_masks import withhold_partial_numbers
 from invoice_proof import invoice_number_edges
 from model import FIELDS
 
@@ -230,6 +231,7 @@ def build_graph(docs, pages, attestations, amendments=()):
     graph = {"nodes": list(nodes.values()), "edges": edges, "facts": evidence,
              "documents_by_kind": dict(by_kind), "gaps": gaps, "cautions": cautions, "documents": docs}
     partition_documents(graph, pages)
+    withhold_partial_numbers(graph)
     graph["invoice_identity"] = IDENTITY_FORMAT
     graph["invoice_lookup"] = INVOICE_LOOKUP
     identities,links = identity_relations(graph)

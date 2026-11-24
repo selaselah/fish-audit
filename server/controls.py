@@ -8,6 +8,7 @@ from graph import KINDS, audit_documents, compact
 from invoice_approval import FORMAT as INVOICE_APPROVAL_FORMAT
 from invoice_comparison import FORMAT as INVOICE_LOOKUP, check_history as check_invoice_history
 from invoice_identity import FORMAT as INVOICE_IDENTITY_FORMAT, InvoiceIdentities, identity_key, match_claim, within_case
+from invoice_masks import FORMAT as MASK_FORMAT, withheld_invoices
 from invoice_proof import FORMAT as INVOICE_SOURCE_FORMAT
 from model import FIELDS, SIGNALS, expert_candidates
 from payment_history import HISTORY_RULES, attach_history, check_history, payment_record
@@ -40,7 +41,8 @@ CATALOG = {
 STATUS = {"ok": "相符", "issue": "发现问题", "risk": "风险待核", "missing": "证据不足"}
 VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING,
            "sources": SOURCES, "rule_sources": MAPPING, "invoice_sources": INVOICE_SOURCE_FORMAT,
-           "invoice_approval": INVOICE_APPROVAL_FORMAT,"invoice_identity":INVOICE_IDENTITY_FORMAT,"invoice_lookup":INVOICE_LOOKUP}
+           "invoice_approval": INVOICE_APPROVAL_FORMAT,"invoice_identity":INVOICE_IDENTITY_FORMAT,"invoice_lookup":INVOICE_LOOKUP,
+           "invoice_number_masks":MASK_FORMAT}
 FULL_TERMS = {"验收后一次性全额结算", "验收后一次性付清", "一次性全额结算", "一次性付清",
               "验收合格后一次性支付全款", "一次性全额付款", "一次结清", "一次性结清", "一次付清"}
 FULL_ACCEPTANCE = {"合格", "验收合格", "通过", "验收通过", "全部合格"}
@@ -115,7 +117,13 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
         return findings
     numbers = defaultdict(list)
     amounts_valid = {}
+    masked = withheld_invoices(graph)
     for doc in kinds.get("invoice", []):
+        partial = [m for m in masked if m["unit"]==doc]
+        if partial:
+            record("I01","missing","票号引文包含遮盖位或只列尾号，需取得可核对的完整号码。",
+                   [m["fact"] for m in partial],[doc])
+            continue
         found = values("I01", [(doc, "invoice_id")])
         if found:
             numbers[compact(found[0]["value"])].extend(found)
@@ -128,7 +136,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
         status,detail = within_case(number,members)
         record("I01",status,detail,ids(group)+[ref for i in members for ref in i["code_refs"]])
     if "prior_invoices" in graph:
-        if not numbers:
+        if not numbers and not masked:
             record("I02", "missing", "缺少可比对的本案发票号码。", [], doc_ids)
         else:
             check_invoice_history(graph,record)
@@ -274,6 +282,12 @@ def check_travel(graph, linked, identities, values, record):
                and f["status"] not in {"confirmed","anchored"}]
     pending += [g["id"] for g in graph["gaps"] if g.get("field") in {"claim_ref","claim_full_ref"}]
     matching,detail = match_claim(listed,identities.values())
+    partial = [m for m in graph.get("number_masks",{}).get("facts",[])
+               if (m["unit"]==claim and m["field"] in {"claim_ref","claim_full_ref"})
+               or (m["unit"] in invoices and m["field"]=="invoice_id")]
+    if partial:
+        pending.extend(m["fact"] for m in partial)
+        detail += "原件只列部分号码，暂缓关联："+"、".join(dict.fromkeys(m["value"] for m in partial))+"。"
     matching = matching and len(identities)==len(invoices) and not pending
     number_refs = ids(listed) + list(identities) + [ref for i in identities.values() for ref in i["code_refs"]] + pending
     record("T02","ok" if matching else "missing",detail,number_refs,docs)
@@ -295,7 +309,8 @@ def check_travel(graph, linked, identities, values, record):
                 detail += "申请低于票面金额，请核对个人承担、费用分摊或部分报销记录。"
             record("T03", status, detail, refs)
         else:
-            record("T03", "missing", "票号、币种、金额单位、负数方向或金额格式不满足可比条件。", refs, docs)
+            reason = "票号含遮盖位或只列尾号，待核对完整号码后再比较申请与附件金额。" if partial else "票号、币种、金额单位、负数方向或金额格式不满足可比条件。"
+            record("T03", "missing", reason, refs, docs)
     trip = values("T04", [(claim, "trip_start"), (claim,"trip_end")])
     for doc in invoices:
         incurred = values("T04", [(doc, "service_on")])

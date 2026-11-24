@@ -3,6 +3,7 @@
 from collections import defaultdict
 
 from invoice_identity import InvoiceIdentities, printed
+from invoice_masks import withheld_invoices
 from invoice_proof import field_source, invoice_number_edges
 
 
@@ -98,6 +99,11 @@ def check_history(graph,record):
     historical=defaultdict(list)
     for row in graph["prior_invoices"]:
         historical[row["number_key"]].append(row)
+    partial=withheld_invoices(graph)
+    if partial:
+        refs=[m["fact"] for m in partial]
+        record("I02","missing","有票号含遮盖位或只列尾号，无法用这些引文对已签收底稿作完整标识查重。",
+               refs,invoice_lookup={"withheld":refs,"candidates":[]})
     for number in lookup_numbers(graph):
         label = (number["code"]+" / " if number["code"] else "")+number["value"]
         candidates = historical[number["key"]]

@@ -6,12 +6,13 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
-from calculations import CalculationEvidence, SUPPORTED
+from calculations import CalculationEvidence, SUPPORTED, normalized
 from field_receipts import verify_field_sources
 from installments import LIMIT as INSTALLMENT_LIMIT, calculate as calculate_installments, finding as installment_finding
 from invoice_approval import FORMAT as INVOICE_APPROVAL_FORMAT, LEGACY_FORMAT as LEGACY_APPROVAL, PROFILES as INVOICE_PROFILES, validate as validate_invoice_approval
 from invoice_comparison import FORMAT as INVOICE_LOOKUP, archived_identity, check_history as check_invoice_history, code_relations, lookup_numbers, screen
 from invoice_identity import FORMAT as INVOICE_IDENTITY_FORMAT, InvoiceIdentities, identity_relations, printed_claim_pair
+from invoice_masks import FIELDS as NUMBER_FIELDS, FORMAT as MASK_FORMAT, verify_masks, withheld_invoices
 from invoice_proof import FORMAT as INVOICE_SOURCE_FORMAT, invoice_number_edges, source_record as invoice_source_record
 from payment_history import LIMIT, cited_facts, payment_record
 from peer_review import journal_decision, verify_referrals, verify_review
@@ -69,7 +70,7 @@ def verify_signed_invoices(bundle, hashes, report, journal, revision, nodes, app
             code_nodes,code_edges = code_relations(matches)
             require(code_nodes==[n for n in graph["nodes"] if n["type"]=="archived_code"] and
                     code_edges==[e for e in graph["edges"] if e["type"]=="supports_invoice_code"],"历史发票代码的证据关系不符")
-            if report["policy"]["profile"] in INVOICE_PROFILES and lookup_numbers(graph):
+            if report["policy"]["profile"] in INVOICE_PROFILES and (lookup_numbers(graph) or withheld_invoices(graph)):
                 expected=[]
                 def record(rule,status,detail,refs,*,invoice_lookup):
                     expected.append((status,detail,list(dict.fromkeys(refs)),invoice_lookup))
@@ -264,6 +265,20 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
                 texts[path] = bundle.read(path).decode().splitlines()
             text = texts[path]
             require(1 <= line["number"] <= len(text) and text[line["number"]-1] == line["text"], "引文定位与原文字层不符")
+        if report["policy"].get("invoice_number_masks")==MASK_FORMAT and fact["field"] in NUMBER_FIELDS:
+            if fact["status"]=="anchored":
+                require(line and line["rects"] and nodes[f"{fact['doc']}/p{fact['page']}"].get("layer")=="text" and
+                        normalized(line["text"]).strip("。;；")==normalized(fact["quote"]).strip("。;；") and
+                        normalized(fact["value"]) in normalized(fact["quote"]),"已定位的票号与原生文字行不符")
+            raw_candidate=fact.get("amendment")
+            if not raw_candidate:
+                candidates=page_calls[fact["doc"],fact["page"]]["output"]["facts"]
+                index=fact["id"].rsplit("/f",1)[-1]
+                require(index.isdecimal() and 1<=int(index)<=len(candidates),"票号缺少原始抄录记录")
+                raw_candidate=candidates[int(index)-1]
+            expected_field="claim_ref" if fact.get("origin")=="printed_claim_pair" else fact["field"]
+            require(raw_candidate["field"]==expected_field and raw_candidate["value"].strip()==fact["value"] and
+                    raw_candidate["quote"].strip()==fact["quote"],"票号与当时模型抄录或人工补正不符")
         if fact.get("origin")=="printed_claim_pair" or (fact["field"]=="claim_full_ref" and not fact.get("amendment")):
             trace = page_calls[fact["doc"],fact["page"]]
             index = fact["id"].rsplit("/f",1)[-1]
@@ -378,6 +393,12 @@ def verify(source, strict_rules=False, *, rule_checker=None):
             for name, expected in report["policy"]["code_sha256"].items():
                 require(hashes.get("methods/" + name) == expected, "执行程序版本不符：" + name)
         nodes = verify_workpaper_sources(bundle, hashes, report, "pages")
+        guarded = "invoice_masks.py" in modules
+        mask_format = graph.get("number_masks",{}).get("format")
+        require(mask_format==report["policy"].get("invoice_number_masks")== (MASK_FORMAT if guarded else None),
+                "遮盖票号的核对格式与程序版本不符")
+        if guarded:
+            verify_masks(graph)
         if "invoice_identity.py" in report["policy"].get("code_sha256",{}):
             require(report["policy"].get("invoice_identity")==graph.get("invoice_identity")==INVOICE_IDENTITY_FORMAT,
                     "发票标识的比对格式与程序版本不符")

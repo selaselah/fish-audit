@@ -78,3 +78,5 @@ PYTHONPATH=server server/.venv/bin/python -m unittest discover -s server/tests -
 `server/.venv/bin/python docs/samples/invoice_codes.py --run` 生成两张带水印的虚构发票，代码分别为 099926001011、099926002011，票号相同，金额分别为 212 元和 424 元。一份合订 PDF 载两张发票，另一份报销单逐项列出组合。脚本核对 I01 的票据标识，并检查缺少可核申请引文时 T03 暂缓计算。
 
 使用 `server/.venv/bin/python docs/samples/invoice_codes.py --cross` 可提交三个独立的合成任务。甲、乙为同号异代码两笔报销，乙签收时重新查询并随回执保存甲的代码原页。第三案沿用甲票，签收时提示前案有变化，重审后同时显示与甲的同票线索和乙的排除依据。第三案留给审计人员复核。用 `node frontend/tests/workspace.mjs --invoice-code-case 案件编号` 可在浏览器检查乙或第三案的原页跳转。
+
+使用 `server/.venv/bin/python docs/samples/invoice_codes.py --masked` 生成金额同为 636 元、号码同样有星号遮盖的申请和 PDF 发票。`--masked-photo` 改用带水印的发票照片，以演练身份只确认抬头及实际可见的号码字符。两个脚本均检查系统暂停完整标识比对与报销金额勾稽。用 `node frontend/tests/workspace.mjs --masked-invoice-case 案件编号` 可检查两份资料的引文及手机页面。

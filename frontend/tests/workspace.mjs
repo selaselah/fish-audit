@@ -34,8 +34,10 @@ const invoiceSource = caseArgument('--invoice-source-case');
 const invoiceApproval = caseArgument('--invoice-approval-case');
 const claimPairCase = caseArgument('--claim-pair-case');
 const invoiceCodeHistory = caseArgument('--invoice-code-case');
+const maskedInvoice = caseArgument('--masked-invoice-case');
 const waitingCase = caseArgument('--waiting-case');
-const seeded = sampleDesk || paymentCase || supplementCase || peerCase || fieldCase || installmentCase || replayCase || recoveringCase || invoiceConflict || invoiceSource || invoiceApproval || claimPairCase || invoiceCodeHistory || waitingCase;
+const seeded = [sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+                invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,waitingCase].some(Boolean);
 const root = waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN : recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
 if (recoveringCase || waitingCase) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
 const children = [];
@@ -115,6 +117,27 @@ try {
       assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && document.querySelector(".located").scrollWidth<=document.querySelector(".located").clientWidth+1'),'printed pair at '+width);
     }
     console.log('PASS · Printed claim pairs, exact labelled lines, visible model classification and six widths');
+  } else if (maskedInvoice) {
+    const api=root+'/api/cases/'+maskedInvoice;
+    const task=await (await fetch(api)).json();
+    assert.ok(task.title.startsWith('合成演练 · 遮盖票号'));
+    const {report}=await (await fetch(api+'/reports/'+task.rev)).json();
+    const masks=report.graph.number_masks.facts;
+    assert.ok(masks.some(f=>f.field==='invoice_id') && masks.some(f=>f.field==='claim_ref'));
+    for (const field of masks) {
+      await call('Page.navigate',{url:root+'/workpaper/'+maskedInvoice+'?rev='+task.rev+'&fact='+encodeURIComponent(field.fact)});
+      await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth && document.querySelector(".located")?.textContent.includes("原文含遮盖位")','incomplete invoice on its original page');
+      assert.ok(await evaluate('document.querySelector(".located").textContent.includes('+JSON.stringify(field.value)+')'));
+    }
+    await call('Page.navigate',{url:root+'/workpaper/'+maskedInvoice+'?rev='+task.rev});
+    const selectRule=rule=>'[data-finding="'+report.findings.find(f=>f.rule===rule).id+'"]';
+    await wait('document.querySelector('+JSON.stringify(selectRule('I02'))+')?.textContent.includes("无法用这些引文")','withheld cross-case search');
+    assert.ok(await evaluate('document.querySelector('+JSON.stringify(selectRule('T02'))+').textContent.includes("暂缓关联")'));
+    for (const width of [1440,1024,820,768,390,320]) {
+      await call('Emulation.setDeviceMetricsOverride',{width,height:860,deviceScaleFactor:1,mobile:false});
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),'incomplete invoice at '+width);
+    }
+    console.log('PASS · Withheld invoice identity, original marked fields and six widths');
   } else if (invoiceCodeHistory) {
     const api=root+'/api/cases/'+invoiceCodeHistory;
     const task=await (await fetch(api)).json();
@@ -277,7 +300,8 @@ try {
     const body=await evaluate('document.querySelector(".invoice-approval").innerText');
     assert.ok(body.includes('R'+record.source_rev) && body.includes('R'+record.signed_rev));
     for (const entry of record.numbers) assert.ok(body.includes(entry.value));
-    assert.ok(body.includes({matched:'命中 ',no_match:'未命中已签收任务',no_usable_number:'缺少可查的已核票号'}[record.outcome]));
+    assert.ok(body.includes({matched:'命中 ',no_match:'未命中已签收任务',no_usable_number:'缺少可查的已核票号',
+      incomplete_number:'无法完整查重',insufficient_identity:'同页代码待核',possible_match:'需核对代码或单据归属'}[record.outcome]));
     await evaluate('document.querySelector(".invoice-approval details summary").click()');
     const pin=current.decisions.find(d=>d.rev===current.rev).invoice_check_hash;
     await wait('document.querySelector(".invoice-approval").textContent.includes('+JSON.stringify(pin)+')','approval check digest');
