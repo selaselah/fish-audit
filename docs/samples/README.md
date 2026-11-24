@@ -31,6 +31,8 @@ server/.venv/bin/python docs/samples/run.py
 
 `server/.venv/bin/python docs/samples/concurrent_invoices.py --run` 在本机提交两份票号相同的 636 元合成差旅报销。等两案均生成底稿后签收甲案，验证乙案原版被拦下，再核对重算后的同号发现。生成使用可嵌入的中文 TrueType 字体，可通过 `AUDIT_CJK_FONT` 指定。改用 `--pause-after-first` 会将乙案留在待验收，可运行 `node frontend/tests/workspace.mjs --invoice-conflict-case 乙案编号 --live`，在 Chrome 打开签收提示并实际重审。
 
+差旅补件签收场景可运行 `server/.venv/bin/python docs/samples/invoice_approval.py --run`。先退回只有住宿发票的任务，再沿用原件补交报销单，由另一名演练审计员核对同票前案并签收。改用 `--refer` 可停在提交复核，随后用 `node frontend/tests/workspace.mjs --invoice-approval-case 补件编号 --live` 在浏览器签收并查看回执。`--single-ready` 准备另一份独立的完整报销，可用同一网页测试命令验证没有匹配前案的初审签收。
+
 ## 离线回归
 
 ```sh

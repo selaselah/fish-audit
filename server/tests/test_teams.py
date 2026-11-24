@@ -100,6 +100,47 @@ class EnterpriseFlow(unittest.TestCase):
         self.assertTrue(any(f["rule"]=="I02" and f["status"]=="risk" for f in report["findings"]))
         self.assertEqual(admin.get(base+"/reports/2").json["sha256"],previous)
         self.assertEqual(admin.post(base+"/signoff",headers=headers,json={**choice,"rev":3,"note":"已核前案，按演练意见签收。"}).status_code,200)
+        winner = admin.get(f"/api/w/{wid}/cases/{prior}/reports/2").json["invoice_approval"]
+        self.assertEqual((winner["outcome"],winner["numbers"][0]["value"],winner["matches"]),("no_match","DEMO-537",[]))
+        self.assertNotIn("invoice_approval",admin.get(base+"/reports/2").json)
+        checked = admin.get(base+"/reports/3").json["invoice_approval"]
+        self.assertEqual((checked["outcome"],checked["workspace"],[m["case_id"] for m in checked["matches"]]),("matched",wid,[prior]))
+        with admin.get(base+"/reports/3/bundle") as response:
+            data=io.BytesIO(response.data)
+            self.assertEqual(verify(data,True)[:2],(loser,3))
+            with zipfile.ZipFile(data) as archive:
+                self.assertEqual(json.loads(archive.read("approval/invoices.json")),checked)
+                self.assertEqual(json.loads(archive.read(f"prior/{prior}/r2/approval/invoices.json")),winner)
+        with self.store.connect(True) as db:
+            db.execute("UPDATE signoffs SET note='改写原签收' WHERE case_id=?",(prior,))
+        self.assertEqual(admin.get(f"/api/w/{wid}/cases/{prior}/reports/2").status_code,409)
+        self.assertEqual(admin.get(base+"/reports/3/bundle").status_code,409)
+
+    def test_peer_invoice_approval_keeps_its_source_and_records_an_unsearchable_number(self):
+        admin,wid,headers = self.register("approval-origin")
+        token = admin.post("/api/workspaces/"+wid+"/invites",headers=headers,json={"role":"auditor"}).json["token"]
+        peer,_,ph = self.register("approval-peer",invite=token)
+        cid = self.submit(admin,wid,headers,"approval-visual-only")
+        self.worker.run(self.store.claim())
+        base=f"/api/w/{wid}/cases/{cid}"
+        before=admin.get(base+"/reports/1").json
+        self.assertNotIn("invoice_approval",before)
+        self.assertEqual(admin.post(base+"/signoff",headers=headers,json={"rev":1,"decision":"escalate","note":"票号待线下复核。"}).status_code,200)
+        pin=admin.get(base).json["referrals"][0]
+        action={"rev":1,"decision":"approve","note":"合成线下核验演练。","report_hash":pin["report_hash"],
+                "signoff_hash":pin["signoff_hash"],"findings":[before["report"]["findings"][0]["id"]]}
+        for attempt in range(2):
+            self.assertEqual(peer.post(base+"/peer-review",headers=ph,json=action).json["rev"],2)
+        current=admin.get(base+"/reports/2").json
+        checked=current["invoice_approval"]
+        self.assertEqual((checked["source_rev"],checked["signed_rev"],checked["source_sha256"]),(1,2,before["sha256"]))
+        self.assertEqual((checked["outcome"],checked["numbers"],checked["matches"]),("no_usable_number",[],[]))
+        self.assertEqual(admin.get(base+"/reports/1").json,before)
+        with admin.get(base+"/reports/2/bundle") as response:
+            self.assertEqual(verify(io.BytesIO(response.data),True)[:2],(cid,2))
+        with self.store.connect(True) as db:
+            db.execute("UPDATE signoffs SET invoice_check=NULL,invoice_check_hash=NULL WHERE case_id=? AND rev=2",(cid,))
+        self.assertEqual(admin.get(base+"/reports/2/bundle").status_code,409)
 
     def test_native_invoice_exports_signed_original_and_rejects_changed_evidence(self):
         admin,wid,headers = self.register("native-invoice")

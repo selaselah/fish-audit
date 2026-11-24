@@ -66,6 +66,10 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 
 最终决定的字段为 `rev`、`reviewer`、`decision`、`note`，决定可为 `approve`、`return` 或 `escalate`。已归档、正在重算或提交过期版本返回 409。下载及操作均以任务和版本为范围。错误响应采用 `{"error":"可读说明"}`。
 
+采购、差旅签收通过时，服务在写入人工决定的同一事务内保存同票检索回执。审计人员读取签收版 `GET /reports/{rev}` 响应的 `invoice_approval` 可见当时的工作区、原查验版与摘要、签收版、签收时间、查询票号、原文字段及命中的前案版本。`outcome` 取 `matched`、`no_match` 或 `no_usable_number`。其中 `no_match` 限于本企业当时已签收的任务。提交复核的原版及独立复核签收版各有版本号。报告正文的 SHA-256 与验收前一致。
+
+签收记录的 `invoice_check_hash` 固定 `approval/invoices.json` 的原始字节。回执的 `decision_sha256` 对应含案件、企业、标题、版本、签收人、决定、意见和时间的原始签收内容，计算时排除回执摘要本身。审计人员可在独立离线校验中重建票号与命中清单并核对人工意见。本版开始实际执行过签收的记录才会带回执。
+
 更正或补录时提交 `rev`、`doc`、`page`、`field`、`quote`、`value`、`region`、`reviewer`、`note`。更正须携带本页的 `target` 证据编号，补录时设为 null。`field` 取自 `GET /api/controls` 的 `fields`，`region` 为 top、middle 或 bottom。新记录与该页 SHA-256 一起保存。
 
 任务从 `queued`、`running` 进入 `ready`。人工通过或退回后的状态为 `closed`，提交复核后为 `in_review`，复核人签收后为 `closed`。`failed` 保留阶段、原因与已完成页面。同号核查可引用本工作区已签收或已转交复核的记录，另一笔全额付款检查只采用已通过的历史签收。旧原型的 `POST /api/reviews` 继续支持文本审核。

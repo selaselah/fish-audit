@@ -5,6 +5,7 @@ from calculations import CalculationEvidence, in_yuan, money
 
 from config import BANK, PROFILE, RULE_VERSION, TRAVEL
 from graph import KINDS, audit_documents, compact, entity_id
+from invoice_approval import FORMAT as INVOICE_APPROVAL_FORMAT
 from invoice_proof import FORMAT as INVOICE_SOURCE_FORMAT
 from model import FIELDS, SIGNALS, expert_candidates
 from payment_history import HISTORY_RULES, attach_history, check_history, payment_record
@@ -36,7 +37,8 @@ CATALOG = {
 }
 STATUS = {"ok": "相符", "issue": "发现问题", "risk": "风险待核", "missing": "证据不足"}
 VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING,
-           "sources": SOURCES, "rule_sources": MAPPING, "invoice_sources": INVOICE_SOURCE_FORMAT}
+           "sources": SOURCES, "rule_sources": MAPPING, "invoice_sources": INVOICE_SOURCE_FORMAT,
+           "invoice_approval": INVOICE_APPROVAL_FORMAT}
 FULL_TERMS = {"验收后一次性全额结算", "验收后一次性付清", "一次性全额结算", "一次性付清",
               "验收合格后一次性支付全款", "一次性全额付款", "一次结清", "一次性结清", "一次付清"}
 FULL_ACCEPTANCE = {"合格", "验收合格", "通过", "验收通过", "全部合格"}

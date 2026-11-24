@@ -390,6 +390,8 @@ function reportPanel() {
   if (decision) {
     human.append(el('h3', statusName(decision.decision)), el('p', decision.note),
       el('small', decision.reviewer + ' · ' + time(decision.time), 'small'));
+    if (state.bundle.invoice_approval && decision.invoice_check_hash)
+      human.append(invoiceApproval(state.bundle.invoice_approval,decision.invoice_check_hash));
   } else if (state.detail.status === 'ready' && state.detail.rev === state.bundle.rev) {
     human.append(el('p', '查看原页与引用后，记录验收决定及依据。', 'muted'),
       action('填写验收意见', () => openReview(null), 'primary'));
@@ -583,7 +585,8 @@ async function refresh() {
       const requested = Number(route.params.get('rev'));
       const rev = data.can_review === false ? 0 : (state.pinned || (Number.isSafeInteger(requested) && requested>0 ? requested : data.rev));
       let bundle = state.bundle;
-      if (rev && (bundle?.rev !== rev || bundle.report.case_id !== data.id))
+      const approved = data.decisions?.find(d=>d.rev===rev)?.invoice_check_hash;
+      if (rev && (bundle?.rev !== rev || bundle.report.case_id !== data.id || (approved && !bundle.invoice_approval)))
         bundle = await api(Team.cases() + '/' + data.id + '/reports/' + rev);
       if (epoch !== state.epoch) return;
       state.detail = data; state.bundle = rev ? bundle : null;

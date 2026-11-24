@@ -9,6 +9,7 @@ from pathlib import Path
 from calculations import CalculationEvidence, SUPPORTED
 from field_receipts import verify_field_sources
 from installments import LIMIT as INSTALLMENT_LIMIT, calculate as calculate_installments, finding as installment_finding
+from invoice_approval import FORMAT as INVOICE_APPROVAL_FORMAT, validate as validate_invoice_approval
 from invoice_proof import FORMAT as INVOICE_SOURCE_FORMAT, invoice_number_edges, source_record as invoice_source_record
 from payment_history import LIMIT, cited_facts, payment_record
 from peer_review import journal_decision, verify_referrals, verify_review
@@ -68,6 +69,7 @@ def verify_signed_invoices(bundle, hashes, report, journal, revision, nodes):
                 and signoff["workspace"] == journal["workspace"] and signoff["decision"] in {"approve","return","escalate"}
                 and signed_at.tzinfo and signed_at <= created, "历史票号签收的企业、版本、决定或时间不符")
         verify_peer_source(bundle,hashes,archived,signoff,root)
+        verify_invoice_approval(bundle,hashes,archived,hashes[root+"report.json"],signoff,root)
         verify_field_sources(bundle,hashes,archived,rev,folder=root,pages=root,selected={m["fact"] for m in group})
         old = archived["graph"]
         docs = {d["id"]:d for d in old["documents"]}
@@ -100,6 +102,12 @@ def verify_signed_invoices(bundle, hashes, report, journal, revision, nodes):
             source = invoice_source_record(fact,node,page_texts[prefix],key,signoff["time"])
             require(match.get("source")==source and bool(match.get("checked_field"))==(source["basis"]=="field_check"),
                     "历史票号的原文定位或人工核图依据不符")
+
+
+def verify_invoice_approval(bundle, hashes, report, checksum, signoff, root=""):
+    path = root+"approval/invoices.json"
+    require(hashes.get(path)==signoff.get("invoice_check_hash"), "同票检查回执与签收时留存的摘要不符")
+    validate_invoice_approval(report,checksum,signoff,bundle.read(path) if path in hashes else None)
 
 
 def verify_payment_history(bundle, hashes, report, journal):
@@ -313,6 +321,13 @@ def verify(source, strict_rules=False, *, rule_checker=None):
             verify_peer_source(bundle, hashes, report, journal_decision(journal,revision))
         require(hashes["report.json"] == manifest["report_sha256"] and any(
             item["rev"] == revision and item["hash"] == hashes["report.json"] for item in journal["revisions"]), "底稿版本摘要不符")
+        has_approval_format = "invoice_approval.py" in report["policy"].get("code_sha256",{})
+        require(report["policy"].get("invoice_approval")== (INVOICE_APPROVAL_FORMAT if has_approval_format else None),
+                "签收时的同票查验格式与发行程序不符")
+        if any(d["rev"]==revision for d in journal["decisions"]):
+            verify_invoice_approval(bundle,hashes,report,hashes["report.json"],journal_decision(journal,revision))
+        else:
+            require("approval/invoices.json" not in hashes,"同票检查回执缺少对应的签收决定")
         graph = report["graph"]
         if report["policy"].get("archived_methods"):
             for name, expected in report["policy"]["code_sha256"].items():

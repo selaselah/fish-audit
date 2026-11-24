@@ -31,7 +31,7 @@ def result_bytes(value):
 
 def compare_rules(report, engine):
     policy = report["policy"]
-    if any(policy.get(k) != engine.VERSION.get(k) for k in ("version","sources","rule_sources","invoice_sources")):
+    if any(policy.get(k) != engine.VERSION.get(k) for k in ("version","sources","rule_sources","invoice_sources","invoice_approval")):
         raise RuleMismatch("制度与执行程序目录和当时的规则版本不符。")
     if report["graph"].get("profile") != policy["profile"]:
         raise RuleMismatch("底稿与规则的业务范围不符。")

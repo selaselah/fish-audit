@@ -31,7 +31,8 @@ const replayCase = caseArgument('--replay-case');
 const recoveringCase = caseArgument('--recovering-case');
 const invoiceConflict = caseArgument('--invoice-conflict-case');
 const invoiceSource = caseArgument('--invoice-source-case');
-const seeded = sampleDesk || paymentCase || supplementCase || peerCase || fieldCase || installmentCase || replayCase || recoveringCase || invoiceConflict || invoiceSource;
+const invoiceApproval = caseArgument('--invoice-approval-case');
+const seeded = sampleDesk || paymentCase || supplementCase || peerCase || fieldCase || installmentCase || replayCase || recoveringCase || invoiceConflict || invoiceSource || invoiceApproval;
 const root = recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
 if (recoveringCase) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
 const children = [];
@@ -176,6 +177,68 @@ try {
     await call('Page.navigate',{url:urls[0]});
     await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth && document.querySelector(".located")?.textContent.includes('+JSON.stringify(prior.quote)+')','signed native invoice opened at its original quote');
     console.log('PASS · I02 signed source, original bytes, exact line, both revisions and six responsive widths');
+  } else if (invoiceApproval) {
+    const base=root+'/api/cases/'+invoiceApproval;
+    const get=async suffix=>(await fetch(base+suffix)).json();
+    const task=await get('');
+    assert.ok(task.title.startsWith('合成演练 · '));
+    await call('Page.navigate',{url:root+'/workpaper/'+invoiceApproval});
+    if (process.argv.includes('--live') && task.title.startsWith('合成演练 · 单笔差旅签收 · ')) {
+      assert.ok(task.status==='ready' && task.rev===1);
+      const {report}=await get('/reports/1');
+      assert.equal(report.result.verdict,'pass');
+      assert.equal(report.graph.prior_invoices.length,0);
+      const code=task.title.split(' · ').at(-1);
+      assert.ok(report.graph.facts.some(f=>f.field==='invoice_id' && f.status==='anchored' && f.value==='YL-LV-'+code));
+      await wait('[...document.querySelectorAll("button")].some(b=>b.textContent==="填写验收意见")','single claim pending signature');
+      await click('填写验收意见');
+      await evaluate('document.querySelector("#reviewer").value="演练初审陆平";document.querySelector("#review-decision").value="approve";document.querySelector("#review-note").value="已对照水印住宿发票和差旅报销单，金额均为 636 元。";document.querySelector("#review-form").requestSubmit()');
+    } else if (process.argv.includes('--live')) {
+      assert.ok(task.title.startsWith('合成演练 · 补齐差旅报销单 · ') && task.status==='in_review' && task.rev===1);
+      const {report}=await get('/reports/1');
+      const prior=report.graph.prior_invoices;
+      assert.equal(prior.length,1);
+      assert.equal(prior[0].case_id,task.supplement_of.id);
+      assert.equal(prior[0].decision,'return');
+      const parent=await (await fetch(root+'/api/cases/'+prior[0].case_id)).json();
+      assert.ok(parent.title.startsWith('合成演练 · 差旅缺报销单 · ') && parent.decisions.at(-1).decision==='return');
+      assert.ok(task.documents.some(d=>d.sha256===parent.documents[0].sha256));
+      const finding=report.findings.find(f=>f.rule==='I02' && f.status==='risk');
+      assert.ok(report.findings.some(f=>f.rule==='T03' && f.status==='ok'));
+      await wait('[...document.querySelectorAll("button")].some(b=>b.textContent==="填写复核意见")','corrected claim pending peer signature');
+      await click('填写复核意见');
+      await evaluate('document.querySelector("#peer-reviewer").value="演练复核沈禾";document.querySelector("#peer-decision").value="approve";document.querySelector("#peer-note").value="已核前案退回、沿用的水印发票和补交的 636 元差旅报销单，本次演练只签收一次。";[...document.querySelectorAll("#peer-findings input")].find(i=>i.value==='+JSON.stringify(finding.id)+').checked=true;document.querySelector("#peer-form").requestSubmit()');
+    }
+    await wait('!!document.querySelector(".invoice-approval")','invoice receipt on signed workpaper');
+    const current=await get('');
+    const saved=await get('/reports/'+current.rev);
+    const record=saved.invoice_approval;
+    assert.ok(record);
+    await evaluate('document.querySelector(".invoice-approval > summary").click()');
+    const body=await evaluate('document.querySelector(".invoice-approval").innerText');
+    assert.ok(body.includes('R'+record.source_rev) && body.includes('R'+record.signed_rev));
+    for (const entry of record.numbers) assert.ok(body.includes(entry.value));
+    assert.ok(body.includes({matched:'命中 ',no_match:'未命中已签收任务',no_usable_number:'缺少可查的已核票号'}[record.outcome]));
+    await evaluate('document.querySelector(".invoice-approval details summary").click()');
+    const pin=current.decisions.find(d=>d.rev===current.rev).invoice_check_hash;
+    await wait('document.querySelector(".invoice-approval").textContent.includes('+JSON.stringify(pin)+')','approval check digest');
+    for (const width of [1440,1024,820,768,390,320]) {
+      await call('Emulation.setDeviceMetricsOverride',{width,height:860,deviceScaleFactor:1,mobile:false});
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),'approval receipt at '+width);
+      if (process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
+        await evaluate('document.querySelector(".invoice-approval").scrollIntoView({block:"center"})');
+        const capture=await call('Page.captureScreenshot',{format:'png'});
+        await writeFile(join(process.env.AUDIT_UI_SHOTS,'invoice-approval-'+width+'.png'),Buffer.from(capture.data,'base64'));
+      }
+    }
+    if (record.matches.length) {
+      const href=await evaluate('document.querySelector(".invoice-approval > a").href');
+      assert.equal(new URL(href).pathname,'/workpaper/'+record.matches[0].case_id);
+      assert.equal(new URL(href).searchParams.get('fact'),record.matches[0].fact);
+      await call('Page.navigate',{url:href});
+      await wait('document.querySelector("#page-dialog").open && !!document.querySelector(".located")','pinned historical invoice from signoff');
+    }
+    console.log('PASS · Human approval, original search scope, pinned invoice evidence and six viewport widths');
   } else if (recoveringCase) {
     const workspace=process.env.SYNTHETIC_RECOVERY_WORKSPACE;
     assert.match(workspace || '',/^[0-9a-f]{32}$/);

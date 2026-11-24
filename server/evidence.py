@@ -4,9 +4,10 @@ import zipfile
 from config import CaseError
 from documents import digest
 from field_receipts import field_actions, validate_field_actions
+from invoice_approval import validate as validate_invoice_approval
 from invoice_proof import FORMAT as INVOICE_SOURCE_FORMAT
 from payment_history import payment_matches_with_evidence
-from peer_review import verify_referrals, verify_review
+from peer_review import journal_decision, verify_referrals, verify_review
 from storage import encode
 
 
@@ -24,6 +25,20 @@ def journal(store, case_id):
     except (ValueError, TypeError, KeyError) as exc:
         raise CaseError("提交复核的签收记录或版本摘要不符。",409) from exc
     return result
+
+
+def write_invoice_approval(store, report, checksum, signoff, write, folder=""):
+    if signoff["decision"]!="approve":
+        return
+    with store.connect() as db:
+        row = db.execute("SELECT invoice_check FROM signoffs WHERE case_id=? AND rev=?",(signoff["case_id"],signoff["rev"])).fetchone()
+    raw = row["invoice_check"].encode() if row and row["invoice_check"] is not None else None
+    try:
+        validate_invoice_approval(report,checksum,signoff,raw)
+    except (ValueError,KeyError,TypeError) as exc:
+        raise CaseError("签收时的同票检查回执与所据底稿或人工意见不符。",409) from exc
+    if raw is not None:
+        write(folder+"approval/invoices.json",raw,signoff["invoice_check_hash"])
 
 
 def write_peer_source(store, report, revision, write, folder=""):
@@ -111,6 +126,8 @@ def export_bundle(store, case_id, revision, stream):
         write("report.json", raw_report, bundle["sha256"])
         history = journal(store,case_id)
         write("journal.json", encode(history).encode())
+        if any(d["rev"]==revision for d in history["decisions"]):
+            write_invoice_approval(store,report,bundle["sha256"],journal_decision(history,revision),write)
         write_peer_source(store, report, revision, write)
         write_field_sources(store,report,revision,write,journal=history)
         if report["policy"].get("archived_methods"):
@@ -159,6 +176,7 @@ def export_bundle(store, case_id, revision, stream):
             write(root + "/report.json", content, group["report_hash"])
             write(root + "/signoff.json", encode(signoff).encode(), group["signoff_hash"])
             previous = json.loads(content)
+            write_invoice_approval(store,previous,group["report_hash"],signoff,write,root+"/")
             write_peer_source(store, previous, rev, write, root+"/")
             write_field_sources(store,previous,rev,write,folder=root+"/",selected=group["facts"])
             graph = previous["graph"]
