@@ -139,3 +139,22 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 自规则 `2026.11.24.15` 起，`policy.payment_references` 与 `graph.transfer_references.format` 记为 `receipt-reference-v2`。受独立引文限定的流水在 `facts[].notes` 中返回说明字段编号、逐字引文和来源状态。`state=pending_note` 表示同页候选说明待核图，`state=partial` 表示已有来源支持部分展示。关系 `proposed_transfer_note`、`qualifies_transfer_ref` 均保留说明和流水两个证据编号。原生文字页的说明行仍可在 `lines` 中查看。
 
 跨案分期核查在 `incomplete_references` 中携带相同的来源。系统按本次比较采用的规则阅读旧版原文，旧版证据包仍按出具时的规则复算。
+
+### 整页流水核图
+
+规则 `2026.11.24.16` 使用 `receipt-reference-v3`。照片、扫描页或无法逐字定位流水栏的混合 PDF，只有“已核对栏内字符”时会返回 `state=visibility_unchecked`。审计员可在现有的 `POST /attest` 请求中按已选字段分别登记展示范围。
+
+```json
+{
+  "rev": 3,
+  "reviewer": "水印样本校验",
+  "decision": "confirm",
+  "facts": ["d02/p1/f7"],
+  "reference_visibility": {"d02/p1/f7": "complete"},
+  "note": "对照本次水印原件的流水栏、备注与页脚，整页完整显示 0042。"
+}
+```
+
+可选值为 `complete` 和 `partial`。省略这一字段表示只确认引文。同一请求内某项无效时会整批退回。只有所选的付款回单任务流水字段支持该意见。原生文字可精确定位、原件已变化、已登记的印刷限定位与完整意见冲突时，可根据接口返回原因处理。独立说明仍待核时，也需先处理说明。
+
+流水字段的 `attestation.source_check.reference_visibility` 留存意见、字段编号、当时的取值和逐字引文。外层回执保存核图时的底稿、原件与页图摘要。人工确认部分展示时会返回 `reviewed_partial`，若另有印刷限定，底稿继续保留其逐行来源。引用历史回单时，证据包另附所引原页的核图登记摘录 `field-checks/reference-visibility.json`。

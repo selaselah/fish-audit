@@ -7,6 +7,7 @@ from field_receipts import field_actions, validate_field_actions
 from invoice_approval import validate as validate_invoice_approval
 from invoice_proof import FORMAT as INVOICE_SOURCE_FORMAT
 from payment_history import payment_matches_with_evidence
+from payment_index import checked_visibility
 from peer_review import journal_decision, verify_referrals, verify_review
 from storage import encode
 
@@ -73,6 +74,11 @@ def write_field_sources(store, report, revision, write, *, folder="", journal=No
             return row["hash"],json.loads(row["content"])
         try:
             validate_field_actions(report,revision,field_actions(report,revision,journal,selected),load_version)
+            if folder:
+                actions = checked_visibility(db,report["case_id"],report["graph"],selected)
+                if actions:
+                    ledger = {"case_id":report["case_id"],"rev":revision,"actions":{a["fact"]:a for a in actions}}
+                    write(folder+"field-checks/reference-visibility.json",encode(ledger).encode())
         except (TypeError, ValueError, KeyError) as exc:
             raise CaseError("核图记录与字段、人工日志或原版底稿不符。",409) from exc
 

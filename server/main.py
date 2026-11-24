@@ -434,7 +434,8 @@ def create_app(store, worker):
         decision = data.get("decision")
         if decision not in choices:
             raise CaseError("无效的核验决定。", 400)
-        store.review(case_id, revision, reviewer, note, decision, facts, g.actor and g.actor["id"])
+        store.review(case_id, revision, reviewer, note, decision, facts, g.actor and g.actor["id"],
+                     visibility=data.get("reference_visibility"))
         worker.wakeup.set()
         return jsonify(id=case_id), 202 if facts is not None else 200
 

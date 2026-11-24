@@ -39,25 +39,39 @@ def exercise(run_id, run):
         print(label,BASE+"/workpaper/"+case+"?"+urlencode({"rev":detail["rev"],"fact":field["fact"]}),flush=True)
 
 
-def exercise_photo(run_id, run):
+def exercise_photo(run_id, run, *, whole=False, scan=False):
     import pypdfium2
     batch = hashlib.sha256(run_id.encode()).hexdigest()[:8].upper()
-    folder = ROOT / ("流水照片-"+batch)
+    folder = ROOT / (("流水整页核图-" if whole else "流水照片-")+batch)
     write_bank_pair(folder,"YL-PHOTO-"+batch,ACCOUNT,"0042",term="分期付款",payment_amount="4,200.00",
-                    reference_note="仅显示后四位")
+                    reference_note=None if whole else "仅显示后四位")
     photo = folder/"银行回单照片.jpg"
     with pypdfium2.PdfDocument(folder/"银行付款回单.pdf") as pdf:
+        size=pdf[0].get_size()
         pdf[0].render(scale=2).to_pil().convert("RGB").save(photo,quality=93,subsampling=0)
+    source=photo
+    if scan:
+        from reportlab.lib.utils import ImageReader
+        from reportlab.pdfgen.canvas import Canvas
+        source=folder/"银行回单扫描.pdf"
+        scanned=Canvas(str(source),pagesize=size,invariant=1)
+        scanned.drawImage(ImageReader(str(photo)),0,0,width=size[0],height=size[1])
+        scanned.showPage()
+        scanned.save()
     if not run:
         return
-    title = "合成演练 · 流水照片与页脚说明 · "+batch
-    case = submit(title,[folder/"采购合同.pdf",photo],run_id+"-photo",PROFILE)
+    scenario = "流水整页核图" if whole else "流水照片与页脚说明"
+    if scan:
+        scenario = "流水扫描件整页核图" if whole else "流水扫描件与页脚说明"
+    title = "合成演练 · "+scenario+" · "+batch
+    case = submit(title,[folder/"采购合同.pdf",source],run_id+("-whole-photo" if whole else "-photo")+("-scan" if scan else ""),PROFILE)
     base = "/api/cases/"+case
-    checksum = hashlib.sha256(photo.read_bytes()).hexdigest()
+    checksum = hashlib.sha256(source.read_bytes()).hexdigest()
     fields = (("bank_receipt","银行付款回单","银行付款回单","top"),
               ("payer","青岚演练商贸中心","付款户名：青岚演练商贸中心","top"),
-              ("transfer_ref","0042","交易流水号：0042","middle"),
-              ("transfer_ref_note","仅显示后四位","交易流水号说明：仅显示后四位","bottom"))
+              ("transfer_ref","0042","交易流水号：0042","middle"))
+    if not whole:
+        fields += (("transfer_ref_note","仅显示后四位","交易流水号说明：仅显示后四位","bottom"),)
     def compact(value):
         return "".join(unicodedata.normalize("NFKC",value).split())
     for _ in range(8):
@@ -66,7 +80,7 @@ def exercise_photo(run_id, run):
         assert detail["title"]==title and detail["profile"]==PROFILE
         doc = next(d["id"] for d in detail["documents"] if d["sha256"]==checksum)
         observations = [f for f in paper["graph"]["facts"] if f["doc"]==doc and f["page"]==1]
-        payload = {"rev":detail["rev"],"reviewer":"水印样本校验","note":"按本次生成的水印照片逐字核对抬头、付款户名、可见流水与展示说明。"}
+        payload = {"rev":detail["rev"],"reviewer":"水印样本校验","note":"对照本次生成的水印照片逐字核对所选栏位。"}
         confirming = []
         for field,value,quote,region in fields:
             matches = [f for f in observations if f["field"]==field]
@@ -88,8 +102,17 @@ def exercise_photo(run_id, run):
             if confirming:
                 post(base+"/attest",{**payload,"facts":confirming,"decision":"confirm"})
                 continue
-            ref = next(m for m in paper["graph"]["transfer_references"]["facts"] if m["value"]=="0042")
-            assert ref["state"]=="partial" and any(n["status"]=="confirmed" for n in ref["notes"])
+            number = next(f for f in observations if f["field"]=="transfer_ref" and f["value"]=="0042")
+            ref = next((m for m in paper["graph"]["transfer_references"]["facts"] if m["fact"]==number["id"]),None)
+            if whole and ref is None:
+                assert number["attestation"]["source_check"]["reference_visibility"]["opinion"]=="complete"
+                print(title,BASE+"/workpaper/"+case+"?"+urlencode({"rev":detail["rev"],"fact":number["id"]}),flush=True)
+                return
+            assert ref
+            if whole:
+                assert ref["state"]=="visibility_unchecked"
+            else:
+                assert ref["state"]=="partial" and any(n["status"]=="confirmed" for n in ref["notes"])
             assert [f["status"] for f in paper["findings"] if f["rule"]=="B06"]==["missing"]
             calc=paper["graph"]["payment_history"]["installments"]["calculation"]
             assert calc["state"]=="missing" and "paid_total" not in calc
@@ -101,10 +124,15 @@ def exercise_photo(run_id, run):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run",action="store_true")
-    parser.add_argument("--photo",action="store_true",help="生成独立照片与说明，并仅按样本真值核对四处印刷字段")
+    photos=parser.add_mutually_exclusive_group()
+    photos.add_argument("--photo",action="store_true",help="生成独立照片与说明，并仅按样本真值核对四处印刷字段")
+    photos.add_argument("--whole-photo",action="store_true",help="生成完整流水照片，只核对可见字符，保留整页展示范围待审")
+    parser.add_argument("--scan",action="store_true",help="将水印页作为纯图像 PDF 上传")
     parser.add_argument("--run-id",default="synthetic-partial-receipts-v1")
     args = parser.parse_args()
-    if args.photo:
-        exercise_photo(args.run_id,args.run)
+    if args.scan and not (args.photo or args.whole_photo):
+        parser.error("--scan 需配合 --photo 或 --whole-photo")
+    if args.photo or args.whole_photo:
+        exercise_photo(args.run_id,args.run,whole=args.whole_photo,scan=args.scan)
     else:
         exercise(args.run_id,args.run)

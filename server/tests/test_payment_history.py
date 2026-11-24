@@ -20,7 +20,7 @@ from graph import build_graph, link_procedures
 from identity import Directory
 from jobs import CODE_DIGESTS, METHODS
 from payment_history import LIMIT
-from payment_reference import LEGACY_FORMAT, attach as attach_references
+from payment_reference import LEGACY_FORMAT, NOTE_FORMAT, attach as attach_references
 from policy import link_sources
 from storage import Store, encode
 from test_transfers import receipt_material
@@ -35,7 +35,7 @@ class PaymentHistoryTests(unittest.TestCase):
         self.store = Store(self.root)
 
     def workpaper(self, case_id, *, fresh=True, history=True, workspace="local", user=None, contract_variant=0,
-                  legacy=False, reference_v1=False, **fields):
+                  legacy=False, reference_version=None, **fields):
         docs, pages = receipt_material(**fields)
         for doc, page in zip(docs, pages):
             # The controlled extractor supplies the text layer. The bundle still carries real image bytes.
@@ -56,8 +56,8 @@ class PaymentHistoryTests(unittest.TestCase):
         attachment = nullcontext()
         if legacy:
             attachment = patch("graph.attach_payment_references")
-        elif reference_v1:
-            attachment = patch("graph.attach_payment_references",lambda graph,read: attach_references(graph,read,LEGACY_FORMAT))
+        elif reference_version:
+            attachment = patch("graph.attach_payment_references",lambda graph,read: attach_references(graph,read,reference_version))
         with attachment:
             graph = build_graph(docs, pages, self.store.attestations(case_id), self.store.amendments(case_id))
         graph["profile"] = BANK
@@ -70,13 +70,15 @@ class PaymentHistoryTests(unittest.TestCase):
         link_sources(graph)
         policy = {**VERSION, "profile": BANK, "code_sha256": CODE_DIGESTS, "calculations": FORMAT, "archived_methods": True}
         methods = METHODS
-        if legacy or reference_v1:
-            omitted = {"payment_notes.py"}
+        if legacy or reference_version:
+            omitted = {"payment_visibility.py"}
+            if reference_version!=NOTE_FORMAT:
+                omitted.add("payment_notes.py")
             if legacy:
                 omitted.add("payment_reference.py")
                 policy.pop("payment_references")
             else:
-                policy["payment_references"]=LEGACY_FORMAT
+                policy["payment_references"]=reference_version
             policy["code_sha256"] = {k:v for k,v in CODE_DIGESTS.items() if k not in omitted}
             methods = {k:v for k,v in METHODS.items() if k not in omitted}
         if not history or legacy:
@@ -452,7 +454,7 @@ class PaymentHistoryTests(unittest.TestCase):
         with self.store.connect() as db:
             self.assertIsNone(db.execute("SELECT 1 FROM contract_payments WHERE case_id='other'").fetchone())
             self.assertIsNotNone(db.execute("SELECT 1 FROM payment_index_pending WHERE case_id='other'").fetchone())
-            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 8)
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 9)
 
     def test_damaged_signed_payment_archive_cannot_silently_disappear(self):
         self.installment("signed")
@@ -567,7 +569,7 @@ class PaymentHistoryTests(unittest.TestCase):
 
     def test_v1_signed_photo_is_screened_by_new_comparisons_and_old_approval(self):
         from payment_index import LegacyPartialTransfer
-        opts={"reference":"0042","photo_note":("other","交易流水号说明：仅显示后四位"),"reference_v1":True}
+        opts={"reference":"0042","photo_note":("other","交易流水号说明：仅显示后四位"),"reference_version":LEGACY_FORMAT}
         with patch("payment_index.checked_references",return_value=[]):
             for case in ("paid-photo","stale-photo","peer-photo"):
                 first=self.installment(case,**opts)
@@ -577,7 +579,7 @@ class PaymentHistoryTests(unittest.TestCase):
                 self.assertEqual(old["graph"]["payment_history"]["installments"]["calculation"]["paid_total"],"4200.00")
             self.store.review("paid-photo",2,"演练","核对模拟旧版","approve")
             self.store.review("peer-photo",2,"演练","转独立复核","escalate")
-            total=self.installment("stale-total",reference="YL-NEW",reference_v1=True)
+            total=self.installment("stale-total",reference="YL-NEW",reference_version=LEGACY_FORMAT)
             self.assertEqual(total["graph"]["payment_history"]["installments"]["calculation"]["paid_total"],"8400.00")
         with self.store.connect(True) as db:
             db.execute("PRAGMA user_version=7")
@@ -618,6 +620,141 @@ class PaymentHistoryTests(unittest.TestCase):
             db.execute("UPDATE pages SET text=text||' ' WHERE case_id='first' AND doc='d02'")
         with self.assertRaisesRegex(CaseError,"流水的原文"):
             self.installment("bad-text",reference="YL-NEXT")
+
+    def test_whole_image_review_is_per_field_reversible_and_pinned_to_the_checked_bytes(self):
+        from field_receipts import field_actions, validate_field_actions
+        from payment_visibility import UNCHECKED
+        opts={"reference":"0042","bank_photo":True}
+        first=self.installment("whole",**opts)
+        bank={f["field"]:f["id"] for f in first["graph"]["facts"] if f["doc"]=="d02"}
+        ref=bank["transfer_ref"]
+        for facts,decision,choices in (([ref],"confirm",{ref:True}),([ref],"confirm",["complete"]),
+                                       ([ref],"confirm",{bank["payee"]:"complete"}),([bank["payee"]],"confirm",{bank["payee"]:"complete"}),
+                                       ([ref],"dispute",{ref:"partial"}),(None,"approve",{ref:"complete"})):
+            with self.subTest(choices=choices,decision=decision),self.assertRaises(CaseError):
+                self.store.review("whole",1,"演练","按已选原页记录",decision,facts,visibility=choices)
+        self.assertEqual(self.store.attestations("whole"),{})
+        self.store.review("whole",1,"演练","仅核对可见字符","confirm",list(bank.values()))
+        held=self.installment("whole",fresh=False,**opts)
+        self.assertEqual(held["graph"]["transfer_references"]["facts"][0]["state"],UNCHECKED)
+        self.assertEqual(held["graph"]["payment_history"]["installments"]["calculation"]["state"],"missing")
+        for rule in ("B05","B06","B08"):
+            finding=next(f for f in held["findings"] if f["rule"]==rule)
+            self.assertEqual(finding["status"],"missing")
+            self.assertIn(ref,finding["evidence"])
+        self.store.review("whole",2,"演练","核对页脚及整张回单后确认完整","confirm",[ref],visibility={ref:"complete"})
+        checked=self.installment("whole",fresh=False,**opts)
+        self.assertEqual(checked["graph"]["transfer_references"]["facts"],[])
+        self.assertEqual(checked["graph"]["payment_history"]["installments"]["calculation"]["paid_total"],"4200.00")
+        fact=next(f for f in checked["graph"]["facts"] if f["id"]==ref)
+        receipt=fact["attestation"]["source_check"]
+        self.assertEqual(receipt["reference_visibility"],{"format":"receipt-visibility-v1","opinion":"complete","fact":ref,
+                                                        "value":"0042","quote":"交易流水号：0042"})
+        self.assertEqual(receipt["report_hash"],self.store.report("whole",2)["sha256"])
+        self.assertEqual((fact["source_sha256"],fact["page_sha256"]),(receipt["original_sha256"],receipt["page_sha256"]))
+        def archived(rev):
+            bundle=self.store.report("whole",rev)
+            return bundle["sha256"],bundle["report"]
+        for key,value in (("fact",bank["payer"]),("quote","流水号：042"),("opinion","maybe")):
+            bad=deepcopy(checked)
+            f=next(f for f in bad["graph"]["facts"] if f["id"]==ref)
+            f["attestation"]["source_check"]["reference_visibility"][key]=value
+            with self.subTest(key=key),self.assertRaises(ValueError):
+                validate_field_actions(bad,3,field_actions(bad,3,selected={ref}),archived)
+        self.store.review("whole",3,"另一演练员","重新核图，只能确认部分流水","confirm",[ref],visibility={ref:"partial"})
+        limited=self.installment("whole",fresh=False,**opts)
+        self.assertEqual(limited["graph"]["transfer_references"]["facts"][0]["state"],"reviewed_partial")
+        self.assertNotIn("paid_total",limited["graph"]["payment_history"]["installments"]["calculation"])
+        self.assertEqual(checked,self.store.report("whole",3)["report"])
+        for rev in (1,2,3,4):
+            out=io.BytesIO()
+            export_bundle(self.store,"whole",rev,out)
+            self.assertEqual(verify(out,True)[:2],("whole",rev))
+
+    def test_visibility_never_overrides_a_printed_or_pending_qualifier(self):
+        opts={"reference":"0042","photo_note":("other","交易流水号说明：仅显示后四位")}
+        first=self.installment("limited",**opts)
+        bank=[f for f in first["graph"]["facts"] if f["doc"]=="d02"]
+        ref=next(f["id"] for f in bank if f["field"]=="transfer_ref")
+        # Both observations can first reach the policy together. An affirmative opinion cannot remove the qualifier.
+        self.store.review("limited",1,"演练","按整页复核可见栏位","confirm",[f["id"] for f in bank if f["field"]!="other"],visibility={ref:"complete"})
+        second=self.installment("limited",fresh=False,**opts)
+        field,=second["graph"]["transfer_references"]["facts"]
+        self.assertEqual(field["state"],"pending_note")
+        with self.assertRaisesRegex(CaseError,"同页展示说明"):
+            self.store.review("limited",2,"演练","核对字段","confirm",[ref],visibility={ref:"complete"})
+        note,=field["notes"]
+        self.store.review("limited",2,"演练","同页印有部分展示说明","confirm",[note["fact"]])
+        third=self.installment("limited",fresh=False,**opts)
+        self.assertEqual(third["graph"]["transfer_references"]["facts"][0]["state"],"partial")
+        self.assertNotIn("paid_total",third["graph"]["payment_history"]["installments"]["calculation"])
+        digital=self.installment("text")
+        text=next(f["id"] for f in digital["graph"]["facts"] if f["field"]=="transfer_ref")
+        with self.assertRaisesRegex(CaseError,"原页类型"):
+            self.store.review("text",1,"演练","核对电子回单","confirm",[text],visibility={text:"complete"})
+
+    def test_legacy_v2_photo_without_an_independent_note_is_not_a_proven_complete_reference(self):
+        from payment_index import LegacyPartialTransfer
+        opts={"reference":"0042","bank_photo":True,"reference_version":NOTE_FORMAT}
+        with patch("payment_index.checked_references",return_value=[]):
+            for case in ("v2-photo","v2-pending"):
+                first=self.installment(case,**opts)
+                self.store.review(case,1,"演练","核对栏内全部字符","confirm",[f["id"] for f in first["graph"]["facts"] if f["doc"]=="d02"])
+                old=self.installment(case,fresh=False,**opts)
+                self.assertEqual(old["graph"]["payment_history"]["installments"]["calculation"]["paid_total"],"4200.00")
+            self.store.review("v2-photo",2,"演练","旧版签收模拟","approve")
+        with self.store.connect(True) as db:
+            db.execute("PRAGMA user_version=8")
+        self.store=Store(self.root)
+        with self.assertRaisesRegex(LegacyPartialTransfer,"整页展示范围"):
+            self.store.review("v2-pending",2,"演练","初审模拟","approve")
+        new=self.installment("new-v3",reference="0042")
+        self.assert_controls(new,"ok","missing")
+        window=new["graph"]["payment_history"]["installments"]
+        match,=window["matches"]
+        self.assertEqual((match["case_id"],match["entry"],match["incomplete_references"][0]["state"]),("v2-photo",None,"visibility_unchecked"))
+        self.assertIn("整页",window["calculation"]["reason"])
+        for case,rev in (("v2-photo",2),("new-v3",1)):
+            out=io.BytesIO()
+            export_bundle(self.store,case,rev,out)
+            self.assertEqual(verify(out,case=="new-v3")[:2],(case,rev))
+
+    def test_credited_historical_photo_includes_its_recorded_whole_page_decision(self):
+        opts={"reference":"0042","bank_photo":True}
+        initial=self.installment("paid-image",**opts)
+        fields=[f for f in initial["graph"]["facts"] if f["doc"]=="d02"]
+        ref=next(f["id"] for f in fields if f["field"]=="transfer_ref")
+        self.store.review("paid-image",1,"演练","整页含完整流水，逐项核对","confirm",[f["id"] for f in fields],visibility={ref:"complete"})
+        approved=self.installment("paid-image",fresh=False,**opts)
+        self.store.review("paid-image",2,"演练","确认水印底稿","approve")
+        new=self.installment("second-image",amount="4350.00",reference="YL-NEXT")
+        self.assertEqual(new["graph"]["payment_history"]["installments"]["calculation"]["paid_total"],"8550.00")
+        out=io.BytesIO()
+        export_bundle(self.store,"second-image",1,out)
+        self.assertEqual(verify(out,True)[:2],("second-image",1))
+        path="prior/paid-image/r2/field-checks/reference-visibility.json"
+        with zipfile.ZipFile(out) as archive:
+            hashes={e["path"]:e["sha256"] for e in json.loads(archive.read("manifest.json"))["files"]}
+            journal=json.loads(archive.read("journal.json"))
+            ledger=json.loads(archive.read(path))
+            self.assertEqual(set(ledger["actions"]),{ref})
+            stored=next(f for f in approved["graph"]["facts"] if f["id"]==ref)["attestation"]
+            self.assertEqual(ledger["actions"][ref],stored)
+            with self.assertRaisesRegex(ValueError,"缺少历史流水"):
+                verify_payment_history(archive,{k:v for k,v in hashes.items() if k!=path},new,journal)
+            ledger["actions"][ref]["source_check"]["reference_visibility"]["opinion"]="partial"
+            read=archive.read
+            with patch.object(archive,"read",side_effect=lambda name: encode(ledger).encode() if name==path else read(name)):
+                with self.assertRaisesRegex(ValueError,"整页核图决定与登记"):
+                    verify_payment_history(archive,hashes,new,journal)
+        with self.store.connect(True) as db:
+            db.execute("UPDATE attestations SET source_check=? WHERE case_id='paid-image' AND fact=?",
+                       (encode(ledger["actions"][ref]["source_check"]),ref))
+        with self.assertRaisesRegex(CaseError,"审计员当时登记"):
+            self.sign("second-image")
+        self.assertEqual(self.store.detail("second-image")["status"],"ready")
+        with self.assertRaisesRegex(CaseError,"审计员当时登记"):
+            self.installment("next",reference="YL-THIRD")
 
     def test_native_same_reference_and_full_settlement_require_the_cited_original_and_page(self):
         self.workpaper("paid")

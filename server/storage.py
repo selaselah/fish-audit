@@ -771,6 +771,7 @@ class Store:
                 source.guard(db)
             except SourceFileError as error:
                 raise PaymentSourceError(source.case_id,source.revision,source.facts.values(),error) from error
+            payment_index.checked_visibility(db,source.case_id,{"facts":source.facts.values()})
             if signoff_hash:
                 _,decision = self.signed_source(db,case_id,source.case_id,source.revision)
                 if hashlib.sha256(canonical(decision)).hexdigest()!=signoff_hash:
@@ -995,11 +996,11 @@ class Store:
         return [source_row(row) for row in db.execute("""SELECT target,doc,page,page_hash,field,value,quote,region,
                 reviewer,actor,note,time,rev,source_check FROM amendments WHERE case_id=? ORDER BY seq""", (case_id,))]
 
-    def check_field_sources(self, case_id, revision, selected, address, actor):
+    def check_field_sources(self, case_id, revision, selected, address, actor, *, visibility=None):
         with self.connect() as db:
             db.execute("BEGIN")
             authorize_case_write(db,case_id,actor)
-            sources = FieldSources.prepare(db,self.files/case_id,case_id,revision,selected,address)
+            sources = FieldSources.prepare(db,self.files/case_id,case_id,revision,selected,address,visibility=visibility)
         sources.read_files()
         return sources
 
@@ -1037,8 +1038,10 @@ class Store:
             event(db, case_id, "attestation", f"{reviewer} 新增了原页 {doc}/p{page} 的核验记录。")
             return target
 
-    def review(self, case_id, revision, reviewer, note, decision, fact_ids=None, actor=None):
-        sources = self.check_field_sources(case_id,revision,fact_ids,None,actor) if fact_ids is not None and decision=="confirm" else None
+    def review(self, case_id, revision, reviewer, note, decision, fact_ids=None, actor=None, *, visibility=None):
+        if visibility is not None and (decision!="confirm" or fact_ids is None):
+            raise CaseError("请在确认回单引文时记录流水展示范围。",400)
+        sources = self.check_field_sources(case_id,revision,fact_ids,None,actor,visibility=visibility) if fact_ids is not None and decision=="confirm" else None
         payment_sources = self.payment_approval_sources(case_id,revision,actor) if fact_ids is None and decision=="approve" else None
         with self.connect(True) as db:
             workspace = authorize_case_write(db, case_id, actor)
@@ -1065,7 +1068,7 @@ class Store:
                     raise CaseError("取值与引文不符，请对照原页更正字段。")
                 db.executemany("INSERT INTO attestations(case_id,rev,fact,decision,reviewer,note,time,actor,source_check) VALUES(?,?,?,?,?,?,?,?,?)",
                                [(case_id, revision, ref, decision, reviewer, note, now,actor,
-                                 encode(sources.receipt(facts[ref]["doc"],facts[ref]["page"],"confirm")) if sources else None) for ref in fact_ids])
+                                 encode(sources.confirmation(ref)) if sources else None) for ref in fact_ids])
                 db.execute("""UPDATE cases SET status='queued',stage='queued',progress=0,
                            message='人工核图已保存，等待重算',updated=? WHERE id=?""", (now, case_id))
                 event(db, case_id, "attestation", f"{reviewer} 核对 {len(fact_ids)} 条引文，已保存意见并提交重算。")

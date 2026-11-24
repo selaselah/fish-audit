@@ -38,10 +38,11 @@ const maskedInvoice = caseArgument('--masked-invoice-case');
 const legacyMask = caseArgument('--legacy-mask-case');
 const legacyTransfer = caseArgument('--legacy-transfer-case');
 const partialTransfer = caseArgument('--partial-transfer-case');
+const visibilityCase = caseArgument('--visibility-case');
 const brokenPayment = caseArgument('--payment-source-case');
 const waitingCase = caseArgument('--waiting-case');
 const seeded = [sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
-                invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,brokenPayment,waitingCase].some(Boolean);
+                invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
 const root = brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
   recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
@@ -179,6 +180,50 @@ try {
     await call('Page.navigate',{url:link.href});
     await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.textContent.includes('+JSON.stringify(ref.quote)+')','prior preserved page and cited reference');
     console.log('PASS · Unavailable original blocked approval, preserved note and linked pinned receipt at six widths');
+  } else if (visibilityCase) {
+    const api=root+'/api/cases/'+visibilityCase;
+    const get=async suffix=>(await fetch(api+suffix)).json();
+    const task=await get('');
+    const sample=/^合成演练 · 流水整页核图 · ([0-9A-F]{4,8})$/.exec(task.title);
+    assert.ok(sample && ['ready','closed'].includes(task.status));
+    const bytes=await readFile(resolve('docs/samples/generated/流水整页核图-'+sample[1]+'/银行回单照片.jpg'));
+    const checksum=createHash('sha256').update(bytes).digest('hex');
+    let {report}=await get('/reports/'+task.rev);
+    const source=report.graph.facts.find(f=>f.field==='transfer_ref' && f.source_sha256===checksum);
+    assert.ok(source && source.value==='0042' && source.quote.replace(/[:：\s]/g,'')==='交易流水号0042');
+    const original=source.attestation.source_check.reference_visibility;
+    const rev=original ? source.attestation.source_check.rev : task.rev;
+    const before=await get('/reports/'+rev);
+    assert.equal(before.report.graph.transfer_references.facts.find(f=>f.fact===source.id)?.state,'visibility_unchecked');
+    assert.equal(before.report.findings.find(f=>f.rule==='B06').status,'missing');
+    const page=rev=>root+'/workpaper/'+visibilityCase+'?'+new URLSearchParams({rev,fact:source.id});
+    await call('Page.navigate',{url:page(rev)});
+    await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth && document.querySelector(".located")?.textContent.includes("待核整页展示范围")','unassessed reference on its source image');
+    if (!original) {
+      assert.equal(task.status,'ready');
+      await wait('[...document.querySelectorAll(".located button:enabled")].some(b=>b.textContent==="记录流水展示范围")','loaded source enables whole-page review');
+      await evaluate('[...document.querySelectorAll(".located button")].find(b=>b.textContent==="记录流水展示范围").click()');
+      await wait('document.querySelector("#review-dialog").open && !document.querySelector("#review-visibility").hidden','individual reference scope');
+      assert.equal(await evaluate('document.querySelector("#review-visibility select").value'),'');
+      assert.ok(await evaluate('document.querySelector("#review-visibility a").href.endsWith("?rev='+rev+'")'));
+      for (const width of [1440,1024,820,768,390,320]) {
+        await call('Emulation.setDeviceMetricsOverride',{width,height:860,deviceScaleFactor:1,mobile:false});
+        assert.ok(await evaluate('document.querySelector("#review-dialog").scrollWidth<=document.querySelector("#review-dialog").clientWidth+1'),'whole-page review at '+width);
+      }
+      await evaluate('document.querySelector("#review-visibility select").value="complete";document.querySelector("#reviewer").value="水印样本校验";document.querySelector("#review-note").value="对照生成的水印原件和整页图片，流水栏完整显示 0042。";document.querySelector("#review-form").requestSubmit()');
+      await until(async()=>{const c=await get('');return c.rev===rev+1 && c.status==='ready';},'new version with whole-page evidence',180000);
+    }
+    ({report}=await get('/reports/'+(rev+1)));
+    const checked=report.graph.facts.find(f=>f.id===source.id).attestation.source_check;
+    assert.equal(checked.report_hash,before.sha256);
+    assert.equal(checked.original_sha256,checksum);
+    assert.equal(checked.reference_visibility.opinion,'complete');
+    assert.equal((await get('/reports/'+rev)).sha256,before.sha256);
+    assert.ok(['ok','risk'].includes(report.findings.find(f=>f.rule==='B06').status));
+    await call('Page.navigate',{url:page(rev+1)});
+    await wait('document.querySelector(".located")?.textContent.includes("整页核图已确认流水完整显示")','archived whole-page declaration');
+    assert.ok(await evaluate('document.querySelector(".located .field-source-check").textContent.includes('+JSON.stringify(before.sha256)+')'));
+    console.log('PASS · Checked marked original, explicit full-reference decision, pinned prior revision and resumed comparison');
   } else if (partialTransfer) {
     const api=root+'/api/cases/'+partialTransfer;
     const task=await (await fetch(api)).json();

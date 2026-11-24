@@ -7,6 +7,7 @@ import re
 from calculations import money, normalized
 from installments import RULE as INSTALLMENT_RULE, finding as installment_finding, installment_record
 from payment_notes import note_refs, pending_notes
+from payment_visibility import unchecked
 
 
 LIMIT = 8
@@ -37,6 +38,8 @@ def apply_reference_notes(record, marked):
     if not marked:
         return
     record["installment"]["partial_reference"] = True
+    if unchecked(marked):
+        record["installment"]["visibility_unchecked"] = True
     extra = note_refs(marked)
     if extra:
         for name in ("same_refs","full_refs"):
@@ -139,6 +142,8 @@ def check_history(signature, history, record, scope):
                 detail = "原回单仅提供部分流水号。取得完整流水后可核对已签收回单。" if key=="same" else "本案流水号待补全，暂缓核对同合同的其他全额付款。"
             if signature["installment"].get("reference_note_pending"):
                 detail = "回单同页有一条待核的流水展示说明，请先对照页图核实流水号的完整性。"
+            if signature["installment"].get("visibility_unchecked"):
+                detail = "流水栏的可见字符已核对。请对照整张回单，确认流水号是否完整显示。"
             record(rule, "missing", detail, refs, scope)
             continue
         matches = [m for m in history["matches"] if m["kind"] == key]

@@ -7,7 +7,7 @@ from controls import conclusion, execute
 from graph import build_graph
 
 
-def receipt_material(*, reference_note=None, reference_quote=None, photo_note=None, **overrides):
+def receipt_material(*, reference_note=None, reference_quote=None, photo_note=None, bank_photo=False, **overrides):
     accounts = "000000000000000081"
     shared = [("currency","币种","人民币"),("unit","金额单位","元"),("contract_id","合同编号","YL-081")]
     rows = [
@@ -37,6 +37,7 @@ def receipt_material(*, reference_note=None, reference_quote=None, photo_note=No
         if n==2 and photo_note:
             field,quote = photo_note
             facts.append({"field":field,"quote":quote,"value":quote.split("：")[-1],"region":"bottom"})
+        if n==2 and (bank_photo or photo_note):
             pages[-1].update(text="",layer={"type":"image","lines":{}})
     return docs, pages
 
@@ -161,10 +162,23 @@ class ReceiptControls(unittest.TestCase):
             docs,pages=receipt_material(transfer_ref="TX-XX-0042",photo_note=("other",quote))
             checked={f"d02/p1/f{i+1}":{"decision":"confirm"} for i in range(len(pages[1]["extraction"]["output"]["facts"]))}
             graph=build_graph(docs,pages,checked)
-            self.assertEqual(graph["transfer_references"]["facts"],[])
+            self.assertEqual([m.get("state") for m in graph["transfer_references"]["facts"]],["visibility_unchecked"])
         docs,pages=receipt_material(transfer_ref="0042",photo_note=("other","交易流水号说明：仅显示后四位"))
         note=pages[1]["extraction"]["output"]["facts"].pop()
         second={**pages[1],"number":2,"extraction":{"output":{"quality":"readable","facts":[note]}}}
         checked={f"d02/p1/f{i+1}":{"decision":"confirm"} for i in range(len(pages[1]["extraction"]["output"]["facts"]))}
         checked["d02/p2/f1"]={"decision":"confirm"}
-        self.assertEqual(build_graph(docs,[*pages,second],checked)["transfer_references"]["facts"],[])
+        marked=build_graph(docs,[*pages,second],checked)["transfer_references"]["facts"]
+        self.assertEqual([(m.get("state"),m.get("notes")) for m in marked],[("visibility_unchecked",None)])
+
+    def test_mixed_pdf_without_a_positioned_reference_line_needs_whole_page_review(self):
+        docs,pages=receipt_material(transfer_ref="0042")
+        ref=next(i for i,f in enumerate(pages[1]["extraction"]["output"]["facts"],1) if f["field"]=="transfer_ref")
+        source=f"d02/p1/f{ref}"
+        for layer in ("text","image_overlay"):
+            with self.subTest(layer=layer):
+                pages[1]["layer"]["type"]=layer
+                pages[1]["layer"]["lines"].pop(str(ref),None)
+                checked={f"d02/p1/f{i+1}":{"decision":"confirm"} for i in range(len(pages[1]["extraction"]["output"]["facts"]))}
+                graph=build_graph(docs,pages,checked)
+                self.assertEqual([(f["fact"],f["state"]) for f in graph["transfer_references"]["facts"]],[(source,"visibility_unchecked")])

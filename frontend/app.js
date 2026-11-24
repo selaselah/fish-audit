@@ -179,7 +179,8 @@ function openPage(docId, pageNumber, highlight) {
     const partialTransfer = state.bundle.report.graph.transfer_references?.facts.find(m=>m.fact===fact.id);
     if (partialTransfer) {
       const pending = partialTransfer.state==='pending_note';
-      row.append(el('strong',pending?'流水展示说明待核图':'流水号待补全'));
+      const unchecked = partialTransfer.state==='visibility_unchecked';
+      row.append(el('strong',unchecked?'待核整页展示范围':pending?'流水展示说明待核图':'流水号待补全'));
       for (const line of partialTransfer.lines.filter(l=>l.number!==fact.source_line?.number))
         row.append(el('blockquote','本页第 '+line.number+' 行 · '+line.text));
       for (const note of partialTransfer.notes || []) {
@@ -192,12 +193,21 @@ function openPage(docId, pageNumber, highlight) {
           target.scrollIntoView({block:'nearest'});
         },'ref'));
       }
-      row.append(el('small',pending?'核对这条说明后可重新审计。':'取得完整流水后可查找相同回单、复算累计付款。','small'));
+      row.append(el('small',unchecked?'核对整张回单的流水栏、页脚和备注后，可在核图意见中记录展示范围。':
+        pending?'核对这条说明后可重新审计。':'取得完整流水后可查找相同回单、复算累计付款。','small'));
+      if (editable && unchecked) row.append(action('记录流水展示范围',()=>{
+        $('#page-dialog').close();
+        openReview([fact.id],true);
+      },'ref'));
     }
     if (fact.visual_check) row.append(el('small', '模型二次读图 · ' +
       ({clear:'可辨认', conflict:'存在差异', unreadable:'无法核实'}[fact.visual_check] || fact.visual_check), 'small'));
     if (fact.source_line?.rects?.length) row.append(action('定位原文', () => locate(fact), 'ref'));
-    if (fact.attestation) row.append(el('p', fact.attestation.reviewer + ' · ' + fact.attestation.note, 'muted'));
+    if (fact.attestation) {
+      row.append(el('p', fact.attestation.reviewer + ' · ' + fact.attestation.note, 'muted'));
+      const scope=fact.attestation.source_check?.reference_visibility;
+      if (scope) row.append(el('strong',scope.opinion==='complete'?'整页核图已确认流水完整显示':'整页核图已确认流水仅部分显示'));
+    }
     if (fact.amendment) {
       const previous = fact.original_candidate;
       row.append(fold('人工' + (previous ? '更正' : '补录') + '来源', el('p', fact.amendment.reviewer + ' · ' +
@@ -718,7 +728,7 @@ function showInvoiceReviewConflict(container,problem,choice) {
   if (history.count>history.changes.length)
     container.append(el('p','显示 '+history.changes.length+' / '+history.count+' 处变化，重新审计可核对全部匹配。','small'));
 }
-function openReview(facts) {
+function openReview(facts,reviewVisibility=false) {
   state.review = {id: state.detail.id, rev: state.bundle.rev, facts};
   $('#review-error').textContent = '';
   $('#review-title').textContent = facts ? '记录原图核验' : '人工验收';
@@ -729,6 +739,32 @@ function openReview(facts) {
     {approve:'通过', return:'退回补件', escalate:'提交复核'};
   select.add(new Option('请选择决定', '', true, true)); select.required = true;
   for (const [value, label] of Object.entries(choices)) select.add(new Option(label, value));
+  if (reviewVisibility) select.value='confirm';
+  const visibility=$('#review-visibility');
+  visibility.replaceChildren();
+  const graph=state.bundle.report.graph;
+  if (facts && graph.profile==='cn-bank-contract-payment/v1') {
+    for (const fact of graph.facts.filter(f=>facts.includes(f.id) && f.field==='transfer_ref')) {
+      const page=graph.nodes.find(n=>n.id===fact.doc+'/p'+fact.page);
+      if (page?.layer==='text' && fact.source_line?.rects?.length) continue;
+      const input=el('select');
+      input.dataset.reference=fact.id;
+      input.add(new Option('仅核对栏内字符',''));
+      const limited=graph.transfer_references?.facts.find(m=>m.fact===fact.id);
+      const whole=new Option('已核对整页，流水号完整显示','complete');
+      whole.disabled=!!limited && (!['visibility_unchecked','reviewed_partial'].includes(limited.state) || !!limited.notes?.length || !!limited.lines?.length);
+      input.add(whole);
+      input.add(new Option('已核对整页，流水号仅部分显示','partial'));
+      const label=el('label','流水 '+fact.value+' · 展示范围');
+      label.append(input);
+      const original=link('重新查看第 '+fact.page+' 页整张回单',workpaperSource(fact.doc,'pages/'+fact.page),'source-jump');
+      original.target='_blank'; original.rel='noopener';
+      visibility.append(label,original);
+    }
+  }
+  const updateVisibility=()=>{visibility.hidden=!visibility.childElementCount || select.value!=='confirm';};
+  select.onchange=updateVisibility;
+  updateVisibility();
   $('#reviewer').value=Team.current ? Team.session.user.name : ''; $('#reviewer').readOnly=!!Team.current;
   $('#review-note').value = '';
   $('#review-dialog').showModal();
@@ -786,9 +822,12 @@ $('#review-form').addEventListener('submit', async event => {
   const label = button.textContent;
   if (pending.facts && $('#review-decision').value==='confirm') button.textContent='正在核对原件与页图…';
   try {
+    const visibility={};
+    if (!$('#review-visibility').hidden)
+      for (const input of $('#review-visibility').querySelectorAll('select')) if (input.value) visibility[input.dataset.reference]=input.value;
     await post(Team.cases() + '/' + pending.id + (pending.facts ? '/attest' : '/signoff'), {rev: pending.rev,
       reviewer: $('#reviewer').value, note: $('#review-note').value, decision: $('#review-decision').value,
-      facts: pending.facts});
+      facts: pending.facts,...(Object.keys(visibility).length?{reference_visibility:visibility}:{})});
     $('#review-dialog').close(); chooseRevision(); await refresh();
   } catch (error) {
     const message = $('#review-error');

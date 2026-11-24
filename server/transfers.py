@@ -4,6 +4,7 @@ import re
 
 from calculations import in_yuan, money, normalized
 from payment_notes import note_refs, pending_notes
+from payment_visibility import unchecked
 
 
 RULES = {
@@ -57,6 +58,8 @@ def check_transfers(graph, docs, values, record, parsed_date):
         basis.extend(refs)
         detail = ("回单同页有一条待核的流水展示说明，请对照页图核实该说明和流水栏。" if pending_notes(partial) else
                   "回单流水号有遮盖或只列尾号。请取得完整流水号，核对交易状态和付款日期。")
+        if unchecked(partial):
+            detail = "已核对流水栏的可见字符，请检查整张回单的页脚和备注并记录流水展示范围。"
         record("B05","missing",detail,refs,[bank])
     else:
         trace = values("B05",[(bank,"transfer_ref"),(bank,"transfer_status"),(contract,"signed_on"),(bank,"paid_on")])

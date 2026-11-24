@@ -17,7 +17,7 @@ from invoice_proof import FORMAT as INVOICE_SOURCE_FORMAT, invoice_number_edges,
 from payment_checks import FORMAT as PAYMENT_CHECKS, comparison_refs, verify_findings as verify_payment_findings
 from payment_history import cited_facts, comparable_record, payment_record
 from payment_notes import note_refs
-from payment_reference import FORMAT as REFERENCE_FORMAT, SUPPORTED as REFERENCE_FORMATS, check as check_references, issued_format
+from payment_reference import LEGACY_FORMAT as FIRST_REFERENCE_FORMAT, SUPPORTED as REFERENCE_FORMATS, check as check_references, issued_format
 from peer_review import journal_decision, verify_referrals, verify_review
 from protocol import canonical, response_request
 from rule_replay import check_receipt, replay_from_git, replay_installed
@@ -240,7 +240,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
     page_checks = {(t["doc"],t["page"]): t.get("check") for t in report["calls"]["pages"]}
     page_calls = {(t["doc"],t["page"]):t for t in report["calls"]["pages"]}
     version = report["policy"].get("payment_references")
-    selected_notes = set(note_refs(graph.get("transfer_references",{}).get("facts",[]))) if version==REFERENCE_FORMAT else set()
+    selected_notes = set(note_refs(graph.get("transfer_references",{}).get("facts",[]))) if version in REFERENCE_FORMATS-{FIRST_REFERENCE_FORMAT} else set()
     texts = {}
     for fact in graph["facts"]:
         require(fact["source_sha256"] == nodes[fact["doc"]]["sha256"] and

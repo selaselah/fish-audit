@@ -3,6 +3,8 @@
 import json
 from datetime import datetime
 
+from payment_visibility import recorded_actions, verify_declaration
+
 
 def field_actions(report, revision, journal=None, selected=None):
     result = []
@@ -57,6 +59,10 @@ def validate_field_actions(report, revision, actions, load_version):
                 or nodes[f"{doc}/p{page}"]["sha256"] != rec["page_sha256"]):
             raise ValueError("核图时的原始底稿、原件或页图摘要不符")
         printed = facts.get(target)
+        if "reference_visibility" in rec:
+            if not printed or rec["operation"]!="confirm" or action.get("decision")!="confirm" or action.get("fact")!=target:
+                raise ValueError("整页流水展示范围须来自该字段的原图核验决定")
+            verify_declaration(printed,nodes[f"{doc}/p{page}"],rec["reference_visibility"])
         if rec["operation"] == "add":
             if printed or not target.startswith(f"{doc}/p{page}/h"):
                 raise ValueError("补录目标与核图时的原版不符")
@@ -80,6 +86,14 @@ def verify_field_sources(bundle, hashes, report, revision, *, folder="", pages="
         path = folder+("report.json" if rev == revision else f"field-checks/r{rev}/report.json")
         return hashes[path], report if rev == revision else json.loads(bundle.read(path))
     actions = field_actions(report,revision,journal,selected)
+    if folder and (references:=recorded_actions(report["graph"],selected)):
+        path = folder+"field-checks/reference-visibility.json"
+        if path not in hashes:
+            raise ValueError("缺少历史流水的整页核图登记记录")
+        ledger = json.loads(bundle.read(path))
+        if (ledger.get("case_id")!=report["case_id"] or ledger.get("rev")!=revision or
+                any(ledger["actions"].get(a["fact"])!=a for a in references)):
+            raise ValueError("所引历史流水的整页核图决定与登记记录不符")
     history = {r["rev"]:r for r in journal["revisions"]} if journal is not None else None
     for receipt,ext in validate_field_actions(report,revision,actions,load_version):
         doc,page = receipt["doc"],receipt["page"]

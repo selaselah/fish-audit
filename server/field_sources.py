@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from config import CaseError
+from payment_visibility import review_declarations
 
 
 def source_row(row):
@@ -119,9 +120,10 @@ class FieldSources:
     signatures: dict
     checked_at: str = ""
     text_hashes: dict = field(default_factory=dict)
+    visibility: dict = field(default_factory=dict)
 
     @classmethod
-    def prepare(cls, db, folder, case_id, revision, selected, address):
+    def prepare(cls, db, folder, case_id, revision, selected, address, *, visibility=None):
         row = db.execute("""SELECT r.content,r.hash FROM reports r JOIN cases c ON c.id=r.case_id AND c.rev=r.rev
                          WHERE c.id=? AND c.rev=? AND c.status='ready'""",(case_id,revision)).fetchone()
         if not row or hashlib.sha256(row["content"].encode()).hexdigest() != row["hash"]:
@@ -139,6 +141,11 @@ class FieldSources:
             addresses = {address}
         sources = cls.from_graph(db,folder,case_id,revision,row["hash"],report["graph"],selected or (),addresses)
         sources.facts = facts
+        if visibility is not None:
+            try:
+                sources.visibility = review_declarations(report["graph"],selected,visibility)
+            except ValueError as exc:
+                raise CaseError(str(exc),400) from exc
         return sources
 
     @classmethod
@@ -193,3 +200,10 @@ class FieldSources:
         _,original,image = self.pages[doc,page]
         return {"format":"field-source-v1","operation":operation,"case_id":self.case_id,"rev":self.revision,"report_hash":self.report_hash,
                 "doc":doc,"page":page,"original_sha256":original,"page_sha256":image,"checked_at":self.checked_at}
+
+    def confirmation(self, fact_id):
+        fact = self.facts[fact_id]
+        receipt = self.receipt(fact["doc"],fact["page"],"confirm")
+        if fact_id in self.visibility:
+            receipt["reference_visibility"] = self.visibility[fact_id]
+        return receipt

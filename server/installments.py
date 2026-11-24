@@ -8,6 +8,7 @@ from decimal import Decimal
 
 from calculations import in_yuan, money, normalized
 from payment_notes import pending_notes
+from payment_visibility import unchecked
 
 
 LIMIT = 32
@@ -92,6 +93,8 @@ def installment_record(graph, findings, payer, reference):
 
 
 def calculate(current, history):
+    if current.get("visibility_unchecked"):
+        return {"state":"missing","reason":"本案流水栏已核对，请确认整页完整显示流水号后再复算分期付款。"}
     if current.get("reference_note_pending"):
         return {"state":"missing","reason":"本案流水展示说明尚待核图，请先核实完整流水号再复算分期付款。"}
     if current.get("partial_reference"):
@@ -105,6 +108,8 @@ def calculate(current, history):
     rows = [(first,"")]
     for match in history["matches"]:
         item = match["entry"]
+        if unchecked(match.get("incomplete_references",[])):
+            return {"state":"missing","reason":f"历史底稿「{match['title']}」尚缺整页流水展示范围的核图依据，请核对原图后再复算。"}
         if pending_notes(match.get("incomplete_references",[])):
             return {"state":"missing","reason":f"历史底稿「{match['title']}」的流水展示说明尚待核图，请核实后再复算。"}
         if match.get("incomplete_references"):
