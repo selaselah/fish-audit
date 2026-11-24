@@ -452,8 +452,9 @@ function qualityChangePanel(change, graph) {
   const index = graphIndex(graph);
   const facts = change.evidence.map(id=>index.facts.get(id)).filter(Boolean);
   const units = new Set(change.units);
+  const quantity = change.quantity;
   const decision = {applied:'按补充协议',original:'按原合同',pending:'适用版本待核'}[change.state];
-  const panel = box('quality-change',box('flow',el('h4','终验适用标准'),el('strong',decision,'quality-decision')));
+  const panel = box('quality-change',box('flow',el('h4',quantity?'终验适用交付数量':'终验适用标准'),el('strong',decision,'quality-decision')));
   panel.dataset.qualityChange = change.state;
   if (change.applied_criterion) panel.append(el('p',change.applied_criterion,'quality-standard'));
   const docUnit = f => f.unit || f.doc;
@@ -471,15 +472,54 @@ function qualityChangePanel(change, graph) {
     return row;
   };
   const comparison = el('dl','','change-comparison');
-  for (const [field,title] of [['acceptance_criteria','原合同标准'],['revised_criterion','协议所列新标准'],
-                               ['inspection_basis','验收报告检验依据'],['measured_result','原页实测结果']]) {
+  if (quantity) {
+    const required = quantity.applicable;
+    const actual = quantity.accepted;
+    panel.dataset.quantityStatus=quantity.difference===null?'missing':quantity.difference===0?'ok':'risk';
+    const description = [];
+    if (required) description.push('应验 '+required.count+required.unit);
+    if (actual) description.push('实收 '+actual.count+actual.unit);
+    if (quantity.difference===null) description.push('数量差额待核');
+    else if (quantity.difference===0) description.push('数量相符');
+    else description.push((quantity.difference<0?'少 ':'多 ')+Math.abs(quantity.difference)+required.unit);
+    panel.append(el('p',description.join(' · '),'quantity-result'));
+  }
+  const pairs = quantity ?
+    [['quantity_agreed','原合同约定'],['previous_quantity','协议所引原数量'],['revised_quantity','变更后数量'],['quantity_accepted','终验单实际数量']] :
+    [['acceptance_criteria','原合同标准'],['revised_criterion','协议所列新标准'],['inspection_basis','验收报告检验依据'],['measured_result','原页实测结果']];
+  for (const [field,title] of pairs) {
     const value = el('dd');
-    const matches = facts.filter(f=>f.field===field);
-    if (matches.length) value.append(...matches.map(sourceRow));
-    else value.append(el('span','待补原文','muted'));
+    if (quantity) {
+      value.append(...quantity.lines.filter(line=>line.field===field).map(line=>reservationSource(line,graph)));
+    } else {
+      value.append(...facts.filter(f=>f.field===field).map(sourceRow));
+    }
+    if (!value.childElementCount) value.append(el('span','待补原文','muted'));
     comparison.append(box('',el('dt',title),value));
   }
   panel.append(comparison);
+  if (quantity) {
+    for (const row of quantity.lines.filter(s=>s.field==='quantity_note')) panel.append(reservationSource(row,graph));
+    for (const page of quantity.pages) {
+      const name = index.documents.get(page.doc)?.name || '原件';
+      const original=action(name+' · 第 '+page.page+' 页',()=>openPage(page.doc,page.page),'ref');
+      original.dataset.quantityPage=page.doc+'/p'+page.page;
+      if (!page.native || !page.text_only) {
+        panel.append(box('change-source',el('span','核对整页数量及影像附注'),original));
+        const readings=graph.facts.filter(f=>f.doc===page.doc && f.page===page.page && !f.source_line);
+        if (readings.length && !units.has(page.unit)) {
+          const list=lazyFold('本页读图引文（'+readings.length+'）',()=>readings.map(f=>{
+            const row=sourceRow(f);
+            row.append(tag(f.status));
+            return row;
+          }));
+          list.dataset.quantityImage=page.doc+'/p'+page.page;
+          panel.append(list);
+        }
+      }
+      else if (!quantity.lines.some(line=>line.unit===page.unit && line.field!=='quantity_note')) panel.append(box('change-source',el('span','核对原页数量栏'),original));
+    }
+  }
   const dates = el('dl','','mandate-dates');
   for (const [key,title] of [['buyer_sealed_on','甲方盖章'],['seller_sealed_on','乙方盖章'],['effective_on','按约定生效'],['accepted_on','本次终验']]) {
     const value=el('dd');

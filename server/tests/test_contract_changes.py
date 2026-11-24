@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 import pypdfium2 as pdfium
 from PIL import Image
 
-from contract_changes import verify_sources
+from contract_changes import LEGACY, ledger, verify_sources
 from controls import VERSION, execute
 from documents import clause_text_only, layer_type
 from jobs import refresh_addendum_layout
@@ -33,7 +33,71 @@ def assessment(graph):
     return next(f for f in findings if f["rule"]=="H02"), [f["status"] for f in findings if f["rule"]=="H04"]
 
 
+def quantity_case(*, actual="6台", sealed="2026-09-12", reading="柜温3℃", revised="6台", omissions=()):
+    updates = {"change_scope":("change_scope","变更范围","仅变更交付数量，合同总价及其余条款不变"),
+               "previous_criterion":("previous_quantity","原交付数量","4台"),
+               "revised_criterion":("revised_quantity","变更后交付数量",revised),
+               "seller_sealed_on":("seller_sealed_on","乙方盖章日期",sealed)}
+    amendment = [updates.get(k,(k,l,v)) for k,l,v in CHANGE]
+    overrides = {"quantity_accepted":actual, "measured_result":reading}
+    receipt = [(k,l,overrides.get(k,v)) for k,l,v in RECEIPT if overrides.get(k,v) is not None]
+    return material([CONTRACT,amendment,receipt,WARRANTY,BANK_DOC],omissions=omissions)
+
+
 class ContractChangeTests(unittest.TestCase):
+    def test_quantity_change_has_its_own_effective_date_and_does_not_replace_quality_tests(self):
+        for args,state,count,diff,status,phases in (
+            ({}, "applied",6,0,"ok",["ok"]*3),
+            ({"actual":"4台"}, "applied",6,-2,"risk",["ok","risk","risk"]),
+            ({"actual":"7台"}, "applied",6,1,"risk",["ok","risk","risk"]),
+            ({"sealed":"2026-09-22","actual":"4台"}, "original",4,0,"ok",["ok"]*3),
+            ({"actual":None}, "applied",6,None,"missing",["ok","missing","missing"]),
+            ({"actual":"6套"}, "applied",6,None,"missing",["ok","missing","missing"]),
+            ({"reading":"柜温8℃"}, "applied",6,0,"issue",["ok","risk","risk"]),
+            ({"sealed":"2026-09-20"}, "pending",None,None,"missing",["ok","missing","missing"]),
+        ):
+            with self.subTest(args=args):
+                graph = quantity_case(**args)
+                inspection,stages = assessment(graph)
+                change = inspection["quality_change"]
+                quantity = change["quantity"]
+                self.assertEqual((change["state"],(quantity["applicable"] or {}).get("count"),quantity["difference"],
+                                  inspection["status"],stages),(state,count,diff,status,phases))
+                self.assertIsNone(change["applied_criterion"])
+                self.assertTrue(all(ref in inspection["evidence"] for row in quantity["lines"] for ref in row["facts"]))
+                self.assertTrue(any(e["type"]=="delivery_quantity_basis" for e in graph["edges"]))
+
+    def test_quantity_needs_the_original_unit_and_all_count_entries_on_the_page(self):
+        for args in ({"revised":"6套"},{"revised":"1 6台"},{"sealed":"2026-09-1 2"},
+                     {"omissions":[(2,"价款调整：差额另行结算")]},
+                     {"omissions":[(3,"交付备注：尚欠2台，另行补交")]}):
+            check, stages = assessment(quantity_case(**args))
+            self.assertEqual(check["quality_change"]["state"],"pending",args)
+            self.assertNotEqual(check["status"],"ok")
+            self.assertTrue(all(s!="ok" for s in stages[1:]))
+        check, _ = assessment(quantity_case(omissions=[(3,"实际验收数量：4台")]))
+        self.assertIsNone(check["quality_change"]["quantity"]["difference"])
+        self.assertEqual(check["status"],"missing")
+
+    def test_omitted_quantity_change_blocks_old_positive_signoff_and_forged_edges(self):
+        note = "变更后交付数量：6台"
+        graph = material([CONTRACT,RECEIPT,WARRANTY,BANK_DOC],omissions=[(1,note)])
+        text = {d["id"]:"\n".join(f["quote"] for f in graph["facts"] if f["doc"]==d["id"]) for d in graph["documents"]}
+        text["d01"]+="\n"+note
+        read=lambda d,p:text[d]
+        current={"graph":graph,"policy":VERSION,"findings":compute(graph)}
+        self.assertNotEqual(current["findings"][1]["status"],"ok")
+        verify_sources(current,read)
+        graph["edges"]=[e for e in graph["edges"] if e["type"]!="delivery_quantity_basis"]
+        with self.assertRaisesRegex(ValueError,"原页关系"):
+            verify_sources(current,read)
+        graph["quality_addenda"]=ledger(graph,read,LEGACY)
+        old={"policy":{**VERSION,"version":"2026.11.25.05","quality_addenda":LEGACY},"graph":graph,"findings":compute(graph)}
+        self.assertEqual(old["findings"][1]["status"],"ok")
+        verify_sources(old,read)
+        with self.assertRaisesRegex(ValueError,"数量变更"):
+            verify_sources(old,read,signing=True)
+
     def test_stricter_limit_overrides_stale_basis_with_both_pages(self):
         graph=case()
         finding, phases=assessment(graph)

@@ -1,5 +1,9 @@
 # 本机审计接口
 
+规则 `2026.11.25.06` 的 `policy.quality_addenda` 为 `acceptance-addendum-v2`。出现交付数量变更线索时，`graph.quality_addenda.quantities` 保存合同、变更协议及验收资料的页清单、数量原行与关键身份和日期栏。每一条 `delivery_quantity_basis` 关系可定位到资料单元、页和行，`evidence` 包含原页及已有模型或人工引文。原生文字行可独立于模型抄录保存。
+
+H02 的 `quality_change.quantity` 列出 `original`、`previous`、`revised`、`accepted` 和 `applicable`。可核数量以 `{count, unit}` 表示，待核值为 `null`。`difference` 为同单位实收减应验，负数表示短收，零表示数量相符。变更的 `state` 为 `applied`、`original` 或 `pending`，质量检测与分期条件仍各有自己的发现。旧版仍按出具时程序复算，旧版终验曾判相符且原页现查见数量变更线索时，申请通过会返回 409 并要求重审。
+
 自规则 `2026.11.25.05` 起，合同未提取到任何付款安排或无法确定唯一现行合同时，每个已识别的 `bank_receipt` 仍生成一项 H05。其 `status` 为 `missing`，没有 `stage`。从 `scope` 和 `evidence` 可定位各自的回单、可见用途、金额、日期以及候核合同页。没有回单时不生成此项。历史版本按原程序复算，申请通过一份漏列可识别回单的履约底稿时返回 409 并提示重新审计。
 
 规则 `2026.11.25.04` 使用 `policy.acceptance_reservations=acceptance-reservations-v2`。H02 的 `acceptance_reservations.supplier` 包含 `status`、`detail`、逐项名称 `names`、所据 `pages` 与 `lines`。名称以资料或分册单元为键，取自受支持的原文字段。`graph.acceptance_reservation_sources.supplier_rows` 列示 `seller` 原行和 `delivery_note` 附注，`supplier_identity_basis` 关系从资料单元连到该页。申请通过旧版底稿时，会重查原已判相符的终验供货主体及第三方交付线索。

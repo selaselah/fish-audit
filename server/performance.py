@@ -384,7 +384,7 @@ def inspect_quality(required, basis, reading):
     return "ok",""
 
 
-def acceptance(contract, receipts, *, criterion=None, signature_ok=None):
+def acceptance(contract, receipts, *, criterion=None, signature_ok=None, quantity_change=None):
     keys = ("contract_id","buyer","subject")
     fields = (*keys,"acceptance","seller","accepted_on","acceptance_scope","acceptance_result","acceptance_signer",
               "acceptance_exception","quantity_accepted","inspection_basis","measured_result")
@@ -427,11 +427,22 @@ def acceptance(contract, receipts, *, criterion=None, signature_ok=None):
     if until and accepted and accepted > until:
         return finding("risk","验收日期在所列合同有效期之后，需核对延期、变更及继续履行依据。")
     missing = []
+    if quantity_change is not None and quality is None:
+        missing.append("本次终验的质量标准及实际检验记录")
     if quality and quality[0] != "ok":
         return finding(*quality)
     if contract.incomplete("acceptance_criteria"):
         missing.append("合同验收标准原文")
-    if contract.fields["quantity_agreed"] or r.fields["quantity_accepted"] or contract.incomplete("quantity_agreed"):
+    if quantity_change is not None:
+        difference = quantity_change["difference"]
+        if difference is None:
+            missing.append("终验当日适用的交付数量、实际验收数量及相同计量单位")
+        elif difference:
+            needed, actual = quantity_change["applicable"], quantity_change["accepted"]
+            unit = needed["unit"]
+            delta = "少" if difference < 0 else "多"
+            return finding("risk",f"当次约定应验 {needed['count']}{unit}，原件实收 {actual['count']}{unit}，{delta} {abs(difference)}{unit}。请核对交付范围和差异处置记录。")
+    elif contract.fields["quantity_agreed"] or r.fields["quantity_accepted"] or contract.incomplete("quantity_agreed"):
         left, right = contract.body("quantity_agreed"), r.body("quantity_accepted")
         if not left or not right:
             missing.append("合同及验收资料双方记载的交付数量及单位")
@@ -621,8 +632,9 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True):
     def signatory(record):
         return by_unit[record.unit]["status"]=="ok" if record.unit in by_unit else record.signed("acceptance_signer")
     def evaluate(contract, selected):
-        return acceptance(contract,selected,criterion=(change["applied_criterion"] or "") if change else None,
-                          signature_ok=signatory if authority else None)
+        quantity = change.get("quantity") if change else None
+        criterion = (change["applied_criterion"] or "") if change and not (quantity and change["scope_clear"]) else None
+        return acceptance(contract,selected,criterion=criterion,quantity_change=quantity,signature_ok=signatory if authority else None)
     if version in (REINSPECTION_FORMAT, *MANDATE_FORMATS):
         accepted, accepted_on = assess_reinspection(contract,receipts,repairs,retests,evaluate,signature_ok=signatory if authority else None)
     else:

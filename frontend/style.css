@@ -111,7 +111,9 @@ textarea { width: 100%; resize: vertical; }
 .mandate-review { margin:12px 0; padding:14px; background:var(--soft); border-radius:6px; }
 .mandate-review h4 { margin:0 0 10px; }
 .quality-change { margin:14px 0; padding:14px; background:var(--soft); border-inline-start:3px solid var(--green); }
-.quality-change[data-quality-change="pending"] { border-inline-start-color:#ac772c; }
+.quality-change[data-quality-change="pending"], .quality-change[data-quantity-status="missing"] { border-inline-start-color:#ac772c; }
+.quality-change[data-quantity-status="risk"] { border-inline-start-color:#ac772c; background:#fff8e9; }
+.quality-change[data-quantity-status="risk"] .quantity-result { color:#754e0d; }
 .quality-change h4 { margin:0; }
 .contract-date-evidence { margin:12px 0; padding:10px 14px; border-inline-start:3px solid #946421; background:var(--soft); }
 .contract-date-evidence h4 { margin:0 0 5px; }
@@ -157,7 +159,7 @@ textarea { width: 100%; resize: vertical; }
 .signer-source .ref,.signer-review-note .ref { max-width:100%; overflow-wrap:anywhere; }
 .signature-record .signer-pending { margin:5px 0 0; color:#78511a; font-size:.9rem; }
 .quality-decision { color:var(--muted); font-size:.84rem; }
-.quality-standard { font-size:1.18rem; font-weight:650; margin:4px 0; }
+.quality-standard, .quantity-result { font-size:1.18rem; font-weight:650; margin:4px 0; overflow-wrap:anywhere; }
 .change-comparison { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr)); gap:12px 20px; }
 .change-comparison > div,.change-source { min-width:0; }
 .change-comparison dt { color:var(--muted); font-size:.82rem; }

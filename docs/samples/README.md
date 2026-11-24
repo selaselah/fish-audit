@@ -166,6 +166,10 @@ server/.venv/bin/python docs/samples/acceptance_remarks.py --run --run-id synthe
 
 `server/.venv/bin/python docs/samples/contract_seal_dates.py --run --run-id synthetic-seals-20261125-03` 生成三笔相同总价和预付比例的采购。`complete` 在双方完成盖章后支付，`early` 在乙方盖章前付款，`partial` 的合同仅见甲方盖章日期。三案均附验收、质保确认及回单原件。
 
+### 补充协议调整交付数量
+
+九笔交付数量变更演练可用 `server/.venv/bin/python docs/samples/quantity_changes.py --run` 提交到本机。主合同原数量均为四台冷柜，总价 100,000 元，成功回单均为第二期 60,000 元。`--cases complete short later same_day quality note image price` 分别对应足量、短收、协议晚于终验、同日顺序待辨、质量超限、欠交文字、影像附注和价款另议。`--cases orphan` 在主合同另列六台，没有单独提交变更协议。只生成带水印的 PDF 时省略 `--run`。
+
 ### 终验供应方与委托交付
 
 `server/.venv/bin/python docs/samples/acceptance_suppliers.py --run --run-id synthetic-supplier-20261125-04` 提交七笔水印采购案。`--cases match absent different delegate image` 的五笔采购总价、三期比例及实测质量一致，分别检查供货方名称一致、验收缺栏、名称相异、原生附注和影像附注。`--cases once unspecified` 的两笔回单均为全款 100,000 元，前一份合同明确约定终验后一次付清，后一份未载付款安排。可从底稿顶部进入合同原页或待核回单。

@@ -482,8 +482,40 @@ try {
       assert.equal(await evaluate(panel+'.querySelector(".quality-standard")?.textContent || null'),change.applied_criterion);
       assert.deepEqual(await evaluate('[...'+panel+'.querySelectorAll(".mandate-dates dd > span")].map(e=>e.textContent)'),
         [change.buyer_sealed_on,change.seller_sealed_on,change.effective_on,change.accepted_on].map(d=>d || '待核'));
-      if (await evaluate('!!'+panel+'.querySelector("details")')) await evaluate(panel+'.querySelector("details").open=true');
-      const fields=['acceptance_criteria','revised_criterion','inspection_basis','measured_result','change_scope','change_timing','change_effect_clause','buyer_signature','seller_signature'];
+      if (change.quantity) {
+        const quantity=change.quantity;
+        const expected=quantity.difference===null?'数量差额待核':quantity.difference===0?'数量相符':
+          (quantity.difference<0?'少 ':'多 ')+Math.abs(quantity.difference)+quantity.applicable.unit;
+        assert.ok(await evaluate(panel+'.querySelector(".quantity-result").textContent.endsWith('+JSON.stringify(expected)+')'));
+        await verifyRemarks(panel,quantity.lines);
+        const nativeNote=quantity.lines.find(line=>line.field==='quantity_note') || quantity.lines.find(line=>line.field==='revised_quantity');
+        if (nativeNote) {
+          await evaluate('reservationSource('+JSON.stringify({...nativeNote,facts:[]})+',state.bundle.report.graph).querySelector("button").click()');
+          await wait('document.querySelector(".located[data-gap-line] blockquote")?.textContent==='+JSON.stringify(nativeNote.quote),'quantity from the original row without a model observation');
+          await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+        }
+        for (const page of quantity.pages.filter(p=>!p.native || !p.text_only)) {
+          const locator=panel+'.querySelector('+JSON.stringify('[data-quantity-page="'+page.doc+'/p'+page.page+'"]')+')';
+          await evaluate(locator+'.click()');
+          await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth>0','full page with quantities');
+          await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+          const readings=report.graph.facts.filter(f=>f.doc===page.doc && f.page===page.page && !f.source_line && !change.units.includes(page.unit));
+          if (readings.length) {
+            const list=panel+'.querySelector('+JSON.stringify('[data-quantity-image="'+page.doc+'/p'+page.page+'"]')+')';
+            await evaluate(list+'.open=true');
+            for (const fact of readings) {
+              const row=list+'.querySelector('+JSON.stringify('[data-change-fact="'+fact.id+'"]')+')';
+              await wait(row+'?.querySelector("q").textContent==='+JSON.stringify(fact.quote),'image quantity reading');
+              await evaluate(row+'.querySelector("button").click()');
+              await wait('document.querySelector(".located")?.dataset.fact==='+JSON.stringify(fact.id),'image quantity original');
+              await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+            }
+          }
+        }
+      }
+      await evaluate(panel+'.querySelectorAll("details").forEach(d=>d.open=true)');
+      const fields=['change_scope','change_timing','change_effect_clause','buyer_signature','seller_signature'];
+      if (!change.quantity) fields.push('acceptance_criteria','revised_criterion','inspection_basis','measured_result');
       const refs=report.graph.facts.filter(f=>fields.includes(f.field) && change.evidence.includes(f.id) &&
         (!['buyer_signature','seller_signature'].includes(f.field) || change.units.includes(f.unit || f.doc)));
       for (const fact of refs) {
@@ -689,13 +721,20 @@ try {
       if (change && process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
         await evaluate('document.querySelector(".quality-change").scrollIntoView({block:"start"});window.scrollBy(0,-54)');
         const capture=await call('Page.captureScreenshot',{format:'png'});
-        await writeFile(join(process.env.AUDIT_UI_SHOTS,'amendment-'+change.state+'-'+width+'.png'),Buffer.from(capture.data,'base64'));
+        const name=change.quantity?'quantity-'+performanceCase:'amendment-'+change.state;
+        await writeFile(join(process.env.AUDIT_UI_SHOTS,name+'-'+width+'.png'),Buffer.from(capture.data,'base64'));
       }
     }
     const target=report.findings.find(f=>f.rule==='H02');
     await click('查看证据路径','document.querySelector('+JSON.stringify('[data-finding="'+target.id+'"]')+')');
     await wait('document.querySelector("#trace-select")?.value==='+JSON.stringify(target.id),'acceptance evidence graph');
     const allRemarks=report.graph.acceptance_reservation_sources?.lines || [];
+    const quantities=report.graph.quality_addenda?.quantities?.lines || [];
+    if (quantities.length) {
+      const panel='document.querySelector(".quantity-relations")';
+      await evaluate(panel+'.open=true');
+      await verifyRemarks(panel,quantities);
+    }
     const supplierRows=report.graph.acceptance_reservation_sources?.supplier_rows || [];
     if (supplierRows.length) {
       const panel='document.querySelector(".supplier-relations")';
