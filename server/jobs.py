@@ -10,11 +10,12 @@ from documents import digest, prepare
 from graph import attach_prior_invoices, build_graph, heading_candidates, invoice_number_edges, link_procedures
 from model import AUDIT, EXTRACT, VISUAL_CHECK, attach_check, audit_graph, extract_page
 from policy import link_sources
+from quality_labels import proposed as quality_candidates
 from storage import encode
 
 
 METHODS = {name: (SERVER / name).read_bytes() for name in
-           ("calculations.py", "capacity.py", "conclusions.py", "config.py", "controls.py", "documents.py", "field_receipts.py", "field_sources.py", "graph.py", "installments.py", "invoice_approval.py", "invoice_comparison.py", "invoice_history.py", "invoice_identity.py", "invoice_masks.py", "invoice_proof.py", "jobs.py", "model.py", "payment_checks.py", "payment_history.py", "payment_index.py", "payment_notes.py", "payment_reference.py", "payment_visibility.py", "peer_review.py", "performance.py", "policy.py", "protocol.py", "reinspection.py", "storage.py", "supplements.py", "transfers.py", "work_progress.py")}
+           ("calculations.py", "capacity.py", "conclusions.py", "config.py", "controls.py", "documents.py", "field_receipts.py", "field_sources.py", "graph.py", "installments.py", "invoice_approval.py", "invoice_comparison.py", "invoice_history.py", "invoice_identity.py", "invoice_masks.py", "invoice_proof.py", "jobs.py", "model.py", "payment_checks.py", "payment_history.py", "payment_index.py", "payment_notes.py", "payment_reference.py", "payment_visibility.py", "peer_review.py", "performance.py", "policy.py", "protocol.py", "quality_labels.py", "reinspection.py", "storage.py", "supplements.py", "transfers.py", "work_progress.py")}
 CODE_DIGESTS = {name: digest(source) for name, source in METHODS.items()}
 
 
@@ -100,13 +101,13 @@ class Worker:
                 _, trace = self.extract(path)
                 store.save_extraction(case_id, page, trace)
                 page["extraction"] = trace
-            candidates = heading_candidates(page) if RECHECK_EVIDENCE and not trace.get("check") else []
+            candidates = heading_candidates(page)+quality_candidates(page) if RECHECK_EVIDENCE and not trace.get("check") else []
             if RECHECK_EVIDENCE and (trace["output"]["facts"] or candidates) and not trace.get("check"):
                 store.progress(case_id, "extract", 18 + 54 * index // page_count, f"第 {index+1}/{page_count} 页逐字段视觉复检。",
                                (page["doc"], page["number"], "check"))
-                trace["heading_candidates"] = candidates
+                trace["native_candidates"] = candidates
                 self.check(path, trace)
-                trace.pop("heading_candidates", None)
+                trace.pop("native_candidates", None)
                 store.save_check(case_id, page, trace["check"])
         store.progress(case_id, "graph", 74, f"已读取 {page_count} 页，正在校验引文并建立关系。")
         graph = build_graph(docs, pages, store.attestations(case_id), store.amendments(case_id))

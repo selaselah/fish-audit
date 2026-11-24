@@ -174,6 +174,19 @@ function openPage(docId, pageNumber, highlight, lineHint) {
         '模型定位：页' + statusName(fact.region)), 'small'));
     if (fact.source_line) row.append(fold('对照本机文字层', el('blockquote', fact.source_line.text)));
     if (fact.origin === 'verified_printed_heading') row.append(el('small','标题来自可定位文字层，经模型对照页图复检。','small'));
+    if (fact.origin === 'printed_quality_number') {
+      const trace=state.bundle.report.calls.pages.find(t=>t.doc===docId && t.page===pageNumber);
+      const check=trace?.check;
+      const review=fold('核对编号字段的两项读图结果');
+      review.classList.add('quality-number-check');
+      for (const key of [fact.id.split('/f').pop(),fact.classification_index]) {
+        const input=check?.input?.find(v=>v.index===key);
+        const vote=check?.output?.checks?.find(v=>v.index===key);
+        if (input && vote) review.append(el('p',input.field+' · '+({clear:'与原页相符',conflict:'与原页冲突',unreadable:'无法辨读'}[vote.support])),
+          el('blockquote',input.quote));
+      }
+      row.append(review);
+    }
     if (fact.origin === 'printed_claim_pair') row.append(el('small','模型原列为随附票号。原页同一行明列代码和号码，逐项读图复检已核对这段引文。','small'));
     if (state.bundle.report.graph.number_masks?.facts.some(m=>m.fact===fact.id))
       row.append(el('small','原文含遮盖位或只列尾号。取得完整票号后可重新核对。','small'));

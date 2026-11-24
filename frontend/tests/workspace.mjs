@@ -175,6 +175,22 @@ try {
         await evaluate('document.querySelector("#page-dialog [data-close]").click()');
       }
     }
+    for (const fact of report.graph.facts.filter(f => f.origin === 'printed_quality_number')) {
+      const query = new URLSearchParams({rev: String(task.rev), fact: fact.id});
+      await call('Page.navigate', {url: root+'/workpaper/'+performanceCase+'?'+query});
+      const card = 'document.querySelector(".located .quality-number-check")';
+      await wait('document.querySelector("#page-dialog").open && '+card+' && document.querySelector(".located").dataset.fact==='+JSON.stringify(fact.id),
+        'classification on the cited page');
+      await evaluate(card+'.querySelector("summary").click()');
+      const trace = report.calls.pages.find(p => p.doc === fact.doc && p.page === fact.page);
+      const indices = [fact.id.split('/f').pop(), fact.classification_index];
+      const labels = indices.map(i => trace.check.input.find(row => row.index === i).field);
+      assert.deepEqual(await evaluate('[...'+card+'.querySelectorAll("p")].map(p=>p.textContent)'),
+        [labels[0]+' · 与原页冲突', labels[1]+' · 与原页相符']);
+      assert.deepEqual(await evaluate('[...'+card+'.querySelectorAll("blockquote")].map(b=>b.textContent)'),
+        [fact.quote, fact.quote]);
+      await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+    }
     for (const width of [1440,1024,820,768,390,320]) {
       await call('Emulation.setDeviceMetricsOverride',{width,height:880,deviceScaleFactor:1,mobile:false});
       assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll(".clause-source")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'performance layout at '+width);

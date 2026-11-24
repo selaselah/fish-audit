@@ -6,6 +6,8 @@
 
 涉及整改的 H02 可包含 `reinspection`。其中 `state` 为 `open` 或 `closed`，`steps` 按原验收、整改、复验三种角色列出实际收到的来源。每步保存 `role`（`original`、`repair`、`final`）、`unit`（文件或分册页）、`date`（ISO 日期或 null）及 `evidence`（原页证据编号）。当次是否可以据此认定验收或付款条件满足，分别由 H02、H04 和 H05 的状态说明。
 
+当 `policy.quality_number_classification` 为 `printed-quality-number-v1` 时，按原页标签改归的编号事实带有 `origin: "printed_quality_number"`。`field` 是核对后的分类，`model_field` 保留初次分类，`value` 和 `quote` 保留当时抄录。按 `doc` 和 `page` 找到 `calls.pages[].check`，事实编号末尾 `f` 后的数字及 `classification_index` 分别对应原分类和印刷标签的候选项。两项的具体输入在 `input`，判断在 `output.checks`。底稿支持按 `?rev=版本号&fact=事实编号` 定位页图。
+
 | 请求 | 作用 |
 | --- | --- |
 | `GET /api/health` | 服务状态，`audit` 中提供审计服务商、模型、业务范围及页数限制。兼容字段 `mode` 指旧版文本审核模式 |

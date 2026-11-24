@@ -11,6 +11,7 @@ from model import FIELDS
 from performance import LABELS as PERFORMANCE_LABELS, STAGE_PREFIX, complete_line
 from payment_reference import attach as attach_payment_references, partial_line, printed_partial_value
 from reinspection import NUMBER_TYPES as QUALITY_NUMBERS
+from quality_labels import numbered_lines, verified as verified_quality_number
 
 
 KINDS = {"invoice": "发票", "contract": "合同", "acceptance": "验收单"}
@@ -127,7 +128,7 @@ def heading_candidates(page):
     output = page["extraction"]["output"]
     if layer.get("type") != "text" or output["quality"] != "readable" or len(output["facts"]) >= 140:
         return []
-    if any(item["field"] in TITLE_FIELDS for item in output["facts"]):
+    if any(item["field"] in TITLE_FIELDS and labelled(item["field"],item["value"],item["quote"]) for item in output["facts"]):
         return []
     candidates = []
     for number, line in enumerate(page["text"].splitlines(), 1):
@@ -172,6 +173,18 @@ def build_graph(docs, pages, attestations, amendments=()):
             observations[target] = {key: edit[key] for key in ("field", "value", "quote", "region")}
         lines = index_lines(page["text"])
         layer = page.get("layer") or {"type": "unknown", "lines": {}}
+        printed_numbers = {}
+        if check and output["quality"]=="readable" and layer["type"]=="text" and len(output["facts"])<140:
+            markers = numbered_lines(page["text"].splitlines())
+            for i,raw in enumerate(output["facts"],1):
+                ref = f"{page_id}/f{i}"
+                pos = lines.get(compact(raw["quote"]).strip("。;；"))
+                if ref in page_edits or not pos or not layer["lines"].get(str(pos[0])):
+                    continue
+                corrected = verified_quality_number(raw,markers,pos[0],str(i),check)
+                if corrected:
+                    observations[ref] = {**raw,"field":corrected}
+                    printed_numbers[ref] = raw["field"]
         printed_pairs = set()
         for ref,candidate in observations.items():
             if candidate["field"]!="claim_ref" or ref in page_edits or layer["type"]!="text":
@@ -218,6 +231,8 @@ def build_graph(docs, pages, attestations, amendments=()):
             elif position and layer["type"] == "text" and rects and labelled(field, value, quote):
                 status = "anchored"
             support = supports.get(origin if origin in headings else index) if not edit else None
+            if fact_id in printed_numbers:
+                support = supports["q"+index]
             if support in ("conflict", "unreadable") and status != "unsupported":
                 status = "visual"
             signoff = attestations.get(fact_id)
@@ -236,6 +251,8 @@ def build_graph(docs, pages, attestations, amendments=()):
                 fact["origin"] = "verified_printed_heading"
             if fact_id in printed_pairs:
                 fact.update(origin="printed_claim_pair",model_field="claim_ref")
+            if fact_id in printed_numbers:
+                fact.update(origin="printed_quality_number",model_field=printed_numbers[fact_id],classification_index="q"+index)
             if edit:
                 fact["amendment"] = edit
                 fact["original_candidate"] = output["facts"][int(index) - 1] if index else headings.get(origin)

@@ -20,6 +20,7 @@ from payment_notes import note_refs
 from payment_reference import LEGACY_FORMAT as FIRST_REFERENCE_FORMAT, SUPPORTED as REFERENCE_FORMATS, check as check_references, issued_format
 from peer_review import journal_decision, verify_referrals, verify_review
 from performance import LABELS as PERFORMANCE_FIELDS, verify_findings as verify_performance
+from quality_labels import verify_report as verify_quality_numbers
 from protocol import canonical, response_request
 from rule_replay import check_receipt, replay_from_git, replay_installed
 from supplements import compare_return
@@ -208,6 +209,8 @@ def verify_transcription(fact, page_calls, nodes, subject, *, note_policy=None):
         require(index.isdecimal() and 1<=int(index)<=len(candidates),subject+"缺少原始抄录记录")
         raw = candidates[int(index)-1]
     expected = "claim_ref" if fact.get("origin")=="printed_claim_pair" else fact["field"]
+    if fact.get("origin")=="printed_quality_number":
+        expected = fact["model_field"]
     require(raw["field"]==expected and raw["value"].strip()==fact["value"] and
             raw["quote"].strip()==fact["quote"],subject+"与当时模型抄录或人工补正不符")
     if note_policy is not None:
@@ -219,6 +222,7 @@ def verify_transcription(fact, page_calls, nodes, subject, *, note_policy=None):
 
 def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
     verify_performance(report)
+    verify_quality_numbers(report,lambda doc,page:bundle.read(f"{page_dir}/{doc}/{page}.txt").decode())
     if "conclusions.py" in report["policy"].get("code_sha256",{}):
         verify_result(report)
     graph = report["graph"]

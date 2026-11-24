@@ -18,6 +18,7 @@ from payment_reference import FORMAT as PAYMENT_REFERENCE_FORMAT
 from performance import FORMAT as PERFORMANCE_FORMAT, RULES as PERFORMANCE_RULES, compute as check_performance
 from policy import ACCOUNTING, MAPPING, SOURCES
 from reinspection import closed_steps
+from quality_labels import FORMAT as QUALITY_NUMBER_FORMAT
 from transfers import RULES as TRANSFER_RULES, check_transfers
 
 
@@ -45,6 +46,7 @@ CATALOG = {
     "T05": ("出差人员关联", "对照报销单与具名票据中的出差人，缺姓名、别名和不一致均交人工。"),
 }
 VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING, "performance_checks":PERFORMANCE_FORMAT,
+           "quality_number_classification":QUALITY_NUMBER_FORMAT,
            "sources": SOURCES, "rule_sources": MAPPING, "invoice_sources": INVOICE_SOURCE_FORMAT,
            "invoice_approval": INVOICE_APPROVAL_FORMAT,"invoice_identity":INVOICE_IDENTITY_FORMAT,"invoice_lookup":INVOICE_LOOKUP,
            "invoice_number_masks":MASK_FORMAT,"payment_references":PAYMENT_REFERENCE_FORMAT,"payment_checks":PAYMENT_CHECKS}

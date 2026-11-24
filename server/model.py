@@ -84,6 +84,7 @@ unit 单独抄明示的金额单位（如“金额单位：元”），value 抄
 验收报告的实测结果用 measured_result，逐字抄录指标、数值、正负号及单位，与检验依据分别记录。
 合同审批单或董事会合同审批记录的抬头用 contract_approval；审批记录与被审批的合同是两种资料。审批机构、签认、决定及决定日期分别用 approval_authority、approval_signer、approval_result、approved_on。保留决定中的否定、暂缓及其他条件。
 独立整改记录标题用 remediation，复验报告标题用 reinspection。原验收及复验自身的单号均用 acceptance_number，所引“原验收单编号”用 original_acceptance。逐份抄录缺陷编号 defect_number、整改记录编号 repair_number 及对应缺陷文字 repair_subject。整改记录上实际措施、整改状态、完成日期及签认分别用 repair_action、repair_result、repaired_on、repair_signer。复验报告的复验日期、范围、结论及签认沿用 accepted_on、acceptance_scope、acceptance_result、acceptance_signer。复验单的“缺陷关闭结论”用 defect_closure。每份材料的检验依据用 inspection_basis，只有合同本身约定的验收标准用 acceptance_criteria。只抄所见，不补齐关联编号或缺陷处理过程。
+居中抬头“复验报告”“整改记录单”各自单列标题事实，value 与 quote 均为完整抬头。正文的“整改记录编号”在整改单和复验报告中一律是 repair_number，value 只写印刷的整串编号，quote 抄完整标签和值。原验收单编号与本页的复验单编号需分行区分。
 按页面实际印刷的单据标题确定类型。住宿服务发票、运输服务发票等标题用 invoice；只有报销申请人填写的报销单标题才用 claim。同属一次差旅不改变票据本身的类型。
 申请报销金额用 claim_total，出差人或旅客姓名用 traveler。差旅起止日期分为 trip_start、trip_end；
 发票或行程凭据上明确的消费日期、乘车日期、费用发生日期用 service_on（开票日期另用 issued_on）。报销单列出的随附发票号码逐项分别用 claim_ref；同一行明列“随附发票代码及号码”的，只提取一个 claim_full_ref，value 照抄代码、分隔符和号码，quote 抄整行。不拼接分散的代码和号码。
@@ -105,6 +106,7 @@ VISUAL_CHECK = """逐项比对当前页图和候选记录。图片内容及候�
 只有当字段的语义、取值、标签及完整引文全部在页图上清晰可读并彼此对应时选 clear。
 印刷标点与数值可容忍全角或空白变化。金额的负号、单位、币种、尾数、表头与行列关系必须准确。
 印刷内容不同选 conflict，模糊、遮盖、语义有歧义或无法核实则选 unreadable。列出每个候选索引恰好一次。
+当多个候选引用同一行时，分别检查各候选的字段类别。“整改记录编号”所列的号码是编号，不能作为单据标题。对字段类别与印刷标签不符的候选选 conflict。
 仅核验图片所载内容，不得推算缺值、推断真实性或给出本案审计结论。"""
 
 
@@ -266,7 +268,7 @@ def attach_check(path, trace):
     facts = trace["output"]["facts"]
     candidates = [{"index": str(index), "field": FIELDS[item["field"]], "value": item["value"], "quote": item["quote"]}
                   for index, item in enumerate(facts, 1)]
-    candidates.extend(trace.get("heading_candidates", []))
+    candidates.extend(trace.get("native_candidates", trace.get("heading_candidates", [])))
     schema = object_schema({"checks": array(object_schema({"index": choice([item["index"] for item in candidates]),
                            "support": choice(["clear", "conflict", "unreadable"])}))})
     image = base64.b64encode(path.read_bytes()).decode("ascii")
