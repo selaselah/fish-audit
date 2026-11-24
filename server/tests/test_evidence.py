@@ -3,6 +3,8 @@ import io
 import json
 import tempfile
 import unittest
+import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,6 +18,7 @@ from graph import build_graph
 from jobs import Worker
 from main import create_app
 from model import attach_check, audit_graph, extract_page, validate
+from peer_review import verify_review
 from storage import Store
 from verify import verify, verify_request
 
@@ -291,6 +294,94 @@ class LocalFlowTests(unittest.TestCase):
         original = self.store.files / case_id / "d01" / "original.jpg"
         original.write_bytes(b"wrong source")
         self.assertEqual(self.client.get(base + "/reports/2/bundle").status_code, 409)
+
+    def test_independent_referral_resolution_preserves_raw_source_and_return(self):
+        cid = self.submit().json["id"]
+        self.worker.run(self.store.claim())
+        base = "/api/cases/"+cid
+        old = self.store.report(cid,1)["report"]
+        raw = json.dumps(old, ensure_ascii=False, indent=1).encode()
+        old_hash = hashlib.sha256(raw).hexdigest()
+        with self.store.connect(True) as db:
+            db.execute("UPDATE reports SET content=?,hash=? WHERE case_id=?", (raw.decode(),old_hash,cid))
+        first = {"rev":1,"reviewer":"审计员 A","note":"请复核缺失的付款资料。","decision":"escalate"}
+        self.assertEqual(self.client.post(base+"/signoff",json=first).status_code,200)
+        detail = self.client.get(base).json
+        pin = detail["referrals"][0]
+        self.assertEqual((detail["status"],pin["report_hash"],pin["resolved_rev"]),("in_review",old_hash,None))
+        self.assertEqual(self.client.get("/api/inbox?status=in_review").json["total"],1)
+        self.assertEqual(self.client.get("/api/inbox?status=closed").json["total"],0)
+        finding = old["findings"][0]["id"]
+        body = {"rev":1,"reviewer":"复核乙","note":"需补交本笔付款的签收资料。","decision":"return",
+                "findings":[finding],"report_hash":old_hash,"signoff_hash":pin["signoff_hash"]}
+        for changes, status in (({"reviewer":"审计员ａ"},403),({"rev":2},409),({"rev":2**90},400),({"report_hash":"a"*64},409),
+                                ({"findings":[]},400),({"findings":["fake-id"]},400),({"findings":[finding]*2},400),
+                                ({"findings":[{}]},400),({"decision":"escalate"},400)):
+            self.assertEqual(self.client.post(base+"/peer-review",json={**body,**changes}).status_code,status,changes)
+        with self.store.connect(True) as db:
+            db.execute("UPDATE signoffs SET note='原意见被更改' WHERE case_id=?", (cid,))
+        self.assertEqual(self.client.get(base+"/reports/1").status_code,409)
+        self.assertEqual(self.client.get(base+"/reports/1/bundle").status_code,409)
+        self.assertEqual(self.client.post(base+"/peer-review",json=body).status_code,409)
+        with self.store.connect(True) as db:
+            db.execute("UPDATE signoffs SET note=? WHERE case_id=?", (first["note"],cid))
+        def resolve(name):
+            response = self.app.test_client().post(base+"/peer-review", json={**body,"reviewer":name})
+            return name,response.status_code
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            answers = dict(pool.map(resolve,["复核乙","复核丙"]))
+        self.assertCountEqual(answers.values(),[200,409])
+        winner = next(name for name,code in answers.items() if code==200)
+        self.assertEqual(resolve(winner)[1],200)
+        detail = self.client.get(base).json
+        self.assertEqual((detail["status"],detail["rev"],[d["decision"] for d in detail["decisions"]]),("closed",2,["escalate","return"]))
+        self.assertEqual(self.client.get("/api/inbox?status=in_review").json["total"],0)
+        self.assertEqual(self.store.report(cid,1)["sha256"],old_hash)
+        new = self.store.report(cid,2)["report"]
+        peer = new.pop("peer_review")
+        self.assertEqual((new,peer["findings"],peer["resolution"]["reviewer"]),(old,[finding],winner))
+        for forged in ({"result":{**old["result"],"verdict":"pass"}},
+                       {"peer_review":{**peer,"findings":["made-up-finding"]}},
+                       {"peer_review":{**peer,"referral":{**peer["referral"],"note":"其他意见"}}}):
+            with self.assertRaises(ValueError):
+                verify_review({**new,"peer_review":peer,**forged},raw,peer["referral"],peer["resolution"])
+        self.assertEqual(self.extract_calls,1)
+        self.assertIsNone(self.store.claim())
+        for rev in (1,2):
+            with self.client.get(f"{base}/reports/{rev}/bundle") as res:
+                data = io.BytesIO(res.data)
+                self.assertEqual(verify(data,True)[:2],(cid,rev))
+                if rev==2:
+                    with zipfile.ZipFile(data) as zip_file:
+                        self.assertEqual(zip_file.read("review/source-report.json"),raw)
+                        self.assertEqual(json.loads(zip_file.read("review/referral.json"))["note"],first["note"])
+        child = self.client.post(base+"/supplements",data={"rev":"2","title":"合成补件","retain":"d01"},content_type="multipart/form-data")
+        self.assertEqual(child.status_code,202,child.json)
+        self.worker.run(self.store.claim())
+        child_id = child.json["id"]
+        self.assertEqual(self.store.report(child_id,1)["report"]["supplement"]["returned_by"],winner)
+        with self.client.get(f"/api/cases/{child_id}/reports/1/bundle") as res:
+            data = io.BytesIO(res.data)
+            self.assertEqual(verify(data,True)[:2],(child_id,1))
+            with zipfile.ZipFile(data) as zip_file:
+                self.assertEqual(zip_file.read("supplement/review/source-report.json"),raw)
+
+    def test_pending_referral_is_recovered_from_legacy_archive(self):
+        cid = self.submit().json["id"]
+        self.worker.run(self.store.claim())
+        self.store.review(cid,1,"第一位","旧版提交复核。","escalate")
+        with self.store.connect(True) as db:
+            db.execute("DROP TABLE case_referrals")
+            db.execute("UPDATE cases SET status='closed',stage='ready' WHERE id=?", (cid,))
+        migrated = Store(self.root)
+        old = migrated.detail(cid)
+        pin = old["referrals"][0]
+        self.assertEqual((old["status"],pin["origin"],pin["resolved_rev"]),("in_review","migration",None))
+        item = migrated.report(cid,1)["report"]["findings"][0]["id"]
+        self.assertEqual(migrated.resolve_referral(cid,1,pin["report_hash"],pin["signoff_hash"],"第二位","需补件。","return",[item]),2)
+        final = Store(self.root).detail(cid)
+        self.assertEqual((final["status"],final["referrals"][0]["resolved_rev"]),("closed",2))
+        self.assertEqual(final["decisions"][0],old["decisions"][0])
 
     def test_returned_originals_are_pinned_compared_and_replayable(self):
         from copy import deepcopy

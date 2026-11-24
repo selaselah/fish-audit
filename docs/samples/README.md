@@ -48,3 +48,7 @@ PYTHONPATH=server server/.venv/bin/python -m unittest discover -s server/tests -
 `server/.venv/bin/python docs/samples/returned_files.py --run` 创建只含合同的虚构付款案，核对原件摘要及 B01 缺口后以演练身份退回。随后沿用同一合同，补交对应回单，并检查原退回版本及本次建议。加 `--prepare-parent` 可仅准备退回任务供网页操作。
 
 对已退回、已核票号 YL-FP-038 的合成照片，使用 `--replace-photo 前案编号` 会以合同、发票、验收单三份合成 PDF 替换原照片，核对历史同号风险和签收来源。脚本只对指定的本机演练资料执行。
+
+### 付款差额的独立复核
+
+`server/.venv/bin/python docs/samples/second_signoff.py --run` 提交两份带水印的合成 PDF。脚本先核对原件摘要及 B04 算出的 150 元超付款，再用两个演练姓名完成转交与退回，检查两个版本的模型建议和原图一致。用 `--refer` 只执行到转交，可在台账的「待复核」里接手。选择新的 `--run-id` 会生成独立的合同号和流水号。

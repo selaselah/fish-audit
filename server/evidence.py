@@ -3,6 +3,7 @@ import zipfile
 
 from config import CaseError
 from documents import digest
+from peer_review import verify_referrals, verify_review
 from storage import encode
 
 
@@ -17,7 +18,33 @@ def journal(store, case_id):
             "attestations": attestations, "amendments": store.amendments(case_id)}
     if case["supplement_of"]:
         result["supplement_of"] = case["supplement_of"]
+    result["referrals"] = case["referrals"]
+    try:
+        verify_referrals(result)
+    except (ValueError, TypeError, KeyError) as exc:
+        raise CaseError("提交复核的签收记录或版本摘要不符。",409) from exc
     return result
+
+
+def write_peer_source(store, report, revision, write, folder=""):
+    receipt = report.get("peer_review")
+    if not receipt:
+        return
+    case_id = report["case_id"]
+    with store.connect() as db:
+        db.execute("BEGIN")
+        source, first = store.signed_version(db, case_id, receipt["source_rev"])
+        _, second = store.signed_version(db, case_id, revision)
+        pin = db.execute("""SELECT report_hash,signoff_hash FROM case_referrals
+                         WHERE case_id=? AND rev=? AND resolved_rev=?""", (case_id,first["rev"],revision)).fetchone()
+    if not pin or tuple(pin) != (receipt["source_hash"], receipt["referral_hash"]):
+        raise CaseError("复核版与提交复核时的存证不符。",409)
+    try:
+        verify_review(report, source, first, second)
+    except (ValueError, TypeError, KeyError) as exc:
+        raise CaseError("复核签收、原版底稿或所选依据不符。",409) from exc
+    write(folder+"review/source-report.json",source,receipt["source_hash"])
+    write(folder+"review/referral.json",encode(first).encode(),receipt["referral_hash"])
 
 
 def write_returned_source(store, report, write):
@@ -28,6 +55,7 @@ def write_returned_source(store, report, write):
     write("supplement/report.json", content, supplement["report_hash"])
     write("supplement/signoff.json", encode(signoff).encode(), supplement["signoff_hash"])
     previous = json.loads(content)
+    write_peer_source(store, previous, supplement["rev"], write, "supplement/")
     graph = previous["graph"]
     if previous["policy"].get("archived_methods"):
         current_methods = report["policy"].get("code_sha256", {}) if report["policy"].get("archived_methods") else {}
@@ -66,6 +94,7 @@ def export_bundle(store, case_id, revision, stream):
 
         write("report.json", raw_report, bundle["sha256"])
         write("journal.json", encode(journal(store, case_id)).encode())
+        write_peer_source(store, report, revision, write)
         if report["policy"].get("archived_methods"):
             for name, checksum in report["policy"]["code_sha256"].items():
                 write("methods/" + name, store.method_source(checksum), checksum)
@@ -88,14 +117,23 @@ def export_bundle(store, case_id, revision, stream):
             historic = store.files / match["case_id"] / match["doc"] / f"{match['page']}.jpg"
             path = f"prior/{match['case_id']}/r{match['rev']}/{match['doc']}/{match['page']}.jpg"
             write(path, historic.read_bytes(), match["page_hash"])
-        for match in report["graph"].get("payment_history", {}).get("matches", []):
-            prior, rev = match["case_id"], match["rev"]
+        payments = report["graph"].get("payment_history", {}).get("matches", [])
+        references = {(m["case_id"],m["rev"]):m for m in report["graph"].get("prior_invoices",[]) if "peer_source_rev" in m}
+        references.update({(m["case_id"],m["rev"]):m for m in payments})
+        archived = {}
+        for (prior, rev), match in references.items():
             root = f"prior/{prior}/r{rev}"
             with store.connect() as db:
                 content, signoff = store.signed_source(db, case_id, prior, rev)
             write(root + "/report.json", content, match["report_hash"])
-            write(root + "/signoff.json", encode(signoff).encode(), match["signoff_hash"])
-            graph = json.loads(content)["graph"]
+            write(root + "/signoff.json", encode(signoff).encode(), match.get("signoff_hash"))
+            previous = json.loads(content)
+            write_peer_source(store, previous, rev, write, root+"/")
+            archived[prior,rev] = previous["graph"]
+        for match in payments:
+            prior, rev = match["case_id"], match["rev"]
+            root = f"prior/{prior}/r{rev}"
+            graph = archived[prior,rev]
             documents = {d["id"]: d for d in graph["documents"]}
             prior_nodes = {n["id"]: n for n in graph["nodes"]}
             pages = {(p["doc"], p["number"]): p for p in store.pages(prior)}

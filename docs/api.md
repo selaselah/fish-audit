@@ -47,7 +47,13 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 
 更正或补录时提交 `rev`、`doc`、`page`、`field`、`quote`、`value`、`region`、`reviewer`、`note`。更正须携带本页的 `target` 证据编号，补录时设为 null。`field` 取自 `GET /api/controls` 的 `fields`，`region` 为 top、middle 或 bottom。新记录与该页 SHA-256 一起保存。
 
-任务状态依次为 `queued`、`running`、`ready`（可验收）、`closed`（已归档）。`failed` 保留阶段、原因与已完成页面。同号提示既查本案已核票据，也查询本工作区运行审计时已归档的底稿。旧原型的 `POST /api/reviews` 继续支持文本审核。
+任务从 `queued`、`running` 进入 `ready`。人工通过或退回后的状态为 `closed`，提交复核后为 `in_review`，复核人签收后为 `closed`。`failed` 保留阶段、原因与已完成页面。同号核查可引用本工作区已签收或已转交复核的记录，另一笔全额付款检查只采用已通过的历史签收。旧原型的 `POST /api/reviews` 继续支持文本审核。
+
+### 独立人工复核
+
+审计岗从任务详情的 `referrals` 取得转交版本 `rev`、`report_hash` 和 `signoff_hash`。向 `POST /api/cases/{id}/peer-review` 提交这三个字段，以及 `decision`（`approve` 或 `return`）、`note` 和 `findings`（所核原版发现编号的非空数组）。企业入口使用同样的工作区前缀与 CSRF。企业模式从会话取得签收身份，复核人须为同企业中另一名审计人员或管理员。本机模式填写 `reviewer`，以姓名区分两次演练签收。
+
+成功返回 HTTP 200 和复核签收版 `rev`。相同签收请求重试可取回同一版本，另一人已签收、摘要变化或付款依据过期返回 409。首次转交版仍可按原版本号访问。新版本 `peer_review` 记录两次签收与所据发现，证据包的 `review/source-report.json` 保存当时的原始字节，`review/referral.json` 保存转交记录。旧版已提交复核的任务升级后进入待复核队列，`origin=migration` 表示在升级时建立了两项摘要。
 
 ### 从退回版本提交补件
 
@@ -74,7 +80,7 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 
 | 路径 | 参数与返回 |
 | --- | --- |
-| `GET /inbox` | `q`、`profile`、`sort=updated/created`、`status=all/ready/active/attention/closed/failed`、`page`。返回 `cases`、`counts`、总数及页数 |
+| `GET /inbox` | `q`、`profile`、`sort=updated/created`、`status=all/ready/active/attention/in_review/closed/failed`、`page`。返回 `cases`、`counts`、总数及页数 |
 | `GET /evidence` | `q`、`status=verified/pending/all`、`page`。返回本企业最新版本中命中的原文、证据编号、任务、文件、页码、核验状态及版本。需审计或管理权限 |
 
 版本引用可使用 `/w/{企业编号}/workpaper/{任务编号}?rev=版本&fact=证据编号`，本机使用 `/workpaper/{任务编号}`。浏览器会进入对应工作区和原页，服务端按登录账号核验资料访问权限。

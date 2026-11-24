@@ -39,7 +39,7 @@ def inspect(case_ids, full, database, record):
         case = get("/api/cases/" + case_id)
         if not case["title"].startswith("合成演练 · "):
             raise ValueError("留观只接受指定演练案例")
-        if case["status"] not in ("ready", "closed"):
+        if case["status"] not in ("ready", "in_review", "closed"):
             raise ValueError("演练任务尚未完成：" + case_id[:10] + " " + case["status"])
         if full:
             prefix = f"/api/cases/{case_id}/reports/{case['rev']}"

@@ -2,7 +2,7 @@ const $ = selector => document.querySelector(selector);
 const state = {cases: [], filter: 'all', detail: null, bundle: null, tab: 'report', pinned: 0,
   timer: null, epoch: 0, key: null, review: null};
 const labels = {
-  queued: '排队中', running: '处理中', ready: '待验收', closed: '已归档', failed: '已中断',
+  queued: '排队中', running: '处理中', ready: '待验收', in_review: '待复核', closed: '已归档', failed: '已中断',
   prepare: '资料分页', extract: '多模态解析', graph: '证据建图', controls: '规则执行', expert: '专家复核',
   attestation: '人工核图', pass: '建议通过', review: '需要人工校验', reject: '建议不通过',
   ok: '相符', issue: '问题', risk: '风险', missing: '证据不足', anchored: '已匹配文字层',
@@ -13,7 +13,7 @@ const tabs = {report: '审计结论', evidence: '原件与引文', graph: '知�
 const travelProfile = 'cn-travel-reimbursement/v1';
 const bankProfile = 'cn-bank-contract-payment/v1';
 const profileName = profile => ({[travelProfile]:'差旅报销',[bankProfile]:'付款回单核对','cn-procurement-full-settlement/v1':'采购与付款'}[profile] || profile);
-const tone = {ready: 'risk', closed: 'ok', failed: 'issue', pass: 'ok', review: 'risk', reject: 'issue',
+const tone = {ready: 'risk', in_review: 'risk', closed: 'ok', failed: 'issue', pass: 'ok', review: 'risk', reject: 'issue',
   visual: 'risk', unsupported: 'issue', disputed: 'issue', confirmed: 'ok', anchored: 'ok'};
 const statusName = value => labels[value] || value;
 const base = () => Team.cases() + '/' + state.detail.id;
@@ -289,7 +289,7 @@ function reportPanel() {
   if (exceptions.length) findings.append(...exceptions.map(finding));
   else findings.append(el('p', '本次已执行的检查程序均相符。'));
   if (passed.length) findings.append(fold('展开相符的检查程序（' + passed.length + '）', ...passed.map(finding)));
-  const human = box('panel', el('h2', '审计人员验收'));
+  const human = box('panel', el('h2', report.peer_review ? '复核签收决定' : '审计人员验收'));
   const decision = state.detail.decisions.find(item => item.rev === state.bundle.rev);
   if (decision) {
     human.append(el('h3', statusName(decision.decision)), el('p', decision.note),
@@ -304,7 +304,11 @@ function reportPanel() {
   const review = box('', conclusion);
   if (report.supplement) review.append(returnComparison(report,state.bundle.rev));
   review.append(findings);
-  return box('grid', review, box('', human, working));
+  const side = box('', human);
+  const peer = PeerReview.panel(state.detail,state.bundle);
+  if (peer) side.append(peer);
+  side.append(working);
+  return box('grid', review, side);
 }
 function graphPanel() {
   const graph = state.bundle.report.graph;
@@ -505,6 +509,7 @@ async function refresh() {
         if (fact) { state.openedCitation = location.hash; openPage(fact.doc,fact.page,fact.id); }
       }
       if (['queued','running'].includes(data.status)) interval = 1600;
+      if (data.status === 'in_review') interval = 6000;
     } else if (view === 'rules') {
       const data = await api('/api/controls'); if (epoch !== state.epoch) return; renderCatalog(data);
     } else {
@@ -654,6 +659,7 @@ $('#upload-form').addEventListener('submit', async event => {
 });
 for (const button of document.querySelectorAll('[data-close]')) button.addEventListener('click', () => button.closest('dialog').close());
 Desk.bind();
+PeerReview.bind();
 $('#version').addEventListener('change', () => { chooseRevision(Number($('#version').value)); refresh(); });
 window.addEventListener('hashchange', () => {
   state.openedCitation=null; state.traceId=null; state.traceKey=null; state.bundle = null; state.detail = null; state.pinned = 0; state.tab = 'report';

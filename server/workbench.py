@@ -81,7 +81,7 @@ def inbox(store, workspace, owner, params):
     order = params.get("sort", "updated")
     groups = {"all":"1", "active":"c.status IN ('queued','running')", "ready":"c.status='ready'",
               "attention":"c.status='ready' AND t.verdict IN ('reject','review')",
-              "closed":"c.status='closed'", "failed":"c.status='failed'"}
+              "in_review":"c.status='in_review'", "closed":"c.status='closed'", "failed":"c.status='failed'"}
     if group not in groups or (profile and profile not in PROFILES) or len(query) > 100 or order not in ("updated","created"):
         raise CaseError("台账筛选条件无效。", 400)
     conditions, args = ["c.workspace=?"], [workspace]

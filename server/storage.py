@@ -11,6 +11,7 @@ from capacity import admit, install as install_capacity, settings
 from config import BANK, CaseError, PROFILE
 from graph import compact, invoice_number_edges
 from payment_history import LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_facts, payment_record
+from peer_review import different_reviewers, review_record, valid_findings, verify_review
 from supplements import compare_return
 from work_progress import checkpoints, install as install_progress, set_activity
 from workbench import prepare_index, project
@@ -107,6 +108,12 @@ class Store:
                     note TEXT NOT NULL, retained TEXT NOT NULL, parent_hash TEXT NOT NULL, signoff_hash TEXT NOT NULL, CHECK(child<>parent),
                     FOREIGN KEY(parent,parent_rev) REFERENCES signoffs(case_id,rev));
                 CREATE INDEX IF NOT EXISTS supplements_parent ON case_supplements(parent);
+                CREATE TABLE IF NOT EXISTS case_referrals(
+                    case_id TEXT NOT NULL, rev INTEGER NOT NULL, report_hash TEXT NOT NULL,
+                    signoff_hash TEXT NOT NULL, resolved_rev INTEGER, origin TEXT NOT NULL,
+                    PRIMARY KEY(case_id,rev), CHECK(resolved_rev IS NULL OR resolved_rev=rev+1),
+                    FOREIGN KEY(case_id,rev) REFERENCES signoffs(case_id,rev),
+                    FOREIGN KEY(case_id,resolved_rev) REFERENCES signoffs(case_id,rev));
             """)
             db.execute("BEGIN IMMEDIATE")
             if "layer" not in {row["name"] for row in db.execute("PRAGMA table_info(pages)")}:
@@ -122,6 +129,14 @@ class Store:
             for table in ("attestations", "amendments", "signoffs"):
                 if "actor" not in {row["name"] for row in db.execute(f"PRAGMA table_info({table})")}:
                     db.execute(f"ALTER TABLE {table} ADD COLUMN actor TEXT")
+            old_referrals = db.execute("""SELECT c.workspace,c.title,s.case_id,s.rev,s.decision,s.reviewer,s.note,s.time,s.actor,r.hash
+                    FROM signoffs s JOIN cases c ON c.id=s.case_id JOIN reports r ON r.case_id=s.case_id AND r.rev=s.rev
+                    WHERE s.decision='escalate' AND NOT EXISTS(
+                        SELECT 1 FROM case_referrals f WHERE f.case_id=s.case_id AND f.rev=s.rev)""").fetchall()
+            for row in old_referrals:
+                first = dict(row)
+                report_hash = first.pop("hash")
+                self.record_referral(db, report_hash, first, "migration")
             if db.execute("PRAGMA user_version").fetchone()[0] < 1:
                 rows = db.execute("""SELECT c.id,c.rev,r.content FROM cases c
                                   JOIN reports r ON r.case_id=c.id AND r.rev=c.rev""")
@@ -291,13 +306,15 @@ class Store:
             db.executemany("INSERT OR IGNORE INTO method_sources VALUES(?,?)",
                            [(report["policy"]["code_sha256"][name], contents) for name, contents in methods.items()])
             db.execute("INSERT INTO reports VALUES(?,?,?,?,?)", (case_id, revision, now, digest, encode(report)))
-            project(db, case_id, revision, report)
-            self.index_payment(db, case_id, revision, report)
-            invoice_rows = self.index_rows(case_id, revision, report)
-            db.executemany("INSERT INTO invoice_index VALUES(?,?,?,?,?,?,?,?,?,?)", invoice_rows)
+            self.index_report(db, case_id, revision, report)
             db.execute("""UPDATE cases SET rev=?,status='ready',stage='ready',progress=100,
                        error=NULL,message='审计底稿已生成，等待人工验收',updated=? WHERE id=?""", (revision, now, case_id))
             event(db, case_id, "ready", f"底稿 R{revision} 已保存，等待人工验收。")
+
+    def index_report(self, db, case_id, revision, report):
+        project(db, case_id, revision, report)
+        self.index_payment(db, case_id, revision, report)
+        db.executemany("INSERT INTO invoice_index VALUES(?,?,?,?,?,?,?,?,?,?)", self.index_rows(case_id, revision, report))
 
     def method_source(self, checksum):
         with self.connect() as db:
@@ -324,15 +341,24 @@ class Store:
         if not keys:
             return []
         with self.connect() as db:
+            db.execute("BEGIN")
             placeholders = ",".join("?" for key in keys)
-            rows = db.execute(f"""SELECT i.*,c.title,s.decision,r.hash AS report_hash FROM invoice_index i
+            rows = db.execute(f"""SELECT i.*,c.title,s.decision,r.hash AS report_hash,f.rev AS peer_source_rev FROM invoice_index i
                               JOIN cases c ON c.id=i.case_id AND c.rev=i.rev
                               JOIN signoffs s ON s.case_id=i.case_id AND s.rev=i.rev
                               JOIN reports r ON r.case_id=i.case_id AND r.rev=i.rev
-                              WHERE c.workspace=(SELECT workspace FROM cases WHERE id=?) AND c.status='closed'
+                              LEFT JOIN case_referrals f ON f.case_id=i.case_id AND f.resolved_rev=i.rev
+                              WHERE c.workspace=(SELECT workspace FROM cases WHERE id=?) AND c.status IN ('closed','in_review')
                               AND c.id<>? AND i.number_key IN ({placeholders})
                               ORDER BY i.case_id,i.rev,i.fact""", (case_id, case_id, *keys))
-            return [dict(row) for row in rows]
+            matches = [dict(row) for row in rows]
+            reviewed = {(m["case_id"],m["rev"]) for m in matches if m["peer_source_rev"] or m["decision"]=="escalate"}
+            for prior, rev in reviewed:
+                self.signed_version(db,prior,rev)
+            for match in matches:
+                if match["peer_source_rev"] is None:
+                    del match["peer_source_rev"]
+            return matches
 
     @staticmethod
     def index_payment(db, case_id, revision, report):
@@ -360,7 +386,7 @@ class Store:
                                   JOIN cases c ON c.id=i.case_id AND c.rev=i.rev
                                   JOIN signoffs s ON s.case_id=i.case_id AND s.rev=i.rev
                                   JOIN reports r ON r.case_id=i.case_id AND r.rev=i.rev
-                                  WHERE c.workspace=(SELECT workspace FROM cases WHERE id=?) AND c.status='closed'
+                                  WHERE c.workspace=(SELECT workspace FROM cases WHERE id=?) AND c.status IN ('closed','in_review')
                                   AND c.id<>? AND s.time<=? AND {predicate}
                                   ORDER BY s.time DESC,i.case_id LIMIT ?""",
                               (case_id, case_id, as_of, *params, PAYMENT_HISTORY_LIMIT))
@@ -372,17 +398,34 @@ class Store:
 
     @staticmethod
     def signed_source(db, case_id, prior_id, revision):
+        same_workspace = db.execute("""SELECT 1 FROM cases c JOIN cases p ON c.workspace=p.workspace
+                                    WHERE c.id=? AND p.id=? AND c.id<>p.id""", (case_id, prior_id)).fetchone()
+        if not same_workspace:
+            raise CaseError("未找到本工作区对应的历史签收底稿。", 409)
+        return Store.signed_version(db, prior_id, revision)
+
+    @staticmethod
+    def signed_version(db, case_id, revision):
         row = db.execute("""SELECT r.content,r.hash,c.workspace,c.title,s.case_id,s.rev,s.decision,s.reviewer,s.note,s.time,s.actor
                             FROM reports r JOIN cases c ON c.id=r.case_id
                             JOIN signoffs s ON s.case_id=r.case_id AND s.rev=r.rev
-                            WHERE c.workspace=(SELECT workspace FROM cases WHERE id=?) AND c.id<>? AND c.id=? AND r.rev=?""",
-                         (case_id, case_id, prior_id, revision)).fetchone()
+                            WHERE c.id=? AND r.rev=?""", (case_id, revision)).fetchone()
         if not row:
             raise CaseError("未找到本工作区对应的历史签收底稿。", 409)
         signoff = dict(row)
         content, checksum = signoff.pop("content").encode(), signoff.pop("hash")
         if hashlib.sha256(content).hexdigest() != checksum:
             raise CaseError("历史底稿内容与归档摘要不符。", 409)
+        pin = db.execute("""SELECT rev,report_hash,signoff_hash,resolved_rev FROM case_referrals
+                          WHERE case_id=? AND (rev=? OR resolved_rev=?)""", (case_id,revision,revision)).fetchone()
+        if pin and pin["rev"] == revision and source_hashes(content,signoff) != (pin["report_hash"],pin["signoff_hash"]):
+            raise CaseError("原底稿或转交意见与提交复核时的摘要不符。",409)
+        if pin and pin["resolved_rev"] == revision:
+            original, first = Store.signed_version(db,case_id,pin["rev"])
+            try:
+                verify_review(json.loads(content),original,first,signoff)
+            except (KeyError, TypeError, ValueError) as exc:
+                raise CaseError("复核签收版与原版底稿或签收记录不一致。",409) from exc
         return content, signoff
 
     def payment_history(self, case_id, signature):
@@ -403,7 +446,7 @@ class Store:
                 match["evidence"] = cited_facts(report["graph"], prior, rev, refs)
             return history
 
-    def recheck_payment_approval(self, db, case_id, revision):
+    def recheck_payment_approval(self, db, case_id, revision, *, peer=False):
         row = db.execute("SELECT * FROM payment_index WHERE case_id=? AND rev=?", (case_id, revision)).fetchone()
         if not row:
             return
@@ -413,6 +456,8 @@ class Store:
         def keys(history):
             return [(m["kind"], m["case_id"], m["rev"]) for m in history.get("matches", [])]
         if previous.get("counts", {"same": 0, "full": 0}) != current["counts"] or keys(previous) != keys(current):
+            if peer:
+                raise CaseError("底稿生成后出现了新的已签收付款线索。请退回补件，沿用原件提交重审并核对最新付款记录。", 409)
             raise CaseError("底稿生成后出现了新的已签收付款线索。请在执行记录中选择「保留此版并重新审计」，核对最新凭证后再通过。", 409)
 
     def rerun(self, case_id, revision, actor=None):
@@ -492,6 +537,8 @@ class Store:
             detail["events"] = [dict(row) for row in db.execute("SELECT seq,time,stage,message FROM events WHERE case_id=? ORDER BY seq", (case_id,))]
             detail["revisions"] = [dict(row) for row in db.execute("SELECT rev,created,hash FROM reports WHERE case_id=? ORDER BY rev DESC", (case_id,))]
             detail["decisions"] = [dict(row) for row in db.execute("SELECT rev,decision,reviewer,actor,note,time FROM signoffs WHERE case_id=? ORDER BY rev", (case_id,))]
+            detail["referrals"] = [dict(row) for row in db.execute("""SELECT rev,report_hash,signoff_hash,resolved_rev,origin
+                                             FROM case_referrals WHERE case_id=? ORDER BY rev""", (case_id,))]
             family = (case_id, case["workspace"], owner, owner)
             parent = db.execute("""SELECT c.id,c.title,s.parent_rev AS rev,s.note,s.retained,s.parent_hash,s.signoff_hash FROM case_supplements s
                         JOIN cases c ON c.id=s.parent WHERE s.child=? AND c.workspace=? AND (? IS NULL OR c.submitter=?)""", family).fetchone()
@@ -503,12 +550,20 @@ class Store:
 
     def report(self, case_id, rev):
         with self.connect() as db:
+            db.execute("BEGIN")
             row = db.execute("SELECT content,hash,created FROM reports WHERE case_id=? AND rev=?", (case_id, rev)).fetchone()
             if not row:
                 raise CaseError("未找到该版本底稿。", 404)
             if hashlib.sha256(row["content"].encode()).hexdigest() != row["hash"]:
                 raise CaseError("底稿内容与该版本留存的摘要不符。", 409)
-            return {"rev": rev, "sha256": row["hash"], "created": row["created"], "report": json.loads(row["content"])}
+            report = json.loads(row["content"])
+            referral = db.execute("SELECT resolved_rev FROM case_referrals WHERE case_id=? AND (rev=? OR resolved_rev=?)",
+                                  (case_id,rev,rev)).fetchone()
+            if "peer_review" in report and (not referral or referral["resolved_rev"] != rev):
+                raise CaseError("复核签收版缺少对应的转交记录。",409)
+            if referral:
+                self.signed_version(db,case_id,rev)
+            return {"rev": rev, "sha256": row["hash"], "created": row["created"], "report": report}
 
     def attestations(self, case_id):
         with self.connect() as db:
@@ -575,4 +630,65 @@ class Store:
                     self.recheck_payment_approval(db, case_id, revision)
                 db.execute("INSERT INTO signoffs(case_id,rev,decision,reviewer,note,time,actor) VALUES(?,?,?,?,?,?,?)", (case_id, revision, decision, reviewer, note, now,actor))
                 db.execute("UPDATE cases SET status='closed',message='人工验收已归档',updated=? WHERE id=?", (now, case_id))
-                event(db, case_id, "closed", f"{reviewer} 已验收底稿 R{revision}。")
+                if decision == "escalate":
+                    content, first = self.signed_version(db, case_id, revision)
+                    self.record_referral(db, hashlib.sha256(content).hexdigest(), first, "signoff")
+                    event(db, case_id, "in_review", f"{reviewer} 已将底稿 R{revision} 提交复核。")
+                else:
+                    event(db, case_id, "closed", f"{reviewer} 已验收底稿 R{revision}。")
+
+    @staticmethod
+    def record_referral(db, report_hash, first, origin):
+        key = (first["case_id"], first["rev"])
+        db.execute("""INSERT INTO case_referrals(case_id,rev,report_hash,signoff_hash,origin)
+                      VALUES(?,?,?,?,?)""", (*key, report_hash, hashlib.sha256(canonical(first)).hexdigest(), origin))
+        db.execute("""UPDATE cases SET status='in_review',stage='in_review',message='已提交复核，等待另一位审计人员签收'
+                      WHERE id=? AND rev=? AND status='closed'""", key)
+
+    def resolve_referral(self, case_id, revision, report_hash, signoff_hash, reviewer, note, decision, findings, actor=None):
+        with self.connect(True) as db:
+            authorize_case_write(db, case_id, actor)
+            referral = db.execute("""SELECT f.*,c.rev AS latest,c.status FROM case_referrals f JOIN cases c ON c.id=f.case_id
+                                  WHERE f.case_id=? AND f.rev=?""", (case_id, revision)).fetchone()
+            if not referral or (referral["report_hash"],referral["signoff_hash"]) != (report_hash,signoff_hash):
+                raise CaseError("待复核版本或转交意见与当前请求不符，请重新打开原底稿。", 409)
+            source, first = self.signed_version(db, case_id, revision)
+            if source_hashes(source, first) != (report_hash,signoff_hash):
+                raise CaseError("原底稿或转交意见与提交复核时的摘要不符。", 409)
+            next_rev = revision + 1
+            second = {**first, "rev":next_rev, "time":stamp(), "decision":decision, "actor":actor,
+                      "reviewer":reviewer, "note":note}
+            if not different_reviewers(first,second):
+                raise CaseError("请由另一位审计人员复核这份底稿。", 403)
+            report = json.loads(source)
+            if decision not in ("approve", "return") or not valid_findings(report, findings):
+                raise CaseError("请选择复核决定和原底稿中相应的审计发现。", 400)
+            if referral["resolved_rev"] is not None:
+                raw, actual = self.signed_version(db, case_id, next_rev)
+                previous = json.loads(raw)
+                try:
+                    verify_review(previous, source, first, actual)
+                except (ValueError, KeyError, TypeError) as exc:
+                    raise CaseError("已签收的复核版与原底稿不一致。", 409) from exc
+                if actual == {**second, "time":actual["time"]} and previous["peer_review"]["findings"] == findings:
+                    return next_rev
+                raise CaseError(f"复核已由 {actual['reviewer']} 完成，请查看 R{next_rev}。", 409)
+            if referral["latest"] != revision or referral["status"] != "in_review":
+                raise CaseError("此版本已不在待复核队列。", 409)
+            if decision == "approve":
+                self.recheck_payment_approval(db, case_id, revision, peer=True)
+            try:
+                report["peer_review"] = review_record(source, first, second, findings)
+            except (ValueError, KeyError, TypeError) as exc:
+                raise CaseError("原版签收或复核依据不完整，无法生成复核签收版。", 409) from exc
+            content = encode(report)
+            now = second["time"]
+            db.execute("INSERT INTO reports VALUES(?,?,?,?,?)", (case_id, next_rev, now, hashlib.sha256(content.encode()).hexdigest(), content))
+            db.execute("INSERT INTO signoffs(case_id,rev,decision,reviewer,note,time,actor) VALUES(?,?,?,?,?,?,?)",
+                       (case_id, next_rev, decision, reviewer, note, now, actor))
+            db.execute("UPDATE case_referrals SET resolved_rev=? WHERE case_id=? AND rev=?", (next_rev, case_id, revision))
+            self.index_report(db, case_id, next_rev, report)
+            db.execute("""UPDATE cases SET rev=?,status='closed',stage='closed',message='复核签收版已归档',updated=? WHERE id=?""",
+                       (next_rev, now, case_id))
+            event(db, case_id, "closed", f"{reviewer} 完成 R{revision} 复核，签收版 R{next_rev} 已归档。")
+            return next_rev

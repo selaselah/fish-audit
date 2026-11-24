@@ -13,6 +13,7 @@
   <script src="/provenance.js" defer></script>
   <script src="/supplements.js" defer></script>
   <script src="/checkpoints.js" defer></script>
+  <script src="/peer-review.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -44,6 +45,7 @@
       <div id="desk-metrics" class="metrics" aria-label="当前检索范围内的任务概况">
         <button type="button" data-metric="ready"><span>待验收</span><strong>—</strong></button>
         <button type="button" data-metric="attention"><span>待验收且有疑点</span><strong>—</strong></button>
+        <button type="button" data-metric="in_review"><span>待复核</span><strong>—</strong></button>
         <button type="button" data-metric="active"><span>处理中</span><strong>—</strong></button>
         <button type="button" data-metric="closed"><span>已归档</span><strong>—</strong></button>
       </div>
@@ -55,6 +57,7 @@
           <button type="button" data-filter="all" aria-pressed="true">全部</button>
           <button type="button" data-filter="active" aria-pressed="false">进行中</button>
           <button type="button" data-filter="ready" aria-pressed="false">待验收</button>
+          <button type="button" data-filter="in_review" aria-pressed="false">待复核</button>
           <button type="button" data-filter="closed" aria-pressed="false">已归档</button>
           <button type="button" data-filter="failed" aria-pressed="false" hidden>已中断</button>
         </div><div class="selects"><label>审计范围<select id="desk-profile" aria-label="审计范围"><option value="">全部范围</option><option value="cn-procurement-full-settlement/v1">采购与付款</option><option value="cn-travel-reimbursement/v1">差旅报销</option><option value="cn-bank-contract-payment/v1">付款回单核对</option></select></label>
@@ -123,6 +126,18 @@
       <label>核验依据与处理意见<textarea id="review-note" rows="4" required maxlength="2000"></textarea></label>
       <p id="review-error" role="alert"></p>
       <div class="actions"><button class="primary" id="submit-review">保存核验记录</button></div>
+    </form>
+  </dialog>
+  <dialog id="peer-dialog" aria-labelledby="peer-title">
+    <form id="peer-form">
+      <div class="dialog-head"><h2 id="peer-title">复核签收</h2><button class="plain" type="button" data-close>关闭</button></div>
+      <p id="peer-origin" class="note"></p>
+      <fieldset class="peer-fields"><legend>本次复核依据</legend><p class="small">勾选已核对的审计发现。可打开原版证据查看引文与页图。</p><div id="peer-findings"></div></fieldset>
+      <label>复核决定<select id="peer-decision" required><option value="">请选择决定</option><option value="approve">通过</option><option value="return">退回补件</option></select></label>
+      <label>复核人<input id="peer-reviewer" required maxlength="50" autocomplete="name"></label>
+      <label>复核意见<textarea id="peer-note" rows="3" required maxlength="2000"></textarea></label>
+      <p id="peer-error" role="alert"></p>
+      <button id="peer-submit" class="primary">保存复核决定</button>
     </form>
   </dialog>
   <dialog id="amend-dialog" class="wide-dialog">

@@ -255,7 +255,7 @@ def create_app(store, worker):
 
     @app.get("/<filename>")
     def asset(filename):
-        if filename not in {"app.js", "team.js", "desk.js", "provenance.js", "supplements.js", "checkpoints.js", "style.css"}:
+        if filename not in {"app.js", "team.js", "desk.js", "provenance.js", "supplements.js", "checkpoints.js", "peer-review.js", "style.css"}:
             raise CaseError("资源不存在。", 404)
         return send_file(FRONTEND / filename)
 
@@ -308,6 +308,7 @@ def create_app(store, worker):
         data = store.detail(case_id, g.actor["id"] if g.role == "employee" else None, with_progress=True)
         if g.role == "employee":
             data["revisions"] = []
+            data.pop("referrals", None)
         data["can_review"] = g.role != "employee"
         return jsonify(data)
 
@@ -394,6 +395,17 @@ def create_app(store, worker):
         store.review(case_id, revision, reviewer, note, decision, facts, g.actor and g.actor["id"])
         worker.wakeup.set()
         return jsonify(id=case_id), 202 if facts is not None else 200
+
+    @business.post("/cases/<case_id>/peer-review")
+    def peer_review(case_id):
+        data = json_body()
+        rev, report_hash, signoff_hash = (data.get(k) for k in ("rev","report_hash","signoff_hash"))
+        if type(rev) is not int or not 1 <= rev <= 999_999_999 or not all(isinstance(v,str) and re.fullmatch(r"[a-f0-9]{64}",v) for v in (report_hash,signoff_hash)):
+            raise CaseError("请选择已提交复核的原版底稿。", 400)
+        note = text_field(data.get("note"), "复核意见", 2000)
+        revision = store.resolve_referral(case_id, rev, report_hash, signoff_hash, signer(data), note,
+                                          data.get("decision"), data.get("findings"), g.actor and g.actor["id"])
+        return jsonify(id=case_id, rev=revision)
 
     @business.post("/cases/<case_id>/amend")
     def amend(case_id):

@@ -94,6 +94,43 @@ class PaymentHistoryTests(unittest.TestCase):
         with self.store.connect() as db, self.assertRaises(CaseError):
             self.store.signed_source(db, "other", "archived", 1)
 
+    def test_payment_history_keeps_escalated_and_peer_approved_sources(self):
+        base = self.workpaper("peer-base")
+        self.sign("peer-base","escalate")
+        interim = self.workpaper("before-resolution")
+        self.assert_controls(interim,"risk","ok")
+        self.assertEqual(interim["graph"]["payment_history"]["matches"][0]["decision"],"escalate")
+        before = self.workpaper("other-reference-before",transfer_ref="YL-another")
+        self.assert_controls(before,"ok","ok")
+        pin = self.store.detail("peer-base")["referrals"][0]
+        fid = next(f["id"] for f in base["findings"] if f["rule"]=="B07")
+        self.store.resolve_referral("peer-base",1,pin["report_hash"],pin["signoff_hash"],"复核人员","已核对全额结算依据。","approve",[fid])
+        fresh = self.workpaper("other-reference-after",transfer_ref="YL-another")
+        self.assert_controls(fresh,"ok","risk")
+        match = fresh["graph"]["payment_history"]["matches"][0]
+        self.assertEqual((match["case_id"],match["rev"],match["decision"]),("peer-base",2,"approve"))
+        for cid, prior_rev in (("before-resolution",1),("other-reference-after",2)):
+            buf = io.BytesIO()
+            export_bundle(self.store,cid,1,buf)
+            self.assertEqual(verify(buf,True)[:2],(cid,1))
+            with zipfile.ZipFile(buf) as z:
+                self.assertEqual("prior/peer-base/r2/review/referral.json" in z.namelist(),prior_rev==2)
+                prior = json.loads(z.read(f"prior/peer-base/r{prior_rev}/signoff.json"))
+                self.assertEqual(prior["decision"],"approve" if prior_rev==2 else "escalate")
+
+    def test_new_payment_blocks_stale_peer_approval(self):
+        source = self.workpaper("first-referral")
+        self.sign("first-referral","escalate")
+        self.workpaper("later-cleared",transfer_ref="YL-later")
+        self.sign("later-cleared")
+        pin = self.store.detail("first-referral")["referrals"][0]
+        args = ("first-referral",1,pin["report_hash"],pin["signoff_hash"],"第二位","已核原账与回单。")
+        findings = [source["findings"][0]["id"]]
+        with self.assertRaisesRegex(CaseError,"最新付款记录"):
+            self.store.resolve_referral(*args,"approve",findings)
+        self.assertEqual(self.store.detail("first-referral")["status"],"in_review")
+        self.assertEqual(self.store.resolve_referral(*args,"return",findings),2)
+
     def test_currency_amount_names_dates_and_masked_references(self):
         self.workpaper("base", transfer_ref="00001234")
         self.sign("base")

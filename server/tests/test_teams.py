@@ -2,6 +2,7 @@ import io
 import os
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,6 +11,7 @@ from PIL import Image
 from jobs import Worker
 from main import create_app
 from storage import Store
+from verify import verify
 
 
 class EnterpriseFlow(unittest.TestCase):
@@ -133,6 +135,72 @@ class EnterpriseFlow(unittest.TestCase):
         self.store.limits["storage_mib"] = 0
         self.assertEqual(send(first,fh,base).status_code,429)
         self.assertEqual(len(admin.get(base).json["supplements"]),2)
+
+    def test_peer_review_requires_another_authorized_account(self):
+        owner,wid,oh = self.register("first-reviewer",name="同名审计员")
+        other,b,bh = self.register("other-enterprise")
+        def join(login,role):
+            token = owner.post("/api/workspaces/"+wid+"/invites",headers=oh,json={"role":role}).json["token"]
+            client,_,headers = self.register(login,name="同名审计员",invite=token)
+            return client,headers
+        employee,eh = join("peer-employee","employee")
+        auditor,ah = join("second-reviewer","auditor")
+        cid = self.submit(employee,wid,eh)
+        self.worker.run(self.store.claim())
+        base = "/api/w/"+wid+"/cases/"+cid
+        owner.post(base+"/signoff",headers=oh,json={"rev":1,"decision":"escalate","note":"请另一人复核。"})
+        pin = owner.get(base).json["referrals"][0]
+        self.assertNotIn("referrals",employee.get(base).json)
+        self.assertEqual(employee.get("/api/w/"+wid+"/inbox?status=in_review").json["total"],1)
+        fid = owner.get(base+"/reports/1").json["report"]["findings"][0]["id"]
+        body = {"rev":1,"reviewer":"客户端填写的姓名","report_hash":pin["report_hash"],"signoff_hash":pin["signoff_hash"],
+                "note":"已核所引记录，需要补件。","decision":"return","findings":[fid]}
+        for client, headers, target, expected in ((owner,oh,base,403),(employee,eh,base,403),(auditor,{},base,403),
+                                                  (other,bh,"/api/w/"+b+"/cases/"+cid,404)):
+            self.assertEqual(client.post(target+"/peer-review",headers=headers,json=body).status_code,expected)
+        session = auditor.get("/api/session").json
+        aid = session["user"]["id"]
+        members = "/api/workspaces/"+wid+"/members/"+aid
+        owner.post(members,headers=oh,json={"role":"employee"})
+        self.assertIn(auditor.post(base+"/peer-review",headers=ah,json=body).status_code,(403,404))
+        owner.post(members,headers=oh,json={"role":"auditor"})
+        result = auditor.post(base+"/peer-review",headers=ah,json=body)
+        self.assertEqual((result.status_code,result.json.get("rev")),(200,2))
+        first,second = owner.get(base).json["decisions"]
+        self.assertNotEqual(first["actor"],second["actor"])
+        self.assertEqual((first["reviewer"],second["reviewer"],second["actor"]),("同名审计员","同名审计员",aid))
+        self.assertEqual(employee.get(base+"/reports/2").status_code,403)
+
+    def test_same_invoice_exports_the_reviewed_historical_version(self):
+        first,wid,fh = self.register("invoice-referrer")
+        invite = first.post("/api/workspaces/"+wid+"/invites",headers=fh,json={"role":"auditor"}).json
+        second,_,sh = self.register("invoice-peer",invite=invite["token"])
+        cases = "/api/w/"+wid+"/cases/"
+        def verified_invoice(client,headers):
+            cid = self.submit(client,wid,headers)
+            self.worker.run(self.store.claim())
+            res = client.post(cases+cid+"/attest",headers=headers,json={"rev":1,"decision":"confirm",
+                            "facts":["d01/p1/f1","d01/p1/f2"],"note":"演练核对同票号码及资料类型。"})
+            self.assertEqual(res.status_code,202,res.json)
+            self.worker.run(self.store.claim())
+            return cid
+        prior = verified_invoice(first,fh)
+        base = cases+prior
+        first.post(base+"/signoff",headers=fh,json={"rev":2,"decision":"escalate","note":"请复核资料范围。"})
+        pin = first.get(base).json["referrals"][0]
+        selected = first.get(base+"/reports/2").json["report"]["findings"][0]["id"]
+        body = {"rev":2,"report_hash":pin["report_hash"],"signoff_hash":pin["signoff_hash"],
+                "decision":"return","note":"已核该案资料范围，需补件。","findings":[selected]}
+        self.assertEqual(second.post(base+"/peer-review",headers=sh,json=body).json["rev"],3)
+        repeat = verified_invoice(second,sh)
+        current = second.get(cases+repeat+"/reports/2").json["report"]
+        row = current["graph"]["prior_invoices"][0]
+        self.assertEqual((row["case_id"],row["rev"],row["peer_source_rev"],row["decision"]),(prior,3,2,"return"))
+        with second.get(cases+repeat+"/reports/2/bundle") as response:
+            archive = io.BytesIO(response.data)
+            self.assertEqual(verify(archive,True)[:2],(repeat,2))
+            with zipfile.ZipFile(archive) as saved:
+                self.assertIn(f"prior/{prior}/r3/review/referral.json",saved.namelist())
 
     def test_atomic_admission_and_accounted_requests(self):
         from concurrent.futures import ThreadPoolExecutor

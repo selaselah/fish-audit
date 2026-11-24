@@ -99,6 +99,11 @@ details > summary { cursor: pointer; color: var(--green); padding: 7px 0; }
 #retain-files { min-width: 0; border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; }
 #retain-files .check-label { padding: 5px 0; overflow-wrap: anywhere; }
 #supplement-family .source-jump { overflow-wrap: anywhere; }
+.peer-fields { min-width: 0; margin: 12px 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; }
+.peer-fields legend, .peer-panel h4 { font-weight: 650; }
+.peer-finding { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 7px 0; }
+.peer-finding label { align-items: flex-start; overflow-wrap: anywhere; }
+.peer-finding a { flex: none; font-size: .85rem; }
 .file-progress summary { overflow-wrap: anywhere; cursor: pointer; }
 .file-progress summary > span { margin-inline-start: .8em; color: var(--muted); font-size: .86rem; }
 .checkpoint-document { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
@@ -179,7 +184,7 @@ main.wrap { width: auto; max-width: 1710px; margin-inline: var(--rail) auto; pad
 .eyebrow { font-size: .83rem; color: #52695d; margin-bottom: 8px; }
 #new-case { display: inline-flex; align-items: center; gap: 5px; padding-inline: 17px; }
 #new-case span { font-size: 1.24rem; line-height: 1; }
-.metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); border: 1px solid var(--line); border-radius: 9px; background: #fff; margin-bottom: 25px; overflow: hidden; }
+.metrics { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); border: 1px solid var(--line); border-radius: 9px; background: #fff; margin-bottom: 25px; overflow: hidden; }
 .metrics button { position: relative; display: flex; flex-flow: column; align-items: flex-start; gap: 8px; min-width: 0; text-align: left; border: 0; border-radius: 0; padding: clamp(14px,1.7vw,27px); }
 .metrics button + button { border-left: 1px solid var(--line); }
 .metrics button span { color: var(--muted); font-size: .85rem; }
@@ -245,7 +250,8 @@ input, select, textarea { border-color: #bdc9bf; }
 }
 @media(max-width:520px){
   .metrics { grid-template-columns: 1fr 1fr; } .metrics button { flex-direction:row-reverse; justify-content: flex-end; align-items: baseline; gap: 10px; }
-  .metrics button:nth-child(3) { border-left:0; } .metrics button:nth-child(n+3) { border-top:1px solid var(--line); }
+  .metrics button:nth-child(odd) { border-left:0; } .metrics button:nth-child(n+3) { border-top:1px solid var(--line); }
+  .metrics button:last-child { grid-column: 1/-1; }
   .metrics button span { font-size:.8rem; } .metrics button strong { font-size:1.75rem; }
   .toolbar { align-items: stretch; } .library-form { gap:8px; } .library-form label:first-child { flex-basis:100%; }
   .ledger-row .row-result { grid-column:1/-1; } .pager { padding:10px 15px; }

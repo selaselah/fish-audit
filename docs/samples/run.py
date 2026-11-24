@@ -32,7 +32,7 @@ def wait(case_id):
     until = time.monotonic() + 1800
     while time.monotonic() < until:
         case = get("/api/cases/" + case_id)
-        if case["status"] in ("ready", "closed"):
+        if case["status"] in ("ready", "in_review", "closed"):
             return get(f"/api/cases/{case_id}/reports/{case['rev']}")["report"]
         if case["status"] == "failed":
             raise RuntimeError(case["error"])
