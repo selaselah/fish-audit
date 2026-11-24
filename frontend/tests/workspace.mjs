@@ -28,8 +28,10 @@ const peerCase = caseArgument('--peer-case');
 const fieldCase = caseArgument('--field-case');
 const installmentCase = caseArgument('--installment-case');
 const replayCase = caseArgument('--replay-case');
-const seeded = sampleDesk || paymentCase || supplementCase || peerCase || fieldCase || installmentCase || replayCase;
-const root = 'http://127.0.0.1:' + (seeded ? 8000 : port);
+const recoveringCase = caseArgument('--recovering-case');
+const seeded = sampleDesk || paymentCase || supplementCase || peerCase || fieldCase || installmentCase || replayCase || recoveringCase;
+const root = recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
+if (recoveringCase) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
 const children = [];
 const faults = [];
 function start(binary, args, env = process.env) {
@@ -89,7 +91,24 @@ try {
   const click = (label, container='document') => evaluate('[...'+container+'.querySelectorAll("button,a")].find(b=>b.textContent==='+JSON.stringify(label)+' && b.getClientRects().length).click()');
   await call('Runtime.enable');
   await call('Page.navigate',{url:root});
-  if (replayCase) {
+  if (recoveringCase) {
+    const workspace=process.env.SYNTHETIC_RECOVERY_WORKSPACE;
+    assert.match(workspace || '',/^[0-9a-f]{32}$/);
+    const cookie=await call('Network.setCookie',{name:'fish_session',value:process.env.SYNTHETIC_RECOVERY_SESSION,
+      url:root,httpOnly:true,sameSite:'Lax'});
+    assert.ok(cookie.success);
+    await call('Page.navigate',{url:root+'/w/'+workspace+'/workpaper/'+recoveringCase});
+    await wait('document.querySelector("#checkpoint-totals")?.textContent.includes("R1 专家响应已保存")','persisted expert checkpoint');
+    assert.ok(await evaluate('document.querySelector("#progress-panel progress").value===96 && document.querySelector("#report-tools").hidden'));
+    await evaluate('document.querySelector("#checkpoint-files details").open=true');
+    for (const width of [1440,1024,820,768,390,320]) {
+      await call('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && !!document.querySelector("#checkpoint-files a")'),'saved expert response at '+width);
+    }
+    await call('Page.reload');
+    await wait('document.querySelector("#checkpoint-totals")?.textContent.includes("R1 专家响应已保存")','checkpoint after reload');
+    console.log('PASS · persisted expert checkpoint before publication, reload and six widths');
+  } else if (replayCase) {
     const base=root+'/api/cases/'+replayCase;
     const original=await (await fetch(base)).json();
     assert.ok(original.title.startsWith('合成演练 · '));

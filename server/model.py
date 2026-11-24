@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from capacity import request_attempt
+from capacity import CURRENT_JOB, request_attempt
 from config import AUDITOR_MODEL, CaseError, MODEL, PROMPT_VERSION
 from policy import MAPPING, SOURCES
 from protocol import canonical, response_request
@@ -94,11 +94,26 @@ VISUAL_CHECK = """逐项比对当前页图和候选记录。图片内容及候�
 
 
 def structured(model, instruction, content, schema, name):
+    max_tokens = 5500
+    body = response_request(model, instruction, content, schema, name, max_tokens)
+    request_hash = hashlib.sha256(body).hexdigest()
+    metadata = {"prompt_version": PROMPT_VERSION, "prompt_sha256": hashlib.sha256(instruction.encode()).hexdigest(),
+                "request_sha256": request_hash, "schema": schema, "schema_name": name, "requested_model": model,
+                "instruction": instruction, "request_format": "responses-json-v1", "max_output_tokens": max_tokens}
+    job = CURRENT_JOB.get() if name == "audit_followups" else None
+    if job:
+        def validate_saved(trace):
+            recorded = {key: trace.get(key) for key in metadata}
+            identified = all(isinstance(trace.get(key), str) and trace[key] for key in ("response_id", "model"))
+            if canonical(recorded) != canonical(metadata) or not identified:
+                raise ValueError("专家响应与本次请求的执行记录不符")
+            validate(trace["output"], schema)
+        saved = job.store.expert_checkpoint(job.case_id, job.base_rev, request_hash, validate_saved)
+        if saved:
+            return saved["output"], saved
     key = os.getenv("OPENAI_API_KEY", "").strip()
     if not key:
         raise CaseError("尚未配置 OpenAI 密钥，修改 server/.env 后重启服务并重试。", 503)
-    max_tokens = 5500
-    body = response_request(model, instruction, content, schema, name, max_tokens)
     request = Request("https://api.openai.com/v1/responses", data=body, headers={
         "Authorization": "Bearer " + key, "Content-Type": "application/json"})
     start = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
@@ -135,14 +150,16 @@ def structured(model, instruction, content, schema, name):
         validate(result, schema)
     except (TypeError, KeyError, ValueError) as error:
         raise CaseError("模型结果未通过本地结构校验，可重试。") from error
-    trace = {"response_id": envelope.get("id"), "request_id": request_id,
-             "model": envelope.get("model"), "prompt_version": PROMPT_VERSION,
-             "prompt_sha256": hashlib.sha256(instruction.encode()).hexdigest(),
-             "request_sha256": hashlib.sha256(body).hexdigest(), "usage": envelope.get("usage"),
-             "output": result, "schema": schema, "schema_name": name, "requested_model": model,
-             "instruction": instruction, "request_format": "responses-json-v1", "max_output_tokens": max_tokens,
+    trace = {**metadata, "response_id": envelope.get("id"), "request_id": request_id,
+             "model": envelope.get("model"), "usage": envelope.get("usage"), "output": result,
              "started": start, "completed": datetime.now(timezone.utc).isoformat(timespec="milliseconds"),
              "attempts": attempt+1}
+    if job:
+        try:
+            validate_saved(trace)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise CaseError("专家响应缺少可核对的执行记录，请从检查点重试。") from exc
+        job.store.save_expert_checkpoint(job.case_id, job.base_rev, trace)
     return result, trace
 
 

@@ -5,6 +5,7 @@ import uuid
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import datetime, timezone
+from typing import Any, NamedTuple
 from zoneinfo import ZoneInfo
 
 from config import CaseError
@@ -13,6 +14,13 @@ from config import CaseError
 CLIENT_ZONE = ZoneInfo("Asia/Shanghai")
 CURRENT_JOB = ContextVar("audit_metered_job", default=None)
 DEFAULTS = {"monthly_cases":150, "active_cases":4, "storage_mib":2048, "monthly_requests":3000}
+
+
+class Job(NamedTuple):
+    store: Any
+    workspace: str
+    case_id: str
+    base_rev: int
 
 
 def settings():
@@ -79,8 +87,8 @@ def usage(store, workspace):
 @contextmanager
 def job_scope(store, case_id):
     with store.connect() as db:
-        workspace = db.execute("SELECT workspace FROM cases WHERE id=?", (case_id,)).fetchone()["workspace"]
-    token = CURRENT_JOB.set(None if workspace == "local" else (store,workspace,case_id))
+        case = db.execute("SELECT workspace,rev FROM cases WHERE id=?", (case_id,)).fetchone()
+    token = CURRENT_JOB.set(Job(store,case["workspace"],case_id,case["rev"]))
     try:
         yield
     finally:
@@ -90,10 +98,10 @@ def job_scope(store, case_id):
 @contextmanager
 def request_attempt(model, operation):
     job = CURRENT_JOB.get()
-    if job is None:
+    if job is None or job.workspace == "local":
         yield lambda response: None
         return
-    store, workspace, case_id = job
+    store, workspace, case_id = job.store, job.workspace, job.case_id
     request_id = uuid.uuid4().hex
     with store.connect(True) as db:
         issued = db.execute("SELECT count(*) FROM model_requests WHERE workspace=? AND started>=?",

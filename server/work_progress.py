@@ -10,6 +10,9 @@ PAGE_STATE = """CASE WHEN extraction IS NULL THEN 'prepared'
 
 def install(db):
     db.execute(f"CREATE INDEX IF NOT EXISTS page_checkpoint_states ON pages(case_id,doc,number,({PAGE_STATE}))")
+    db.execute("""CREATE TABLE IF NOT EXISTS expert_checkpoints(
+        case_id TEXT PRIMARY KEY REFERENCES cases(id), base_rev INTEGER NOT NULL,
+        request_hash TEXT NOT NULL, saved_at TEXT NOT NULL, sha256 TEXT NOT NULL, content TEXT NOT NULL)""")
     db.execute("""CREATE TABLE IF NOT EXISTS case_activity(
         case_id TEXT PRIMARY KEY, doc TEXT NOT NULL, page INTEGER CHECK(page IS NULL OR page>0),
         operation TEXT NOT NULL CHECK(operation IN ('prepare','read','check','integrity')),
@@ -39,4 +42,9 @@ def checkpoints(db, case, documents):
         row = db.execute("SELECT doc,page,operation FROM case_activity WHERE case_id=?", (case["id"],)).fetchone()
         if row:
             active = dict(row)
-    return {"counts": counts, "documents": pages, "activity": active}
+    result = {"counts": counts, "documents": pages, "activity": active}
+    if case["status"] in {"running","failed","queued"}:
+        row = db.execute("SELECT saved_at FROM expert_checkpoints WHERE case_id=? AND base_rev=?",(case["id"],case["rev"])).fetchone()
+        if row:
+            result["expert"] = {"target_rev":case["rev"]+1,"saved_at":row["saved_at"]}
+    return result

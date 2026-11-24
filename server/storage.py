@@ -37,6 +37,13 @@ def event(db, case_id, stage, message):
                (case_id, stamp(), stage, message))
 
 
+def record_progress(db,case_id,stage,percent,message,activity=None):
+    db.execute("UPDATE cases SET stage=?,progress=?,message=?,updated=? WHERE id=?",
+               (stage,percent,message,stamp(),case_id))
+    set_activity(db,case_id,activity)
+    event(db,case_id,stage,message)
+
+
 def authorize_write(db, workspace, actor, *, review=False):
     if workspace == "local":
         return "admin"
@@ -254,10 +261,44 @@ class Store:
 
     def progress(self, case_id, stage, percent, message, activity=None):
         with self.connect(True) as db:
-            db.execute("UPDATE cases SET stage=?,progress=?,message=?,updated=? WHERE id=?",
-                       (stage, percent, message, stamp(), case_id))
-            set_activity(db, case_id, activity)
-            event(db, case_id, stage, message)
+            record_progress(db,case_id,stage,percent,message,activity)
+
+    def expert_checkpoint(self,case_id,base_rev,request_hash,validate_trace):
+        with self.connect(True) as db:
+            row = db.execute("""SELECT e.* FROM expert_checkpoints e JOIN cases c ON c.id=e.case_id
+                                WHERE e.case_id=? AND c.status='running' AND c.rev=?""",(case_id,base_rev)).fetchone()
+            if not row:
+                return None
+            message = "专家请求与已保存记录的版本或输入不同，重新调用模型。"
+            if row["base_rev"]==base_rev and row["request_hash"]==request_hash:
+                try:
+                    if not isinstance(row["content"],str) or hashlib.sha256(row["content"].encode()).hexdigest()!=row["sha256"]:
+                        raise ValueError("摘要不符")
+                    saved = json.loads(row["content"])
+                    if saved["case_id"]!=case_id or type(saved["base_rev"]) is not int or saved["base_rev"]!=base_rev:
+                        raise ValueError("版本不符")
+                    trace = saved["trace"]
+                    if not isinstance(trace,dict) or trace["request_sha256"]!=request_hash:
+                        raise ValueError("请求不符")
+                    validate_trace(trace)
+                except (KeyError,TypeError,ValueError):
+                    message = "已保存的专家响应未通过完整性检查，重新调用模型。"
+                else:
+                    record_progress(db,case_id,"expert",97,"本版专家请求与已保存响应匹配，正在恢复底稿。")
+                    return trace
+            db.execute("DELETE FROM expert_checkpoints WHERE case_id=?",(case_id,))
+            event(db,case_id,"expert",message)
+            return None
+
+    def save_expert_checkpoint(self,case_id,base_rev,trace):
+        content = encode({"case_id":case_id,"base_rev":base_rev,"trace":trace})
+        checksum = hashlib.sha256(content.encode()).hexdigest()
+        with self.connect(True) as db:
+            if not db.execute("SELECT 1 FROM cases WHERE id=? AND rev=? AND status='running'",(case_id,base_rev)).fetchone():
+                raise CaseError("专家请求所属的任务版本已变化。",409)
+            db.execute("""INSERT OR REPLACE INTO expert_checkpoints(case_id,base_rev,request_hash,saved_at,sha256,content)
+                          VALUES(?,?,?,?,?,?)""",(case_id,base_rev,trace["request_sha256"],stamp(),checksum,content))
+            record_progress(db,case_id,"expert",96,"已保存专家响应，正在生成本版底稿。")
 
     def fail(self, case_id, message):
         with self.connect(True) as db:
@@ -320,6 +361,7 @@ class Store:
             db.executemany("INSERT OR IGNORE INTO method_sources VALUES(?,?)",
                            [(report["policy"]["code_sha256"][name], contents) for name, contents in methods.items()])
             db.execute("INSERT INTO reports VALUES(?,?,?,?,?)", (case_id, revision, now, digest, encode(report)))
+            db.execute("DELETE FROM expert_checkpoints WHERE case_id=? AND base_rev=?",(case_id,revision-1))
             self.index_report(db, case_id, revision, report)
             db.execute("""UPDATE cases SET rev=?,status='ready',stage='ready',progress=100,
                        error=NULL,message='审计底稿已生成，等待人工验收',updated=? WHERE id=?""", (revision, now, case_id))
