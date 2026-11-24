@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from backup import MARKER
 from capacity import admit, install as install_capacity, settings
 from config import BANK, CaseError, PROFILE
+from field_receipts import field_actions, validate_field_actions
+from field_sources import FieldSources, check_archived_files, source_row
 from graph import compact, invoice_number_edges
 from payment_history import LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_facts, payment_record
 from peer_review import different_reviewers, review_record, valid_findings, verify_review
@@ -127,8 +129,13 @@ class Store:
                     db.execute(f"ALTER TABLE cases ADD COLUMN {column} {definition}")
             db.execute("CREATE INDEX IF NOT EXISTS cases_space ON cases(workspace,created DESC,id)")
             for table in ("attestations", "amendments", "signoffs"):
-                if "actor" not in {row["name"] for row in db.execute(f"PRAGMA table_info({table})")}:
+                columns = {row["name"] for row in db.execute(f"PRAGMA table_info({table})")}
+                if "actor" not in columns:
                     db.execute(f"ALTER TABLE {table} ADD COLUMN actor TEXT")
+                if table != "signoffs" and "source_check" not in columns:
+                    db.execute(f"ALTER TABLE {table} ADD COLUMN source_check TEXT")
+            db.execute("""CREATE INDEX IF NOT EXISTS checked_fact_versions ON attestations(case_id,fact,rev)
+                          WHERE source_check IS NOT NULL""")
             old_referrals = db.execute("""SELECT c.workspace,c.title,s.case_id,s.rev,s.decision,s.reviewer,s.note,s.time,s.actor,r.hash
                     FROM signoffs s JOIN cases c ON c.id=s.case_id JOIN reports r ON r.case_id=s.case_id AND r.rev=s.rev
                     WHERE s.decision='escalate' AND NOT EXISTS(
@@ -343,7 +350,9 @@ class Store:
         with self.connect() as db:
             db.execute("BEGIN")
             placeholders = ",".join("?" for key in keys)
-            rows = db.execute(f"""SELECT i.*,c.title,s.decision,r.hash AS report_hash,f.rev AS peer_source_rev FROM invoice_index i
+            rows = db.execute(f"""SELECT i.*,c.title,s.decision,r.hash AS report_hash,f.rev AS peer_source_rev,
+                              EXISTS(SELECT 1 FROM attestations a WHERE a.case_id=i.case_id AND a.fact=i.fact
+                                     AND a.rev<i.rev AND a.source_check IS NOT NULL) AS checked_field FROM invoice_index i
                               JOIN cases c ON c.id=i.case_id AND c.rev=i.rev
                               JOIN signoffs s ON s.case_id=i.case_id AND s.rev=i.rev
                               JOIN reports r ON r.case_id=i.case_id AND r.rev=i.rev
@@ -352,12 +361,33 @@ class Store:
                               AND c.id<>? AND i.number_key IN ({placeholders})
                               ORDER BY i.case_id,i.rev,i.fact""", (case_id, case_id, *keys))
             matches = [dict(row) for row in rows]
-            reviewed = {(m["case_id"],m["rev"]) for m in matches if m["peer_source_rev"] or m["decision"]=="escalate"}
-            for prior, rev in reviewed:
-                self.signed_version(db,prior,rev)
+            sources = {}
+            for match in matches:
+                if match["peer_source_rev"] or match["decision"]=="escalate" or match["checked_field"]:
+                    sources.setdefault((match["case_id"],match["rev"]),[]).append(match)
+            for (prior,rev),group in sources.items():
+                content,signoff = self.signed_version(db,prior,rev)
+                archived = json.loads(content)
+                indexed = set(self.index_rows(prior,rev,archived))
+                columns = ("case_id","rev","doc","fact","page","number_key","quote","source_hash","page_hash","document_kind")
+                if any(tuple(match[key] for key in columns) not in indexed for match in group):
+                    raise CaseError("历史同票索引与已签收底稿所记的票号或引文不符。",409)
+                selected = {match["fact"] for match in group if match["checked_field"]}
+                if selected:
+                    graph = archived["graph"]
+                    observations = self.check_graph_field_history(prior,rev,graph,selected)
+                    if not selected <= {f["id"] for f in graph["facts"] if any((f.get(k) or {}).get("source_check") for k in ("attestation","amendment"))}:
+                        raise CaseError("同票索引所引的字段缺少历史核图存证。",409)
+                    check_archived_files(db,prior,self.files/prior,observations)
+                    signature = hashlib.sha256(canonical(signoff)).hexdigest()
+                    for match in group:
+                        if match["checked_field"]:
+                            match["signoff_hash"] = signature
             for match in matches:
                 if match["peer_source_rev"] is None:
                     del match["peer_source_rev"]
+                if not match["checked_field"]:
+                    del match["checked_field"]
             return matches
 
     @staticmethod
@@ -443,6 +473,8 @@ class Store:
                     raise CaseError("历史付款索引与已签收底稿中的原文不一致，无法出具本次跨案结果。", 409)
                 match["signoff_hash"] = hashlib.sha256(canonical(signoff)).hexdigest()
                 refs = record["same_refs" if match["kind"] == "same" else "full_refs"]
+                verified = self.check_graph_field_history(prior,rev,report["graph"],set(refs))
+                check_archived_files(db,prior,self.files/prior,verified)
                 match["evidence"] = cited_facts(report["graph"], prior, rev, refs)
             return history
 
@@ -523,7 +555,7 @@ class Store:
             return compare_return(current, json.loads(data), signoff, row["parent_hash"],
                                   json.loads(row["retained"]), row["note"])
 
-    def detail(self, case_id, owner=None, *, with_progress=False):
+    def detail(self, case_id, owner=None, *, with_progress=False, with_actions=False):
         with self.connect() as db:
             db.execute("BEGIN")
             case = db.execute("""SELECT id,title,profile,workspace,submitter,submitter_name,created,updated,status,stage,progress,message,error,rev
@@ -537,6 +569,10 @@ class Store:
             detail["events"] = [dict(row) for row in db.execute("SELECT seq,time,stage,message FROM events WHERE case_id=? ORDER BY seq", (case_id,))]
             detail["revisions"] = [dict(row) for row in db.execute("SELECT rev,created,hash FROM reports WHERE case_id=? ORDER BY rev DESC", (case_id,))]
             detail["decisions"] = [dict(row) for row in db.execute("SELECT rev,decision,reviewer,actor,note,time FROM signoffs WHERE case_id=? ORDER BY rev", (case_id,))]
+            if with_actions:
+                detail["attestations"] = [source_row(row) for row in db.execute("""SELECT seq,rev,fact,decision,reviewer,actor,note,time,source_check
+                            FROM attestations WHERE case_id=? ORDER BY seq""", (case_id,))]
+                detail["amendments"] = self.amendment_rows(db,case_id)
             detail["referrals"] = [dict(row) for row in db.execute("""SELECT rev,report_hash,signoff_hash,resolved_rev,origin
                                              FROM case_referrals WHERE case_id=? ORDER BY rev""", (case_id,))]
             family = (case_id, case["workspace"], owner, owner)
@@ -567,42 +603,61 @@ class Store:
 
     def attestations(self, case_id):
         with self.connect() as db:
-            return {row["fact"]: dict(row) for row in db.execute("SELECT fact,decision,reviewer,actor,note,time,rev FROM attestations WHERE case_id=? ORDER BY seq", (case_id,))}
+            return {row["fact"]:source_row(row) for row in db.execute("SELECT fact,decision,reviewer,actor,note,time,rev,source_check FROM attestations WHERE case_id=? ORDER BY seq", (case_id,))}
 
     def amendments(self, case_id):
         with self.connect() as db:
-            return [dict(row) for row in db.execute("""SELECT target,doc,page,page_hash,field,value,quote,region,
-                    reviewer,actor,note,time,rev FROM amendments WHERE case_id=? ORDER BY seq""", (case_id,))]
+            return self.amendment_rows(db,case_id)
+
+    @staticmethod
+    def amendment_rows(db, case_id):
+        return [source_row(row) for row in db.execute("""SELECT target,doc,page,page_hash,field,value,quote,region,
+                reviewer,actor,note,time,rev,source_check FROM amendments WHERE case_id=? ORDER BY seq""", (case_id,))]
+
+    def check_field_sources(self, case_id, revision, selected, address, actor):
+        with self.connect() as db:
+            db.execute("BEGIN")
+            authorize_case_write(db,case_id,actor)
+            sources = FieldSources.prepare(db,self.files/case_id,case_id,revision,selected,address)
+        sources.read_files()
+        return sources
+
+    def check_graph_field_history(self, case_id, revision, graph, selected=None):
+        def load_version(rev):
+            original = self.report(case_id,rev)
+            return original["sha256"],original["report"]
+        report = {"case_id":case_id,"graph":graph}
+        try:
+            return validate_field_actions(report,revision,field_actions(report,revision,selected=selected),load_version)
+        except (KeyError, ValueError, TypeError) as exc:
+            raise CaseError("人工核图依据与当时的底稿或原页不符，已停止建图。",409) from exc
 
     def amend(self, case_id, revision, reviewer, note, target, doc, page, field, value, quote, region, actor=None):
+        sources = self.check_field_sources(case_id,revision,[target] if target is not None else None,(doc,page),actor)
         with self.connect(True) as db:
             workspace = authorize_case_write(db, case_id, actor)
             admit(db, workspace, self.limits)
             case = db.execute("SELECT status,rev FROM cases WHERE id=?", (case_id,)).fetchone()
             if not case or case["status"] != "ready" or case["rev"] != revision:
                 raise CaseError("请对当前待验收底稿进行更正或补录。", 409)
-            source = db.execute("SELECT sha256 FROM pages WHERE case_id=? AND doc=? AND number=?", (case_id, doc, page)).fetchone()
-            if not source:
-                raise CaseError("所选原页不属于此案。", 400)
-            if target is not None:
-                row = db.execute("SELECT content FROM reports WHERE case_id=? AND rev=?", (case_id, revision)).fetchone()
-                facts = json.loads(row["content"])["graph"]["facts"]
-                if not any(fact["id"] == target and fact["doc"] == doc and fact["page"] == page for fact in facts):
-                    raise CaseError("更正记录与所选原页不匹配。", 400)
-            else:
+            sources.guard(db)
+            receipt = sources.receipt(doc,page,"add" if target is None else "correct")
+            if target is None:
                 target = f"{doc}/p{page}/h{uuid.uuid4().hex[:12]}"
             now = stamp()
-            db.execute("""INSERT INTO amendments(case_id,rev,target,doc,page,page_hash,field,value,quote,region,reviewer,note,time,actor)
-                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                       (case_id, revision, target, doc, page, source["sha256"], field, value, quote, region, reviewer, note, now,actor))
-            db.execute("INSERT INTO attestations(case_id,rev,fact,decision,reviewer,note,time,actor) VALUES(?,?,?,'confirm',?,?,?,?)",
-                       (case_id, revision, target, reviewer, note, now,actor))
+            encoded = encode(receipt)
+            db.execute("""INSERT INTO amendments(case_id,rev,target,doc,page,page_hash,field,value,quote,region,reviewer,note,time,actor,source_check)
+                       VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                       (case_id, revision, target, doc, page, receipt["page_sha256"], field, value, quote, region, reviewer, note, now,actor,encoded))
+            db.execute("INSERT INTO attestations(case_id,rev,fact,decision,reviewer,note,time,actor,source_check) VALUES(?,?,?,'confirm',?,?,?,?,?)",
+                       (case_id, revision, target, reviewer, note, now,actor,encoded))
             db.execute("""UPDATE cases SET status='queued',stage='queued',progress=0,
                        message='人工更正已留存，等待重算',updated=? WHERE id=?""", (now, case_id))
             event(db, case_id, "attestation", f"{reviewer} 新增了原页 {doc}/p{page} 的核验记录。")
             return target
 
     def review(self, case_id, revision, reviewer, note, decision, fact_ids=None, actor=None):
+        sources = self.check_field_sources(case_id,revision,fact_ids,None,actor) if fact_ids is not None and decision=="confirm" else None
         with self.connect(True) as db:
             workspace = authorize_case_write(db, case_id, actor)
             if fact_ids is not None:
@@ -614,14 +669,21 @@ class Store:
                 raise CaseError("底稿已更新或已验收，请刷新后查看。", 409)
             now = stamp()
             if fact_ids is not None:
-                row = db.execute("SELECT content FROM reports WHERE case_id=? AND rev=?", (case_id, revision)).fetchone()
-                facts = {fact["id"]: fact for fact in json.loads(row["content"])["graph"]["facts"]}
+                if sources:
+                    sources.guard(db)
+                    facts = sources.facts
+                else:
+                    row = db.execute("SELECT content,hash FROM reports WHERE case_id=? AND rev=?", (case_id, revision)).fetchone()
+                    if not row or hashlib.sha256(row["content"].encode()).hexdigest() != row["hash"]:
+                        raise CaseError("所选底稿与留存的版本摘要不符。",409)
+                    facts = {fact["id"]: fact for fact in json.loads(row["content"])["graph"]["facts"]}
                 if not fact_ids or len(fact_ids) != len(set(fact_ids)) or set(fact_ids) - set(facts):
                     raise CaseError("待核记录不属于当前底稿。", 400)
                 if decision == "confirm" and any(compact(facts[ref]["value"]) not in compact(facts[ref]["quote"]) for ref in fact_ids):
                     raise CaseError("取值与引文不符，请对照原页更正字段。")
-                db.executemany("INSERT INTO attestations(case_id,rev,fact,decision,reviewer,note,time,actor) VALUES(?,?,?,?,?,?,?,?)",
-                               [(case_id, revision, ref, decision, reviewer, note, now, actor) for ref in fact_ids])
+                db.executemany("INSERT INTO attestations(case_id,rev,fact,decision,reviewer,note,time,actor,source_check) VALUES(?,?,?,?,?,?,?,?,?)",
+                               [(case_id, revision, ref, decision, reviewer, note, now,actor,
+                                 encode(sources.receipt(facts[ref]["doc"],facts[ref]["page"],"confirm")) if sources else None) for ref in fact_ids])
                 db.execute("""UPDATE cases SET status='queued',stage='queued',progress=0,
                            message='人工核图已保存，等待重算',updated=? WHERE id=?""", (now, case_id))
                 event(db, case_id, "attestation", f"{reviewer} 核对 {len(fact_ids)} 条引文，已保存意见并提交重算。")

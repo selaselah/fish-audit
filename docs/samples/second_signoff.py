@@ -2,19 +2,11 @@
 
 import argparse
 import hashlib
-import json
 from decimal import Decimal
-from urllib.request import Request, urlopen
 
 from bank import write_bank_pair
 from generate import ROOT
-from run import BASE, get, submit, wait
-
-
-def post(path, body):
-    request = Request(BASE+path, data=json.dumps(body).encode(), headers={"Content-Type":"application/json"})
-    with urlopen(request, timeout=30) as response:
-        return json.load(response)
+from run import BASE, get, post, submit, wait
 
 
 def exercise(run_id, mode):

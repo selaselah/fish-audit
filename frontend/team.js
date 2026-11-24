@@ -17,6 +17,7 @@ const Team = {
     const target = this.hash('case/'+caseId+suffix);
     const anchor = link(label,path,className);
     anchor.addEventListener('click',event=>{
+      if (anchor.target && anchor.target !== '_self') return;
       if (event.button===0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
         event.preventDefault();
         if (location.hash===target) { state.openedCitation=null; refresh(); }

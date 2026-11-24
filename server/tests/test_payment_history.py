@@ -48,7 +48,7 @@ class PaymentHistoryTests(unittest.TestCase):
             self.store.create(case_id, "演练 "+case_id, docs, case_id, case_id, BANK, workspace, user)
             for doc, page in zip(docs, pages):
                 self.store.put_pages(case_id, doc["id"], [page])
-        graph = build_graph(docs, pages, {})
+        graph = build_graph(docs, pages, self.store.attestations(case_id), self.store.amendments(case_id))
         graph["profile"] = BANK
         lookup = (lambda signature: self.store.payment_history(case_id, signature)) if history else None
         findings = execute(graph, BANK, lookup)
@@ -117,6 +117,25 @@ class PaymentHistoryTests(unittest.TestCase):
                 self.assertEqual("prior/peer-base/r2/review/referral.json" in z.namelist(),prior_rev==2)
                 prior = json.loads(z.read(f"prior/peer-base/r{prior_rev}/signoff.json"))
                 self.assertEqual(prior["decision"],"approve" if prior_rev==2 else "escalate")
+
+    def test_historical_payment_replays_human_checked_transfer_reference(self):
+        original = self.workpaper("checked-payment")
+        ref = next(f["id"] for f in original["graph"]["facts"] if f["field"]=="transfer_ref")
+        self.store.review("checked-payment",1,"演练核图","已核流水号。","confirm",[ref])
+        self.workpaper("checked-payment",fresh=False)
+        self.store.review("checked-payment",2,"验收员","已核回单。","approve")
+        found = self.workpaper("later-copy")
+        self.assert_controls(found,"risk","ok")
+        buf = io.BytesIO()
+        export_bundle(self.store,"later-copy",1,buf)
+        self.assertEqual(verify(buf,True)[:2],("later-copy",1))
+        with zipfile.ZipFile(buf) as z:
+            self.assertIn("prior/checked-payment/r2/field-checks/r1/report.json",z.namelist())
+        field = next(f for f in original["graph"]["facts"] if f["id"]==ref)
+        (self.store.files/"checked-payment"/field["doc"]/"original.jpg").write_bytes(b"damaged historical synthetic upload")
+        with self.assertRaisesRegex(CaseError,"来源摘要不符"):
+            self.workpaper("unverifiable-copy")
+        self.assertEqual(self.store.detail("unverifiable-copy")["rev"],0)
 
     def test_new_payment_blocks_stale_peer_approval(self):
         source = self.workpaper("first-referral")

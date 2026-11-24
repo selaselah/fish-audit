@@ -4,7 +4,7 @@ import argparse
 import json
 import subprocess
 import time
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 from generate import ROOT, generate_packet, generate_resubmission, main as generate
 
@@ -14,6 +14,12 @@ BASE = "http://127.0.0.1:8000"
 
 def get(path):
     with urlopen(BASE + path, timeout=20) as response:
+        return json.load(response)
+
+
+def post(path, body):
+    request = Request(BASE+path,data=json.dumps(body).encode(),headers={"Content-Type":"application/json"})
+    with urlopen(request,timeout=30) as response:
         return json.load(response)
 
 

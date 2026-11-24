@@ -14,6 +14,8 @@ from werkzeug.datastructures import MultiDict
 from config import CaseError, TRAVEL
 from controls import additional, conclusion, execute, money, parsed_date
 from documents import prepare
+from field_receipts import verify_field_sources
+from field_sources import FieldSources
 from graph import build_graph
 from jobs import Worker
 from main import create_app
@@ -591,6 +593,90 @@ class LocalFlowTests(unittest.TestCase):
             db.execute("UPDATE reports SET content=content || ' ' WHERE case_id=? AND rev=1",(cid,))
         self.assertEqual(self.client.get("/api/cases/"+cid+"/reports/1").status_code,409)
 
+    def test_field_source_checks_are_atomic_and_replayable(self):
+        reply = self.client.post("/api/cases",data=MultiDict([("title","两张演练照片"),
+                                 ("files",(io.BytesIO(self.photo),"甲.jpg")),("files",(io.BytesIO(self.photo),"乙.jpg"))]))
+        cid = reply.json["id"]
+        self.worker.run(self.store.claim())
+        base = "/api/cases/"+cid
+        refs = ["d01/p1/f1","d02/p1/f1"]
+        body = {"rev":1,"facts":refs,"decision":"confirm","reviewer":"核图员","note":"逐页核对两张演练照片。"}
+        amend = {"rev":1,"doc":"d02","page":1,"field":"invoice_id","value":"YL-77","quote":"票号 YL-77",
+                 "region":"top","reviewer":"核图员","note":"补记演练票号。"}
+        source = self.store.files/cid/"d02"/"original.jpg"
+        image = source.with_name("1.jpg")
+        saved = image.read_bytes()
+        with self.client.get(base+"/documents/d02/pages/1?rev=1") as first_view:
+            self.assertEqual(first_view.status_code,200)
+        source.write_bytes(b"different source")
+        for suffix,data in (("/attest",body),("/amend",amend)):
+            self.assertEqual(self.client.post(base+suffix,json=data).status_code,409)
+        source.write_bytes(self.photo)
+        image.unlink()
+        self.assertEqual(self.client.post(base+"/amend",json=amend).status_code,409)
+        image.write_bytes(saved)
+        read = FieldSources.read_files
+        def replace_after_read(sources):
+            read(sources)
+            replacement = image.with_name("replacement.jpg")
+            replacement.write_bytes(saved)
+            replacement.replace(image)
+        with patch.object(FieldSources,"read_files",replace_after_read):
+            self.assertEqual(self.client.post(base+"/attest",json=body).status_code,409)
+        rejected = self.store.detail(cid,with_actions=True)
+        self.assertEqual((rejected["status"],rejected["rev"],rejected["attestations"],rejected["amendments"]),("ready",1,[],[]))
+        self.assertEqual(self.client.post(base+"/attest",json=body).status_code,202)
+        self.worker.run(self.store.claim())
+        report = self.store.report(cid,2)["report"]
+        facts = report["graph"]["facts"]
+        for f in facts:
+            rec = f["attestation"]["source_check"]
+            self.assertEqual((rec["case_id"],rec["rev"],rec["doc"],rec["page"],rec["operation"]),(cid,1,f["doc"],1,"confirm"))
+            self.assertEqual((rec["original_sha256"],rec["page_sha256"]),(f["source_sha256"],f["page_sha256"]))
+        with self.client.get(base+"/reports/2/bundle") as res:
+            archive = io.BytesIO(res.data)
+            self.assertEqual(verify(archive,True)[:2],(cid,2))
+            with zipfile.ZipFile(archive) as z:
+                self.assertEqual([n for n in z.namelist() if n.startswith("field-checks/")],["field-checks/r1/report.json"])
+                hashes = {item["path"]:item["sha256"] for item in json.loads(z.read("manifest.json"))["files"]}
+                journal = json.loads(z.read("journal.json"))
+                wrong = json.loads(json.dumps(report))
+                wrong["graph"]["facts"][0]["attestation"]["source_check"]["page_sha256"] = "f"*64
+                with self.assertRaises(ValueError):
+                    verify_field_sources(z,hashes,wrong,2,journal=journal)
+                with self.assertRaises(ValueError):
+                    verify_field_sources(z,{**hashes,"originals/d01.jpg":"0"*64},report,2,journal=journal)
+        with self.store.connect(True) as db:
+            db.execute("""UPDATE attestations SET source_check=json_set(source_check,'$.report_hash',?) WHERE case_id=?""",("f"*64,cid))
+        self.store.rerun(cid,2)
+        with self.assertRaisesRegex(CaseError,"核图依据"):
+            self.worker.run(self.store.claim())
+        self.assertEqual(self.store.detail(cid)["rev"],2)
+
+    def test_case_signed_by_another_reviewer_during_source_check(self):
+        cid = self.submit().json["id"]
+        self.worker.run(self.store.claim())
+        original_read = FieldSources.read_files
+        def close_before_commit(sources):
+            original_read(sources)
+            self.store.review(cid,1,"验收员","需要补件。","return")
+        with patch.object(FieldSources,"read_files",close_before_commit):
+            res = self.client.post("/api/cases/"+cid+"/attest",json={"rev":1,"facts":["d01/p1/f1"],
+                                   "decision":"confirm","reviewer":"核图员","note":"核对票据标题。"})
+        self.assertEqual(res.status_code,409)
+        snapshot = self.store.detail(cid,with_actions=True)
+        self.assertEqual((snapshot["status"],snapshot["attestations"],snapshot["decisions"][0]["decision"]),("closed",[],"return"))
+
+    def test_dispute_can_record_unavailable_source_without_a_confirmation(self):
+        cid = self.submit().json["id"]
+        self.worker.run(self.store.claim())
+        (self.store.files/cid/"d01"/"1.jpg").unlink()
+        payload = {"rev":1,"facts":["d01/p1/f1"],"decision":"dispute","reviewer":"核图员","note":"原页当前无法核对。"}
+        self.assertEqual(self.client.post("/api/cases/"+cid+"/attest",json=payload).status_code,202)
+        recorded = self.store.attestations(cid)["d01/p1/f1"]
+        self.assertEqual(recorded["decision"],"dispute")
+        self.assertNotIn("source_check",recorded)
+
     def test_disputed_value_still_requires_literal_quote_to_confirm(self):
         def inconsistent(path):
             output = {"quality":"readable","facts":[fact("total","99.00","含税总额：12.00")]}
@@ -648,6 +734,8 @@ class LocalFlowTests(unittest.TestCase):
         self.assertEqual(revised["quote"], "演练采购发票")
         self.assertEqual(revised["original_candidate"]["quote"], "采购发票")
         self.assertEqual(revised["status"], "confirmed")
+        self.assertEqual(revised["amendment"]["source_check"],revised["attestation"]["source_check"])
+        self.assertEqual(revised["amendment"]["source_check"]["operation"],"correct")
         extra = {**edit, "rev":2, "target":None, "field":"invoice_id", "value":"YL-321", "quote":"发票号码：YL-321"}
         response = self.client.post(base+"/amend", json=extra)
         self.assertEqual(response.status_code, 202)
@@ -655,12 +743,23 @@ class LocalFlowTests(unittest.TestCase):
         self.worker.run(self.store.claim())
         latest = self.client.get(base+"/reports/3").json["report"]["graph"]
         fact = next(item for item in latest["facts"] if item["id"] == ref)
+        self.assertEqual(fact["amendment"]["source_check"]["operation"],"add")
         self.assertIsNone(fact["original_candidate"])
         self.assertTrue(any(edge["type"] == "invoice_id" and edge["evidence"] == [ref] for edge in latest["edges"]))
         self.assertEqual(self.client.get(base+"/reports/1").json["sha256"], first["sha256"])
         self.assertEqual(self.extract_calls, 1)
         signer = {"rev":3, "reviewer":"演练审计员", "note":"证据尚待补充", "decision":"return"}
         self.assertEqual(self.client.post(base+"/signoff", json=signer).status_code, 200)
+        child = self.client.post(base+"/supplements",data={"title":"演练沿用核图照片","rev":"3","retain":"d01"},content_type="multipart/form-data")
+        self.assertEqual(child.status_code,202,child.json)
+        self.worker.run(self.store.claim())
+        child_id = child.json["id"]
+        with self.client.get(f"/api/cases/{child_id}/reports/1/bundle") as res:
+            archive = io.BytesIO(res.data)
+            self.assertEqual(verify(archive,True)[:2],(child_id,1))
+            with zipfile.ZipFile(archive) as z:
+                self.assertIn("supplement/field-checks/r1/report.json",z.namelist())
+                self.assertIn("supplement/field-checks/r2/report.json",z.namelist())
         other = self.submit(key="synthetic-second-case-001", title="合成跨案测试").json["id"]
         self.worker.run(self.store.claim())
         another_edit = {**extra, "rev":1}

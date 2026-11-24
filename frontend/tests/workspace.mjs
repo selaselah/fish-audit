@@ -25,7 +25,8 @@ function caseArgument(name) {
 const paymentCase = caseArgument('--payment-case');
 const supplementCase = caseArgument('--supplement-case');
 const peerCase = caseArgument('--peer-case');
-const seeded = sampleDesk || paymentCase || supplementCase || peerCase;
+const fieldCase = caseArgument('--field-case');
+const seeded = sampleDesk || paymentCase || supplementCase || peerCase || fieldCase;
 const root = 'http://127.0.0.1:' + (seeded ? 8000 : port);
 const children = [];
 const faults = [];
@@ -86,7 +87,38 @@ try {
   const click = (label, container='document') => evaluate('[...'+container+'.querySelectorAll("button,a")].find(b=>b.textContent==='+JSON.stringify(label)+' && b.getClientRects().length).click()');
   await call('Runtime.enable');
   await call('Page.navigate',{url:root});
-  if (peerCase) {
+  if (fieldCase) {
+    const base = root+'/api/cases/'+fieldCase;
+    const current = await (await fetch(base)).json();
+    assert.ok(current.title.startsWith('合成演练 · '));
+    const bundle = await (await fetch(base+'/reports/'+current.rev)).json();
+    const field = bundle.report.graph.facts.find(f=>f.attestation?.source_check);
+    assert.ok(field);
+    const receipt = field.attestation.source_check;
+    const params = new URLSearchParams({rev:String(current.rev),fact:field.id});
+    await call('Page.navigate',{url:root+'/workpaper/'+fieldCase+'?'+params});
+    await wait('document.querySelector("#page-dialog")?.open && !!document.querySelector(".located .field-source-check")','checked field on its original page');
+    await evaluate('document.querySelector(".located .field-source-check").open=true');
+    const visible = await evaluate('document.querySelector(".located .field-source-check").textContent');
+    for (const hash of [receipt.report_hash,receipt.original_sha256,receipt.page_sha256]) assert.ok(visible.includes(hash));
+    const links = await evaluate('[...document.querySelectorAll(".located .field-source-check a")].map(link=>link.href)');
+    const [pageUrl,paperUrl,originalUrl] = links.map(url=>new URL(url));
+    for (const url of [pageUrl,paperUrl,originalUrl]) assert.equal(url.searchParams.get('rev'),String(receipt.rev));
+    assert.equal(paperUrl.pathname,'/workpaper/'+fieldCase);
+    assert.equal(paperUrl.searchParams.get('fact'),receipt.operation==='add' ? null : field.id);
+    for (const [url,expected] of [[pageUrl,receipt.page_sha256],[originalUrl,receipt.original_sha256]]) {
+      const file = await fetch(url);
+      assert.equal(file.status,200);
+      assert.equal(createHash('sha256').update(Buffer.from(await file.arrayBuffer())).digest('hex'),expected);
+    }
+    const prior = await (await fetch(base+'/reports/'+receipt.rev)).json();
+    assert.equal(prior.sha256,receipt.report_hash);
+    for (const width of [1440,1024,820,768,390,320]) {
+      await call('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      assert.ok(await evaluate('document.querySelector("#page-dialog").scrollWidth<=document.querySelector("#page-dialog").clientWidth+1'),'field receipt at '+width);
+    }
+    console.log('PASS · Signed field, pinned workpaper, original and page hashes across six widths');
+  } else if (peerCase) {
     const base = root+'/api/cases/'+peerCase;
     const detail = await (await fetch(base)).json();
     assert.ok(detail.title.startsWith('合成演练 · '));
@@ -328,17 +360,44 @@ try {
       await evaluate('document.querySelector("#page-dialog").close()');
       let revision = 1;
       let referForReview = needsReview;
+      if (process.argv.includes('--confirm-source')) {
+        const bill = report.report.graph.facts.find(f=>f.field==='invoice_id' && f.value==='YL-FP-071');
+        assert.ok(bill?.doc==='d01' && bill.page===2);
+        await evaluate('location.hash='+JSON.stringify(detail+'?rev=1&fact='+encodeURIComponent(bill.id)));
+        await wait('document.querySelector("#page-dialog")?.open && !!document.querySelector(".located input:enabled")','invoice to confirm');
+        await evaluate('document.querySelector(".located input").click()');
+        await click('记录所选引文的核图意见','document.querySelector("#page-dialog")');
+        await evaluate('document.querySelector("#review-decision").value="confirm";document.querySelector("#review-note").value="合成演练，已核对第二页所列发票号码。";');
+        const originalFile = join(scratch,'data','cases',path[3],'d01','original.pdf');
+        const bytes = await readFile(originalFile);
+        assert.equal(createHash('sha256').update(bytes).digest('hex'),bill.source_sha256);
+        try {
+          await writeFile(originalFile,Buffer.from('changed synthetic upload after opening the page'));
+          await evaluate('document.querySelector("#review-form").requestSubmit()');
+          await wait('document.querySelector("#review-error").textContent.includes("摘要不符") && !document.querySelector("#submit-review").disabled','confirmation refused after original changed');
+        } finally { await writeFile(originalFile,bytes); }
+        await evaluate('document.querySelector("#review-form").requestSubmit()');
+        revision++;
+        await wait('document.querySelector("#version").value==="2" && document.querySelector("#case-status").textContent==="待验收"','confirmed report rebuilt',240000);
+        await evaluate('location.hash='+JSON.stringify(detail+'?rev=2&fact='+encodeURIComponent(bill.id)));
+        await wait('document.querySelector("#page-dialog").open && !!document.querySelector(".located .field-source-check")','field source receipt in the workpaper');
+        const certificate = await evaluate('(()=>{const d=document.querySelector(".located .field-source-check");d.open=true;return [d.textContent,d.querySelector("a").href]})()');
+        for (const sha of [bill.source_sha256,bill.page_sha256,report.sha256]) assert.ok(certificate[0].includes(sha));
+        assert.equal(new URL(certificate[1]).searchParams.get('rev'),'1');
+        await evaluate('document.querySelector("#page-dialog").close()');
+        console.log('PASS · Refused a changed original after preview; restored source, confirmed bill number and pinned its three hashes');
+      }
       if (process.argv.includes('--dispute') && !needsReview) {
         const term = report.report.graph.facts.find(f=>f.field==='payment_term' && f.doc==='d01' && f.page===1);
         assert.ok(term);
-        await evaluate('location.hash='+JSON.stringify(detail+'?rev=1&fact='+encodeURIComponent(term.id)));
+        await evaluate('location.hash='+JSON.stringify(detail+'?rev='+revision+'&fact='+encodeURIComponent(term.id)));
         await wait('document.querySelector("#page-dialog")?.open && !!document.querySelector(".located input:enabled")','printed payment term');
         await evaluate('document.querySelector(".located input").click()');
         await click('记录所选引文的核图意见','document.querySelector("#page-dialog")');
         await evaluate('document.querySelector("#review-decision").value="dispute";document.querySelector("#review-note").value="合成演练，审计员对该合同结算条款的取值提出异议。";document.querySelector("#review-form").requestSubmit()');
-        revision = 2;
-        await wait('document.querySelector("#version").value==="2" && document.querySelector("#case-status").textContent==="待验收"','recalculated workpaper after dispute',240000);
-        const revised = await evaluate('fetch("/api/w/'+path[1]+'/cases/'+path[3]+'/reports/2").then(r=>r.json()).then(b=>b.report)');
+        revision++;
+        await wait('document.querySelector("#version").value==='+JSON.stringify(String(revision))+' && document.querySelector("#case-status").textContent==="待验收"','recalculated workpaper after dispute',240000);
+        const revised = await evaluate('fetch("/api/w/'+path[1]+'/cases/'+path[3]+'/reports/'+revision+'").then(r=>r.json()).then(b=>b.report)');
         assert.equal(revised.graph.facts.find(f=>f.id===term.id)?.status,'disputed');
         assert.equal(revised.findings.find(f=>f.rule==='M02')?.status,'missing');
         assert.equal(revised.result.verdict,'review');

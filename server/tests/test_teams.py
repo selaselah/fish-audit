@@ -1,3 +1,4 @@
+import hashlib
 import io
 import os
 import tempfile
@@ -8,6 +9,7 @@ from unittest.mock import patch
 
 from PIL import Image
 
+from config import CaseError
 from jobs import Worker
 from main import create_app
 from storage import Store
@@ -90,7 +92,9 @@ class EnterpriseFlow(unittest.TestCase):
         from graph import entity_id
         key=entity_id("invoice_number","DEMO-537")
         self.assertEqual(self.store.prior_invoices(other_case,[key]),[])
-        self.assertEqual(self.store.prior_invoices(administrator_case,[key])[0]["case_id"],emp_case)
+        matched = self.store.prior_invoices(administrator_case,[key])[0]
+        self.assertEqual((matched["case_id"],matched["checked_field"]),(emp_case,True))
+        self.assertRegex(matched["signoff_hash"],r"^[0-9a-f]{64}$")
         ledger = "/api/w/"+a+"/inbox"
         self.assertEqual(employee.get(ledger).json["counts"]["all"], 1)
         self.assertEqual(admin.get(ledger+"?status=closed").json["cases"][0]["id"], emp_case)
@@ -201,11 +205,16 @@ class EnterpriseFlow(unittest.TestCase):
             self.assertEqual(verify(archive,True)[:2],(repeat,2))
             with zipfile.ZipFile(archive) as saved:
                 self.assertIn(f"prior/{prior}/r3/review/referral.json",saved.namelist())
+                self.assertIn(f"prior/{prior}/r3/field-checks/r1/report.json",saved.namelist())
+                self.assertEqual(hashlib.sha256(saved.read(f"prior/{prior}/r3/signoff.json")).hexdigest(),row["signoff_hash"])
+        with self.store.connect(True) as db:
+            db.execute("UPDATE invoice_index SET quote=? WHERE case_id=?",("不符的测试引文",prior))
+        with self.assertRaisesRegex(CaseError,"同票索引"):
+            self.store.prior_invoices(repeat,[row["number_key"]])
 
     def test_atomic_admission_and_accounted_requests(self):
         from concurrent.futures import ThreadPoolExecutor
         from capacity import job_scope, request_attempt, usage
-        from config import CaseError
         admin,w,headers=self.register("quota-owner")
         _,other,_=self.register("quota-second")
         uid=admin.get("/api/session").json["user"]
@@ -233,7 +242,6 @@ class EnterpriseFlow(unittest.TestCase):
 
     def test_rotating_worker_and_restored_credentials(self):
         from backup import snapshot, restore
-        from config import CaseError
         a,w,h=self.register("fair-a")
         b,v,k=self.register("fair-b")
         ua,ub=(client.get("/api/session").json["user"] for client in (a,b))

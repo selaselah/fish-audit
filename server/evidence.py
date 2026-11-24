@@ -3,19 +3,17 @@ import zipfile
 
 from config import CaseError
 from documents import digest
+from field_receipts import field_actions, validate_field_actions
 from peer_review import verify_referrals, verify_review
 from storage import encode
 
 
 def journal(store, case_id):
-    case = store.detail(case_id)
-    with store.connect() as db:
-        attestations = [dict(row) for row in db.execute("""SELECT seq,rev,fact,decision,reviewer,actor,note,time
-                         FROM attestations WHERE case_id=? ORDER BY seq""", (case_id,))]
+    case = store.detail(case_id,with_actions=True)
     result = {"id": case_id, "title": case["title"], "workspace":case["workspace"], "submitter":case["submitter"],
             "status": case["status"], "created": case["created"],
             "events": case["events"], "revisions": case["revisions"], "decisions": case["decisions"],
-            "attestations": attestations, "amendments": store.amendments(case_id)}
+            "attestations":case["attestations"], "amendments":case["amendments"]}
     if case["supplement_of"]:
         result["supplement_of"] = case["supplement_of"]
     result["referrals"] = case["referrals"]
@@ -47,6 +45,21 @@ def write_peer_source(store, report, revision, write, folder=""):
     write(folder+"review/referral.json",encode(first).encode(),receipt["referral_hash"])
 
 
+def write_field_sources(store, report, revision, write, *, folder="", journal=None, selected=None):
+    with store.connect() as db:
+        def load_version(rev):
+            row = db.execute("SELECT content,hash FROM reports WHERE case_id=? AND rev=?",(report["case_id"],rev)).fetchone()
+            if not row or digest(row["content"].encode()) != row["hash"]:
+                raise CaseError("核图时的底稿版本或摘要不符。",409)
+            if rev != revision:
+                write(folder+f"field-checks/r{rev}/report.json",row["content"].encode(),row["hash"])
+            return row["hash"],json.loads(row["content"])
+        try:
+            validate_field_actions(report,revision,field_actions(report,revision,journal,selected),load_version)
+        except (TypeError, ValueError, KeyError) as exc:
+            raise CaseError("核图记录与字段、人工日志或原版底稿不符。",409) from exc
+
+
 def write_returned_source(store, report, write):
     supplement = report["supplement"]
     prior = supplement["parent"]
@@ -56,6 +69,7 @@ def write_returned_source(store, report, write):
     write("supplement/signoff.json", encode(signoff).encode(), supplement["signoff_hash"])
     previous = json.loads(content)
     write_peer_source(store, previous, supplement["rev"], write, "supplement/")
+    write_field_sources(store,previous,supplement["rev"],write,folder="supplement/")
     graph = previous["graph"]
     if previous["policy"].get("archived_methods"):
         current_methods = report["policy"].get("code_sha256", {}) if report["policy"].get("archived_methods") else {}
@@ -93,8 +107,10 @@ def export_bundle(store, case_id, revision, stream):
             files.append({"path": path, "bytes": len(data), "sha256": checksum})
 
         write("report.json", raw_report, bundle["sha256"])
-        write("journal.json", encode(journal(store, case_id)).encode())
+        history = journal(store,case_id)
+        write("journal.json", encode(history).encode())
         write_peer_source(store, report, revision, write)
+        write_field_sources(store,report,revision,write,journal=history)
         if report["policy"].get("archived_methods"):
             for name, checksum in report["policy"]["code_sha256"].items():
                 write("methods/" + name, store.method_source(checksum), checksum)
@@ -118,26 +134,30 @@ def export_bundle(store, case_id, revision, stream):
             path = f"prior/{match['case_id']}/r{match['rev']}/{match['doc']}/{match['page']}.jpg"
             write(path, historic.read_bytes(), match["page_hash"])
         payments = report["graph"].get("payment_history", {}).get("matches", [])
-        references = {(m["case_id"],m["rev"]):m for m in report["graph"].get("prior_invoices",[]) if "peer_source_rev" in m}
-        references.update({(m["case_id"],m["rev"]):m for m in payments})
-        archived = {}
-        for (prior, rev), match in references.items():
+        invoices = [m for m in report["graph"].get("prior_invoices",[]) if "peer_source_rev" in m or m.get("checked_field")]
+        references = {}
+        for match in [*invoices,*payments]:
+            key = match["case_id"],match["rev"]
+            group = references.setdefault(key,{"report_hash":match["report_hash"],"signoff_hash":None,"facts":set(),"pages":set()})
+            if "signoff_hash" in match:
+                group["signoff_hash"] = match["signoff_hash"]
+            for item in match.get("evidence",[match]):
+                group["facts"].add(item["fact"])
+                group["pages"].add((item["doc"],item["page"]))
+        for (prior, rev), group in references.items():
             root = f"prior/{prior}/r{rev}"
             with store.connect() as db:
                 content, signoff = store.signed_source(db, case_id, prior, rev)
-            write(root + "/report.json", content, match["report_hash"])
-            write(root + "/signoff.json", encode(signoff).encode(), match.get("signoff_hash"))
+            write(root + "/report.json", content, group["report_hash"])
+            write(root + "/signoff.json", encode(signoff).encode(), group["signoff_hash"])
             previous = json.loads(content)
             write_peer_source(store, previous, rev, write, root+"/")
-            archived[prior,rev] = previous["graph"]
-        for match in payments:
-            prior, rev = match["case_id"], match["rev"]
-            root = f"prior/{prior}/r{rev}"
-            graph = archived[prior,rev]
+            write_field_sources(store,previous,rev,write,folder=root+"/",selected=group["facts"])
+            graph = previous["graph"]
             documents = {d["id"]: d for d in graph["documents"]}
             prior_nodes = {n["id"]: n for n in graph["nodes"]}
             pages = {(p["doc"], p["number"]): p for p in store.pages(prior)}
-            cited = {(f["doc"], f["page"]) for f in match["evidence"]}
+            cited = group["pages"]
             for doc in sorted({doc for doc, page in cited}):
                 meta = documents[doc]
                 original = "original" + meta["ext"]

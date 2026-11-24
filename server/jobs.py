@@ -14,7 +14,7 @@ from storage import encode
 
 
 METHODS = {name: (SERVER / name).read_bytes() for name in
-           ("calculations.py", "capacity.py", "config.py", "controls.py", "documents.py", "graph.py", "jobs.py", "model.py", "payment_history.py", "peer_review.py", "policy.py", "protocol.py", "storage.py", "supplements.py", "transfers.py", "work_progress.py")}
+           ("calculations.py", "capacity.py", "config.py", "controls.py", "documents.py", "field_receipts.py", "field_sources.py", "graph.py", "jobs.py", "model.py", "payment_history.py", "peer_review.py", "policy.py", "protocol.py", "storage.py", "supplements.py", "transfers.py", "work_progress.py")}
 CODE_DIGESTS = {name: digest(source) for name, source in METHODS.items()}
 
 
@@ -58,7 +58,8 @@ class Worker:
 
     def process(self, case_id):
         store = self.store
-        profile = store.detail(case_id)["profile"]
+        case = store.detail(case_id)
+        profile = case["profile"]
         folder = store.files / case_id
         docs = store.documents(case_id)
         old_layers = {page["doc"] for page in store.pages(case_id) if page["layer"] is None}
@@ -105,6 +106,7 @@ class Worker:
                 store.save_check(case_id, page, trace["check"])
         store.progress(case_id, "graph", 74, f"已读取 {page_count} 页，正在校验引文并建立关系。")
         graph = build_graph(docs, pages, store.attestations(case_id), store.amendments(case_id))
+        store.check_graph_field_history(case_id,case["rev"]+1,graph)
         graph["profile"] = profile
         keys = {edge["to"] for edge in invoice_number_edges(graph)}
         attach_prior_invoices(graph, store.prior_invoices(case_id, sorted(keys)))

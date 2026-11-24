@@ -177,6 +177,25 @@ function openPage(docId, pageNumber, highlight) {
       row.append(fold('人工' + (previous ? '更正' : '补录') + '来源', el('p', fact.amendment.reviewer + ' · ' +
         fact.amendment.note), el('p', previous ? '原模型引文：' + previous.quote + '（' + previous.value + '）' : '此字段由审计人员据图补录。')));
     }
+    const checks = new Map();
+    for (const record of [fact.amendment,fact.attestation]) {
+      const check = record?.source_check;
+      if (check) checks.set(check.rev+'@'+check.checked_at,check);
+    }
+    for (const check of checks.values()) {
+      const anchor = link('打开核图时的第 '+check.page+' 页',base()+'/documents/'+check.doc+'/pages/'+check.page+'?rev='+check.rev,'source-jump');
+      anchor.target = '_blank'; anchor.rel='noopener';
+      const params = new URLSearchParams({rev:String(check.rev)});
+      if (check.operation!=='add') params.set('fact',fact.id);
+      const paper = Team.paperLink('查看核图时的底稿 R'+check.rev,state.detail.id,'source-jump',params);
+      paper.target='_blank'; paper.rel='noopener';
+      const download = link('下载当时的原件',base()+'/documents/'+check.doc+'/original?rev='+check.rev);
+      const receipt = fold('核图时的原件与页图 · R'+check.rev,
+        el('p',time(check.checked_at)+' · '+({confirm:'确认字段',correct:'更正字段',add:'补录字段'}[check.operation])),
+        box('chips',anchor,paper,download),el('p','原件 SHA-256'),el('code',check.original_sha256),el('p','页图 SHA-256'),el('code',check.page_sha256),
+        el('p','核图时的底稿 SHA-256'),el('code',check.report_hash));
+      receipt.classList.add('field-source-check'); row.append(receipt);
+    }
     if (editable) row.append(action('更正字段', () => openAmend(docId, pageNumber, fact), 'ref'));
     if (fact.id === highlight) focusRow = row;
     right.append(row);
@@ -331,9 +350,10 @@ function graphPanel() {
       box('chips',...edge.evidence.map(citation))))))));
   if (!groups.length) panel.append(el('p', '请在原件与引文中核对待确认记录，核图后系统会重建关系。'));
   if (graph.prior_invoices?.length) panel.append(fold('跨案同号记录', ...graph.prior_invoices.map(row =>
-    box('line', link(row.title, Team.hash('case/' + row.case_id)), el('p', '历史人工决定 · ' + statusName(row.decision) + ' · ' +
+    box('line', Team.paperLink(row.title+' · R'+row.rev,row.case_id,'case-link',new URLSearchParams({rev:row.rev,fact:row.fact})), el('p', '历史人工决定 · ' + statusName(row.decision) + ' · ' +
       (row.document_kind === 'unclassified' ? '原资料类型待核' : '发票')),
-      el('blockquote', row.quote), citation(row.id), el('small', '历史底稿 SHA-256 · ' + row.report_hash, 'small')))));
+      el('blockquote', row.quote), citation(row.id), el('small', '历史底稿 SHA-256 · ' + row.report_hash, 'small'),
+      ...(row.signoff_hash ? [el('small','人工签收 SHA-256 · '+row.signoff_hash,'small')] : [])))));
   if (graph.payment_history) {
     const history = graph.payment_history;
     const comparison = (rule,kind,label) => state.bundle.report.findings.find(f=>f.rule===rule)?.status==='missing'
@@ -587,18 +607,21 @@ $('#amend-form').addEventListener('submit', async event => {
   if ($('#amend-submit').disabled) return;
   const {id, ...source} = state.amend;
   const button = $('#amend-submit'); button.disabled = true;
+  const label = button.textContent; button.textContent = '正在核对原件与页图…';
   try {
     await post(Team.cases() + '/' + id + '/amend', {...source, field:$('#amend-field').value,
       quote:$('#amend-quote').value, value:$('#amend-value').value, region:$('#amend-region').value,
       reviewer:$('#amend-reviewer').value, note:$('#amend-note').value});
     $('#amend-dialog').close(); chooseRevision(); await refresh();
   } catch (error) { $('#amend-error').textContent = error.message; }
-  finally { button.disabled = false; }
+  finally { button.disabled = false; button.textContent=label; }
 });
 $('#review-form').addEventListener('submit', async event => {
   event.preventDefault();
   const pending = state.review; if (!pending) return;
   const button = $('#submit-review'); button.disabled = true;
+  const label = button.textContent;
+  if (pending.facts && $('#review-decision').value==='confirm') button.textContent='正在核对原件与页图…';
   try {
     await post(Team.cases() + '/' + pending.id + (pending.facts ? '/attest' : '/signoff'), {rev: pending.rev,
       reviewer: $('#reviewer').value, note: $('#review-note').value, decision: $('#review-decision').value,
@@ -611,7 +634,7 @@ $('#review-form').addEventListener('submit', async event => {
       $('#review-dialog').close(); chooseRevision(); state.tab='activity'; await refresh();
     },'text-button'));
   }
-  finally { button.disabled = false; }
+  finally { button.disabled = false; button.textContent=label; }
 });
 $('#new-case').addEventListener('click', () => openIntake());
 $('#supplement-fields').addEventListener('input',()=>{state.key=null;});

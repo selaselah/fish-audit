@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from calculations import CalculationEvidence, SUPPORTED
+from field_receipts import verify_field_sources
 from payment_history import LIMIT, cited_facts, payment_record
 from peer_review import journal_decision, verify_referrals, verify_review
 from protocol import canonical, response_request
@@ -81,6 +82,7 @@ def verify_payment_history(bundle, hashes, report, journal):
         require(hashes[report_path] == match["report_hash"] and hashes[signoff_path] == match["signoff_hash"], "历史底稿或签收摘要不符")
         previous, signoff = json.loads(bundle.read(report_path)), json.loads(bundle.read(signoff_path))
         verify_peer_source(bundle, hashes, previous, signoff, root+"/")
+        verify_field_sources(bundle,hashes,previous,rev,folder=root+"/",pages=root+"/",selected={f["fact"] for f in match["evidence"]})
         require(previous["case_id"] == signoff["case_id"] == prior and signoff["rev"] == rev
                 and signoff["title"] == match["title"] and signoff["workspace"] == journal["workspace"]
                 and previous["graph"]["profile"] == graph["profile"], "历史签收归属或核查范围不符")
@@ -202,6 +204,7 @@ def verify_returned_source(bundle, hashes, report, journal):
         prefix = "originals/" + retained[old] if old in retained else "supplement/originals/" + old
         originals[old] = prefix + doc["ext"]
     verify_workpaper_sources(bundle, hashes, parent, "supplement/pages", originals)
+    verify_field_sources(bundle,hashes,parent,snapshot["rev"],folder="supplement/",pages="supplement/pages/",originals=originals)
 
 
 def verify_peer_source(bundle, hashes, report, signoff, folder=""):
@@ -249,22 +252,33 @@ def verify(source, strict_rules=False):
             for name, expected in report["policy"]["code_sha256"].items():
                 require(hashes.get("methods/" + name) == expected, "执行程序版本不符：" + name)
         nodes = verify_workpaper_sources(bundle, hashes, report, "pages")
+        verify_field_sources(bundle,hashes,report,revision,journal=journal)
         for match in graph.get("prior_invoices", []):
             path = f"prior/{match['case_id']}/r{match['rev']}/{match['doc']}/{match['page']}.jpg"
             require(hashes[path] == match["page_hash"] and match["id"] in nodes, "历史票号证据不符")
-            if "peer_source_rev" in match:
+            if "peer_source_rev" in match or match.get("checked_field"):
                 root = f"prior/{match['case_id']}/r{match['rev']}/"
                 require(hashes.get(root+"report.json") == match["report_hash"], "历史同票复核版摘要不符")
                 archived = json.loads(bundle.read(root+"report.json"))
                 signoff = json.loads(bundle.read(root+"signoff.json"))
-                require(archived["peer_review"]["source_rev"] == match["peer_source_rev"] and
-                        signoff["case_id"] == match["case_id"] != case_id and signoff["rev"] == match["rev"]
+                if "peer_source_rev" in match:
+                    require(archived["peer_review"]["source_rev"] == match["peer_source_rev"],"同票复核版所引的转交版本错误")
+                require(archived["case_id"] == signoff["case_id"] == match["case_id"] != case_id and signoff["rev"] == match["rev"]
                         and signoff["workspace"] == journal["workspace"] and signoff["decision"] == match["decision"],
                         "同票复核版归属或人工决定不符")
                 fact = next((f for f in archived["graph"]["facts"] if f["id"] == match["fact"]), None)
                 require(fact and fact["page_sha256"] == match["page_hash"] and fact["quote"] == match["quote"],
                         "同票复核版中的原页或票号引文不符")
                 verify_peer_source(bundle, hashes, archived, signoff, root)
+                if match.get("checked_field"):
+                    require(hashes[root+"signoff.json"] == match["signoff_hash"],"历史票号所据的签收意见摘要不符")
+                    require((fact["doc"],fact["page"],fact["source_sha256"],fact["field"]) ==
+                            (match["doc"],match["page"],match["source_hash"],"invoice_id") and
+                            any(e["type"] == "invoice_id" and e["to"] == match["number_key"] and fact["id"] in e["evidence"]
+                                for e in archived["graph"]["edges"]),"历史核图票号与引用的原件、页码或编号不符")
+                    require(any((fact.get(key) or {}).get("source_check") for key in ("attestation","amendment")),
+                            "历史同票记录缺少所引用的人工核图依据")
+                    verify_field_sources(bundle,hashes,archived,match["rev"],folder=root,pages=root,selected={match["fact"]})
         if "payment_history" in graph:
             verify_payment_history(bundle, hashes, report, journal)
         require(("supplement" in report) == ("supplement_of" in journal), "底稿与受理记录中的补件归属不符")

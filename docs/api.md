@@ -43,6 +43,12 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 {"rev":1,"reviewer":"演练人员","decision":"confirm","facts":["d01/p1/f3"],"note":"已对照合成原页的票号。"}
 ```
 
+提交确认、更正或补录时，服务端重新读取所选字段的原件与页图，核对字节与当前底稿登记的 SHA-256。一次选中多页时，任一页缺失、内容变化，或核对期间有人签收该案，整次操作返回 409，不写入其中任何一项。所选字段不属于该底稿或页码时返回 400。对资料提出 `dispute` 仍可记录无法核实的原因。
+
+新记录的 `source_check` 保存动作 `confirm`、`correct` 或 `add`，以及案件、底稿版本与摘要、文档编号、页码、原件与页图的 SHA-256 和 UTC 核对时间。新版底稿的字段通过 `attestation` 或 `amendment` 引用这项记录。ZIP 在 `field-checks/r{版本}/report.json` 保存所引旧底稿的原始字节，每个版本一份。操作针对导出版本时直接引用包内的 `report.json`。旧记录沿用其历史字段，只有实际执行过这项校验的操作才有 `source_check`。
+
+跨案同票命中带核图存证的票号时，`graph.prior_invoices` 的该条记录含 `checked_field` 和历史人工决定的 `signoff_hash`。导出包的 `prior/{案件}/r{版本}/` 下可核对签收意见、当时的底稿及票号原页。跨案付款检查同样会重新核对其所引人工字段的原件与页图。
+
 最终决定的字段为 `rev`、`reviewer`、`decision`、`note`，决定可为 `approve`、`return` 或 `escalate`。已归档、正在重算或提交过期版本返回 409。下载及操作均以任务和版本为范围。错误响应采用 `{"error":"可读说明"}`。
 
 更正或补录时提交 `rev`、`doc`、`page`、`field`、`quote`、`value`、`region`、`reviewer`、`note`。更正须携带本页的 `target` 证据编号，补录时设为 null。`field` 取自 `GET /api/controls` 的 `fields`，`region` 为 top、middle 或 bottom。新记录与该页 SHA-256 一起保存。
