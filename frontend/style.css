@@ -117,6 +117,7 @@ textarea { width: 100%; resize: vertical; }
 .contract-date-evidence h4 { margin:0 0 5px; }
 .effect-review { margin:14px 0; padding:12px 14px; background:#faf6ed; border-inline-start:3px solid #9c7139; }
 .effect-review h4 { margin:0 0 6px; }
+.effect-review[data-status="ok"] { border-inline-start-color:var(--green); background:var(--soft); }
 .warranty-review { margin:14px 0; padding:12px 14px; background:var(--soft); border-inline-start:3px solid var(--accent,#40645d); min-width:0; }
 .warranty-review h4 { margin:0 0 8px; }
 .warranty-dates { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,8rem),1fr)); gap:9px 14px; margin:0 0 12px; }

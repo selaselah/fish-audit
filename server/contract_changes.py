@@ -106,7 +106,10 @@ def page_signals(graph, read_text):
 
 
 def observed_units(graph):
-    return {f.get("unit",f["doc"]) for f in graph["facts"] if f["field"] in LABELS or f["field"]=="contract_addendum"
+    from contract_effect import FORMAT as SEAL_FORMAT
+    originals=set(graph["documents_by_kind"].get("contract",[])) if graph.get("contract_effect_sources",{}).get("format")==SEAL_FORMAT else set()
+    return {f.get("unit",f["doc"]) for f in graph["facts"] if (f["field"] in LABELS and not
+            (f["field"] in ("buyer_sealed_on","seller_sealed_on") and f.get("unit",f["doc"]) in originals)) or f["field"]=="contract_addendum"
             or SIGNAL.search(normalized(f["quote"]))}
 
 

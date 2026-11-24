@@ -238,7 +238,7 @@ def period_checks(contract):
     return checks
 
 
-def receipt_date_checks(contract, receipts, retests):
+def receipt_date_checks(contract, receipts, retests, seal_day=None):
     checks = []
     effective = printed_day(contract,"effect_on")
     for record in [*receipts,*retests]:
@@ -248,6 +248,11 @@ def receipt_date_checks(contract, receipts, retests):
         label = "复验" if is_retest else "验收"
         accepted = printed_day(record,"accepted_on")
         refs = contract.evidence("effect_on",*LINK_KEYS)+record.evidence("accepted_on",*LINK_KEYS)
+        if seal_day and seal_day!=effective and accepted and accepted<=seal_day and warranty_terms.identity(contract,record):
+            status="risk" if accepted<seal_day else "missing"
+            checks.append(date_check("reinspection" if is_retest else "acceptance",status,
+                f"{label}日期 {accepted} "+("早于" if accepted<seal_day else "等于")+f"双方最后盖章日 {seal_day}，请核实签章、验收的先后及实际履行依据。",
+                refs+contract.evidence("buyer_sealed_on","seller_sealed_on")))
         event = "reinspection" if is_retest else "acceptance"
         if not accepted and any(f["field"]=="accepted_on" for f in record.refs):
             checks.append(date_check(event,"missing",label+"日期需从对应日期栏和原页核实。",refs))
@@ -572,7 +577,7 @@ def compute(graph, version=FORMAT):
     grants = materials("power_of_attorney") if version in MANDATE_FORMATS else ()
     signed = effect(contract, approvals, version, grants)
     if version in EFFECT_FORMATS:
-        contract_effect.review(signed,graph.get("contract_effect_sources",{}),contract.unit)
+        contract_effect.review(signed,graph.get("contract_effect_sources",{}),contract)
     if version in DATE_FORMATS:
         add_date_checks(signed,period_checks(contract))
     classified = {u for group in kinds.values() for u in group}
@@ -650,7 +655,8 @@ def compute(graph, version=FORMAT):
                 accepted["reinspection"]["state"] = "open"
         accepted["detail"] += " "+authority["detail"]
     if version in DATE_FORMATS:
-        chronology = receipt_date_checks(contract,receipts,retests)
+        seal_day=day(signed.get("effect_review",{}).get("seals",{}).get("completed_on") or "")
+        chronology = receipt_date_checks(contract,receipts,retests,seal_day)
         if chronology and accepted.get("reinspection",{}).get("state")=="closed":
             initial_units = {s["unit"] for s in accepted["reinspection"]["steps"] if s["role"]=="original"}
             initial = evaluate(contract,[d for d in receipts if d.unit in initial_units])
@@ -839,6 +845,13 @@ def compute(graph, version=FORMAT):
         add_date_checks(payment,timing)
         if version in PAYMENT_WINDOW_FORMATS:
             payment_windows.compare_transfer(payment,check,graph,contract,bank,row)
+        sealed=signed.get("effect_review",{}).get("seals",{}).get("completed_on")
+        if sealed and paid and paid.isoformat()<sealed and warranty_terms.bank_identity(contract,bank):
+            bank_sources=graph.get("payment_window_sources",{})
+            pages=[p for p in bank_sources.get("pages",[]) if p["unit"]==bank.unit]
+            clean=pages and all(p["native"] and p["text_only"] for p in pages) and not any(s["unit"]==bank.unit for s in bank_sources["lines"])
+            if clean:
+                payment.update(status="risk",detail=f"本笔回单付款日 {paid} 早于合同双方最后盖章日 {sealed}，须核实提前支付的授权、追认或其他履约依据。")
         output.append(payment)
     return output
 

@@ -113,7 +113,7 @@ function performanceComparison(finding, graph) {
 }
 
 function dateEvidencePanel(finding, graph) {
-  const fields = new Set(['signed_on','effect_on','valid_until','approved_on','accepted_on','paid_on','warranty_release']);
+  const fields = new Set(['signed_on','effect_on','valid_until','approved_on','accepted_on','paid_on','warranty_release','buyer_sealed_on','seller_sealed_on']);
   const index = graphIndex(graph);
   const refs = new Set(finding.date_checks.flatMap(check=>check.evidence));
   const panel = box('contract-date-evidence',el('h4','核对日期原文'));
@@ -219,11 +219,19 @@ function contractEffectPanel(finding,graph) {
   const {conditions,mixed_pages}=finding.effect_review;
   if (!conditions.length && !mixed_pages.length) return null;
   const {facts,documents}=graphIndex(graph);
-  const panel=box('effect-review',el('h4','需核对的生效条件'));
+  const seals=finding.effect_review.seals;
+  const panel=box('effect-review',el('h4',seals?'双方盖章与合同生效日':'需核对的生效条件'));
+  panel.dataset.status=finding.status;
+  if (seals) {
+    const dates=el('dl','','warranty-dates');
+    for (const [label,value] of [['甲方盖章日',seals.dates.buyer_sealed_on],['乙方盖章日',seals.dates.seller_sealed_on],['合同所列生效日',seals.declared_on]])
+      dates.append(box('warranty-date',el('dt',label),el('dd',value || '待核')));
+    panel.append(dates);
+  }
   const cited=new Set(conditions.flatMap(s=>s.facts));
   for (const ref of finding.evidence) {
     const fact=facts.get(ref);
-    if (fact?.field==='effect_clause' && !cited.has(ref))
+    if ((fact?.field==='effect_clause' || seals && fact?.field==='effect_on') && !cited.has(ref))
       panel.append(box('batch-source',el('q',fact.source_line?.text || fact.quote),citation(ref)));
   }
   for (const item of conditions) {

@@ -9,7 +9,11 @@ from performance_versions import EFFECT_FORMATS
 from calculations import normalized
 
 
-FORMAT = "contract-effect-sources-v1"
+LEGACY = "contract-effect-sources-v1"
+FORMAT = "contract-effect-sources-v2"
+SEAL_FIELDS = {"甲方盖章日期":"buyer_sealed_on","乙方盖章日期":"seller_sealed_on"}
+SEAL_LABEL = re.compile(r"(?:甲方|乙方|买方|卖方|采购方|供应方)(?:实际)?(?:盖章|签章|签署|签字)(?:日期|时间|日)|^(?:双方)?(?:实际)?(?:盖章|签章)(?:日期|时间)[:：]")
+SEAL_CLAUSES = {"本合同自双方盖章之日起生效","合同自双方盖章之日起生效","自双方盖章之日起生效"}
 PERFORMANCE = "contract-performance-v11"
 APPROVAL = re.compile(r"批准|审批|核准|许可|备案|公证|登记")
 QUALIFIER = re.compile(r"附加条件|生效要件|效力|特别约定|附注|备注")
@@ -54,7 +58,7 @@ def recognized(raw,facts):
     return False
 
 
-def sources(graph,read_text):
+def sources(graph,read_text,format=FORMAT):
     def effect_signal(raw):
         if not relevant(raw):
             return False
@@ -86,6 +90,8 @@ def sources(graph,read_text):
             line=fact.get("source_line")
             if native and line:
                 by_line[line["number"],line["text"]].append(fact)
+            elif format==FORMAT and SEAL_LABEL.search(normalized(fact["quote"])):
+                conditions.append({**place,"line":None,"quote":fact["quote"],"facts":[fact["id"]],"kind":"seal_date"})
             elif effect_signal(fact["quote"]):
                 conditions.append({**place,"line":None,"quote":fact["quote"],"facts":[fact["id"]]})
         if native:
@@ -94,12 +100,39 @@ def sources(graph,read_text):
                 raise ValueError("合同生效条件所据的整页文字与底稿不符")
             for number,raw in enumerate(text.splitlines(),1):
                 matches=by_line[number,raw]
-                if effect_signal(raw) and not recognized(raw,matches):
+                if format==FORMAT and SEAL_LABEL.search(normalized(raw)):
+                    conditions.append({**place,"line":number,"quote":raw,"facts":[f["id"] for f in matches],"kind":"seal_date"})
+                elif effect_signal(raw) and not recognized(raw,matches):
                     conditions.append({**place,"line":number,"quote":raw,"facts":[f["id"] for f in matches]})
-    return {"format":FORMAT,"pages":pages,"conditions":conditions}
+    return {"format":format,"pages":pages,"conditions":conditions}
 
 
-def review(finding,ledger,unit):
+def seal_check(contract,rows,clear):
+    from performance import printed_day
+    dates={}
+    for label,field in SEAL_FIELDS.items():
+        matched=[r for r in rows if parts(r["quote"])[0]==label]
+        when=printed_day(contract,field)
+        facts=contract.fields[field]
+        if (len(matched)==1 and matched[0]["line"] and len(facts)==1 and facts[0]["id"] in matched[0]["facts"]
+                and facts[0]["quote"]==matched[0]["quote"] and when):
+            dates[field]=when.isoformat()
+    effective=printed_day(contract,"effect_on")
+    evidence={"dates":dates,"declared_on":effective.isoformat() if effective else None,"completed_on":None}
+    if (not clear or len(rows)!=2 or len(dates)!=2 or contract.body("effect_clause") not in SEAL_CLAUSES
+            or not all(contract.signed(side+"_signature",contract.single(party),"seal") for side,party in (("buyer","buyer"),("seller","seller")))):
+        return evidence,"missing","须核实双方盖章日期原行、印章、条款及各日期的对应关系。"
+    last=max(dates.values())
+    evidence["completed_on"]=last
+    if not effective:
+        return evidence,"missing",f"双方最后盖章日为 {last}，实际生效日期原件待核。"
+    if last!=effective.isoformat():
+        return evidence,"risk",f"双方最后盖章日为 {last}，与合同所列生效日 {effective} 不一致，须核对现行约定及履行依据。"
+    return evidence,"ok",f"双方最后盖章日 {last} 与合同所列生效日相符。"
+
+
+def review(finding,ledger,contract):
+    unit=contract.unit
     pages=[p for p in ledger.get("pages",[]) if p["unit"]==unit]
     conditions=[s for s in ledger.get("conditions",[]) if s["unit"]==unit]
     mixed=[p for p in pages if not p["text_only"] or not p["native"]]
@@ -107,6 +140,16 @@ def review(finding,ledger,unit):
     refs=[f"{p['doc']}/p{p['page']}" for p in pages]
     refs.extend(ref for s in conditions for ref in s["facts"])
     finding["evidence"]=list(dict.fromkeys(finding["evidence"]+refs))
+    seals=[s for s in conditions if s.get("kind")=="seal_date"]
+    conditions=[s for s in conditions if s.get("kind")!="seal_date"]
+    if seals:
+        data,status,detail=seal_check(contract,seals,finding["status"]=="ok" and not conditions and not mixed and bool(pages))
+        finding["effect_review"]["seals"]=data
+        finding["evidence"]=list(dict.fromkeys(finding["evidence"]+contract.evidence("effect_on","buyer_sealed_on","seller_sealed_on")))
+        if finding["status"]=="ok":
+            finding.update(status=status,detail=detail)
+        else:
+            finding["detail"]+=" "+detail
     if not conditions and not mixed and pages:
         return
     if finding["status"]=="ok":
@@ -128,6 +171,14 @@ def verify(report,read_text,*,signing=False):
             if ledger["conditions"] or any(not p["native"] or not p["text_only"] for p in ledger["pages"]):
                 raise ValueError("旧版合同尚有附加生效约定或待核的整页版式，请按现行程序重审后签收。")
         return
-    if (policy["contract_effect"]!=FORMAT or policy.get("performance_checks") not in EFFECT_FORMATS or
-            graph.get("contract_effect_sources")!=sources(graph,read_text)):
+    marker=policy["contract_effect"]
+    if marker==LEGACY and signing and any(f["rule"]=="H01" and f["status"]=="ok" for f in report["findings"]):
+        from performance import Material
+        ledger=sources(graph,read_text)
+        for unit in graph["documents_by_kind"].get("contract",[]):
+            seals=[s for s in ledger["conditions"] if s["unit"]==unit and s.get("kind")=="seal_date"]
+            if seals and seal_check(Material(graph,unit),seals,True)[1]!="ok":
+                raise ValueError("旧版未核清双方实际盖章日，请按现行规则重审后签收。")
+    if (marker not in (FORMAT,LEGACY) or policy.get("version","")>="2026.11.25.03" and marker!=FORMAT or policy.get("performance_checks") not in EFFECT_FORMATS or
+            graph.get("contract_effect_sources")!=sources(graph,read_text,marker)):
         raise ValueError("合同生效所据的整页记录、附加条件或引文与归档不符")

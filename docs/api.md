@@ -1,5 +1,7 @@
 # 本机审计接口
 
+规则 `2026.11.25.03` 的 `policy.contract_effect` 为 `contract-effect-sources-v2`。有单独签章日期记载时，H01 的 `effect_review.conditions` 保留 `kind=seal_date` 的原件引文，`effect_review.seals.dates` 按 `buyer_sealed_on`、`seller_sealed_on` 保存证据支持的日期。`declared_on` 为原件所列生效日，`completed_on` 为按约定核准的最后盖章日，未核清时为 `null`。旧版仍按原规则回放，申请通过时会重新核验所据主合同的日期。
+
 基础地址为 `http://127.0.0.1:8000`。接口与前端同源。审计资料只在当前电脑的本地工作区共享。所有时间戳以 UTC 保存，网页按北京时间显示。
 
 创建任务时可提交 `profile=cn-contract-performance/v1` 审查合同履约与分期。当前规则在采购及银行回单范围也执行 H01–H05。报告的 `findings` 保留各程序的 `status`、`evidence` 和 `scope`。已识别的 H04/H05 期次还包含 `stage.name`（期名）、`share`（百分数文本）、`clause`（本期条款）和 `clause_ref`（完整原文的证据编号）。缺少证明的项目仍进入报告。

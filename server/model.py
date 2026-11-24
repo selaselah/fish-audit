@@ -79,6 +79,7 @@ buyer/seller 抄全称。total 是整张单据的含税总额，net/tax 是整�
 unit 单独抄明示的金额单位（如“金额单位：元”），value 抄“元”“万元”等，不从币种推断单位。每个有标签的字段应抄录整行，尤其保留否定、附加条件和金额尾数。
 日期区分签订、开票、验收；acceptance_result 抄原文验收结果。标的、付款条件、红冲、变更条款只在原文有相关记载时收录。
 合同逐项读取生效条件(effect_clause)、合同状态(contract_state)、实际生效日期(effect_on)、双方签署栏(buyer_signature/seller_signature)。逐字保留附审批、签字并盖章等限定。只抄可见姓名、签章等文字，不能把印章图案、空栏或印刷的公司名改写为“已盖章”或“已签字”。
+采购合同本身的甲方盖章日期和乙方盖章日期也分别用 buyer_sealed_on、seller_sealed_on，完整抄录对应一方及日期。
 补充协议有独立抬头，用 contract_addendum。逐行抄录补充协议编号 addendum_number、原合同编号 base_contract_ref、变更范围 change_scope、原验收标准 previous_criterion、变更后验收标准 revised_criterion、变更适用时点 change_timing、协议生效条款 change_effect_clause、补充协议状态 change_state。甲方和乙方盖章日期分别用 buyer_sealed_on、seller_sealed_on，各自的签章栏另抄为 buyer_signature、seller_signature。保留附加限制、其他变更以及页尾备注原文，其他未分类条件用 other。
 合同中各批交付明细逐行归 delivery_batch，保留批序、数量、单位及逐台设备编号。分批独立验收付款及是否另作终验的条款归 batch_clause。验收报告明确的本批范围归 acceptance_scope，验收设备编号或序列号归 delivered_serials，验收单自己的编号归 acceptance_number。以原页栏目为据，保留限定、尾号和字符间隔。
 合同付款总约定用 payment_term，分列的各期文字逐行用 payment_stage，quote 从“第一期”“首付款”等行首抄到末尾，value 保留整期条件、比例、期限及例外。单行有多期应保留整行。回单所列款项用途/对应期次用 payment_designation，不从金额反推。单列付款期限、最迟付款日、指定期次付款时限用 payment_deadline，保留触发事件、自然日或工作日口径、节假日及调休约定、到账或支付措辞。期限与比例同列只抄作一条 payment_stage，切勿推算或补写日期。

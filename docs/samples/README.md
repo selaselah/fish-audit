@@ -162,6 +162,10 @@ server/.venv/bin/python docs/samples/acceptance_remarks.py --run --run-id synthe
 
 六案总价、三期比例和回单金额相同。`clear` 已完成完整终验，`reserved` 的验收附注只承认到货签收，`image` 将限制写在影像中，`limit` 实测超出合同上限，`approval` 缺少合同生效所需的批准文件，`retest` 的复验单仍有未检项目。可以用 `--cases` 指定案例，省略 `--run` 只生成水印 PDF。
 
+### 分日盖章与首期预付款
+
+`server/.venv/bin/python docs/samples/contract_seal_dates.py --run --run-id synthetic-seals-20261125-03` 生成三笔相同总价和预付比例的采购。`complete` 在双方完成盖章后支付，`early` 在乙方盖章前付款，`partial` 的合同仅见甲方盖章日期。三案均附验收、质保确认及回单原件。
+
 ### 复现首次读图的编号误分类
 
 运行 `server/.venv/bin/python docs/samples/quality_readback.py --run`，可用上述复验后付款案例的 R1 重测。脚本校验原版本证据包，把两份 PDF 与固定种子重新生成的水印样本逐字节比较，并检查重渲染的页图和文字层。随后只将两张水印页图连同真实初读候选送入视觉复检，将回执另存入演练目录。原底稿仍可照常打开。

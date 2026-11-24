@@ -1,7 +1,7 @@
 import copy
 import unittest
 
-from contract_effect import sources, verify
+from contract_effect import LEGACY, sources, verify
 from controls import VERSION, execute
 from performance import BATCH_FORMAT, compute, verify_findings
 from test_performance import APPROVAL, BANK_DOC, CONTRACT, RECEIPT, WARRANTY, material
@@ -11,6 +11,42 @@ RIDER="附加生效条件：本合同须取得主管机构书面批准后方可�
 
 
 class ContractEffectTests(unittest.TestCase):
+    def test_seal_date_missed_by_old_workpaper_requires_review_before_approval(self):
+        extra="乙方盖章日期：2026-09-12"
+        graph=material([CONTRACT],omissions=[(1,extra)])
+        raw="\n".join([f["quote"] for f in graph["facts"]]+[extra])
+        read=lambda d,p:raw
+        graph["contract_effect_sources"]=sources(graph,read,LEGACY)
+        old={"graph":graph,"policy":{**VERSION,"version":"2026.11.25.02","contract_effect":LEGACY},
+             "findings":compute(graph)}
+        self.assertEqual(old["findings"][0]["status"],"ok")
+        verify(old,read)
+        with self.assertRaisesRegex(ValueError,"双方实际盖章日"):
+            verify(old,read,signing=True)
+
+    def test_main_contract_seals_and_early_advance(self):
+        dates=[("buyer_sealed_on","甲方盖章日期","2026-09-01"),("seller_sealed_on","乙方盖章日期","2026-09-12")]
+        def trial(declared,paid,rows,omissions=()):
+            def edit(i,k,l,v):
+                return {"effect_on":declared,"paid_on":paid,"payment_designation":"第一期"}.get(k,v)
+            return compute(material([CONTRACT+rows,RECEIPT,WARRANTY,BANK_DOC],edit,omissions=omissions))
+        good=trial("2026-09-12","2026-09-14",dates)
+        self.assertEqual([f["status"] for f in good],["ok"]*7)
+        self.assertEqual(good[0]["effect_review"]["seals"]["completed_on"],"2026-09-12")
+        bad=trial("2026-09-01","2026-09-05",dates)
+        self.assertEqual((bad[0]["status"],bad[-1]["status"]),("risk","risk"))
+        self.assertIn("2026-09-12",bad[-1]["detail"])
+        self.assertEqual([s["status"] for s in bad if s["rule"]=="H04"],["missing"]*3)
+        graph=material([CONTRACT+dates,RECEIPT,WARRANTY,BANK_DOC],lambda i,k,l,v:"2026-09-04" if k=="accepted_on" else v)
+        acceptance=compute(graph)[1]
+        self.assertEqual(acceptance["status"],"risk")
+        self.assertIn("双方最后盖章日",acceptance["date_checks"][0]["detail"])
+        for rows,notes in [(dates[:1],()),(dates[:1],[(1,"乙方盖章日期：2026-09-12")]),
+                           (dates,[(1,"盖章日期：另行确认")])]:
+            check=trial("2026-09-01","2026-09-05",rows,notes)
+            self.assertEqual(check[0]["status"],"missing")
+            self.assertIsNone(check[0]["effect_review"]["seals"]["completed_on"])
+
     def test_omitted_rider_blocks_effect_and_the_triggered_payments(self):
         for clause in (RIDER,"特别约定：尚待主管机关核准","合同状态说明：本合同已解除","另须取得公证证明"):
             graph=material([CONTRACT,RECEIPT,WARRANTY,BANK_DOC],omissions=[(1,clause)])

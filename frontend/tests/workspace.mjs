@@ -211,7 +211,7 @@ try {
     for (const finding of report.findings.filter(f=>f.date_checks)) {
       const panel='document.querySelector('+JSON.stringify('[data-finding="'+finding.id+'"] .contract-date-evidence')+')';
       const dates=new Set(finding.date_checks.flatMap(c=>c.evidence));
-      const relevant=report.graph.facts.filter(f=>dates.has(f.id) && ['signed_on','effect_on','valid_until','approved_on','accepted_on','paid_on','warranty_release'].includes(f.field));
+      const relevant=report.graph.facts.filter(f=>dates.has(f.id) && ['signed_on','effect_on','valid_until','approved_on','accepted_on','paid_on','warranty_release','buyer_sealed_on','seller_sealed_on'].includes(f.field));
       assert.equal(await evaluate(panel+'.querySelectorAll("[data-date-fact]").length'),relevant.length);
       for (const check of finding.date_checks.filter(c=>!finding.detail.includes(c.detail)))
         assert.ok(await evaluate(panel+'.textContent.includes('+JSON.stringify(check.detail)+')'));
@@ -336,6 +336,11 @@ try {
     if (effect) {
       const panel='document.querySelector(".effect-review")';
       assert.equal(await evaluate('!!'+panel),Boolean(effect.conditions.length || effect.mixed_pages.length));
+      if (effect.seals) {
+        assert.deepEqual(await evaluate('[...'+panel+'.querySelectorAll("dd")].map(e=>e.textContent)'),
+          [effect.seals.dates.buyer_sealed_on,effect.seals.dates.seller_sealed_on,effect.seals.declared_on].map(d=>d || '待核'));
+        assert.equal(await evaluate(panel+'.querySelector("h4").textContent'),'双方盖章与合同生效日');
+      }
       for (const item of effect.conditions) {
         const fact=report.graph.facts.find(f=>item.facts.includes(f.id) && f.quote===item.quote);
         const ref=fact?.id || item.doc+'/p'+item.page+'/l'+item.line;
