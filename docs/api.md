@@ -32,6 +32,8 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 
 ## 逐页进度与资料预览
 
+`GET /api/ready` 是公开的就绪探测接口。任务线程运行且数据库可读时，响应为 `{"status":"ready","mode":"local"}` 或企业模式 `saas`。未就绪时返回 HTTP 503，`component` 为 `worker` 或 `database`。探测读取任务表结构并检查线程状态。
+
 任务详情的 `page_progress.counts` 分别给出已分页 `prepared`、已提取 `read`、已有视觉复检记录 `checked` 的页数。三项分别计数，已复检页也计入已提取页。`documents` 以原件编号列出页码及最近保存的状态，`invalid` 表示提取记录需要检查。`activity` 提供当前处理或中断位置的原件、页码及步骤，队列中、已完成及整案处理阶段可为空。完成视觉复检的页仍可能有待人工确认的字段。
 
 专家模型已经返回且响应已保存、底稿尚待生成时，`page_progress.expert` 提供目标底稿版本 `target_rev` 与保存时间 `saved_at`。写入响应的同时，工作台进度更新为 96%。恢复后若同案同版的完整请求与原记录相符，系统标记 97% 并沿用原响应。底稿成功提交时清理临时响应，完整专家执行记录进入该版底稿。

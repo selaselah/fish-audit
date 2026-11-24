@@ -2,10 +2,11 @@ import hashlib
 import os
 import re
 import shutil
+import sqlite3
 import sys
 import tempfile
 import uuid
-from contextlib import ExitStack
+from contextlib import ExitStack, closing
 from pathlib import Path
 from urllib.parse import urlencode, urlsplit
 
@@ -272,6 +273,17 @@ def create_app(store, worker):
         return jsonify(status="ok", mode="ollama" if os.getenv("OLLAMA_MODEL") else "demo",
                        audit={"provider": "openai", "configured": bool(os.getenv("OPENAI_API_KEY", "").strip()), "model": MODEL,
                               "auditor_model": AUDITOR_MODEL, "profile": PROFILE, "profiles": PROFILES, "max_pages": MAX_PAGES})
+
+    @app.get("/api/ready")
+    def ready():
+        if worker.thread is None or not worker.thread.is_alive():
+            return jsonify(status="unavailable",component="worker"),503
+        try:
+            with closing(sqlite3.connect(store.path.resolve().as_uri()+"?mode=ro",uri=True,timeout=1)) as db:
+                db.execute("SELECT id,rev FROM cases LIMIT 0")
+        except sqlite3.Error:
+            return jsonify(status="unavailable",component="database"),503
+        return jsonify(status="ready",mode=app.config["AUDIT_MODE"])
 
     @app.post("/api/reviews")
     def legacy():

@@ -26,6 +26,7 @@ class Worker:
         self.check = checker
         self.wakeup = threading.Event()
         self.lock = None
+        self.thread = None
 
     def start(self):
         self.lock = (self.store.root / "worker.lock").open("a")
@@ -35,7 +36,8 @@ class Worker:
             self.lock.close()
             raise RuntimeError("此资料目录已有一个服务进程正在工作。") from error
         self.store.recover()
-        threading.Thread(target=self.loop, daemon=True, name="case-worker").start()
+        self.thread = threading.Thread(target=self.loop, daemon=True, name="case-worker")
+        self.thread.start()
 
     def loop(self):
         while True:
