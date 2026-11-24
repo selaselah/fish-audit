@@ -62,7 +62,8 @@ def generate(seed,mode):
 
 def validate(report,mode):
     checks=report["findings"]
-    assert [f["status"] for f in checks if f["rule"] in ("H01","H02","H03")]==["ok"]*3,[(f["id"],f["detail"]) for f in checks if f["status"]!="ok"]
+    mixed_acceptance=mode=="image" and report["policy"].get("acceptance_reservations")
+    assert [f["status"] for f in checks if f["rule"] in ("H01","H02","H03")]==["ok","missing" if mixed_acceptance else "ok","ok"],[(f["id"],f["detail"]) for f in checks if f["status"]!="ok"]
     phases=[f for f in checks if f["rule"]=="H04"]
     bank,=[f for f in checks if f["rule"]=="H05"]
     index=0 if mode=="prepay" else 1

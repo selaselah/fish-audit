@@ -127,6 +127,8 @@ textarea { width: 100%; resize: vertical; }
 .payment-window { margin:14px 0; padding:12px 14px; border-inline-start:3px solid var(--green); background:var(--soft); min-width:0; }
 .payment-window:is([data-status="risk"],[data-status="missing"]) { border-inline-start-color:#946421; background:#fbf7ed; }
 .payment-window[data-status="issue"] { border-inline-start-color:#903a30; background:#fbf2ef; }
+.reservation-review { margin:14px 0; padding:12px 14px; border-inline-start:3px solid #946421; background:#fbf7ed; min-width:0; }
+.reservation-note { border-top:1px solid var(--line); padding-top:8px; }
 .payment-window h4 { margin:0 0 8px; }
 .workday-trace { margin:10px 0; }
 .workday-table { width:100%; border-collapse:collapse; margin-top:6px; font-size:.86rem; font-variant-numeric:tabular-nums; }

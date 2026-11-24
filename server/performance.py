@@ -13,9 +13,10 @@ import delivery_batches
 import contract_effect
 import warranty_terms
 import payment_windows
+import acceptance_reservations
 from performance_versions import (FIRST_FORMAT, BOARD_FORMAT, REINSPECTION_FORMAT, DELEGATION_FORMAT, IDENTITY_FORMAT,
                                   NATIVE_FORMAT, ADDENDUM_FORMAT, SIGNATORY_FORMAT, DATE_FORMAT, BATCH_FORMAT, FORMAT,
-                                  WARRANTY_FORMATS, EFFECT_FORMATS, BATCH_FORMATS, DATE_FORMATS, SIGNATORY_FORMATS, ADDENDUM_FORMATS,
+                                  PAYMENT_WINDOW_FORMATS, WARRANTY_FORMATS, EFFECT_FORMATS, BATCH_FORMATS, DATE_FORMATS, SIGNATORY_FORMATS, ADDENDUM_FORMATS,
                                   MANDATE_FORMATS, SUPPORTED)
 
 
@@ -600,7 +601,7 @@ def compute(graph, version=FORMAT):
     else:
         accepted = acceptance(contract, receipts)
         accepted_on = day(receipts[0].single("accepted_on")) if accepted["status"]=="ok" else None
-    plan, rows = schedule(contract,warranty_checks=version in WARRANTY_FORMATS,deadlines=version==FORMAT)
+    plan, rows = schedule(contract,warranty_checks=version in WARRANTY_FORMATS,deadlines=version in PAYMENT_WINDOW_FORMATS)
     batch = None
     if version in BATCH_FORMATS:
         batch = delivery_batches.inspect(graph,contract,receipts,native_spacing=version in EFFECT_FORMATS,
@@ -701,6 +702,14 @@ def compute(graph, version=FORMAT):
             item["evidence"] = list(dict.fromkeys(item["evidence"] + (refs or [doc["id"]])))
             if doc["id"] not in item["scope"]:
                 item["scope"].append(doc["id"])
+    if version==FORMAT and not batch:
+        closed = accepted.get("reinspection",{}).get("state")=="closed"
+        if acceptance_reservations.apply(accepted,graph.get("acceptance_reservation_sources",{})):
+            accepted_on = None
+            if closed:
+                original = evaluate(contract,receipts)
+                if original["status"]=="issue":
+                    accepted.update(status="issue",detail=original["detail"]+" "+accepted["detail"]+" 原验收缺陷仍需正式复验。")
     output = [signed, accepted, plan]
     if not rows:
         output.append(result("H04","missing","缺少可逐期核对的付款约定。",plan["evidence"],plan["scope"]))
@@ -762,7 +771,7 @@ def compute(graph, version=FORMAT):
         check = result("H04",status,detail,refs,scope,stage)
         if kind=="warranty" and release_check:
             check["warranty_check"]=release_check
-        if version==FORMAT:
+        if version in PAYMENT_WINDOW_FORMATS:
             window=payment_windows.stage_window(graph,contract,rows,idx-1,[*receipts,*retests],signed,accepted,accepted_on,check)
             payment_windows.attach_stage(check,window)
         output.append(check)
@@ -828,7 +837,7 @@ def compute(graph, version=FORMAT):
         if row["kind"]=="warranty" and release_check:
             payment["warranty_check"]=release_check
         add_date_checks(payment,timing)
-        if version==FORMAT:
+        if version in PAYMENT_WINDOW_FORMATS:
             payment_windows.compare_transfer(payment,check,graph,contract,bank,row)
         output.append(payment)
     return output
@@ -862,6 +871,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("effect_review") != entry.get("effect_review")
                 or saved.get("warranty_check") != entry.get("warranty_check")
                 or saved.get("payment_window") != entry.get("payment_window")
+                or saved.get("acceptance_reservations") != entry.get("acceptance_reservations")
                 or (saved.get("id"),saved.get("version"),saved.get("title"),saved.get("basis")) !=
                 (f"{rule}-{position}",policy["version"],*RULES[rule])):
             raise ValueError("合同履约结论、期次或引文与证据图谱不符")

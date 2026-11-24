@@ -239,6 +239,12 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 
 `graph.payment_window_sources` 逐页保存原件覆盖及付款时限原文。`payment_window_comparison` 关联付款期限条款与回单日期，两端均带证据编号。核验归档时可按当版方法重算全部日期和日历。提交通过决定时会重查相关原件，旧底稿曾判相符、现可定位到相冲突或待核的付款条件时返回 HTTP 409。
 
+## 终验和复验保留意见
+
+规则 `2026.11.25.02` 使用 `contract-performance-v14` 和 `policy.acceptance_reservations=acceptance-reservations-v1`。`graph.acceptance_reservation_sources.pages` 登记验收及复验原件的分册、资料、页号、文字层和整页版式。`lines` 保留 `doc`、`unit`、`page`、原生行号 `line`、逐字引文 `quote`、线索种类 `kind` 及观察编号 `facts`。原件有文字而模型未抽成字段时，行号仍可查。影像观察的行号为 `null`。每条 `acceptance_reservation` 边连接所属资料与对应原页。
+
+在整体验收或复验程序中，H02 的 `acceptance_reservations` 包含本次所据的 `pages`、`lines` 和需要通读的 `mixed_pages`。`limited` 表示文字涉及验收范围限制，`unclear` 表示保留意见需解释。已知的超限或原验收失败仍可使 H02 为 `issue`。是否有材料支持某一期付款，由该期 H04 及实付 H05 分别说明。核验旧底稿可按当时规则重算。原先判定终验相符，现识别到保留意见或必须通读的影像时，提交通过决定返回 HTTP 409，提示重新审计。
+
 ## 履约日期核对
 
 规则 `2026.11.24.28` 使用 `contract-performance-v9`。涉及日期疑点的 H01、H02 或 H05 附有 `date_checks[]`。每一项保存 `event`（`contract_period`、`acceptance`、`reinspection` 或 `payment`）、`status`（`risk` 或 `missing`）、案情说明 `detail` 和引用 `evidence`。原生日期的证据可定位到逐字引文和文字层原行，人工核图的日期可以回到其核图回执。H04 继承该期所据的签署、验收或质保条件。历史底稿保留当时的程序，申请签收时会重新检查原为相符的日期判断。

@@ -163,15 +163,17 @@ try {
       task.rev=rev;
     }
     const {report} = await (await fetch(api+'/reports/'+task.rev)).json();
-    const phases = report.findings.filter(f=>f.rule==='H04');
+    const phaseChecks=report.findings.filter(f=>f.rule==='H04');
+    const phases=phaseChecks.filter(f=>f.stage);
     const batches=report.findings.find(f=>f.rule==='H02')?.batch_acceptance;
-    assert.deepEqual(phases.map(f=>f.stage.share),batches?['20','35','35','10']:['30','60','10']);
+    if (phases.length) assert.deepEqual(phases.map(f=>f.stage.share),batches?['20','35','35','10']:['30','60','10']);
+    else assert.ok(phaseChecks.length && phaseChecks.every(f=>f.status==='missing'));
     await wait('!!document.querySelector("#new-case")','new audit');
     await evaluate('document.querySelector("#new-case").click()');
     await evaluate('const p=document.querySelector("#upload-profile");p.value="cn-contract-performance/v1";p.dispatchEvent(new Event("change"));');
     assert.ok(await evaluate('document.querySelector("#profile-note").textContent.includes("质保期满确认单")'));
     await call('Page.navigate',{url:root+'/workpaper/'+performanceCase+'?rev='+task.rev});
-    await wait('!!document.querySelector(".performance-panel .clause-source")','contract performance report');
+    await wait('!!document.querySelector(".performance-panel .performance-overview")','contract performance report');
     const summary='document.querySelector(".performance-overview")';
     const jump = async (container,item) => {
       const selector='[data-jump-finding="'+item.id+'"]';
@@ -194,15 +196,17 @@ try {
       for (const payment of matched) await jump(row,payment);
     }
     for (const payment of report.findings.filter(f=>f.rule==='H05' && !f.stage)) await jump(summary,payment);
-    const sharedClause = await evaluate(`(() => {
-      const {findings,graph}=state.bundle.report;
-      const [first,second]=findings.filter(f=>f.rule==='H04').slice(0,2);
-      const sameLine={...second,stage:{...second.stage,clause_ref:first.stage.clause_ref}};
-      const receipt={...sameLine,id:'H05-99',rule:'H05'};
-      const preview=performanceOverview([first,sameLine,receipt],graph);
-      return [...preview.querySelectorAll('li')].map(row=>row.querySelectorAll('[data-jump-finding="H05-99"]').length);
-    })()`);
-    assert.deepEqual(sharedClause,[0,1],'a receipt belongs only to its named phase when two phases share one contract line');
+    if (phases.length>=2) {
+      const sharedClause = await evaluate(`(() => {
+        const {findings,graph}=state.bundle.report;
+        const [first,second]=findings.filter(f=>f.rule==='H04' && f.stage);
+        const sameLine={...second,stage:{...second.stage,clause_ref:first.stage.clause_ref}};
+        const receipt={...sameLine,id:'H05-99',rule:'H05'};
+        const preview=performanceOverview([first,sameLine,receipt],graph);
+        return [...preview.querySelectorAll('li')].map(row=>row.querySelectorAll('[data-jump-finding="H05-99"]').length);
+      })()`);
+      assert.deepEqual(sharedClause,[0,1],'a receipt belongs only to its named phase when two phases share one contract line');
+    }
     const chain=report.findings.find(f=>f.rule==='H02')?.reinspection;
     for (const finding of report.findings.filter(f=>f.date_checks)) {
       const panel='document.querySelector('+JSON.stringify('[data-finding="'+finding.id+'"] .contract-date-evidence')+')';
@@ -223,6 +227,40 @@ try {
     const authority=report.findings.find(f=>f.rule==='H02')?.acceptance_authority;
     const effect=report.findings.find(f=>f.rule==='H01')?.effect_review;
     const warranty=phases.find(f=>f.warranty_check);
+    const inspection=report.findings.find(f=>f.rule==='H02');
+    const reservations=inspection?.acceptance_reservations;
+    const hasRemarks=Boolean(reservations && (reservations.lines.length || reservations.mixed_pages.length));
+    const verifyRemarks=async (panel,lines)=>{
+      for (const line of lines) {
+        const fact=line.facts.map(id=>report.graph.facts.find(f=>f.id===id)).find(f=>f?.quote===line.quote);
+        const ref=fact?.id || line.doc+'/p'+line.page+'/l'+line.line;
+        const row=panel+'.querySelector('+JSON.stringify('[data-reservation-source="'+ref+'"]')+')';
+        await wait(row+'?.querySelector("q").textContent==='+JSON.stringify(line.quote),'acceptance remark transcription');
+        await evaluate(row+'.querySelector("button").click()');
+        const position=fact?'document.querySelector(".located")?.dataset.fact==='+JSON.stringify(fact.id):
+          'document.querySelector(".located[data-gap-line] blockquote")?.textContent==='+JSON.stringify(line.quote);
+        await wait('document.querySelector("#page-dialog").open && '+position+' && document.querySelector("#page-dialog img")?.naturalWidth>0','inspection remark on original');
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
+    };
+    assert.equal(await evaluate('!!document.querySelector(".reservation-review")'),hasRemarks);
+    if (hasRemarks) {
+      const panel='document.querySelector(".reservation-review")';
+      await verifyRemarks(panel,reservations.lines);
+      for (const fact of report.graph.facts.filter(f=>inspection.evidence.includes(f.id) && ['acceptance_result','acceptance_scope'].includes(f.field))) {
+        const row=panel+'.querySelector('+JSON.stringify('[data-reservation-fact="'+fact.id+'"]')+')';
+        assert.equal(await evaluate(row+'.querySelector("q").textContent'),fact.source_line?.text || fact.quote);
+        await evaluate(row+'.querySelector("button").click()');
+        await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(fact.id),'inspection conclusion box');
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
+      for (const page of reservations.mixed_pages) {
+        const button=panel+'.querySelector('+JSON.stringify('[data-reservation-page="'+page.doc+'/p'+page.page+'"]')+')';
+        await evaluate(button+'.click()');
+        await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth>0','inspection page with annotations');
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
+    }
     const windows=report.findings.filter(f=>f.payment_window);
     const windowPanel=f=>'document.querySelector('+JSON.stringify('[data-finding="'+f.id+'"] .payment-window')+')';
     for (const finding of windows) {
@@ -571,6 +609,15 @@ try {
           await writeFile(join(process.env.AUDIT_UI_SHOTS,'payment-window-'+performanceCase+'-'+width+'.png'),Buffer.from(capture.data,'base64'));
         }
       }
+      if (hasRemarks) {
+        const panel='document.querySelector(".reservation-review")';
+        assert.ok(await evaluate(panel+'.clientWidth>0 && '+panel+'.scrollWidth<='+panel+'.clientWidth+1'),'inspection remarks at '+width);
+        if (process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
+          await evaluate(panel+'.scrollIntoView({block:"start"});window.scrollBy(0,-85)');
+          const capture=await call('Page.captureScreenshot',{format:'png'});
+          await writeFile(join(process.env.AUDIT_UI_SHOTS,'reservations-'+performanceCase+'-'+width+'.png'),Buffer.from(capture.data,'base64'));
+        }
+      }
       if (effect && (effect.conditions.length || effect.mixed_pages.length) && process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
         await evaluate('document.querySelector(".effect-review").scrollIntoView({block:"start"});window.scrollBy(0,-45)');
         assert.ok(await evaluate('document.querySelector(".effect-review").scrollWidth<=document.querySelector(".effect-review").clientWidth+1'));
@@ -596,6 +643,13 @@ try {
     const target=report.findings.find(f=>f.rule==='H02');
     await click('查看证据路径','document.querySelector('+JSON.stringify('[data-finding="'+target.id+'"]')+')');
     await wait('document.querySelector("#trace-select")?.value==='+JSON.stringify(target.id),'acceptance evidence graph');
+    const allRemarks=report.graph.acceptance_reservation_sources?.lines || [];
+    assert.equal(await evaluate('!!document.querySelector(".reservation-relations")'),Boolean(allRemarks.length));
+    if (allRemarks.length) {
+      const panel='document.querySelector(".reservation-relations")';
+      await evaluate(panel+'.open=true');
+      await verifyRemarks(panel,allRemarks);
+    }
     if (windows.length) {
       const links=report.graph.edges.filter(e=>e.type==='payment_window_comparison');
       assert.equal(await evaluate('!!document.querySelector(".payment-window-relations")'),!!links.length);

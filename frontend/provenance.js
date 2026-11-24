@@ -244,6 +244,38 @@ function contractEffectPanel(finding,graph) {
   return panel;
 }
 
+function reservationSource(line,graph) {
+  const {facts,documents}=graphIndex(graph);
+  const fact=line.facts.map(id=>facts.get(id)).find(f=>f?.quote===line.quote);
+  const location='第 '+line.page+' 页'+(line.line?' · 第 '+line.line+' 行':' · 影像引文');
+  const button=action((documents.get(line.doc)?.name || '原件')+' · '+location,
+    ()=>openPage(line.doc,line.page,fact?.id,fact?null:line.line),'ref');
+  const row=box('batch-source reservation-note',el('q',line.quote),button);
+  row.dataset.reservationSource=fact?.id || line.doc+'/p'+line.page+'/l'+line.line;
+  if (!line.line && fact) row.append(tag(fact.status));
+  return row;
+}
+
+function reservationPanel(finding,graph) {
+  const {lines,mixed_pages}=finding.acceptance_reservations;
+  const {documents}=graphIndex(graph);
+  const panel=box('reservation-review',el('h4','验收结论与原页附注'));
+  const cited=new Set(finding.evidence);
+  for (const fact of graph.facts.filter(f=>cited.has(f.id) && ['acceptance_result','acceptance_scope'].includes(f.field))) {
+    const row=box('batch-source',el('q',fact.source_line?.text || fact.quote),citation(fact.id));
+    row.dataset.reservationFact=fact.id;
+    panel.append(row);
+  }
+  for (const line of lines) panel.append(reservationSource(line,graph));
+  for (const page of mixed_pages) {
+    const title=(documents.get(page.doc)?.name || '原件')+' · 第 '+page.page+' 页';
+    const button=action(title,()=>openPage(page.doc,page.page),'ref');
+    button.dataset.reservationPage=page.doc+'/p'+page.page;
+    panel.append(box('batch-source',el('strong','核对整页签收范围及批注'),button));
+  }
+  return panel;
+}
+
 function paymentWindowPanel(finding,graph) {
   const w=finding.payment_window;
   const {facts,documents}=graphIndex(graph);

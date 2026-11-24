@@ -19,6 +19,7 @@ import delivery_batches
 import contract_effect
 import warranty_terms
 import payment_windows
+import acceptance_reservations
 from acceptance_authority import CLAUSE as AUTHORITY_CLAUSE, SIGNER as ACCEPTANCE_SIGNATURE, attach as record_signatories, witness_edges
 
 
@@ -300,6 +301,9 @@ def build_graph(docs, pages, attestations, amendments=()):
     partition_documents(graph, pages)
     withhold_partial_numbers(graph)
     texts = {(page["doc"],page["number"]):page["text"] for page in pages}
+    reservations = acceptance_reservations.sources(graph,lambda doc,number:texts[doc,number])
+    graph["acceptance_reservation_sources"] = reservations
+    graph["edges"].extend(acceptance_reservations.edges(reservations))
     graph["payment_window_sources"]=payment_windows.sources(graph,lambda doc,number:texts[doc,number])
     graph["contract_effect_sources"]=contract_effect.sources(graph,lambda doc,number:texts[doc,number])
     graph["warranty_sources"]=warranty_terms.sources(graph,lambda doc,number:texts[doc,number])

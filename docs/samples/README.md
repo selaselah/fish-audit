@@ -154,6 +154,14 @@ server/.venv/bin/python docs/samples/payment_deadlines.py --run --run-id synthet
 
 `--cases national boundary` 只运行末日相同、分别在末日当天及两天后转账的两案。省略 `--run` 可只生成原件。联机演练对生成文件的摘要和原行做比对，在对应水印页模拟核图并保留各版记录。
 
+### 到货签收、终验和复验的保留意见
+
+```sh
+server/.venv/bin/python docs/samples/acceptance_remarks.py --run --run-id synthetic-remarks-20261125-02
+```
+
+六案总价、三期比例和回单金额相同。`clear` 已完成完整终验，`reserved` 的验收附注只承认到货签收，`image` 将限制写在影像中，`limit` 实测超出合同上限，`approval` 缺少合同生效所需的批准文件，`retest` 的复验单仍有未检项目。可以用 `--cases` 指定案例，省略 `--run` 只生成水印 PDF。
+
 ### 复现首次读图的编号误分类
 
 运行 `server/.venv/bin/python docs/samples/quality_readback.py --run`，可用上述复验后付款案例的 R1 重测。脚本校验原版本证据包，把两份 PDF 与固定种子重新生成的水印样本逐字节比较，并检查重渲染的页图和文字层。随后只将两张水印页图连同真实初读候选送入视觉复检，将回执另存入演练目录。原底稿仍可照常打开。

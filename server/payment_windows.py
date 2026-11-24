@@ -10,7 +10,7 @@ from calculations import normalized
 from cn_workdays import SOURCE as CALENDAR_NOTICE, SOURCE_KEY, after_workdays
 from delegation import complete_id
 from delivery_batches import one, ordinal, raw_body
-from performance_versions import FORMAT as CURRENT
+from performance_versions import PAYMENT_WINDOW_FORMAT, PAYMENT_WINDOW_FORMATS
 from warranty_terms import DATE, NO_EXTENSION, bank_identity, identity
 
 
@@ -342,7 +342,7 @@ def verify(report,read_text,*,signing=False):
     policy,graph=report["policy"],report["graph"]
     marker=policy.get("payment_windows")
     if not marker:
-        if "payment_windows.py" in policy.get("code_sha256",{}) or "payment_window_sources" in graph or policy.get("performance_checks")==CURRENT:
+        if "payment_windows.py" in policy.get("code_sha256",{}) or "payment_window_sources" in graph or policy.get("performance_checks") in PAYMENT_WINDOW_FORMATS:
             raise ValueError("付款时限核对程序标记缺失")
         if not signing:
             return
@@ -350,14 +350,14 @@ def verify(report,read_text,*,signing=False):
         if old:
             from performance import compute
             ledger=sources(graph,read_text)
-            current=compute({**graph,"payment_window_sources":ledger},CURRENT)
+            current=compute({**graph,"payment_window_sources":ledger},PAYMENT_WINDOW_FORMAT)
             for former in old:
                 for new in current:
                     if (new.get("payment_window") and new["rule"]==former["rule"] and new.get("stage")==former["stage"]
                             and set(former["scope"])<=set(new["scope"]) and new["status"]!="ok"):
                         raise ValueError("旧版付款时限或回单时点仍需核对，请按现行程序重新审计后签收。")
         return
-    if marker!=FORMAT or policy.get("performance_checks")!=CURRENT or graph.get("payment_window_sources")!=sources(graph,read_text):
+    if marker!=FORMAT or policy.get("performance_checks") not in PAYMENT_WINDOW_FORMATS or graph.get("payment_window_sources")!=sources(graph,read_text):
         raise ValueError("付款期限、原页文字或影像覆盖与归档不符")
     if [e for e in graph["edges"] if e["type"]=="payment_window_comparison"]!=edges(report["findings"]):
         raise ValueError("合同付款期限与实际回单的比较关系不符")

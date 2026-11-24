@@ -25,6 +25,7 @@ from delivery_batches import FORMAT as DELIVERY_BATCHES
 from contract_effect import FORMAT as CONTRACT_EFFECT
 from warranty_terms import FORMAT as WARRANTY_CHECKS
 from payment_windows import FORMAT as PAYMENT_WINDOWS
+from acceptance_reservations import FORMAT as RESERVATIONS
 from contract_changes import FORMAT as ADDENDUM_FORMAT
 from delegation import FORMAT as DELEGATION_FORMAT
 from transfers import RULES as TRANSFER_RULES, check_transfers
@@ -54,6 +55,7 @@ CATALOG = {
     "T05": ("出差人员关联", "对照报销单与具名票据中的出差人，缺姓名、别名和不一致均交人工。"),
 }
 VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING, "performance_checks":PERFORMANCE_FORMAT,
+           "acceptance_reservations":RESERVATIONS,
            "quality_number_classification":QUALITY_NUMBER_FORMAT, "quality_references":QUALITY_REFERENCE_FORMAT,
            "delegation_checks":DELEGATION_FORMAT, "quality_addenda":ADDENDUM_FORMAT, "acceptance_authority":ACCEPTANCE_AUTHORITY,"delivery_batches":DELIVERY_BATCHES,
            "contract_effect":CONTRACT_EFFECT,"warranty_checks":WARRANTY_CHECKS,"payment_windows":PAYMENT_WINDOWS,"sources": SOURCES, "rule_sources": MAPPING, "invoice_sources": INVOICE_SOURCE_FORMAT,
@@ -128,7 +130,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
     def with_performance():
         for item in performance:
             record(item["rule"],item["status"],item["detail"],item["evidence"],item["scope"])
-            for key in ("stage","reinspection","delegations","quality_change","acceptance_authority","date_checks","batch_acceptance","effect_review","warranty_check","payment_window"):
+            for key in ("stage","reinspection","delegations","quality_change","acceptance_authority","date_checks","batch_acceptance","effect_review","warranty_check","payment_window","acceptance_reservations"):
                 if key in item:
                     findings[-1][key] = item[key]
         return findings
