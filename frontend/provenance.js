@@ -140,6 +140,36 @@ function dateEvidencePanel(finding, graph) {
   return panel.children.length>1 ? panel : null;
 }
 
+function receiptPacketPanel(packets, graph) {
+  const {documents}=graphIndex(graph);
+  const panel=el('section','','receipt-packets');
+  panel.setAttribute('aria-label','验收合订件的单据归属');
+  panel.append(el('h4','验收合订件'));
+  for (const packet of packets) {
+    const split=packet.status==='split';
+    const file=el('section','','packet-file');
+    file.dataset.packetStatus=packet.status;
+    file.append(box('flow',el('strong',documents.get(packet.doc).name),
+      el('span',split?packet.pages.length+' 张可独立核对的验收单':'单据归属待人工核对',split?'small':'signer-pending')));
+    for (const page of packet.pages) {
+      const pageRef=page.doc+'/p'+page.page;
+      const row=el('section','','packet-page');
+      row.dataset.packetPage=pageRef;
+      const scope=page.rows.find(r=>r.field==='acceptance_scope');
+      row.append(box('flow',citation(pageRef),el('strong',scope?.quote || '验收范围待核')));
+      for (const proof of page.rows.filter(r=>['acceptance_number','continuation','partial_number'].includes(r.field))) {
+        row.append(reservationSource(proof,graph));
+      }
+      if (page.reasons.length) row.append(el('p',page.reasons.join('。')+'。','signer-pending'));
+      const context=page.rows.filter(r=>['acceptance','contract_id','accepted_on'].includes(r.field));
+      if (context.length) row.append(lazyFold('核对页首、合同号与验收日期',()=>context.map(r=>reservationSource(r,graph))));
+      file.append(row);
+    }
+    panel.append(file);
+  }
+  return panel;
+}
+
 function deliveryBatchPanel(entry, graph, phases) {
   const {facts,documents}=graphIndex(graph);
   const ledger=graph.delivery_batch_sources;

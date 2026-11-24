@@ -16,6 +16,7 @@ from quality_references import attach as record_quality_references
 from delegation import ENTITY_TYPES as DELEGATION_ENTITIES, TITLES as MANDATE_TITLES, attach as record_mandate_pages, printed_value as mandate_value
 from contract_changes import NUMBER_TYPES as ADDENDUM_NUMBERS, TITLES as ADDENDUM_TITLES, attach as record_addenda, number_target
 import delivery_batches
+import receipt_packets
 import contract_effect
 import warranty_terms
 import payment_windows
@@ -298,9 +299,13 @@ def build_graph(docs, pages, attestations, amendments=()):
     graph = {"nodes": list(nodes.values()), "edges": edges, "facts": evidence,
              "documents_by_kind": dict(by_kind), "gaps": gaps, "cautions": cautions,
              "performance_cautions":performance_cautions, "documents": docs}
-    partition_documents(graph, pages)
-    withhold_partial_numbers(graph)
     texts = {(page["doc"],page["number"]):page["text"] for page in pages}
+    packets = receipt_packets.sources(graph,lambda doc,n:texts[doc,n])
+    graph["receipt_packet_sources"] = packets
+    graph["gaps"].extend(receipt_packets.gaps(packets))
+    partition_documents(graph, pages)
+    graph["edges"].extend(receipt_packets.edges(packets))
+    withhold_partial_numbers(graph)
     reservations = acceptance_reservations.sources(graph,lambda doc,number:texts[doc,number])
     graph["acceptance_reservation_sources"] = reservations
     graph["edges"].extend(acceptance_reservations.edges(reservations))
@@ -337,6 +342,7 @@ def partition_documents(graph, pages):
         by_page[fact["doc"], fact["page"]].append(fact)
     units, unit_by_fact = [], {}
     assignments = graph["documents_by_kind"]
+    split = {p["doc"] for p in graph.get("receipt_packet_sources",{}).get("packets",[]) if p["status"]=="split"}
     for doc in graph["documents"]:
         source = doc["id"]
         titles, invoice_numbers = {}, set()
@@ -352,7 +358,7 @@ def partition_documents(graph, pages):
                         if SHORT.fullmatch(printed_number):
                             short_pages[printed_number].add(number)
         kinds = {kind for number, group in titles.items() for kind in group | hints[source, number]}
-        if len(kinds) <= 1 and len(invoice_numbers) <= 1 and not any(len(p)>1 for p in short_pages.values()):
+        if source not in split and len(kinds) <= 1 and len(invoice_numbers) <= 1 and not any(len(p)>1 for p in short_pages.values()):
             units.append(doc)
             continue
         for group in assignments.values():

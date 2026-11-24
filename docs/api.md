@@ -1,5 +1,12 @@
 # 本机审计接口
 
+## 验收合订件的原页归属
+
+规则 `2026.11.25.10` 保存 `policy.receipt_packets=numbered-acceptance-pages-v1`。报告的 `graph.receipt_packet_sources.packets[]` 按上传原件列出审查过的验收页。每条含原件 `doc`、`status` 和 `pages[]`。页记录有物理页 `page`、原文编号 `number`、文字版式标记 `text_only`、待核原因 `reasons[]`、原行 `rows[]`。原行记录字段、页、行号、引文和能与原行逐字对应的观察 ID。
+
+`split` 表示各张验收单可分别核对。所有字段和签认保留物理 `doc/page`，`unit` 指向该页的逻辑单据。每个 `acceptance_page_identity` 关系从逻辑单据指向标题或本单编号，引文包含页 ID 及观察 ID。`review` 表示该组合内的验收依据尚待核实，理由也发布到 `graph.gaps` 的 `receipt_packet` 项。H02 及依赖该资料的付款条件保留相关页的证据引用。签收与离线核验按底稿版本检查归属、页码、文本、图关系及原件摘要。
+
+
 规则 `2026.11.25.09` 使用 `policy.delivery_batches=contract-delivery-batches-v4`。在各批独立付款且另行终验的合同中，H02 的 `batch_acceptance.separate_final.signing_requirement` 保存合同逐字可核的终验签认要求，`required` 是指定姓名，`clause_ref` 定位条款。合同有这项要求、尚缺终验原件时，仍返回要求及空的 `separate_final.records`。
 
 已归属的总单在 `batch_acceptance.records[]` 内以 `role=final` 标识。该单的 `signing` 包含逐人所据的 `signed[]`、`missing_names`、`other_names`、`status` 和 `detail`。原页有签字行而观察漏提时，可用 `doc`、`page`、`line`、`quote` 复查，`confirmed` 为 false。终验的全部条件相符后，`final_named_signature` 从合同指定终验人的观察指向总单上每一条已核签字观察，`batch_named_signature` 仍对应各批自己的签字。归档的 v1、v2 和 v3 继续按各自程序复算。

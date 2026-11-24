@@ -25,10 +25,7 @@ def set_signatures(rows,names):
     rows[:]=[(k,v) for k,v in rows if k!="验收签认"]+[("验收签认",name+"（已签字）") for name in names]
 
 
-def generate(seed,mode):
-    code=hashlib.sha256((seed+"-"+mode).encode()).hexdigest()[:8].upper()
-    folder=ROOT/"38-分批与另行终验的指定签认人"/code
-    folder.mkdir(parents=True,exist_ok=True)
+def signed_records(code,mode):
     records=final_documents(code,"quality" if mode=="quality" else "complete")
     clauses=records["采购合同"]
     if mode!="only_final":
@@ -46,6 +43,14 @@ def generate(seed,mode):
         del records[FINAL]
         paid={"款项用途":"第二期","付款日期":"2026年9月15日","付款金额":"35,000.00"}
         records["银行付款回单"]=[(k,paid.get(k,v)) for k,v in records["银行付款回单"]]
+    return records
+
+
+def generate(seed,mode):
+    code=hashlib.sha256((seed+"-"+mode).encode()).hexdigest()[:8].upper()
+    folder=ROOT/"38-分批与另行终验的指定签认人"/code
+    folder.mkdir(parents=True,exist_ok=True)
+    records=signed_records(code,mode)
     font=embedded_font("FinalSignatoriesCJK")
     for name,rows in records.items():
         path=folder/(name+".pdf")

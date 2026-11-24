@@ -290,6 +290,12 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     if (source) gaps.push({...source,quality:'signer_reference'});
   }
   const batches=state.bundle?.report.graph.delivery_batch_sources;
+  const packets=state.bundle?.report.graph.receipt_packet_sources?.packets;
+  if (packets && lineHint && !gaps.some(g=>g.line===lineHint)) {
+    const page=packets.find(p=>p.doc===docId)?.pages.find(p=>p.page===pageNumber);
+    const row=page?.rows.find(r=>r.line===lineHint);
+    if (row) gaps.push({...row,quality:'receipt_page_reference',field:['continuation','partial_number'].includes(row.field)?null:row.field});
+  }
   if (batches && lineHint && !gaps.some(g=>g.line===lineHint)) {
     const source=batches.signals.find(s=>s.doc===docId && s.page===pageNumber && s.line===lineHint);
     if (source) gaps.push({...source,quality:'delivery_batch_clause'});
@@ -315,7 +321,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     if (source) gaps.push({...source,quality:['seller','delivery_note'].includes(source.kind)?'supplier_reference':'reservation_reference'});
   }
   for (const gap of gaps) {
-    const label = {addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
+    const label = {receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
     const section = box('evidence-row',el('h4',label+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
     section.dataset.gapLine = String(gap.line);
     if (gap.line===lineHint) {
@@ -527,6 +533,8 @@ function finding(item) {
   if (item.acceptance_reservations?.lines.length || item.acceptance_reservations?.mixed_pages.length)
     node.append(reservationPanel(item,state.bundle.report.graph));
   if (item.acceptance_reservations?.supplier) node.append(supplierPanel(item.acceptance_reservations.supplier,state.bundle.report.graph));
+  const packets=state.bundle.report.graph.receipt_packet_sources?.packets;
+  if (item.rule==='H02' && packets?.length) node.append(receiptPacketPanel(packets,state.bundle.report.graph));
   if (item.batch_acceptance) {
     const {graph,findings}=state.bundle.report;
     node.append(deliveryBatchPanel(item.batch_acceptance,graph,findings.filter(f=>f.rule==='H04')));
@@ -664,6 +672,18 @@ function graphPanel() {
     links.classList.add('warranty-relations');
     panel.append(links);
   }
+  const receiptEdges=graph.edges.filter(e=>e.type==='acceptance_page_identity');
+  if (receiptEdges.length) {
+    const nodes=graphIndex(graph).nodes;
+    const list=lazyFold('验收单与原件页码（'+receiptEdges.length+'）',()=>receiptEdges.map(edge=>{
+      const row=box('line',el('strong',nodes.get(edge.from).label),reservationSource({
+        ...facts.get(edge.to),line:facts.get(edge.to).source_line.number,facts:[edge.to]},graph));
+      row.dataset.packetWitness=edge.to;
+      return row;
+    }));
+    list.classList.add('packet-relations');
+    panel.append(list);
+  }
   const batchLabels={delivery_batch_acceptance:'约定交付范围',batch_payment_basis:'本期付款条件',
     batch_named_signature:'本批指定人员与实际签认',batch_final_basis:'终验单引用的批次验收原件',
     final_named_signature:'合同指定的终验人与总单签字'};
@@ -722,9 +742,9 @@ function graphPanel() {
   if (graph.cautions?.length) panel.append(fold('原文中的结算及变更线索', ...graph.cautions.map(item =>
     box('line', el('blockquote', item.quote), el('span', '文字层第 ' + item.line + ' 行'), citation(item.page_id)))));
   if (graph.gaps.length) panel.append(fold('辨读与覆盖缺口', ...graph.gaps.map(item =>
-    box('line', el('span', item.quality === 'uncovered_title' ? '页首标题尚待核图补录' : item.quote ? '文字层第 ' + item.line + ' 行尚缺完整取值' :
+    box('line', el('span', item.quality==='receipt_packet'?'验收单归属待核':item.quality === 'uncovered_title' ? '页首标题尚待核图补录' : item.quote ? '文字层第 ' + item.line + ' 行尚缺完整取值' :
       (item.quality === 'section_unresolved' ? '本页的单据归属待核对' : '页图存在辨读或提取缺口')),
-      el('blockquote', item.quote || '请查看原件或补传清晰资料。'), citation(item.id)))));
+      el('blockquote', item.quote || item.detail || '请查看原件或补传清晰资料。'), citation(item.id)))));
   panel.append(lazyFold('资料、页与观察记录的溯源关系', ()=>graph.edges.filter(edge => ['contains','records'].includes(edge.type))
     .map(edge => box('line', el('code', edge.from + ' → ' + edge.to), box('chips', ...edge.evidence.map(citation))))));
   const path = provenancePanel(state.bundle.report);

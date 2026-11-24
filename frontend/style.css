@@ -143,6 +143,12 @@ textarea { width: 100%; resize: vertical; }
 .batch-heading { justify-content:space-between; margin-bottom:6px; }
 .delivery-batches h4,.delivery-batches h5 { margin:0; font-size:1rem; }
 .batch-record { min-width:0; margin-top:12px; padding-top:12px; border-top:1px solid var(--line); }
+.receipt-packets { margin:16px 0; }
+.packet-file { padding:12px 14px; border:1px solid var(--line); border-radius:6px; }
+.packet-file + .packet-file { margin-top:8px; }
+.packet-file > .flow { justify-content:space-between; }
+.packet-page { padding-top:10px; margin-top:10px; border-top:1px solid var(--line); overflow-wrap:anywhere; }
+.packet-page .ref { max-width:100%; white-space:normal; }
 .batch-source { display:flex; align-items:baseline; flex-wrap:wrap; gap:3px 10px; margin:6px 0; }
 .batch-source q,.batch-source .ref,.batch-receipt { min-width:0; max-width:100%; white-space:pre-wrap; overflow-wrap:anywhere; }
 .batch-payment { font-variant-numeric:tabular-nums; color:var(--muted); }

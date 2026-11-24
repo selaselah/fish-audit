@@ -5,7 +5,7 @@ import hashlib
 from collections import Counter
 import pypdfium2 as pdfium
 
-from contract_milestones import PROFILE, confirm_printed_records, documents, normalize
+from contract_milestones import printed_pages, PROFILE, confirm_printed_records, documents, normalize
 from generate import ROOT, embedded_font, pdf
 from run import BASE, get, post, submit, wait
 
@@ -84,10 +84,10 @@ def verify_report(report, mode):
         assert report["graph"]["quality_references"]["holds"]==[]
 
 
-def reconcile_training_pages(cid,folder,records,*,case_titles=None,field_labels=None,document_types=None,printed_titles=None,row_spacing=34,exact_fields=()):
+def reconcile_training_pages(cid,folder,records,*,case_titles=None,field_labels=None,document_types=None,printed_titles=None,row_spacing=34,exact_fields=(),layout=None):
     path="/api/cases/"+cid
     detail=get(path)
-    expected={title+".pdf":hashlib.sha256((folder/(title+".pdf")).read_bytes()).hexdigest() for title in records}
+    expected={title+".pdf":hashlib.sha256((folder/(title+".pdf")).read_bytes()).hexdigest() for title in (layout or records)}
     allowed = {"合成演练 · "+name for name in (case_titles or CASES.values())}
     if detail["title"] not in allowed or {d["name"]:d["sha256"] for d in detail["documents"]}!=expected:
         raise ValueError("案例名称或原件摘要与本次水印演练不符")
@@ -95,11 +95,11 @@ def reconcile_training_pages(cid,folder,records,*,case_titles=None,field_labels=
     types = {**TITLES, **(document_types or {})}
     docs={d["name"]:d["id"] for d in detail["documents"]}
     report=wait(cid)
-    for title,rows in records.items():
-        source=folder/(title+".pdf")
+    for filename,page,title,rows in printed_pages(records,layout):
+        source=folder/(filename+".pdf")
         with pdfium.PdfDocument(source) as pdf:
-            assert len(pdf)==1
-            printed=pdf[0].get_textpage().get_text_bounded()
+            assert len(pdf)==(len(layout[filename]) if layout else 1)
+            printed=pdf[page-1].get_textpage().get_text_bounded()
         ordered_lines=[normalize(line) for line in printed.splitlines()]
         source_lines=set(ordered_lines)
         targets=[]
@@ -116,7 +116,7 @@ def reconcile_training_pages(cid,folder,records,*,case_titles=None,field_labels=
             assert normalize(line) in source_lines
             graph=report["graph"]
             doc=docs[source.name]
-            facts=[f for f in graph["facts"] if f["doc"]==doc and f["page"]==1]
+            facts=[f for f in graph["facts"] if f["doc"]==doc and f["page"]==page]
             same=[f for f in facts if normalize(f["quote"])==normalize(line)]
             strict=field in exact_fields
             if strict:
@@ -139,12 +139,12 @@ def reconcile_training_pages(cid,folder,records,*,case_titles=None,field_labels=
             if not wrong:
                 wrong=[f for f in facts if f["field"]==field and f["status"] in ("unsupported","visual") and
                        (normalize(f["quote"])==normalize(line) or (counts[field]==1 and not f.get("source_line")))]
-            gap=any(g["doc"]==doc and normalize(g.get("quote",""))==normalize(line) for g in graph["gaps"])
+            gap=any(g["doc"]==doc and g["page"]==page and normalize(g.get("quote",""))==normalize(line) for g in graph["gaps"])
             if len(wrong)>1 or not (wrong or gap):
                 continue
             target=wrong[0] if wrong else None
             assert not target or not target.get("amendment")
-            post(path+"/amend",{"rev":get(path)["rev"],"reviewer":"水印复验演练","doc":doc,"page":1,
+            post(path+"/amend",{"rev":get(path)["rev"],"reviewer":"水印复验演练","doc":doc,"page":page,
                                 "target":target["id"] if target else None,"field":field,"value":value,"quote":line,
                                 "region":region,
                                 "note":"经原件摘要及生成件原页核对，按水印资料印刷的整行补正字段类别或抄录。保留初次识别记录。"})

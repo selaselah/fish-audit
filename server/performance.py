@@ -606,6 +606,12 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True):
         return output
     contract = contracts[0]
     receipts, releases = materials("acceptance"), materials("warranty")
+    packet_pages = [(p["doc"],p["page"]) for packet in graph.get("receipt_packet_sources",{}).get("packets",[])
+                    if packet["status"]=="review" for p in packet["pages"]]
+    pending_units = [d["id"] for d in graph.get("audit_documents",graph["documents"])
+                     if any(d.get("source",d["id"])==doc and d.get("page",n)==n for doc,n in packet_pages)]
+    if pending_units:
+        receipts = [r for r in receipts if r.unit not in pending_units]
     approvals = materials("contract_approval") if version != FIRST_FORMAT else []
     grants = materials("power_of_attorney") if version in MANDATE_FORMATS else ()
     signed = effect(contract, approvals, version, grants)
@@ -648,7 +654,7 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True):
     if version in BATCH_FORMATS:
         batch = delivery_batches.inspect(graph,contract,receipts,native_spacing=version in EFFECT_FORMATS,
                     requirements=batch_signers.get("batches"),final_requirement=batch_signers.get("final"),
-                    other_terms=bool(signed["status"]!="ok" or extra_units or change or authority or repairs or retests or
+                    other_terms=bool(signed["status"]!="ok" or extra_units or pending_units or change or authority or repairs or retests or
                                      any(r.fields[k] or k in r.uncertain for r in receipts for k in ("original_acceptance","repair_number","defect_closure"))))
     batch_rows = {r["index"]:r for r in batch["batches"]} if batch else {}
     if batch:
@@ -759,6 +765,16 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True):
                 original = evaluate(contract,receipts)
                 if original["status"]=="issue":
                     accepted.update(status="issue",detail=original["detail"]+" "+accepted["detail"]+" 原验收缺陷仍需正式复验。")
+    if pending_units:
+        page_refs = [f"{doc}/p{n}" for doc,n in packet_pages]
+        if accepted["status"]=="ok":
+            accepted["status"]="missing"
+        accepted["detail"] += " 合订件中有验收单编号、原页或续页归属待核。请按原页核对各单覆盖的设备和签字。"
+        accepted["evidence"] = list(dict.fromkeys(accepted["evidence"]+page_refs))
+        accepted["scope"] = list(dict.fromkeys(accepted["scope"]+pending_units))
+        accepted_on = None
+        if accepted.get("reinspection"):
+            accepted["reinspection"]["state"]="open"
     output = [signed, accepted, plan]
     if not rows:
         output.append(result("H04","missing","缺少可逐期核对的付款约定。",plan["evidence"],plan["scope"]))
@@ -786,6 +802,9 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True):
         scope = [contract.unit] if version == FIRST_FORMAT else signed["scope"].copy()
         this_batch = batch_rows.get(row.get("batch_index"))
         if kind=="batch":
+            if pending_units:
+                refs += page_refs
+                scope += pending_units
             stage["batch_index"] = row["batch_index"]
             stage["batch_date"] = this_batch["date"] if this_batch else None
             refs += this_batch["evidence"] if this_batch else batch["evidence"]

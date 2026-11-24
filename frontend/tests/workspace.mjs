@@ -262,6 +262,24 @@ try {
         await evaluate('document.querySelector("#page-dialog [data-close]").click()');
       }
     };
+    const packets=report.graph.receipt_packet_sources?.packets || [];
+    assert.equal(await evaluate('document.querySelectorAll(".packet-file").length'),packets.length);
+    for (const packet of packets) {
+      for (const page of packet.pages) {
+        const ref=page.doc+'/p'+page.page;
+        const group='document.querySelector('+JSON.stringify('[data-packet-page="'+ref+'"]')+')';
+        assert.equal(await evaluate(group+'.closest(".packet-file").dataset.packetStatus'),packet.status);
+        for (const reason of page.reasons) assert.ok(await evaluate(group+'.textContent.includes('+JSON.stringify(reason)+')'));
+        await evaluate(group+'.querySelector("button").click()');
+        const original=report.graph.documents.find(d=>d.id===page.doc).name+' · 第 '+page.page+' 页';
+        await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-title").textContent==='+JSON.stringify(original)
+          +' && document.querySelector("#page-dialog img")?.naturalWidth>0','original acceptance page in shared PDF');
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+        const detail=page.rows.filter(r=>['acceptance','contract_id','accepted_on'].includes(r.field));
+        if (detail.length) await evaluate(group+'.querySelector("details").open=true');
+        await verifyRemarks(group,page.rows.filter(r=>r.field!=='acceptance_scope'));
+      }
+    }
     const supplier=reservations?.supplier;
     if (supplier) {
       const panel='document.querySelector(".supplier-review")';
@@ -843,6 +861,16 @@ try {
           await evaluate('document.querySelector("#page-dialog [data-close]").click()');
         }
       }
+    }
+    const pageIdentities=report.graph.edges.filter(e=>e.type==='acceptance_page_identity');
+    assert.equal(await evaluate('!!document.querySelector(".packet-relations")'),Boolean(pageIdentities.length));
+    if (pageIdentities.length) await evaluate('document.querySelector(".packet-relations").open=true');
+    for (const edge of pageIdentities) {
+      const row='document.querySelector('+JSON.stringify('[data-packet-witness="'+edge.to+'"]')+')';
+      await wait(row+'?.querySelector("button")','acceptance page identity in graph');
+      await evaluate(row+'.querySelector("button").click()');
+      await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(edge.to),'printed receipt identity');
+      await evaluate('document.querySelector("#page-dialog [data-close]").click()');
     }
     if (batches) {
       const edges=report.graph.edges.filter(e=>['delivery_batch_acceptance','batch_payment_basis','batch_named_signature','batch_final_basis','final_named_signature'].includes(e.type));

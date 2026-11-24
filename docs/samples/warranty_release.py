@@ -83,7 +83,7 @@ def check_training_watermark(cid,folder,records,report):
     selected=[]
     api="/api/cases/"+cid
     for fact in report["graph"]["facts"]:
-        if (fact["status"]!="visual" or fact["page"]!=1 or
+        if (fact["status"]!="visual" or
                 normalize(fact["quote"])!=normalize(WATERMARK) or normalize(fact["value"])!=normalize(WATERMARK)):
             continue
         path=folder/fact["name"]
@@ -91,12 +91,12 @@ def check_training_watermark(cid,folder,records,report):
         doc=next(d for d in report["graph"]["documents"] if d["id"]==fact["doc"])
         assert doc["sha256"]==hashlib.sha256(path.read_bytes()).hexdigest()
         with pdfium.PdfDocument(path) as source:
-            first_line=source[0].get_textpage().get_text_bounded().splitlines()[0]
+            first_line=source[fact["page"]-1].get_textpage().get_text_bounded().splitlines()[0]
             assert normalize(first_line)==normalize(WATERMARK)
         if fact["field"]=="other":
             selected.append(fact["id"])
         else:
-            post(api+"/amend",{"rev":get(api)["rev"],"reviewer":"水印演练校验","doc":doc["id"],"page":1,
+            post(api+"/amend",{"rev":get(api)["rev"],"reviewer":"水印演练校验","doc":doc["id"],"page":fact["page"],
                                "target":fact["id"],"field":"other","value":first_line,"quote":first_line,"region":"top",
                                "note":"对照摘要一致的合成原页，此处为页首测试水印，已据实更正候选字段类别。"})
             report=wait(cid)

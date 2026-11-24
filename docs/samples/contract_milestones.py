@@ -51,21 +51,29 @@ def normalize(value):
     return "".join(unicodedata.normalize("NFKC",value).split())
 
 
-def confirm_printed_records(cid, folder, records):
+def printed_pages(records, layout=None):
+    """Map each physical PDF page to the form printed there in this synthetic fixture."""
+    forms = layout or {title:[title] for title in records}
+    for filename, titles in forms.items():
+        for number, title in enumerate(titles,1):
+            yield filename,number,title,records[title]
+
+
+def confirm_printed_records(cid, folder, records, *, layout=None):
     path = "/api/cases/"+cid
     detail = get(path)
     assert {d["name"]:d["sha256"] for d in detail["documents"]} == {
-        title+".pdf":hashlib.sha256((folder/(title+".pdf")).read_bytes()).hexdigest() for title in records}
+        title+".pdf":hashlib.sha256((folder/(title+".pdf")).read_bytes()).hexdigest() for title in (layout or records)}
     expected = {"甲方签章":"buyer_signature","乙方签章":"seller_signature","验收签认":"acceptance_signer","复验签认":"acceptance_signer",
                 "审批签认":"approval_signer","整改签认":"repair_signer","甲方代理人签字":"buyer_agent_signature",
                 "乙方代理人签字":"seller_agent_signature","委托单位签章":"grant_signature"}
     report = wait(cid)
     selected = []
-    for title, rows in records.items():
+    for source,page,title,rows in printed_pages(records,layout):
         for label,value in rows:
             if label not in expected:
                 continue
-            matches = [f for f in report["graph"]["facts"] if f["name"]==title+".pdf" and f["field"]==expected[label]
+            matches = [f for f in report["graph"]["facts"] if f["name"]==source+".pdf" and f["page"]==page and f["field"]==expected[label]
                        and normalize(f["quote"])==normalize(label+"："+value) and f.get("source_line")
                        and normalize(f["source_line"]["text"])==normalize(f["quote"])]
             assert len(matches)==1, (title,label,"水印原文与提取结果尚待人工核图")
