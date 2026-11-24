@@ -2,6 +2,7 @@ import argparse
 import base64
 import hashlib
 import json
+import tempfile
 import zipfile
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +23,7 @@ from peer_review import journal_decision, verify_referrals, verify_review
 from performance import LABELS as PERFORMANCE_FIELDS, verify_findings as verify_performance
 from quality_labels import verify_report as verify_quality_numbers
 from quality_references import verify_report as verify_quality_references
+from contract_changes import verify_sources as verify_addendum_sources
 from delegation import verify_sources as verify_delegation_sources
 from protocol import canonical, response_request
 from rule_replay import check_receipt, replay_from_git, replay_installed
@@ -229,6 +231,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
     verify_quality_numbers(report, page_text)
     verify_quality_references(report, page_text)
     verify_delegation_sources(report, page_text)
+    verify_addendum_sources(report, page_text)
     if "conclusions.py" in report["policy"].get("code_sha256",{}):
         verify_result(report)
     graph = report["graph"]
@@ -240,6 +243,10 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
     for trace in report["calls"]["pages"]:
         doc, page = trace["doc"], trace["page"]
         page_node = nodes[f"{doc}/p{page}"]
+        if report["policy"].get("quality_addenda") and ("clause_text_only" in trace or
+                any(p["doc"]==doc and p["page"]==page for p in graph["quality_addenda"]["pages"])):
+            require(isinstance(trace.get("clause_text_only"),bool) and trace["clause_text_only"] is page_node.get("clause_text_only"),
+                    "补充协议的页面版式与分页记录不符")
         require(hashes[f"{page_dir}/{doc}/{page}.jpg"] == trace["page_sha256"] == page_node["sha256"], "页图摘要不符")
         if "text_sha256" in page_node:
             require(hashes[f"{page_dir}/{doc}/{page}.txt"] == page_node["text_sha256"], "文字层摘要不符")
@@ -257,7 +264,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
                      for note in h["observations"]}
     mandate_images = {(p["doc"],p["page"]) for p in graph.get("delegation_coverage",{}).get("pages",[]) if not p["native"]}
     texts = {}
-    performance_refs = {ref for item in report["findings"] if item.get("reinspection") or item.get("delegations") for ref in item["evidence"]}
+    performance_refs = {ref for item in report["findings"] if item.get("reinspection") or item.get("delegations") or item.get("quality_change") for ref in item["evidence"]}
     for fact in graph["facts"]:
         require(fact["source_sha256"] == nodes[fact["doc"]]["sha256"] and
                 fact["page_sha256"] == nodes[f"{fact['doc']}/p{fact['page']}"]["sha256"], "取值与来源不符")
@@ -362,7 +369,48 @@ def verify_peer_source(bundle, hashes, report, signoff, folder=""):
         verify_review(report, bundle.read(source), json.loads(bundle.read(referral)), signoff)
 
 
-def verify(source, strict_rules=False, *, rule_checker=None):
+def render_addendum_sources(bundle, report, nodes):
+    graph = report["graph"]
+    ledger = graph.get("quality_addenda",{})
+    selected = {p["doc"] for key in ("pages","signals","limited_numbers") for p in ledger.get(key,[])}
+    units = {d["id"]:d.get("source",d["id"]) for d in graph.get("audit_documents",graph["documents"])}
+    selected.update(units[u] for f in report["findings"] if f.get("quality_change") for u in f["scope"])
+    require(selected,"本版底稿没有可按补充协议程序重新分页的原件。")
+    try:
+        from documents import CaseError, prepare
+    except ImportError as error:
+        raise ValueError("重新分页需使用安装了服务端依赖的 Python 环境。") from error
+    require(sha(Path(__file__).with_name("documents.py").read_bytes())==report["policy"]["code_sha256"].get("documents.py"),
+            "请使用与底稿出具时相同版本的分页程序。")
+    count = 0
+    for doc in (d for d in graph["documents"] if d["id"] in selected):
+        ext, doc_id = doc["ext"], doc["id"]
+        require(ext in {".pdf",".doc",".docx",".jpg",".jpeg",".png",".webp",".tif",".tiff",".heic",".heif"},"原件格式不符。")
+        pages = [p for p in report["calls"]["pages"] if p["doc"]==doc_id]
+        with tempfile.TemporaryDirectory() as folder:
+            original = Path(folder)/("original"+ext)
+            original.write_bytes(bundle.read("originals/"+doc_id+ext))
+            try:
+                rendered = prepare(original,len(pages),save_images=False)
+            except CaseError as error:
+                raise ValueError(f"无法重现《{doc['name']}》的原页。{error}") from error
+        require(len(rendered)==len(pages),"补充协议所据原件重新分页后的页数不符")
+        for page in rendered:
+            number = page["number"]
+            node = nodes[f"{doc_id}/p{number}"]
+            layout = page["layer"]
+            require(page["sha256"]==node["sha256"] and sha(page["text"].encode())==node["text_sha256"]
+                    and layout["type"]==node["layer"] and (layout.get("clause_text_only") is True) is node["clause_text_only"],
+                    f"《{doc['name']}》第 {number} 页的影像、文字或版式未能从原件重现。")
+            for fact in graph["facts"]:
+                line = fact.get("source_line")
+                if fact["doc"]==doc_id and fact["page"]==number and line:
+                    require(layout["lines"].get(str(line["number"]),[])==line["rects"],"引文在原页的定位未能重现")
+            count += 1
+    return count
+
+
+def verify(source, strict_rules=False, *, rule_checker=None, render_addenda=False):
     with zipfile.ZipFile(source) as bundle:
         names = bundle.namelist()
         require(len(names) == len(set(names)), "包内出现同名文件")
@@ -414,6 +462,9 @@ def verify(source, strict_rules=False, *, rule_checker=None):
             for name, expected in report["policy"]["code_sha256"].items():
                 require(hashes.get("methods/" + name) == expected, "执行程序版本不符：" + name)
         nodes = verify_workpaper_sources(bundle, hashes, report, "pages")
+        if render_addenda:
+            count = render_addendum_sources(bundle,report,nodes)
+            print(f"已独立从提交原件重现 {count} 页，页图、文字、引文位置及页面版式一致。")
         reference_format = issued_format(report["policy"])
         require(graph.get("transfer_references",{}).get("format")==report["policy"].get("payment_references")==reference_format,
                 "流水完整性核验格式与程序版本不符")
@@ -485,6 +536,7 @@ def verify(source, strict_rules=False, *, rule_checker=None):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="离线核对 Fish Audit 导出包的文件与引用。")
+    parser.add_argument("--render-addenda",action="store_true",help="从补充协议及本次终验所据原件重新生成页图，核对文字、引文位置和版式")
     parser.add_argument("bundle", type=Path)
     rules = parser.add_mutually_exclusive_group()
     rules.add_argument("--rules", action="store_true", help="使用与底稿一致的本机程序，从图谱完整复算规则、追加程序及总建议")
@@ -508,7 +560,7 @@ if __name__ == "__main__":
             source = f"本地提交 {outcome['commit']}" if "commit" in outcome else "本机部署目录"
             print(f"规则复算一致，{outcome['finding_count']} 项发现。规则来自{source}，共核对 {len(outcome['modules'])} 份源码。")
         selected = args.rules or args.rules_from_git or args.replay_receipt
-        case_id, revision, files = verify(args.bundle,rule_checker=check_selected_rules if selected else None)
+        case_id, revision, files = verify(args.bundle,rule_checker=check_selected_rules if selected else None,render_addenda=args.render_addenda)
         print(f"校验成功：{case_id} R{revision}，{files} 个文件。")
     except (KeyError, TypeError, ValueError, OSError, zipfile.BadZipFile) as error:
         parser.exit(1, f"校验失败：{error}\n")

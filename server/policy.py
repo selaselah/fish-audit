@@ -10,6 +10,10 @@ EVIDENCE = {"title": "《中国注册会计师审计准则第1301号——审计
             "url": "https://www.cicpa.org.cn/ztzl1/Professional_standards/xxzztx/zyzz/sjzz/202105/P020240412542695263912.pdf",
             "edition": "2022-12-22 修订", "scope": "注册会计师审计的方法参考，用于说明证据评估与追加程序思路。"}
 SOURCES = {
+    "contract-change": {"title":"《中华人民共和国民法典》","edition":"2020-05-28 通过",
+        "url":"https://tjca.miit.gov.cn/zwgk/zcwj/flfg/art/2020/art_20cf1a2e1b854924b5caa744c8045d1f.html",
+        "locator":"第五百四十三、五百四十四条","scope":"当事人协商变更合同及变更内容不明确时的法律背景。",
+        "summary":"合同变更取决于当事人合意及具体约定。审查提交的变更文本与原合同、签署和实际验收时点，约定或事实待辨时交由人工核实。"},
     "written-mandate": {"title":"《中华人民共和国民法典》","edition":"2020-05-28 通过",
         "url":"https://www.samr.gov.cn/zw/zfxxgk/fdzdgknr/bgt/art/2023/art_60fb3863b7364b759123a42d1df568ca.html",
         "locator":"第一百六十二、一百六十五、一百六十六、一百六十八、一百七十一至一百七十三条",
@@ -53,8 +57,8 @@ SOURCES = {
     "follow-up": {**EVIDENCE, "locator": "第十五条",
                   "summary": "不同来源的材料相互矛盾或可靠性存疑时，应考虑调整检查或追加程序。"},
 }
-MAPPING = {"H01":["contract-effect","written-mandate","contract-signing","purchase-records"],"H02":["receipt","evidence-quality"],
-           "H03":["payment","purchase-records"],"H04":["payment","receipt"],"H05":["payment","evidence-quality"],
+MAPPING = {"H01":["contract-effect","written-mandate","contract-signing","purchase-records"],"H02":["receipt","contract-change","evidence-quality"],
+           "H03":["payment","purchase-records"],"H04":["payment","receipt","contract-change"],"H05":["payment","evidence-quality"],
            "B01":["purchase-records","evidence-quality"],"B02":["payment"],"B03":["payment","follow-up"],
            "B08":["installment-tracking","follow-up"],
            "B04":["payment","voucher"],"B05":["evidence-quality","follow-up"],

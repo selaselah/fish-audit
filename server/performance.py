@@ -7,6 +7,7 @@ from datetime import date
 from decimal import Decimal
 from reinspection import LABELS as REINSPECTION_FIELDS, assess as assess_reinspection, verify_number_links
 from delegation import LABELS as DELEGATION_FIELDS, PARTY_SIGNATURES, checks as check_delegations
+from contract_changes import LABELS as ADDENDUM_FIELDS, LIMIT, candidates as change_candidates, resolve as resolve_change
 
 
 PROFILE = "cn-contract-performance/v1"
@@ -15,8 +16,9 @@ BOARD_FORMAT = "contract-performance-v2"
 REINSPECTION_FORMAT = "contract-performance-v3"
 DELEGATION_FORMAT = "contract-performance-v4"
 IDENTITY_FORMAT = "contract-performance-v5"
-FORMAT = "contract-performance-v6"
-MANDATE_FORMATS = (DELEGATION_FORMAT, IDENTITY_FORMAT, FORMAT)
+NATIVE_FORMAT = "contract-performance-v6"
+FORMAT = "contract-performance-v7"
+MANDATE_FORMATS = (DELEGATION_FORMAT, IDENTITY_FORMAT, NATIVE_FORMAT, FORMAT)
 SUPPORTED = (FIRST_FORMAT, BOARD_FORMAT, REINSPECTION_FORMAT, *MANDATE_FORMATS)
 RULES = {
     "H01": ("合同签署与约定生效条件", "核对合同双方、签订日期、生效条款和签署栏的人工核图记录，保留附加条件及状态疑点。"),
@@ -28,6 +30,7 @@ RULES = {
 LABELS = {
     **REINSPECTION_FIELDS,
     **DELEGATION_FIELDS,
+    **ADDENDUM_FIELDS,
     "effect_clause": ("生效条款", "合同生效条件", "生效条件", "合同生效条款"),
     **PARTY_SIGNATURES,
     "contract_state": ("合同状态", "协议状态"),
@@ -282,7 +285,7 @@ def inspect_quality(required, basis, reading):
         return "ok",""
     numeric = r"(-?\d{1,12}(?:\.\d{1,6})?)"
     units = r"(°C|mm|cm|kg|MPa|kPa|%)"
-    spec = re.fullmatch(r"([\u4e00-\u9fff]{1,16}?)(不高于|不超过|不低于|至少|至多|≤|≥)" + numeric + units, required)
+    spec = LIMIT.fullmatch(required)
     measured = re.fullmatch(r"([\u4e00-\u9fff]{1,16})" + numeric + units, reading)
     if not spec or not measured or spec[1] != measured[1] or spec[4] != measured[3]:
         return "missing","需核对标准全文、同一指标及单位的实测结果。"
@@ -293,7 +296,7 @@ def inspect_quality(required, basis, reading):
     return "ok",""
 
 
-def acceptance(contract, receipts):
+def acceptance(contract, receipts, *, criterion=None):
     keys = ("contract_id","buyer","subject")
     fields = (*keys,"acceptance","seller","accepted_on","acceptance_scope","acceptance_result","acceptance_signer",
               "acceptance_exception","quantity_accepted","inspection_basis","measured_result")
@@ -317,7 +320,13 @@ def acceptance(contract, receipts):
         return finding("issue","本合同对应验收记录明确记载“" + outcome + "”，需查明缺陷及复验处置。")
     quality = None
     if contract.fields["acceptance_criteria"] or r.fields["inspection_basis"] or r.fields["measured_result"]:
-        quality = inspect_quality(contract.body("acceptance_criteria"),r.body("inspection_basis"),r.body("measured_result"))
+        basis, reading = r.body("inspection_basis"), r.body("measured_result")
+        standard = contract.body("acceptance_criteria") if criterion is None else criterion
+        quality = inspect_quality(standard,basis,reading)
+        if criterion and standard!=basis:
+            observation = inspect_quality(standard,standard,reading)
+            if observation[0]=="issue":
+                quality = ("issue",observation[1]+" 验收报告所引检验依据同时需核对。")
         if quality[0]=="issue":
             return finding("issue",quality[1]+(" 验收结论栏同时记载“"+outcome+"”，请核对并复验。" if outcome else ""))
     if (outcome and outcome not in PASS) or (scope and scope not in FINAL_SCOPES) or (
@@ -464,23 +473,67 @@ def compute(graph, version=FORMAT):
     approvals = materials("contract_approval") if version != FIRST_FORMAT else []
     grants = materials("power_of_attorney") if version in MANDATE_FORMATS else ()
     signed = effect(contract, approvals, version, grants)
+    classified = {u for group in kinds.values() for u in group}
+    extra_units = {d["id"] for d in graph.get("audit_documents",graph["documents"])} - classified
+    changes = change_candidates(graph) if version==FORMAT else []
+    repairs, retests = materials("remediation"), materials("reinspection")
+    change = None
+    evaluate = acceptance
+    if changes:
+        multiple = bool(repairs or retests or len(receipts)!=1 or any(r.fields[k] or k in r.uncertain
+                        for r in receipts for k in ("original_acceptance","repair_number","defect_closure")))
+        change = resolve_change(graph,contract,[Material(graph,u) for u in changes],receipts,multiple_events=multiple,
+                                contract_supported=signed["status"]=="ok",unclassified=extra_units)
+        change["evidence"] = list(dict.fromkeys(change["evidence"]+signed["evidence"]))
+        def evaluate(contract, selected):
+            return acceptance(contract,selected,criterion=change["applied_criterion"] or "")
     if version in (REINSPECTION_FORMAT, *MANDATE_FORMATS):
-        accepted, accepted_on = assess_reinspection(contract,receipts,materials("remediation"),materials("reinspection"),acceptance)
+        accepted, accepted_on = assess_reinspection(contract,receipts,repairs,retests,evaluate)
     else:
         accepted = acceptance(contract, receipts)
         accepted_on = day(receipts[0].single("accepted_on")) if accepted["status"]=="ok" else None
     plan, rows = schedule(contract)
-    classified = {u for group in kinds.values() for u in group}
+    if change:
+        if change["state"]=="pending":
+            accepted_on = None
+            if accepted["status"]=="ok":
+                accepted["detail"] = "尚待确定各次验收所据标准及结果。"
+            if accepted["status"]!="issue":
+                accepted["status"] = "missing" if accepted["status"]!="risk" else "risk"
+            if accepted.get("reinspection"):
+                accepted["reinspection"]["state"] = "open"
+        accepted["quality_change"] = change
+        affected = [accepted]
+        if not change["scope_clear"]:
+            for item in (signed,plan):
+                if item["status"]=="ok":
+                    item.update(status="missing",detail="需核对补充协议是否改变本项约定。")
+            affected += [signed,plan]
+        for item in affected:
+            item["detail"] = change["detail"]+" "+item["detail"]
+            item["evidence"] = list(dict.fromkeys(item["evidence"]+change["evidence"]))
+            item["scope"] = list(dict.fromkeys(item["scope"]+changes))
+        limited = [s["unit"] for s in graph.get("quality_addenda",{}).get("limited_numbers",[])]
+        accepted["scope"] = list(dict.fromkeys(accepted["scope"]+signed["scope"]+limited))
     for doc in graph.get("audit_documents",graph["documents"]):
         if doc["id"] in classified:
             continue
         extra = Material(graph,doc["id"])
         refs = extra.evidence("adjustment","effect_clause","contract_state","payment_stage","payment_term","contract_id")
         refs += [n["page_id"] for n in extra.notes]
+        if version==FORMAT:
+            if accepted["status"]=="ok":
+                accepted.update(status="missing",detail="终验记录已有签认，另有资料尚未归属，需核对其对本次验收标准或结果的影响。")
+            accepted_on = None
+            if accepted.get("reinspection"):
+                accepted["reinspection"]["state"] = "open"
+            accepted["evidence"] = list(dict.fromkeys(accepted["evidence"]+(refs or [doc["id"]])))
+            accepted["scope"] = list(dict.fromkeys(accepted["scope"]+[doc["id"]]))
         for item in (signed,plan):
             item.update(status="missing", detail="另有尚未归属的资料，请核对其是否变更本合同或付款约定。")
             item["evidence"] = list(dict.fromkeys(item["evidence"] + (refs or [doc["id"]])))
-            item["scope"].append(doc["id"])
+            if doc["id"] not in item["scope"]:
+                item["scope"].append(doc["id"])
     output = [signed, accepted, plan]
     if not rows:
         output.append(result("H04","missing","缺少可逐期核对的付款约定。",plan["evidence"],plan["scope"]))
@@ -544,6 +597,8 @@ def compute(graph, version=FORMAT):
         elif (accepted.get("reinspection",{}).get("state")=="closed" and row["kind"] in ("acceptance","warranty")
               and paid==accepted_on):
             status, detail = "missing","付款与缺陷关闭在同一天，需取得时分记录核对先后顺序。"
+        elif change and row["kind"] in ("acceptance","warranty") and (paid==accepted_on or row["kind"]=="warranty" and paid==expiry):
+            status, detail = "missing","付款日与所据履约记录同日，请核对当日验收或质保确认与付款的具体时分。"
         elif check["status"] != "ok" or not all(dates):
             status, detail = "missing","付款对应本期，现有材料尚不足以证实付款日已满足全部前提。"
         else:
@@ -573,6 +628,7 @@ def verify_findings(report):
         position = report["findings"].index(saved) + 1
         if (any(saved.get(key) != val for key, val in entry.items()) or saved.get("stage") != entry.get("stage")
                 or saved.get("reinspection") != entry.get("reinspection") or saved.get("delegations") != entry.get("delegations")
+                or saved.get("quality_change") != entry.get("quality_change")
                 or (saved.get("id"),saved.get("version"),saved.get("title"),saved.get("basis")) !=
                 (f"{rule}-{position}",policy["version"],*RULES[rule])):
             raise ValueError("合同履约结论、期次或引文与证据图谱不符")

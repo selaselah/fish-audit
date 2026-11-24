@@ -51,7 +51,7 @@ def material(groups, edit=None, confirm=True, omissions=()):
                 signoffs[f"{doc}/p1/f{len(facts)}"] = {"decision":"confirm","source_check":{"fixture":True}}
         lines += [line for unit,line in omissions if unit == i]
         pages.append(dict(doc=doc,number=1,sha256="page",text="\n".join(lines),
-                          layer={"type":"text","lines":{str(j):[[0,.1,.9,.2]] for j in range(1,len(lines)+1)}},
+                          layer={"type":"text","clause_text_only":True,"lines":{str(j):[[0,.1,.9,.2]] for j in range(1,len(lines)+1)}},
                           extraction={"output":{"quality":"readable","facts":facts}}))
     graph = build_graph(docs,pages,signoffs)
     graph["profile"] = PERFORMANCE

@@ -14,11 +14,12 @@ from reinspection import NUMBER_TYPES as QUALITY_NUMBERS
 from quality_labels import numbered_lines, verified as verified_quality_number
 from quality_references import attach as record_quality_references
 from delegation import ENTITY_TYPES as DELEGATION_ENTITIES, TITLES as MANDATE_TITLES, attach as record_mandate_pages, printed_value as mandate_value
+from contract_changes import NUMBER_TYPES as ADDENDUM_NUMBERS, TITLES as ADDENDUM_TITLES, attach as record_addenda, number_target
 
 
 KINDS = {"invoice": "发票", "contract": "合同", "acceptance": "验收单"}
 TITLE_FIELDS = {**KINDS, "claim": "报销", "bank_receipt":"回单", "warranty":"质保期满确认","contract_approval":"审批",
-                "remediation":"整改","reinspection":"复验","power_of_attorney":"委托书"}
+                "remediation":"整改","reinspection":"复验","power_of_attorney":"委托书","contract_addendum":"补充协议"}
 PRINTED_TITLES = {label: field for field, labels in {
     "invoice": ("发票", "采购发票", "住宿服务发票", "增值税专用发票", "增值税普通发票", "增值税电子普通发票",
                 "电子发票(普通发票)", "电子发票(增值税专用发票)"),
@@ -27,6 +28,7 @@ PRINTED_TITLES = {label: field for field, labels in {
     "warranty": ("质保期满确认单", "质保期满确认书"),
     "contract_approval": ("合同审批单","合同审批记录","董事会合同审批记录"),
     "power_of_attorney": MANDATE_TITLES,
+    "contract_addendum": ADDENDUM_TITLES,
     "remediation": ("整改记录单","缺陷整改记录","整改完成记录"),
     "reinspection": ("复验报告","整改复验单","最终复验报告","整改复验报告"),
     "bank_receipt": ("银行付款回单", "银行转账回单", "电子银行回单", "银行电子回单", "转账回单"),
@@ -91,6 +93,8 @@ def labelled(field, value, quote):
     if field in TITLE_FIELDS:
         if field=="power_of_attorney":
             return value==quote and quote in MANDATE_TITLES
+        if field=="contract_addendum":
+            return value==quote and quote in ADDENDUM_TITLES
         printed = PRINTED_TITLES.get(quote)
         if printed and printed != field:
             return False
@@ -200,7 +204,8 @@ def build_graph(docs, pages, attestations, amendments=()):
                 observations[ref] = {**candidate,"field":"claim_full_ref"}
                 printed_pairs.add(ref)
         nodes[page_id] = {"id": page_id, "type": "page", "label": f"第 {number} 页", "sha256": page["sha256"],
-                          "text_sha256": hashlib.sha256(page["text"].encode()).hexdigest(), "layer": layer["type"]}
+                          "text_sha256": hashlib.sha256(page["text"].encode()).hexdigest(), "layer": layer["type"],
+                          "clause_text_only":layer.get("clause_text_only") is True}
         edges.append({"from": doc, "to": page_id, "type": "contains", "evidence": [page_id]})
         if output["quality"] != "readable" or not observations:
             gaps.append({"doc": doc, "page": number, "quality": output["quality"], "id": page_id})
@@ -275,7 +280,11 @@ def build_graph(docs, pages, attestations, amendments=()):
                     "invoice_id": "invoice_number", "claim_ref": "invoice_number"}.get(field, field)
             entity_label = (mandate_value(field, value, quote) or value) if field in DELEGATION_ENTITIES else value
             target = entity_id(kind, entity_label)
-            nodes[target] = {"id": target, "type": kind, "label": entity_label}
+            if field in ADDENDUM_NUMBERS:
+                target, entity_label = number_target(field,value,quote,fact_id)
+                kind = ADDENDUM_NUMBERS[field]
+            if target!=fact_id:
+                nodes[target] = {"id": target, "type": kind, "label": entity_label}
             edges.append({"from": doc, "to": target, "type": field, "evidence": [fact_id]})
     graph = {"nodes": list(nodes.values()), "edges": edges, "facts": evidence,
              "documents_by_kind": dict(by_kind), "gaps": gaps, "cautions": cautions,
@@ -284,6 +293,7 @@ def build_graph(docs, pages, attestations, amendments=()):
     withhold_partial_numbers(graph)
     texts = {(page["doc"],page["number"]):page["text"] for page in pages}
     record_mandate_pages(graph, lambda doc, number: texts[doc, number])
+    record_addenda(graph, lambda doc, number: texts[doc, number])
     record_quality_references(graph, lambda doc, number: texts[doc, number])
     attach_payment_references(graph, lambda doc, number: texts[doc,number])
     graph["invoice_identity"] = IDENTITY_FORMAT

@@ -278,14 +278,20 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     right.append(row);
   }
   const gaps = (state.bundle?.report.graph.gaps || []).filter(g => g.doc === docId && g.page === pageNumber && g.quote);
+  const addenda = state.bundle?.report.graph.quality_addenda;
+  if (addenda && lineHint && !gaps.some(g=>g.line===lineHint)) {
+    const note = [...addenda.signals,...addenda.limited_numbers].find(s=>s.doc===docId && s.page===pageNumber && s.line===lineHint);
+    if (note) gaps.push({...note,quality:'addendum_reference'});
+  }
   for (const gap of gaps) {
-    const section = box('evidence-row',el('h4','待核的原文字层 · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
+    const label = gap.quality==='addendum_reference'?'补充协议所据原文':'待核的原文字层';
+    const section = box('evidence-row',el('h4',label+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
     section.dataset.gapLine = String(gap.line);
     if (gap.line===lineHint) {
       section.classList.add('located');
       focusRow=section;
     }
-    const field = gap.quality==='mandate_clause' ? null : gap.field || gap.title_hint;
+    const field = ['mandate_clause','addendum_clause'].includes(gap.quality) ? null : gap.field || gap.title_hint;
     if (editable && field) {
       const unresolved=pageFacts.filter(f=>['visual','unsupported'].includes(f.status));
       const matching=unresolved.filter(f=>f.source_line?.number===gap.line && f.source_line.text===gap.quote);
@@ -450,6 +456,7 @@ function finding(item) {
   if (item.stage) node.insertBefore(box('clause-source',el('q',item.stage.clause), citation(item.stage.clause_ref)),node.children[1]);
   if (item.reinspection) node.append(reinspectionTrail(item.reinspection,state.bundle.report.graph));
   if (item.delegations) node.append(mandatePanel(item.delegations, state.bundle.report.graph));
+  if (item.quality_change) node.append(qualityChangePanel(item.quality_change, state.bundle.report.graph));
   if (item.rule.startsWith('H')) {
     const comparison = performanceComparison(item,state.bundle.report.graph);
     if (comparison) node.append(comparison);

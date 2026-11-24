@@ -132,6 +132,27 @@ def layer_type(page):
     return "text"
 
 
+def clause_text_only(page):
+    """Allow text and straight separators; small images, forms, drawings or annotations need visual review."""
+    if raw.FPDFPage_GetAnnotCount(page) != 0:
+        return False
+    for obj in page.get_objects(max_depth=0):
+        if obj.type==raw.FPDF_PAGEOBJ_TEXT:
+            continue
+        if obj.type!=raw.FPDF_PAGEOBJ_PATH or raw.FPDFPath_CountSegments(obj)!=2:
+            return False
+        points = []
+        for i,command in enumerate((raw.FPDF_SEGMENT_MOVETO,raw.FPDF_SEGMENT_LINETO)):
+            segment = raw.FPDFPath_GetPathSegment(obj,i)
+            x,y = ctypes.c_float(),ctypes.c_float()
+            if raw.FPDFPathSegment_GetType(segment)!=command or not raw.FPDFPathSegment_GetPoint(segment,x,y):
+                return False
+            points.append((x.value,y.value))
+        if points[0][0]!=points[1][0] and points[0][1]!=points[1][1]:
+            return False
+    return True
+
+
 def text_geometry(text_page, text, picture, page):
     pos = picture.get_posconv(page)
     lines = {}
@@ -204,6 +225,7 @@ def render(source, target, limit):
                 meta = save_page(picture.to_pil(), text, index + 1, target)
                 kind = layer_type(page)
                 meta["layer"] = {"type": kind, "lines": text_geometry(text_page, text, picture, page) if kind == "text" else {}}
+                meta["layer"]["clause_text_only"] = kind=="text" and clause_text_only(page)
                 pages.append(meta)
                 text_page.close()
                 picture.close()

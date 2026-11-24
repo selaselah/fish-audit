@@ -197,6 +197,47 @@ try {
     })()`);
     assert.deepEqual(sharedClause,[0,1],'a receipt belongs only to its named phase when two phases share one contract line');
     const chain=report.findings.find(f=>f.rule==='H02')?.reinspection;
+    const change=report.findings.find(f=>f.rule==='H02')?.quality_change;
+    if (change) {
+      const panel='document.querySelector(".quality-change")';
+      assert.equal(await evaluate(panel+'.dataset.qualityChange'),change.state);
+      assert.equal(await evaluate(panel+'.querySelector(".quality-standard")?.textContent || null'),change.applied_criterion);
+      assert.deepEqual(await evaluate('[...'+panel+'.querySelectorAll(".mandate-dates dd > span")].map(e=>e.textContent)'),
+        [change.buyer_sealed_on,change.seller_sealed_on,change.effective_on,change.accepted_on].map(d=>d || '待核'));
+      if (await evaluate('!!'+panel+'.querySelector("details")')) await evaluate(panel+'.querySelector("details").open=true');
+      const fields=['acceptance_criteria','revised_criterion','inspection_basis','measured_result','change_scope','change_timing','change_effect_clause','buyer_signature','seller_signature'];
+      const refs=report.graph.facts.filter(f=>fields.includes(f.field) && change.evidence.includes(f.id) &&
+        (!['buyer_signature','seller_signature'].includes(f.field) || change.units.includes(f.unit || f.doc)));
+      for (const fact of refs) {
+        const row=panel+'.querySelector('+JSON.stringify('[data-change-fact="'+fact.id+'"]')+')';
+        await wait(row+'?.textContent.includes('+JSON.stringify(fact.quote)+')','visible amendment evidence');
+        await evaluate(row+'.querySelector("button").click()');
+        await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(fact.id),'source of '+fact.field);
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
+      for (const page of report.graph.quality_addenda.pages) {
+        if (!page.text_only) {
+          await click('查看第 '+page.page+' 页',panel);
+          await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth>0','visible mixed-layout page');
+          await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+          const notes=report.graph.facts.filter(f=>f.doc===page.doc && f.page===page.page && !f.source_line && f.field!=='contract_addendum' && change.evidence.includes(f.id));
+          const list=panel+'.querySelector('+JSON.stringify('[data-change-image="'+page.doc+'/p'+page.page+'"]')+')';
+          if (notes.length) await evaluate(list+'.open=true');
+          for (const note of notes) {
+            const line=list+'.querySelector('+JSON.stringify('[data-change-fact="'+note.id+'"]')+')';
+            await wait(line+'?.textContent.includes('+JSON.stringify(note.quote)+')','transcribed visual rider');
+            await evaluate(line+'.querySelector("button").click()');
+            await wait('document.querySelector(".located")?.dataset.fact==='+JSON.stringify(note.id),'visual rider source');
+            await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+          }
+        }
+        for (const line of page.uncovered) {
+          await click('定位第 '+line.line+' 行',panel);
+          await wait('document.querySelector(".located[data-gap-line] blockquote")?.textContent==='+JSON.stringify(line.quote),'unread addendum clause');
+          await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+        }
+      }
+    }
     if (chain) {
       assert.equal(await evaluate('document.querySelector(".reinspection-trail").dataset.disposition'),chain.state);
       for (const role of ['original','repair','final']) {
@@ -308,7 +349,12 @@ try {
     }
     for (const width of [1440,1024,820,768,390,320]) {
       await call('Emulation.setDeviceMetricsOverride',{width,height:880,deviceScaleFactor:1,mobile:false});
-      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll(".phase-summary li,.phase-results,.clause-source,.mandate-dates,.mandate-side")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'performance layout at '+width);
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll(".phase-summary li,.phase-results,.clause-source,.mandate-dates,.mandate-side,.quality-change,.change-comparison,.change-source")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'performance layout at '+width);
+      if (change && process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
+        await evaluate('document.querySelector(".quality-change").scrollIntoView({block:"start"});window.scrollBy(0,-54)');
+        const capture=await call('Page.captureScreenshot',{format:'png'});
+        await writeFile(join(process.env.AUDIT_UI_SHOTS,'amendment-'+change.state+'-'+width+'.png'),Buffer.from(capture.data,'base64'));
+      }
     }
     const target=report.findings.find(f=>f.rule==='H02');
     await click('查看证据路径','document.querySelector('+JSON.stringify('[data-finding="'+target.id+'"]')+')');

@@ -112,6 +112,73 @@ function performanceComparison(finding, graph) {
   return details;
 }
 
+function qualityChangePanel(change, graph) {
+  const index = graphIndex(graph);
+  const facts = change.evidence.map(id=>index.facts.get(id)).filter(Boolean);
+  const units = new Set(change.units);
+  const decision = {applied:'按补充协议',original:'按原合同',pending:'适用版本待核'}[change.state];
+  const panel = box('quality-change',box('flow',el('h4','终验适用标准'),el('strong',decision,'quality-decision')));
+  panel.dataset.qualityChange = change.state;
+  if (change.applied_criterion) panel.append(el('p',change.applied_criterion,'quality-standard'));
+  const docUnit = f => f.unit || f.doc;
+  const sourceRow = fact => {
+    const row = box('change-source',el('q',fact.quote),citation(fact.id));
+    row.dataset.changeFact = fact.id;
+    return row;
+  };
+  const comparison = el('dl','','change-comparison');
+  for (const [field,title] of [['acceptance_criteria','原合同标准'],['revised_criterion','协议所列新标准'],
+                               ['inspection_basis','验收报告检验依据'],['measured_result','原页实测结果']]) {
+    const value = el('dd');
+    const matches = facts.filter(f=>f.field===field);
+    if (matches.length) value.append(...matches.map(sourceRow));
+    else value.append(el('span','待补原文','muted'));
+    comparison.append(box('',el('dt',title),value));
+  }
+  panel.append(comparison);
+  const dates = el('dl','','mandate-dates');
+  for (const [key,title] of [['buyer_sealed_on','甲方盖章'],['seller_sealed_on','乙方盖章'],['effective_on','按约定生效'],['accepted_on','本次终验']]) {
+    const value=el('dd');
+    value.append(el('span',change[key] || '待核'));
+    const fields=key==='effective_on'?['change_effect_clause']:[key];
+    for (const f of facts.filter(f=>fields.includes(f.field))) value.append(citation(f.id));
+    dates.append(box('',el('dt',title),value));
+  }
+  const fields = new Set(['addendum_number','base_contract_ref','previous_criterion','change_scope','change_timing',
+                          'change_effect_clause','change_state','buyer_signature','seller_signature']);
+  const clauses = facts.filter(f=>units.has(docUnit(f)) && fields.has(f.field));
+  panel.append(dates);
+  if (clauses.length) panel.append(lazyFold('核对协议编号、签章和完整条款',()=>clauses.map(sourceRow)));
+  const ledger = graph.quality_addenda;
+  for (const page of ledger.pages.filter(p=>units.has(p.unit))) {
+    if (!page.text_only) {
+      panel.append(box('change-source',el('span','本页含影像或待核版式，请通读原页'),
+        action('查看第 '+page.page+' 页',()=>openPage(page.doc,page.page),'ref')));
+      const notes = facts.filter(f=>f.doc===page.doc && f.page===page.page && !f.source_line && f.field!=='contract_addendum');
+      if (notes.length) {
+        const list=lazyFold('查看本页读图引文（'+notes.length+'）',()=>notes.map(f=>{
+          const row=sourceRow(f);
+          row.append(tag(f.status));
+          return row;
+        }));
+        list.dataset.changeImage=page.doc+'/p'+page.page;
+        panel.append(list);
+      }
+    }
+    for (const line of page.uncovered) {
+      const row = box('change-source',el('q',line.quote),action('定位第 '+line.line+' 行',()=>openPage(page.doc,page.page,null,line.line),'ref'));
+      row.dataset.changeLine = String(line.line);
+      panel.append(row);
+    }
+  }
+  const coveredUnits = new Set(ledger.pages.map(p=>p.unit));
+  for (const item of [...ledger.limited_numbers,...ledger.signals.filter(s=>!coveredUnits.has(s.unit))]) {
+    panel.append(box('change-source',el('q',item.quote),item.fact?citation(item.fact):
+      action('查看第 '+item.page+' 页第 '+item.line+' 行',()=>openPage(item.doc,item.page,null,item.line),'ref')));
+  }
+  return panel;
+}
+
 function reinspectionTrail(chain, graph) {
   const index = graphIndex(graph);
   const roles = [

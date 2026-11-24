@@ -16,7 +16,7 @@ from protocol import canonical, response_request
 
 
 FIELDS = {
-    **PERFORMANCE_FIELDS, "warranty":"质保期满确认单标题", "contract_approval":"合同审批单标题",
+    **PERFORMANCE_FIELDS, "contract_addendum":"合同补充协议标题", "warranty":"质保期满确认单标题", "contract_approval":"合同审批单标题",
     "remediation":"整改记录单标题","reinspection":"整改复验报告标题","power_of_attorney":"授权委托书标题",
     "invoice": "发票标题", "contract": "合同标题", "acceptance": "验收单标题",
     "contract_id": "合同编号", "invoice_id": "发票号码", "invoice_code":"发票代码", "buyer": "采购方",
@@ -79,6 +79,7 @@ buyer/seller 抄全称。total 是整张单据的含税总额，net/tax 是整�
 unit 单独抄明示的金额单位（如“金额单位：元”），value 抄“元”“万元”等，不从币种推断单位。每个有标签的字段应抄录整行，尤其保留否定、附加条件和金额尾数。
 日期区分签订、开票、验收；acceptance_result 抄原文验收结果。标的、付款条件、红冲、变更条款只在原文有相关记载时收录。
 合同逐项读取生效条件(effect_clause)、合同状态(contract_state)、实际生效日期(effect_on)、双方签署栏(buyer_signature/seller_signature)。逐字保留附审批、签字并盖章等限定。只抄可见姓名、签章等文字，不能把印章图案、空栏或印刷的公司名改写为“已盖章”或“已签字”。
+补充协议有独立抬头，用 contract_addendum。逐行抄录补充协议编号 addendum_number、原合同编号 base_contract_ref、变更范围 change_scope、原验收标准 previous_criterion、变更后验收标准 revised_criterion、变更适用时点 change_timing、协议生效条款 change_effect_clause、补充协议状态 change_state。甲方和乙方盖章日期分别用 buyer_sealed_on、seller_sealed_on，各自的签章栏另抄为 buyer_signature、seller_signature。保留附加限制、其他变更以及页尾备注原文，其他未分类条件用 other。
 合同付款总约定用 payment_term，分列的各期文字逐行用 payment_stage，quote 从“第一期”“首付款”等行首抄到末尾，value 保留整期条件、比例、期限及例外。单行有多期应保留整行。回单所列款项用途/对应期次用 payment_designation，不从金额反推。
 验收资料除日期、结论外逐行抄验收范围(acceptance_scope)、验收人签认(acceptance_signer)、遗留/整改/保留事项(acceptance_exception)，保留“初验”“仅本批次”“有条件”等限定。质保期满确认单标题用 warranty，其已发生的质保期满记录用 warranty_release。合同对将来质保期的约定仍作为付款条款。
 明列的合同有效截止日用 valid_until。合同约定交付数量和验收标准分别用 quantity_agreed 和 acceptance_criteria，验收材料上的实际验收数量、实测标准分别用 quantity_accepted 和 inspection_basis。数量连同单位完整抄录。
@@ -315,7 +316,7 @@ def audit_graph(graph, controls):
     procedures = [{"rule": item["rule"], "status": item["status"], "observation": item["detail"],
                    "evidence": item["evidence"], "methods": MAPPING[item["rule"]]} for item in controls]
     for procedure, finding in zip(procedures, controls):
-        for key in ("stage","reinspection","delegations"):
+        for key in ("stage","reinspection","delegations","quality_change"):
             if key in finding:
                 procedure[key] = finding[key]
     method_ids = {key for row in procedures for key in row["methods"]}

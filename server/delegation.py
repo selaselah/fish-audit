@@ -149,14 +149,19 @@ def identity_holds(graph, read_text):
 
 def rows_for_grants(graph, read_text):
     units = set(graph["documents_by_kind"].get("power_of_attorney", []))
+    return covered_rows(graph, read_text, units, GRANT_FIELDS, printed_value, "授权委托书")
+
+
+def covered_rows(graph, read_text, units, fields, validate, subject):
+    """Account for each native line of a bounded legal instrument, including unclassified riders."""
     if not units:
         return []
     positions = defaultdict(set)
     for fact in graph["facts"]:
         unit = fact.get("unit", fact["doc"])
         line = fact.get("source_line")
-        if (unit in units and fact["field"] in GRANT_FIELDS and fact["status"] in ("anchored", "confirmed")
-                and printed_value(fact["field"], fact["value"], fact["quote"])
+        if (unit in units and fact["field"] in fields and fact["status"] in ("anchored", "confirmed")
+                and validate(fact["field"], fact["value"], fact["quote"])
                 and line and line["rects"] and normalized(line["text"]) == normalized(fact["quote"])):
             positions[unit, fact["page"]].add((line["number"], line["text"]))
     pages = {n["id"]: n for n in graph["nodes"] if n["type"]=="page"}
@@ -172,7 +177,7 @@ def rows_for_grants(graph, read_text):
             if page.get("layer") == "text":
                 source = read_text(doc, number)
                 if not isinstance(source, str) or hashlib.sha256(source.encode()).hexdigest() != page.get("text_sha256"):
-                    raise ValueError("授权委托书的文字层摘要与归档不符")
+                    raise ValueError(subject+"的文字层摘要与归档不符")
                 for index, text in enumerate(source.splitlines(), 1):
                     plain = normalized(text)
                     if (not plain or plain=="合成演练资料仅供系统测试无交易效力" or PAGE_MARK.fullmatch(plain)
@@ -229,8 +234,9 @@ def verify_sources(report, read_text, *, signing=False):
     if marker in (NAME_FORMAT,FORMAT):
         coverage["agent_holds"] = holds
         withheld = {h["fact"] for h in holds}
-    expected_format = {LEGACY_FORMAT:"contract-performance-v4", NAME_FORMAT:"contract-performance-v5", FORMAT:"contract-performance-v6"}.get(marker)
-    if (not expected_format or policy.get("performance_checks")!=expected_format or graph.get("delegation_coverage")!=coverage
+    versions = {LEGACY_FORMAT:("contract-performance-v4",), NAME_FORMAT:("contract-performance-v5",),
+                FORMAT:("contract-performance-v6","contract-performance-v7")}
+    if (policy.get("performance_checks") not in versions.get(marker,()) or graph.get("delegation_coverage")!=coverage
             or coverage_gaps(pages) != [g for g in graph["gaps"] if g["quality"]=="mandate_clause"]):
         raise ValueError("授权委托书的已核页面或未覆盖条款与原页不符")
     nodes = {n["id"]: n for n in graph["nodes"]}

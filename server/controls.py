@@ -20,6 +20,7 @@ from policy import ACCOUNTING, MAPPING, SOURCES
 from reinspection import closed_steps
 from quality_labels import FORMAT as QUALITY_NUMBER_FORMAT
 from quality_references import FORMAT as QUALITY_REFERENCE_FORMAT
+from contract_changes import FORMAT as ADDENDUM_FORMAT
 from delegation import FORMAT as DELEGATION_FORMAT
 from transfers import RULES as TRANSFER_RULES, check_transfers
 
@@ -49,7 +50,7 @@ CATALOG = {
 }
 VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING, "performance_checks":PERFORMANCE_FORMAT,
            "quality_number_classification":QUALITY_NUMBER_FORMAT, "quality_references":QUALITY_REFERENCE_FORMAT,
-           "delegation_checks":DELEGATION_FORMAT,
+           "delegation_checks":DELEGATION_FORMAT, "quality_addenda":ADDENDUM_FORMAT,
            "sources": SOURCES, "rule_sources": MAPPING, "invoice_sources": INVOICE_SOURCE_FORMAT,
            "invoice_approval": INVOICE_APPROVAL_FORMAT,"invoice_identity":INVOICE_IDENTITY_FORMAT,"invoice_lookup":INVOICE_LOOKUP,
            "invoice_number_masks":MASK_FORMAT,"payment_references":PAYMENT_REFERENCE_FORMAT,"payment_checks":PAYMENT_CHECKS}
@@ -122,7 +123,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
     def with_performance():
         for item in performance:
             record(item["rule"],item["status"],item["detail"],item["evidence"],item["scope"])
-            for key in ("stage","reinspection","delegations"):
+            for key in ("stage","reinspection","delegations","quality_change"):
                 if key in item:
                     findings[-1][key] = item[key]
         return findings
@@ -176,6 +177,10 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
     for item in performance:
         if item["status"]=="ok":
             support.update(optional.intersection(item["scope"]))
+    for item in performance:
+        change = item.get("quality_change")
+        if change and change["state"] in ("applied","original") and item["status"]=="ok":
+            support.update(change["units"])
     titles = [fact for fact in facts.values() if fact["field"] in {*KINDS,"reinspection","remediation"} and fact["status"] in ("anchored", "confirmed")]
     assignment = [doc for kind in KINDS for doc in kinds.get(kind, [])]
     complete = (all(len(kinds.get(kind, [])) == 1 for kind in KINDS) and

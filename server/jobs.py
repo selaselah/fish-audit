@@ -15,7 +15,7 @@ from storage import encode
 
 
 METHODS = {name: (SERVER / name).read_bytes() for name in
-           ("calculations.py", "capacity.py", "conclusions.py", "config.py", "controls.py", "delegation.py", "documents.py", "field_receipts.py", "field_sources.py", "graph.py", "installments.py", "invoice_approval.py", "invoice_comparison.py", "invoice_history.py", "invoice_identity.py", "invoice_masks.py", "invoice_proof.py", "jobs.py", "model.py", "payment_checks.py", "payment_history.py", "payment_index.py", "payment_notes.py", "payment_reference.py", "payment_visibility.py", "peer_review.py", "performance.py", "policy.py", "protocol.py", "quality_labels.py", "quality_references.py", "reinspection.py", "storage.py", "supplements.py", "transfers.py", "work_progress.py")}
+           ("calculations.py", "capacity.py", "conclusions.py", "config.py", "contract_changes.py", "controls.py", "delegation.py", "documents.py", "field_receipts.py", "field_sources.py", "graph.py", "installments.py", "invoice_approval.py", "invoice_comparison.py", "invoice_history.py", "invoice_identity.py", "invoice_masks.py", "invoice_proof.py", "jobs.py", "model.py", "payment_checks.py", "payment_history.py", "payment_index.py", "payment_notes.py", "payment_reference.py", "payment_visibility.py", "peer_review.py", "performance.py", "policy.py", "protocol.py", "quality_labels.py", "quality_references.py", "reinspection.py", "storage.py", "supplements.py", "transfers.py", "work_progress.py")}
 CODE_DIGESTS = {name: digest(source) for name, source in METHODS.items()}
 
 
@@ -67,7 +67,8 @@ class Worker:
         profile = case["profile"]
         folder = store.files / case_id
         docs = store.documents(case_id)
-        old_layers = {page["doc"] for page in store.pages(case_id) if page["layer"] is None}
+        old_layers = {p["doc"] for p in store.pages(case_id) if p["layer"] is None or
+                      p["layer"].get("type")=="text" and "clause_text_only" not in p["layer"]}
         page_count = 0
         for index, doc in enumerate(docs):
             source = folder / doc["id"] / ("original" + doc["ext"])
@@ -122,6 +123,7 @@ class Worker:
         findings += additional(graph, proposals)
         result = conclusion(findings)
         traces = [{"doc": page["doc"], "page": page["number"], "page_sha256": page["sha256"],
+                   "clause_text_only":(page.get("layer") or {}).get("clause_text_only") is True,
                    **page["extraction"]} for page in pages]
         instructions = {digest(prompt.encode()): prompt for prompt in (EXTRACT, AUDIT, VISUAL_CHECK)}
         all_calls = [*traces, trace, *(item["check"] for item in traces if "check" in item)]
