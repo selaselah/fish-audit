@@ -48,6 +48,8 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 
 ## 核图与最终决定
 
+初审或独立复核提交 `approve` 时，服务端在同一写事务内重新读取本企业与本案已核发票号码匹配的签收记录。若与所选版底稿有出入，返回 409 和 `invoice_history`。其中 `count` 为变化的票号引文总数，`changes` 最多返回前八处，每处包含 `previous` 和 `current`。新增引用的 `previous` 为空，原引消失时 `current` 为空，有前后版本时两者均给出案件、版本、引文编号、原文和人工决定。此响应保留当前任务状态。初审可走原有重新审计接口，独立复核可在原转交版签收为退回。
+
 核图请求使用 `application/json`。姓名与意见必填。决定可为 `confirm` 或 `dispute`，`facts` 取自当前版本的证据编号。
 
 ```json

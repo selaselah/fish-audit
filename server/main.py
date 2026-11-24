@@ -28,6 +28,7 @@ from documents import digest
 from evidence import export_bundle
 from graph import compact
 from jobs import Worker
+from invoice_history import InvoiceHistoryChanged
 from model import FIELDS
 from review import review_text
 from rule_replay import RulesUnavailable, replay_from_git
@@ -217,6 +218,8 @@ def create_app(store, worker):
 
     @app.errorhandler(CaseError)
     def known_error(error):
+        if isinstance(error,InvoiceHistoryChanged):
+            return jsonify(error=str(error),invoice_history={"count":len(error.differences),"changes":error.differences[:8]}),error.status
         return jsonify(error=str(error)), error.status
 
     @app.errorhandler(HTTPException)

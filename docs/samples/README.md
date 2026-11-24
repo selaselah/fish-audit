@@ -27,6 +27,10 @@ server/.venv/bin/python docs/samples/run.py
 
 `run.py --include-packet` 加验合订件。两个选项可以同时使用。
 
+## 同票报销签收
+
+`server/.venv/bin/python docs/samples/concurrent_invoices.py --run` 在本机提交两份票号相同的 636 元合成差旅报销。等两案均生成底稿后签收甲案，验证乙案原版被拦下，再核对重算后的同号发现。生成使用可嵌入的中文 TrueType 字体，可通过 `AUDIT_CJK_FONT` 指定。改用 `--pause-after-first` 会将乙案留在待验收，可运行 `node frontend/tests/workspace.mjs --invoice-conflict-case 乙案编号 --live`，在 Chrome 打开签收提示并实际重审。
+
 ## 离线回归
 
 ```sh

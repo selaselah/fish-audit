@@ -66,7 +66,9 @@ async function api(url, options = {}) {
   const data = await response.json();
   if (!response.ok) {
     const problem = new Error(data.error || '服务请求失败。');
-    problem.status = response.status; throw problem;
+    problem.status = response.status;
+    problem.invoiceHistory = data.invoice_history;
+    throw problem;
   }
   return data;
 }
@@ -627,6 +629,28 @@ function chooseRevision(rev = 0) {
   state.pinned = rev;
   history.replaceState(null,'',Team.hash('case/'+state.detail.id+(rev ? '?rev='+rev : '')));
 }
+function showInvoiceChanges(container,problem,choice) {
+  const history = problem.invoiceHistory;
+  choice.querySelector('option[value="approve"]').disabled=true;
+  choice.value='';
+  const list = el('ul','','invoice-changes');
+  const source = (item,label)=>{
+    const params = new URLSearchParams({rev:String(item.rev),fact:item.fact});
+    const anchor = Team.paperLink(label+' · '+item.title+' R'+item.rev+' · '+statusName(item.decision),item.case_id,'source-jump',params);
+    anchor.target='_blank'; anchor.rel='noopener';
+    return anchor;
+  };
+  for (const {previous,current} of history.changes) {
+    const row = el('li');
+    row.append(el('strong',(current || previous).quote));
+    if (previous) row.append(source(previous,'原引版本'));
+    if (current) row.append(source(current,previous?'最新签收':'新增签收'));
+    list.append(row);
+  }
+  container.replaceChildren(el('strong',problem.message),list);
+  if (history.count>history.changes.length)
+    container.append(el('p','显示 '+history.changes.length+' / '+history.count+' 处变化，重新审计可核对全部匹配。','small'));
+}
 function openReview(facts) {
   state.review = {id: state.detail.id, rev: state.bundle.rev, facts};
   $('#review-error').textContent = '';
@@ -701,6 +725,17 @@ $('#review-form').addEventListener('submit', async event => {
     $('#review-dialog').close(); chooseRevision(); await refresh();
   } catch (error) {
     const message = $('#review-error');
+    if (error.invoiceHistory) {
+      showInvoiceChanges(message,error,$('#review-decision'));
+      message.append(action('保留 R'+pending.rev+' 并重新审计',async e=>{
+        const rerun = e.currentTarget; rerun.disabled = true;
+        try {
+          await post(Team.cases()+'/'+pending.id+'/rerun',{rev:pending.rev});
+          $('#review-dialog').close(); chooseRevision(); state.tab='report'; await refresh();
+        } catch (problem) { message.append(el('p',problem.message)); rerun.disabled=false; }
+      }));
+      return;
+    }
     message.textContent = error.message;
     if (error.status === 409) message.append(' ',action('查看最新执行记录',async()=>{
       $('#review-dialog').close(); chooseRevision(); state.tab='activity'; await refresh();

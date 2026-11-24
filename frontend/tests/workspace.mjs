@@ -29,7 +29,8 @@ const fieldCase = caseArgument('--field-case');
 const installmentCase = caseArgument('--installment-case');
 const replayCase = caseArgument('--replay-case');
 const recoveringCase = caseArgument('--recovering-case');
-const seeded = sampleDesk || paymentCase || supplementCase || peerCase || fieldCase || installmentCase || replayCase || recoveringCase;
+const invoiceConflict = caseArgument('--invoice-conflict-case');
+const seeded = sampleDesk || paymentCase || supplementCase || peerCase || fieldCase || installmentCase || replayCase || recoveringCase || invoiceConflict;
 const root = recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
 if (recoveringCase) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
 const children = [];
@@ -91,7 +92,49 @@ try {
   const click = (label, container='document') => evaluate('[...'+container+'.querySelectorAll("button,a")].find(b=>b.textContent==='+JSON.stringify(label)+' && b.getClientRects().length).click()');
   await call('Runtime.enable');
   await call('Page.navigate',{url:root});
-  if (recoveringCase) {
+  if (invoiceConflict) {
+    const path=root+'/api/cases/'+invoiceConflict;
+    const get=async suffix=>(await fetch(path+suffix)).json();
+    const task=await get('');
+    assert.ok(task.title.startsWith('合成演练 · 同票签收乙 · ') && task.status==='ready' && task.rev===1);
+    const list=await (await fetch(root+'/api/cases')).json();
+    const peer=list.cases.find(c=>c.title===task.title.replace('同票签收乙','同票签收甲'));
+    assert.ok(peer && peer.status==='closed' && peer.rev===1);
+    const signed=await (await fetch(root+'/api/cases/'+peer.id)).json();
+    assert.equal(signed.decisions[0].decision,'approve');
+    assert.deepEqual(signed.documents.map(d=>d.sha256).sort(),task.documents.map(d=>d.sha256).sort());
+    const saved=await get('/reports/1');
+    await call('Page.navigate',{url:root+'/workpaper/'+invoiceConflict+'?rev=1'});
+    await wait('!![...document.querySelectorAll("button")].find(b=>b.textContent==="填写验收意见")','workpaper ready for signoff');
+    await click('填写验收意见');
+    await evaluate('document.querySelector("#reviewer").value="网页演练审计员";document.querySelector("#review-note").value="复核同票签收保护。";document.querySelector("#review-decision").value="approve";document.querySelector("#review-form").requestSubmit()');
+    const jump=await wait('document.querySelector("#review-error .invoice-changes a")?.href','newly signed invoice citation');
+    assert.ok(await evaluate('document.querySelector("#review-dialog").open && document.querySelector("#review-note").value==="复核同票签收保护。"'));
+    assert.ok(await evaluate('document.querySelector("#review-decision option[value=approve]").disabled && !document.querySelector("#review-decision option[value=return]").disabled'));
+    const link=new URL(jump),prior=link.pathname.split('/').at(-1);
+    assert.equal(prior,peer.id);
+    const original=await (await fetch(root+'/api/cases/'+prior+'/reports/'+link.searchParams.get('rev'))).json();
+    const fact=original.report.graph.facts.find(f=>f.id===link.searchParams.get('fact'));
+    assert.equal(fact.field,'invoice_id');
+    assert.ok(await evaluate('document.querySelector("#review-error").textContent.includes('+JSON.stringify(fact.quote)+')'));
+    for (const width of [1440,1024,820,768,390,320]) {
+      await call('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      assert.ok(await evaluate('document.querySelector("#review-dialog").scrollWidth<=document.querySelector("#review-dialog").clientWidth+1'),'signoff change at '+width);
+    }
+    assert.deepEqual((await get('')).decisions,[]);
+    if (process.argv.includes('--live')) {
+      await click('保留 R1 并重新审计','document.querySelector("#review-error")');
+      await wait('document.querySelector("#version").value==="2" && document.querySelector("#case-status").textContent==="待验收"','recalculated I02',240000);
+      const next=await get('/reports/2');
+      assert.ok(next.report.findings.some(f=>f.rule==='I02' && f.status==='risk'));
+      assert.equal(next.report.graph.prior_invoices[0].case_id,prior);
+      assert.equal((await get('/reports/1')).sha256,saved.sha256);
+      assert.deepEqual((await get('')).decisions,[]);
+    }
+    await call('Page.navigate',{url:jump});
+    await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth && document.querySelector(".located")?.textContent.includes('+JSON.stringify(fact.quote)+')','signed invoice on its original page');
+    console.log('PASS · Stale invoice approval, preserved draft note, six widths, exact original'+(process.argv.includes('--live')?' and manually initiated rerun':''));
+  } else if (recoveringCase) {
     const workspace=process.env.SYNTHETIC_RECOVERY_WORKSPACE;
     assert.match(workspace || '',/^[0-9a-f]{32}$/);
     const cookie=await call('Network.setCookie',{name:'fish_session',value:process.env.SYNTHETIC_RECOVERY_SESSION,

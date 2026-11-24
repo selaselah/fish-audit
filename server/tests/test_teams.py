@@ -44,11 +44,85 @@ class EnterpriseFlow(unittest.TestCase):
         self.assertEqual(res.status_code,201,res.json)
         return client, res.json["selected"], {"X-CSRF-Token":res.json["csrf"]}
 
-    def submit(self, client,wid,headers):
-        response = client.post("/api/w/"+wid+"/cases",headers={**headers,"Idempotency-Key":"constant-request-key"},
+    def submit(self, client,wid,headers,key="constant-request-key"):
+        response = client.post("/api/w/"+wid+"/cases",headers={**headers,"Idempotency-Key":key},
                                data={"title":"演练", "files":(io.BytesIO(self.source),"演练.jpg")})
         self.assertEqual(response.status_code,202,response.json)
         return response.json["id"]
+
+    def checked_invoice(self,client,wid,headers,key):
+        cid = self.submit(client,wid,headers,key)
+        base = "/api/w/"+wid+"/cases/"+cid
+        self.worker.run(self.store.claim())
+        choice = {"rev":1,"decision":"confirm","facts":["d01/p1/f1","d01/p1/f2"],"note":"已对照合成票号与抬头。"}
+        self.assertEqual(client.post(base+"/attest",headers=headers,json=choice).status_code,202)
+        self.worker.run(self.store.claim())
+        return cid
+
+    def test_concurrent_approvals_recheck_invoice_history_inside_the_write_transaction(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+        admin,wid,headers = self.register("invoice-race")
+        token = admin.post("/api/workspaces/"+wid+"/invites",headers=headers,json={"role":"auditor"}).json["token"]
+        peer,_,ph = self.register("invoice-race-peer",invite=token)
+        foreign,other,oh = self.register("invoice-race-foreign")
+        a = self.checked_invoice(admin,wid,headers,"invoice-race-A")
+        b = self.checked_invoice(peer,wid,ph,"invoice-race-B")
+        outside = self.checked_invoice(foreign,other,oh,"invoice-race-C")
+        choice = {"rev":2,"decision":"approve","note":"已核合成发票。"}
+        self.assertEqual(foreign.post(f"/api/w/{other}/cases/{outside}/signoff",headers=oh,json=choice).status_code,200)
+        gate = Barrier(2)
+        def approve(item):
+            cid,client,auth = item
+            gate.wait(5)
+            response = client.post(f"/api/w/{wid}/cases/{cid}/signoff",headers=auth,json=choice)
+            return response.status_code,cid,response.json
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            results = sorted(pool.map(approve,[(a,admin,headers),(b,peer,ph)]))
+        self.assertEqual([r[0] for r in results],[200,409])
+        prior,loser = results[0][1],results[1][1]
+        delta = results[1][2]["invoice_history"]
+        self.assertEqual(delta["count"],1)
+        changed = delta["changes"][0]
+        self.assertIsNone(changed["previous"])
+        self.assertEqual((changed["current"]["case_id"],changed["current"]["rev"],changed["current"]["fact"]),(prior,2,"d01/p1/f2"))
+        base = f"/api/w/{wid}/cases/{loser}"
+        self.assertEqual(admin.get(base).json["decisions"],[])
+        with admin.get(base+"/reports/2") as response:
+            previous = response.json["sha256"]
+        self.assertEqual(admin.post(base+"/rerun",headers=headers,json={"rev":2}).status_code,202)
+        self.worker.run(self.store.claim())
+        report = admin.get(base+"/reports/3").json["report"]
+        self.assertEqual([r["case_id"] for r in report["graph"]["prior_invoices"]],[prior])
+        self.assertTrue(any(f["rule"]=="I02" and f["status"]=="risk" for f in report["findings"]))
+        self.assertEqual(admin.get(base+"/reports/2").json["sha256"],previous)
+        self.assertEqual(admin.post(base+"/signoff",headers=headers,json={**choice,"rev":3,"note":"已核前案，按演练意见签收。"}).status_code,200)
+
+    def test_changed_referral_blocks_peer_approval_and_keeps_return_available(self):
+        admin,wid,headers = self.register("invoice-pin-owner")
+        token = admin.post("/api/workspaces/"+wid+"/invites",headers=headers,json={"role":"auditor"}).json["token"]
+        other,_,oh = self.register("invoice-pin-peer",invite=token)
+        root = f"/api/w/{wid}/cases/"
+        def refer(cid):
+            self.assertEqual(admin.post(root+cid+"/signoff",headers=headers,json={"rev":2,"decision":"escalate","note":"请复核。"}).status_code,200)
+            pin = admin.get(root+cid).json["referrals"][0]
+            finding = next(f["id"] for f in self.store.report(cid,2)["report"]["findings"] if f["rule"]=="I02")
+            return {"rev":2,"report_hash":pin["report_hash"],"signoff_hash":pin["signoff_hash"],
+                    "decision":"return","note":"已核原版发现。","findings":[finding]}
+        prior = self.checked_invoice(admin,wid,headers,"invoice-pin-prior")
+        first = refer(prior)
+        case = self.checked_invoice(admin,wid,headers,"invoice-pin-later")
+        second = refer(case)
+        self.assertEqual(other.post(root+prior+"/peer-review",headers=oh,json=first).status_code,200)
+        url = root+case+"/peer-review"
+        rejected = other.post(url,headers=oh,json={**second,"decision":"approve"})
+        self.assertEqual(rejected.status_code,409)
+        change = rejected.json["invoice_history"]["changes"][0]
+        self.assertEqual([(change[key]["case_id"],change[key]["rev"],change[key]["decision"]) for key in ("previous","current")],
+                         [(prior,2,"escalate"),(prior,3,"return")])
+        self.assertIsNone(self.store.detail(case)["referrals"][0]["resolved_rev"])
+        self.assertEqual(other.post(url,headers=oh,json=second).json["rev"],3)
+        self.assertEqual(other.post(url,headers=oh,json=second).json["rev"],3)
 
     def test_rule_replay_is_scoped_to_the_selected_immutable_workpaper(self):
         owner,wid,headers=self.register("replay-owner")

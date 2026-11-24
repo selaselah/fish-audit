@@ -10,6 +10,10 @@ EVIDENCE = {"title": "《中国注册会计师审计准则第1301号——审计
             "url": "https://www.cicpa.org.cn/ztzl1/Professional_standards/xxzztx/zyzz/sjzz/202105/P020240412542695263912.pdf",
             "edition": "2022-12-22 修订", "scope": "注册会计师审计的方法参考，用于说明证据评估与追加程序思路。"}
 SOURCES = {
+    "electronic-vouchers": {"title":"财政部、国家档案局《关于规范电子会计凭证报销入账归档的通知》",
+        "edition":"财会〔2020〕6号","url":"https://www.mof.gov.cn/zcsjtsgb/gfxwj/202003/t20200323_3583778.htm",
+        "locator":"第三条第（三）项","scope":"仅使用外部电子会计凭证报销入账归档时的制度背景。同票比对是企业内部复核线索。",
+        "summary":"该条件涉及审签程序及防止电子会计凭证重复入账。是否已实际报销或入账，需查验企业记录。"},
     "installment-tracking": {"title":"《企业内部控制应用指引第7号——采购业务》","edition":"2010-04-15",
         "url":"https://kjs.mof.gov.cn/zhengcefabu/201005/P020230421440664863663.pdf","locator":"付款，第十三及十五条",
         "scope":"采购付款跟踪的方法参考。B08 的去重方式和比较口径由本程序定义。",
@@ -35,7 +39,7 @@ MAPPING = {"B01":["purchase-records","evidence-quality"],"B02":["payment"],"B03"
            "C01": ["payment"], "M02": ["purchase-records", "payment"], "D01": ["purchase-records"],
            "A01": ["receipt"], "S01": ["receipt"], "X01": ["follow-up"],
            "T01": ["voucher"], "T02": ["evidence-quality"], "T03": ["voucher"],
-           "T04": ["evidence-quality"], "T05": ["evidence-quality"], "I02": ["voucher", "follow-up"]}
+           "T04": ["evidence-quality"], "T05": ["evidence-quality"], "I02": ["electronic-vouchers", "voucher", "follow-up"]}
 
 
 def link_sources(graph):

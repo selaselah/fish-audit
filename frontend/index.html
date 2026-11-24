@@ -124,7 +124,7 @@
       <label>核验决定<select id="review-decision"></select></label>
       <label>审计人员<input id="reviewer" required maxlength="50" autocomplete="name"></label>
       <label>核验依据与处理意见<textarea id="review-note" rows="4" required maxlength="2000"></textarea></label>
-      <p id="review-error" role="alert"></p>
+      <div id="review-error" role="alert"></div>
       <div class="actions"><button class="primary" id="submit-review">保存核验记录</button></div>
     </form>
   </dialog>
@@ -136,7 +136,7 @@
       <label>复核决定<select id="peer-decision" required><option value="">请选择决定</option><option value="approve">通过</option><option value="return">退回补件</option></select></label>
       <label>复核人<input id="peer-reviewer" required maxlength="50" autocomplete="name"></label>
       <label>复核意见<textarea id="peer-note" rows="3" required maxlength="2000"></textarea></label>
-      <p id="peer-error" role="alert"></p>
+      <div id="peer-error" role="alert"></div>
       <button id="peer-submit" class="primary">保存复核决定</button>
     </form>
   </dialog>

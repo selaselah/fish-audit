@@ -48,6 +48,7 @@ const PeerReview = {
     this.pending = {url:Team.cases()+'/'+detail.id+'/peer-review',rev:pin.rev,
       report_hash:pin.report_hash, signoff_hash:pin.signoff_hash};
     $('#peer-form').reset(); $('#peer-error').replaceChildren();
+    $('#peer-decision option[value="approve"]').disabled=false;
     $('#peer-origin').textContent = detail.title+' · R'+pin.rev+' · '+first.reviewer+' 转交：'+first.note;
     $('#peer-reviewer').value = Team.current ? Team.session.user.name : '';
     $('#peer-reviewer').readOnly = !!Team.current;
@@ -82,6 +83,13 @@ const PeerReview = {
           reviewer:$('#peer-reviewer').value,note:$('#peer-note').value});
         $('#peer-dialog').close(); chooseRevision(saved.rev); state.tab='report'; await refresh();
       } catch (failure) {
+        if (failure.invoiceHistory) {
+          showInvoiceChanges(error,failure,$('#peer-decision'));
+          error.append(action('选择退回补件',()=>{
+            $('#peer-decision').value='return'; $('#peer-note').focus();
+          },'text-button'));
+          return;
+        }
         error.textContent = failure.message;
         if (failure.status===409) error.append(' ',action('查看最新底稿',async()=>{
           $('#peer-dialog').close(); chooseRevision(); await refresh();

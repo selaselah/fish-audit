@@ -1,5 +1,6 @@
 """Generate plainly marked synthetic procurement files for Fish Audit."""
 
+import os
 from pathlib import Path
 
 from docx import Document
@@ -8,6 +9,7 @@ from docx.shared import Pt
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
 
@@ -15,6 +17,16 @@ ROOT = Path(__file__).resolve().parent / "generated"
 WATERMARK = "合成演练资料　仅供系统测试　无交易效力"
 BUYER = "青禾演练采购中心"
 SELLER = "云桥演练设备中心"
+
+
+def embedded_font(name):
+    paths = (os.getenv("AUDIT_CJK_FONT"),"/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+             "/System/Library/Fonts/Supplemental/Arial Unicode.ttf","C:/Windows/Fonts/msyh.ttc")
+    source = next((Path(p) for p in paths if p and Path(p).is_file()),None)
+    if source is None:
+        raise SystemExit("请通过 AUDIT_CJK_FONT 指定支持中文、可嵌入的 TrueType 字体。")
+    pdfmetrics.registerFont(TTFont(name,str(source)))
+    return name
 
 
 def fields(kind, contract, total, tax="1,300.00", net="10,000.00", number="YL-FP-016"):

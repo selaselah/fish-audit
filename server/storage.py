@@ -13,6 +13,7 @@ from field_receipts import field_actions, validate_field_actions
 from field_sources import FieldSources, check_archived_files, check_cited_files, source_row
 from graph import compact, invoice_number_edges
 from installments import LIMIT as INSTALLMENT_LIMIT, calculate as calculate_installments
+from invoice_history import INDEX_FIELDS, InvoiceHistoryChanged, differences as invoice_differences, indexed_invoices
 from payment_history import LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_facts, payment_record
 from peer_review import different_reviewers, review_record, valid_findings, verify_review
 from supplements import compare_return
@@ -393,34 +394,25 @@ class Store:
                              fact["quote"], fact["source_sha256"], fact["page_sha256"], kind))
         return rows
 
+    def invoice_sources(self,db,matches):
+        groups = {}
+        for match in matches:
+            groups.setdefault((match["case_id"],match["rev"]),[]).append(match)
+        for (prior,rev),group in groups.items():
+            content,signoff = self.signed_version(db,prior,rev)
+            archived = json.loads(content)
+            indexed = set(self.index_rows(prior,rev,archived))
+            if any(tuple(match[key] for key in INDEX_FIELDS) not in indexed for match in group):
+                raise CaseError("历史同票索引与已签收底稿所记的票号或引文不符。",409)
+            yield prior,rev,archived,signoff,group
+
     def prior_invoices(self, case_id, keys):
         if not keys:
             return []
         with self.connect() as db:
             db.execute("BEGIN")
-            placeholders = ",".join("?" for key in keys)
-            rows = db.execute(f"""SELECT i.*,c.title,s.decision,r.hash AS report_hash,f.rev AS peer_source_rev,
-                              EXISTS(SELECT 1 FROM attestations a WHERE a.case_id=i.case_id AND a.fact=i.fact
-                                     AND a.rev<i.rev AND a.source_check IS NOT NULL) AS checked_field FROM invoice_index i
-                              JOIN cases c ON c.id=i.case_id AND c.rev=i.rev
-                              JOIN signoffs s ON s.case_id=i.case_id AND s.rev=i.rev
-                              JOIN reports r ON r.case_id=i.case_id AND r.rev=i.rev
-                              LEFT JOIN case_referrals f ON f.case_id=i.case_id AND f.resolved_rev=i.rev
-                              WHERE c.workspace=(SELECT workspace FROM cases WHERE id=?) AND c.status IN ('closed','in_review')
-                              AND c.id<>? AND i.number_key IN ({placeholders})
-                              ORDER BY i.case_id,i.rev,i.fact""", (case_id, case_id, *keys))
-            matches = [dict(row) for row in rows]
-            sources = {}
-            for match in matches:
-                if match["peer_source_rev"] or match["decision"]=="escalate" or match["checked_field"]:
-                    sources.setdefault((match["case_id"],match["rev"]),[]).append(match)
-            for (prior,rev),group in sources.items():
-                content,signoff = self.signed_version(db,prior,rev)
-                archived = json.loads(content)
-                indexed = set(self.index_rows(prior,rev,archived))
-                columns = ("case_id","rev","doc","fact","page","number_key","quote","source_hash","page_hash","document_kind")
-                if any(tuple(match[key] for key in columns) not in indexed for match in group):
-                    raise CaseError("历史同票索引与已签收底稿所记的票号或引文不符。",409)
+            matches = indexed_invoices(db,case_id,keys)
+            for prior,rev,archived,signoff,group in self.invoice_sources(db,matches):
                 selected = {match["fact"] for match in group if match["checked_field"]}
                 if selected:
                     graph = archived["graph"]
@@ -563,12 +555,27 @@ class Store:
             del row["total"]
         return {"count":count,"matches":rows}
 
-    def recheck_payment_approval(self, db, case_id, revision, *, peer=False):
+    def recheck_approval(self, db, case_id, revision, *, peer=False):
+        row = db.execute("SELECT content,hash FROM reports WHERE case_id=? AND rev=?",(case_id,revision)).fetchone()
+        if not row or hashlib.sha256(row["content"].encode()).hexdigest()!=row["hash"]:
+            raise CaseError("待签收底稿与留存的版本摘要不符。",409)
+        paper = json.loads(row["content"])
+        graph = paper["graph"]
+        if graph.get("profile",paper["policy"].get("profile")) != BANK:
+            keys = sorted({edge["to"] for edge in invoice_number_edges(graph)})
+            current = indexed_invoices(db,case_id,keys)
+            for _,_,_,signoff,group in self.invoice_sources(db,current):
+                digest = hashlib.sha256(canonical(signoff)).hexdigest()
+                for match in group:
+                    match["signoff_hash"] = digest
+            changes = invoice_differences(graph.get("prior_invoices",[]),current)
+            if changes:
+                raise InvoiceHistoryChanged(changes,peer)
+            return
         row = db.execute("SELECT * FROM payment_index WHERE case_id=? AND rev=?", (case_id, revision)).fetchone()
         contract = db.execute("SELECT contract_key FROM contract_payments WHERE case_id=? AND rev=?",(case_id,revision)).fetchone()
         if not row and not contract:
             return
-        paper = json.loads(db.execute("SELECT content FROM reports WHERE case_id=? AND rev=?",(case_id,revision)).fetchone()[0])
         previous = paper["graph"].get("payment_history", {})
         now = stamp()
         current = self.payment_matches(db,case_id,row,now) if row else {"counts":{"same":0,"full":0},"matches":[]}
@@ -783,7 +790,7 @@ class Store:
                 event(db, case_id, "attestation", f"{reviewer} 核对 {len(fact_ids)} 条引文，已保存意见并提交重算。")
             else:
                 if decision == "approve":
-                    self.recheck_payment_approval(db, case_id, revision)
+                    self.recheck_approval(db, case_id, revision)
                 db.execute("INSERT INTO signoffs(case_id,rev,decision,reviewer,note,time,actor) VALUES(?,?,?,?,?,?,?)", (case_id, revision, decision, reviewer, note, now,actor))
                 db.execute("UPDATE cases SET status='closed',message='人工验收已归档',updated=? WHERE id=?", (now, case_id))
                 if decision == "escalate":
@@ -832,7 +839,7 @@ class Store:
             if referral["latest"] != revision or referral["status"] != "in_review":
                 raise CaseError("此版本已不在待复核队列。", 409)
             if decision == "approve":
-                self.recheck_payment_approval(db, case_id, revision, peer=True)
+                self.recheck_approval(db, case_id, revision, peer=True)
             try:
                 report["peer_review"] = review_record(source, first, second, findings)
             except (ValueError, KeyError, TypeError) as exc:
