@@ -148,6 +148,14 @@ textarea { width: 100%; resize: vertical; }
 .batch-payment { font-variant-numeric:tabular-nums; color:var(--muted); }
 .batch-receipt { margin:8px 0; padding:5px 10px; border-inline-start:2px solid #9db1a2; }
 .batch-receipt p,.delivery-batches .batch-detail,.delivery-batches .batch-final { margin:4px 0; }
+.separate-final { background:var(--white); padding:12px; border:1px solid var(--line); border-inline-start:3px solid var(--green); border-radius:4px; }
+.separate-final:is([data-status="missing"],[data-status="risk"]) { border-inline-start-color:#946421; }
+.separate-final[data-status="issue"] { border-inline-start-color:#9a302d; }
+.separate-final:focus-visible { outline:2px solid var(--green); outline-offset:2px; }
+.final-date { font-size:.9rem; font-variant-numeric:tabular-nums; }
+.final-originals { list-style:none; margin:4px 0; padding:0; }
+.final-originals li { display:flex; align-items:baseline; flex-wrap:wrap; gap:0 10px; }
+.final-originals .batch-source { min-width:0; margin:2px 0; }
 .batch-signing { min-width:0; margin:9px 0; padding:8px 12px; background:var(--white); border-inline-start:3px solid var(--green); }
 .batch-signing:is([data-status="risk"],[data-status="missing"]) { background:#fbf7ed; border-inline-start-color:#946421; }
 .batch-signing:focus-visible { outline:2px solid var(--green); outline-offset:2px; }

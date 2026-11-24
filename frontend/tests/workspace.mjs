@@ -414,6 +414,31 @@ try {
         await evaluate('document.querySelector("#page-dialog [data-close]").click()');
       };
       if (batches.rule_ref) await openFact(panel,batches.rule_ref);
+      if (batches.separate_final) {
+        const final=batches.separate_final;
+        const section='document.getElementById("batch-final-acceptance")';
+        assert.equal(await evaluate(section+'.dataset.status'),final.status);
+        assert.ok(await evaluate(section+'.innerText.includes('+JSON.stringify(final.detail)+')'));
+        if (batches.completion_on) assert.ok(await evaluate(section+'.querySelector(".final-date").innerText.includes('+JSON.stringify(batches.completion_on)+')'));
+        for (const f of report.findings.filter(f=>f.warranty_check)) {
+          const locator='[data-finding="'+f.id+'"] [aria-controls="batch-final-acceptance"]';
+          await evaluate('document.querySelector('+JSON.stringify(locator)+').click()');
+          assert.equal(await evaluate('document.activeElement.id'),'batch-final-acceptance');
+        }
+        for (const b of final.basis.filter(b=>b.number_ref)) await openFact(section,b.number_ref);
+        for (const r of batches.records.filter(r=>final.records.includes(r.unit))) {
+          if (r.refs_ref) await openFact(section,r.refs_ref);
+          for (const p of ledger.pages.filter(p=>p.unit===r.unit && !p.text_only)) {
+            const selector='[data-batch-page="'+p.doc+'/p'+p.page+'"]';
+            assert.ok(await evaluate(section+'.querySelector('+JSON.stringify(selector)+')!=null'));
+          }
+          for (const note of ledger.visual_notes.filter(n=>n.unit===r.unit)) await openFact(section,note.fact);
+          const fields=['accepted_on','measured_result','delivered_serials','acceptance_signer'];
+          await evaluate(section+'.querySelectorAll("details").forEach(d=>d.open=true)');
+          for (const fact of report.graph.facts.filter(f=>r.evidence.includes(f.id) && fields.includes(f.field))) await openFact(section,fact.id);
+          await evaluate(section+'.querySelectorAll("details").forEach(d=>d.open=false)');
+        }
+      }
       for (const b of batches.batches) {
         const section=panel+'.querySelector('+JSON.stringify('[data-delivery-index="'+b.index+'"]')+')';
         assert.ok(await evaluate(section+'.innerText.includes('+JSON.stringify(b.detail)+') && '+section+'.querySelector(".tag").classList.contains('+JSON.stringify(b.status)+')'));
@@ -685,6 +710,12 @@ try {
         await evaluate('document.querySelector(".delivery-batches").scrollIntoView({block:"start"});window.scrollBy(0,-40)');
         const capture=await call('Page.captureScreenshot',{format:'png'});
         await writeFile(join(process.env.AUDIT_UI_SHOTS,'batches-'+performanceCase+'-'+width+'.png'),Buffer.from(capture.data,'base64'));
+        if (batches.separate_final) {
+          await evaluate('document.querySelector(".separate-final").scrollIntoView({block:"start"});window.scrollBy(0,-36)');
+          assert.ok(await evaluate('[...document.querySelectorAll(".separate-final,.final-originals li,.separate-final .batch-source")].every(e=>e.scrollWidth<=e.clientWidth+1)'));
+          const shot=await call('Page.captureScreenshot',{format:'png'});
+          await writeFile(join(process.env.AUDIT_UI_SHOTS,'final-'+performanceCase+'-'+width+'.png'),Buffer.from(shot.data,'base64'));
+        }
         if (batches.batches.some(b=>b.signing_requirement)) {
           assert.ok(await evaluate('[...document.querySelectorAll(".batch-signing,.batch-signed-record")].every(e=>e.scrollWidth<=e.clientWidth+1)'));
           await evaluate('(document.querySelector(".batch-signing[data-status=risk],.batch-signing[data-status=missing]") || document.querySelector(".batch-signing")).closest(".batch-record").scrollIntoView({block:"start"});window.scrollBy(0,-30)');
@@ -803,7 +834,7 @@ try {
       }
     }
     if (batches) {
-      const edges=report.graph.edges.filter(e=>['delivery_batch_acceptance','batch_payment_basis','batch_named_signature'].includes(e.type));
+      const edges=report.graph.edges.filter(e=>['delivery_batch_acceptance','batch_payment_basis','batch_named_signature','batch_final_basis'].includes(e.type));
       assert.equal(await evaluate('!!document.querySelector(".batch-relations")'),!!edges.length);
       if (edges.length) await evaluate('document.querySelector(".batch-relations").open=true');
       for (const edge of edges) {

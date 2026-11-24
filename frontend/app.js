@@ -484,6 +484,16 @@ function installmentDetails(history) {
   });
 }
 
+function evidenceJump(label, targetId) {
+  const jump=action(label,()=>{
+    const target=document.getElementById(targetId);
+    target?.focus({preventScroll:true});
+    target?.scrollIntoView({block:'start'});
+  },'text-button');
+  jump.setAttribute('aria-controls',targetId);
+  return jump;
+}
+
 function finding(item) {
   const heading = item.stage ? item.stage.name + (item.stage.share ? ' · ' + item.stage.share + '%' : '') +
     (item.rule === 'H05' ? ' 实付时点' : ' 付款条件') : item.title;
@@ -504,7 +514,11 @@ function finding(item) {
     const clauses=contractEffectPanel(item,state.bundle.report.graph);
     if (clauses) node.append(clauses);
   }
-  if (item.warranty_check) node.append(warrantyPanel(item,state.bundle.report.graph));
+  if (item.warranty_check) {
+    node.append(warrantyPanel(item,state.bundle.report.graph));
+    if (state.bundle.report.findings.some(f=>f.batch_acceptance?.separate_final))
+      node.append(evidenceJump('核对质保起算的终验材料','batch-final-acceptance'));
+  }
   if (item.payment_window) node.append(paymentWindowPanel(item,state.bundle.report.graph));
   if (item.acceptance_reservations?.lines.length || item.acceptance_reservations?.mixed_pages.length)
     node.append(reservationPanel(item,state.bundle.report.graph));
@@ -521,16 +535,7 @@ function finding(item) {
     const evidence=box('flow',el('strong','第'+item.stage.batch_index+'批验收'),el('span',item.stage.batch_date || '合格日期待核','small'));
     if (record) evidence.append(citation(record.clause_ref));
     for (const ref of sources) evidence.append(citation(ref));
-    if (record?.signing_requirement) {
-      const targetId='batch-signing-'+record.index;
-      const jump=action('核对'+record.label+'签认',()=>{
-        const target=document.getElementById(targetId);
-        target.focus({preventScroll:true});
-        target.scrollIntoView({block:'start'});
-      },'text-button');
-      jump.setAttribute('aria-controls',targetId);
-      evidence.append(jump);
-    }
+    if (record?.signing_requirement) evidence.append(evidenceJump('核对'+record.label+'签认','batch-signing-'+record.index));
     node.append(evidence);
   }
   if (item.rule.startsWith('H')) {
@@ -655,10 +660,12 @@ function graphPanel() {
     links.classList.add('warranty-relations');
     panel.append(links);
   }
-  const batchLabels={delivery_batch_acceptance:'约定交付范围',batch_payment_basis:'本期付款条件',batch_named_signature:'本批指定人员与实际签认'};
+  const batchLabels={delivery_batch_acceptance:'约定交付范围',batch_payment_basis:'本期付款条件',
+    batch_named_signature:'本批指定人员与实际签认',batch_final_basis:'终验单引用的批次验收原件'};
   const batchEdges=graph.edges.filter(e=>Object.hasOwn(batchLabels,e.type));
   if (batchEdges.length) {
-    const list=lazyFold('分批验收与付款依据（'+batchEdges.length+'）',()=>batchEdges.map(edge=>{
+    const title=batchEdges.some(e=>e.type==='batch_final_basis')?'分批验收、终验与付款依据':'分批验收与付款依据';
+    const list=lazyFold(title+'（'+batchEdges.length+'）',()=>batchEdges.map(edge=>{
       const row=box('line',el('strong',batchLabels[edge.type]),
         box('batch-source',el('q',facts.get(edge.from).quote),citation(edge.from)),
         box('batch-source',el('q',facts.get(edge.to).quote),citation(edge.to)));

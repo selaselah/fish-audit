@@ -674,6 +674,11 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True):
             plan.update(status="missing",detail="需核对分批条款、附注和完整付款前提。 "+plan["detail"])
             plan["evidence"]=list(dict.fromkeys(plan["evidence"]+contract.evidence("batch_clause","delivery_batch")+
                                                [r for r in batch["evidence"] if "/f" not in r and "/h" not in r]))
+        unresolved=[r for r in batch["records"] if r.get("role")=="final" and r["scope_unclear"]]
+        if unresolved:
+            plan.update(status="missing",detail="终验单有待核的原页或附注，需查清对各期付款的影响。 "+plan["detail"])
+            plan["evidence"]=list(dict.fromkeys(plan["evidence"]+[ref for r in unresolved for ref in r["evidence"]]))
+            plan["scope"]=list(dict.fromkeys(plan["scope"]+[r["unit"] for r in unresolved]))
         for row in rows:
             index=delivery_batches.payment_index(row,contract)
             if index is not None:

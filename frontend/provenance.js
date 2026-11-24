@@ -157,8 +157,10 @@ function deliveryBatchPanel(entry, graph, phases) {
   panel.append(box('batch-heading',el('h4','分批交付与验收'),el('span',complete+' / '+entry.batches.length+' 批有合格依据','small')));
   const rule=facts.get(entry.rule_ref);
   if (rule) panel.append(sourceRow(rule.id));
-  if (entry.completion_on) panel.append(el('p','按合同达到终验条件 · '+entry.completion_on,'batch-final'));
-  else if (!entry.deemed_final) panel.append(el('p',rule && /另行(组织最终验收|终验)/.test(rule.quote)?'合同约定另行终验，待核终验原件。':'各批验收与最终验收的关系待核。','batch-final'));
+  if (!entry.separate_final) {
+    if (entry.completion_on) panel.append(el('p','按合同达到终验条件 · '+entry.completion_on,'batch-final'));
+    else if (!entry.deemed_final) panel.append(el('p',rule && /另行(组织最终验收|终验)/.test(rule.quote)?'合同约定另行终验，待核终验原件。':'各批验收与最终验收的关系待核。','batch-final'));
+  }
   function receipt(r) {
     const group=box('batch-receipt');
     const scope=facts.get(r.scope_ref);
@@ -171,6 +173,39 @@ function deliveryBatchPanel(entry, graph, phases) {
   }
   const proofFields=new Set(['acceptance_number','accepted_on','delivered_serials','quantity_accepted','inspection_basis','measured_result',
                              'acceptance_result','acceptance_exception','acceptance_signer','acceptance_criteria']);
+  const final=entry.separate_final;
+  const finalDocuments=new Map();
+  if (final) {
+    const section=el('section','','batch-record separate-final');
+    section.id='batch-final-acceptance';
+    section.tabIndex=-1;
+    section.setAttribute('aria-label','另行终验');
+    section.dataset.status=final.status;
+    const heading=box('flow',el('h5','另行终验'),tag(final.status));
+    if (entry.completion_on) heading.append(el('strong','终验合格日 '+entry.completion_on,'final-date'));
+    section.append(heading,el('p',final.detail,'batch-detail'));
+    for (const unit of final.records) {
+      matched.add(unit);
+      const r=records.get(unit);
+      const group=receipt(r);
+      finalDocuments.set(unit,group);
+      if (r.refs_ref) group.append(sourceRow(r.refs_ref));
+      const proof=r.evidence.filter(ref=>proofFields.has(facts.get(ref)?.field));
+      if (proof.length) group.append(lazyFold('核对终验单日期、设备、实测与签字',()=>proof.map(sourceRow)));
+      section.append(group);
+    }
+    const issued=final.basis.filter(b=>b.number_ref);
+    if (issued.length) {
+      const list=el('ul','','final-originals');
+      for (const b of issued) {
+        const line=el('li');
+        line.append(el('span','第'+b.index+'批','small'),sourceRow(b.number_ref));
+        list.append(line);
+      }
+      section.append(el('strong','各批验收单原件'),list);
+    }
+    panel.append(section);
+  }
   for (const b of entry.batches) {
     const section=el('section','','batch-record');
     section.dataset.deliveryIndex=String(b.index);
@@ -216,27 +251,28 @@ function deliveryBatchPanel(entry, graph, phases) {
   }
   const observed=new Set();
   for (const p of ledger.pages) {
+    const container=finalDocuments.get(p.unit) || panel;
     if (!p.text_only) {
       const link=action((documents.get(p.doc)?.name || '原件')+' · 第 '+p.page+' 页',()=>openPage(p.doc,p.page),'ref');
       link.dataset.batchPage=p.doc+'/p'+p.page;
-      panel.append(box('batch-source',el('strong','核对整页影像及附注'),link));
+      container.append(box('batch-source',el('strong','核对整页影像及附注'),link));
     }
     for (const l of p.uncovered) {
       const row=box('batch-source',el('q',l.quote),action('核对原件第 '+l.line+' 行',()=>openPage(p.doc,p.page,null,l.line),'ref'));
       row.dataset.batchLine=p.doc+'/p'+p.page+'/l'+l.line;
-      panel.append(row);
+      container.append(row);
       observed.add(p.doc+'/p'+p.page+'@'+l.quote);
     }
   }
   for (const item of ledger.visual_notes) {
     const row=sourceRow(item.fact);
     row.append(tag(facts.get(item.fact).status));
-    panel.append(row);
+    (finalDocuments.get(item.unit) || panel).append(row);
     observed.add(item.fact);
   }
   for (const item of entry.riders) {
     if (facts.has(item.ref) && !observed.has(item.ref)) {
-      panel.append(sourceRow(item.ref));
+      (finalDocuments.get(item.unit) || panel).append(sourceRow(item.ref));
       observed.add(item.ref);
     }
   }

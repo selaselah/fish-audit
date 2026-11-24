@@ -1,5 +1,9 @@
 # 本机审计接口
 
+规则 `2026.11.25.08` 使用 `policy.delivery_batches=contract-delivery-batches-v3`。H02 的 `batch_acceptance.separate_final` 在合同明确约定另行终验时返回 `status`、`detail`、总单所在的 `records[]`，以及各批原件编号的 `basis[]`。每个依据含批序 `index`、文档 `unit`、原单号 `number` 及观察 `number_ref`。已识别的总单在 `batch_acceptance.records[]` 中标为 `role=final`，`refs_ref` 指向其引用栏，`receipt_numbers[]` 保留原件顺序。引用栏缺失时这两个字段分别为 null 和空数组。
+
+另行终验成立时 `deemed_final` 为 false，`completion_on` 取终验单签认的验收日。`batch_final_basis` 从总单的 `batch_receipt_refs` 观察逐份指向对应批次的 `acceptance_number` 观察。人工可从两端打开原页。待核或冲突状态保留原单与引用栏，证据图仅在核查相符时建立这组关系。离线校验按归档规则版本复算。
+
 规则 `2026.11.25.07` 使用 `policy.delivery_batches=contract-delivery-batches-v2`。合同明定分批独立验收付款，且按批或统一指定验收人时，H02 的 `batch_acceptance.batches[].signing_requirement` 保存本批所需人员 `required` 和合同引文 `clause_ref`。每张可归属的验收单在 `records[].signing` 保存签字原行 `signed`、所缺人员 `missing_names`、额外签字人 `other_names`、对照状态和原因。签字原行含资料、页、行、引文及核图状态。原页有字而模型漏读时，事实编号可为空。
 
 每条 `batch_named_signature` 关系从本批合同签认条款指向该批一人的已核图签字行，仅在整批验收有充分依据时生成。签字相符、质量实测超限时，H02 会保留两个判断。H04 按该期对应的批次取证，H05 再核对回单所指的期次及支付日。旧版 `contract-delivery-batches-v1` 底稿继续按出具版本复算。

@@ -34,10 +34,7 @@ FIELD_LABELS={**FIELDS,"第四期":"payment_stage","分批交付":"delivery_batc
 SPACING=28
 
 
-def generate(seed,mode):
-    code=hashlib.sha256((seed+"-"+mode).encode()).hexdigest()[:8].upper()
-    folder=ROOT/"30-分批交付与独立验收付款"/code
-    folder.mkdir(parents=True,exist_ok=True)
+def batch_documents(code,mode):
     records=documents(code,"complete")
     records["采购合同"]=[(k,v) for k,v in records["采购合同"] if k not in {"付款条款","第一期","第二期","第三期"}]+[
         ("分批交付","第一批2台，设备编号 E-11、E-12"),("分批交付","第二批2台，设备编号 E-21、E-22"),
@@ -70,6 +67,14 @@ def generate(seed,mode):
     if mode in SIGNING_CASES:
         values.update({"款项用途":"第二期" if mode in ("undelivered","sign_rider") else "第三期","付款日期":"2026年9月21日"})
     records["银行付款回单"]=[(k,values.get(k,v)) for k,v in records["银行付款回单"]]
+    return records
+
+
+def generate(seed,mode):
+    code=hashlib.sha256((seed+"-"+mode).encode()).hexdigest()[:8].upper()
+    folder=ROOT/"30-分批交付与独立验收付款"/code
+    folder.mkdir(parents=True,exist_ok=True)
+    records=batch_documents(code,mode)
     font=embedded_font("BatchDeliveryCJK")
     for name,rows in records.items():
         path=folder/(name+".pdf")
