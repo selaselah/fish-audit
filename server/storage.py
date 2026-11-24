@@ -27,7 +27,7 @@ from payment_checks import comparison_refs, verify_findings as verify_payment_fi
 from payment_history import LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_facts, comparable_record, payment_record
 import payment_index
 from peer_review import different_reviewers, review_record, valid_findings, verify_review
-from payment_reference import FORMAT as PAYMENT_REFERENCE_FORMAT
+from payment_reference import FORMAT as PAYMENT_REFERENCE_FORMAT, SUPPORTED as REFERENCE_FORMATS
 from supplements import compare_return
 from work_progress import checkpoints, install as install_progress, set_activity
 from workbench import prepare_index, project
@@ -736,8 +736,9 @@ class Store:
                 previous = json.loads(raw)
                 archived = previous["graph"]
                 marked = None
-                if paper["policy"].get("payment_references")==PAYMENT_REFERENCE_FORMAT:
-                    marked = payment_index.checked_references(db,prior,previous)
+                version = paper["policy"].get("payment_references")
+                if version in REFERENCE_FORMATS:
+                    marked = payment_index.checked_references(db,prior,previous,compare_as=version)
                     record = comparable_record(archived,previous["findings"],marked)
                 else:
                     record = payment_record(archived,previous["findings"])
@@ -811,7 +812,8 @@ class Store:
     def recheck_payment_history(self, db, case_id, revision, paper, peer):
         graph = paper["graph"]
         signature,marked = self.reconcile_payment(db,case_id,revision,paper)
-        if marked and "transfer_references" not in graph and (signature["reference"] or
+        current_method = graph.get("transfer_references",{}).get("format")==PAYMENT_REFERENCE_FORMAT
+        if marked and not current_method and (signature["reference"] or
                 any(f["rule"]=="B05" and f["status"]=="ok" for f in paper["findings"])):
             raise payment_index.LegacyPartialTransfer(case_id,revision,marked,peer)
         installment = signature["installment"]
@@ -828,7 +830,7 @@ class Store:
         if installment["key"] and installment["requested"]:
             prior = previous.get("installments",{"count":0,"matches":[]})
             latest = self.installment_matches(db,case_id,installment["key"],now)
-            if "transfer_references" not in graph and prior.get("calculation",{}).get("state")=="calculated":
+            if not current_method and prior.get("calculation",{}).get("state")=="calculated":
                 for match in prior["matches"]:
                     source_id,rev = match["case_id"],match["rev"]
                     raw,_ = self.signed_source(db,case_id,source_id,rev)

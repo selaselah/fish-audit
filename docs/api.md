@@ -133,3 +133,9 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 付款案初审或独立复核选择通过时，服务核验本案原件及页图，并按底稿中所引历史版本检查前案的签收决定、逐字段引文、原件、相关页图和归档文字层。原件或页图缺失、文件摘要不符或核验期间文件发生变化会返回 409。响应中的 `payment_source` 提供工作区内的 `case_id`、`rev`、`doc`、文件名 `name`、`file`（`original` 或 `page`）及可定位的 `fact`。页图另含页码 `page`。工作台保留审计员已填的意见，可跳到对应版底稿。成功通过后执行记录的 `payment_sources` 事件列出核对的历史底稿数和文件数。
 
 新版付款底稿的 `policy.payment_checks` 为 `payment-findings-v1`。底稿的 `graph.payment_history` 保存实际检索时点和前案版本。签收与离线核验会重新核对已列前案的签收时间、匹配类型、字段引文和分期金额。若前案引文缺项、发现的文字或金额与当版计算不符，或底稿总结与逐项发现矛盾，验收会返回 409。缺失的依据应通过重新审计或退回补件处理。
+
+### 回单照片的流水展示说明
+
+自规则 `2026.11.24.15` 起，`policy.payment_references` 与 `graph.transfer_references.format` 记为 `receipt-reference-v2`。受独立引文限定的流水在 `facts[].notes` 中返回说明字段编号、逐字引文和来源状态。`state=pending_note` 表示同页候选说明待核图，`state=partial` 表示已有来源支持部分展示。关系 `proposed_transfer_note`、`qualifies_transfer_ref` 均保留说明和流水两个证据编号。原生文字页的说明行仍可在 `lines` 中查看。
+
+跨案分期核查在 `incomplete_references` 中携带相同的来源。系统按本次比较采用的规则阅读旧版原文，旧版证据包仍按出具时的规则复算。

@@ -8,7 +8,7 @@ from invoice_identity import CLAIM_PAIR_LABELS, FORMAT as IDENTITY_FORMAT, SHORT
 from invoice_masks import withhold_partial_numbers
 from invoice_proof import invoice_number_edges
 from model import FIELDS
-from payment_reference import attach as attach_payment_references, printed_partial_value
+from payment_reference import attach as attach_payment_references, partial_line, printed_partial_value
 
 
 KINDS = {"invoice": "发票", "contract": "合同", "acceptance": "验收单"}
@@ -71,6 +71,8 @@ def labelled(field, value, quote):
     value, quote = compact(value), compact(quote)
     if field=="transfer_ref" and printed_partial_value(quote,value):
         return True
+    if field=="transfer_ref_note":
+        return value in quote and partial_line(quote)
     if field in TITLE_FIELDS:
         word = "验收" if field == "acceptance" else TITLE_FIELDS[field]
         return value == quote and word in value and len(value) <= 48 and not any(

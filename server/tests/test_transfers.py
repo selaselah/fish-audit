@@ -7,7 +7,7 @@ from controls import conclusion, execute
 from graph import build_graph
 
 
-def receipt_material(*, reference_note=None, reference_quote=None, **overrides):
+def receipt_material(*, reference_note=None, reference_quote=None, photo_note=None, **overrides):
     accounts = "000000000000000081"
     shared = [("currency","币种","人民币"),("unit","金额单位","元"),("contract_id","合同编号","YL-081")]
     rows = [
@@ -34,6 +34,10 @@ def receipt_material(*, reference_note=None, reference_quote=None, **overrides):
         pages.append({"doc":doc,"number":1,"sha256":"page","text":"\n".join(lines),
                       "layer":{"type":"text","lines":{str(i):[[0,.1,.9,.12]] for i in range(1,len(lines)+1)}},
                       "extraction":{"output":{"quality":"readable","facts":facts}}})
+        if n==2 and photo_note:
+            field,quote = photo_note
+            facts.append({"field":field,"quote":quote,"value":quote.split("：")[-1],"region":"bottom"})
+            pages[-1].update(text="",layer={"type":"image","lines":{}})
     return docs, pages
 
 
@@ -125,3 +129,42 @@ class ReceiptControls(unittest.TestCase):
         docs,pages=receipt_material(transfer_ref="0042")
         pages[0]["text"]+="\n回单交易流水号说明：仅显示后四位"
         self.assertEqual(build_graph(docs,pages,{})["transfer_references"]["facts"],[])
+
+    def test_independent_image_qualifier_preserves_status_and_exact_field_scope(self):
+        from payment_history import payment_record
+        for field in ("transfer_ref_note","other","transfer_ref"):
+            for state in ("visual","confirmed","disputed"):
+                with self.subTest(field=field,state=state):
+                    docs,pages=receipt_material(transfer_ref="0042",payment_term="分期付款",
+                        photo_note=(field,"交易流水号说明：仅显示后四位"))
+                    count=len(pages[1]["extraction"]["output"]["facts"])
+                    note=f"d02/p1/f{count}"
+                    checked={f"d02/p1/f{i}":{"decision":"confirm"} for i in range(1,count)}
+                    if state!="visual":
+                        checked[note]={"decision":"confirm" if state=="confirmed" else "dispute"}
+                    graph=build_graph(docs,pages,checked)
+                    number=next(f["id"] for f in graph["facts"] if f["field"]=="transfer_ref" and f["value"]=="0042")
+                    marked=graph["transfer_references"]["facts"]
+                    links=[e for e in graph["edges"] if e["type"] in {"qualifies_transfer_ref","proposed_transfer_note"}]
+                    if state=="disputed":
+                        self.assertEqual(links,[])
+                        self.assertFalse(any(m.get("notes") for m in marked))
+                        continue
+                    entry=next(m for m in marked if m["fact"]==number)
+                    self.assertEqual((entry["notes"][0]["fact"],entry["state"]),(note,"partial" if state=="confirmed" else "pending_note"))
+                    self.assertIn({"from":note,"to":number,"type":"qualifies_transfer_ref" if state=="confirmed" else "proposed_transfer_note",
+                                   "evidence":[note,number]},links)
+                    findings=execute(graph,BANK)
+                    self.assertIsNone(payment_record(graph,findings)["reference"])
+                    self.assertTrue({note,number}<=set(next(f for f in findings if f["rule"]=="B05")["evidence"]))
+        for quote in ("收款账号说明：仅显示后四位","交易流水号：TX-XX-0042，收款账号说明：仅显示后四位"):
+            docs,pages=receipt_material(transfer_ref="TX-XX-0042",photo_note=("other",quote))
+            checked={f"d02/p1/f{i+1}":{"decision":"confirm"} for i in range(len(pages[1]["extraction"]["output"]["facts"]))}
+            graph=build_graph(docs,pages,checked)
+            self.assertEqual(graph["transfer_references"]["facts"],[])
+        docs,pages=receipt_material(transfer_ref="0042",photo_note=("other","交易流水号说明：仅显示后四位"))
+        note=pages[1]["extraction"]["output"]["facts"].pop()
+        second={**pages[1],"number":2,"extraction":{"output":{"quality":"readable","facts":[note]}}}
+        checked={f"d02/p1/f{i+1}":{"decision":"confirm"} for i in range(len(pages[1]["extraction"]["output"]["facts"]))}
+        checked["d02/p2/f1"]={"decision":"confirm"}
+        self.assertEqual(build_graph(docs,[*pages,second],checked)["transfer_references"]["facts"],[])

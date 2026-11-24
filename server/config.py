@@ -19,8 +19,8 @@ PROFILE = "cn-procurement-full-settlement/v1"
 TRAVEL = "cn-travel-reimbursement/v1"
 BANK = "cn-bank-contract-payment/v1"
 PROFILES = {PROFILE: "采购与付款", TRAVEL: "差旅报销", BANK: "付款回单核对"}
-RULE_VERSION = "2026.11.24.14"
-PROMPT_VERSION = "2026.11.24.2"
+RULE_VERSION = "2026.11.24.15"
+PROMPT_VERSION = "2026.11.24.3"
 RECHECK_EVIDENCE = os.getenv("OPENAI_RECHECK_EVIDENCE", "1").strip().lower() in {"1", "true", "yes"}
 
 

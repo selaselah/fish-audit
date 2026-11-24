@@ -6,6 +6,7 @@ import re
 
 from calculations import money, normalized
 from installments import RULE as INSTALLMENT_RULE, finding as installment_finding, installment_record
+from payment_notes import note_refs, pending_notes
 
 
 LIMIT = 8
@@ -28,9 +29,22 @@ def unmasked(value):
 def payment_record(graph, findings):
     record = receipt_keys(graph,findings)
     record["installment"] = installment_record(graph,findings,record["payer"],record["reference"])
-    if graph.get("transfer_references",{}).get("facts"):
-        record["installment"]["partial_reference"] = True
+    apply_reference_notes(record,graph.get("transfer_references",{}).get("facts",[]))
     return record
+
+
+def apply_reference_notes(record, marked):
+    if not marked:
+        return
+    record["installment"]["partial_reference"] = True
+    extra = note_refs(marked)
+    if extra:
+        for name in ("same_refs","full_refs"):
+            record[name] = list(dict.fromkeys([*record[name],*extra]))
+        installment = record["installment"]
+        installment["refs"] = list(dict.fromkeys([*installment["refs"],*extra]))
+        if pending_notes(marked):
+            installment["reference_note_pending"] = True
 
 
 def comparable_record(graph, findings, marked):
@@ -39,7 +53,8 @@ def comparable_record(graph, findings, marked):
     record["full_refs"] = list(dict.fromkeys([*record["full_refs"],*record["same_refs"]]))
     if marked:
         record.update(payer=None,reference=None,settlement=None)
-        record["installment"].update(entry=None,partial_reference=True)
+        record["installment"]["entry"] = None
+        apply_reference_notes(record,marked)
     return record
 
 
@@ -122,6 +137,8 @@ def check_history(signature, history, record, scope):
                       "核对同合同多笔全额付款需要已核实的收付主体、账户、一次全额条款、正金额、币种、交易状态及日期。")
             if signature["installment"].get("partial_reference"):
                 detail = "原回单仅提供部分流水号。取得完整流水后可核对已签收回单。" if key=="same" else "本案流水号待补全，暂缓核对同合同的其他全额付款。"
+            if signature["installment"].get("reference_note_pending"):
+                detail = "回单同页有一条待核的流水展示说明，请先对照页图核实流水号的完整性。"
             record(rule, "missing", detail, refs, scope)
             continue
         matches = [m for m in history["matches"] if m["kind"] == key]

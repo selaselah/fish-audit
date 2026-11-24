@@ -27,7 +27,7 @@ FIELDS = {
     "claim_ref": "随附发票号码", "claim_full_ref":"随附发票代码及号码",
     "bank_receipt":"银行回单标题", "payer":"付款户名", "payee":"收款户名", "contract_account":"合同约定收款账号",
     "payee_account":"实际收款账号", "transfer_amount":"回单付款金额", "paid_on":"付款日期",
-    "transfer_ref":"交易流水号", "transfer_status":"回单交易状态",
+    "transfer_ref":"交易流水号", "transfer_ref_note":"流水号展示说明", "transfer_status":"回单交易状态",
 }
 SIGNALS = {
     "installments": ("payment_term", "核对分期、预付款或质保金与本次结算的对应关系。"),
@@ -65,6 +65,7 @@ quality：主体信息可读则 readable；有裁切、涂抹、模糊或关键�
 facts 只收录明确的记载。quote 逐字抄录同一位置连续的字段标签及值。保留标点、币种、单位和格式，不拼接相隔的内容。
 value 必须是 quote 的连续子串。每页如有明确印刷的单据抬头，先单列一条标题事实，完整抄下抬头本身，包括没有“标题”标签的居中大字。发票、合同、验收单的标题分别用 invoice/contract/acceptance。
 银行付款回单/转账回单的明确抬头归 bank_receipt。银行回单上的付款户名/收款户名是 payer/payee；完整收款账号是 payee_account，付款金额是 transfer_amount，交易流水号、交易状态、付款日期分别是 transfer_ref/transfer_status/paid_on。采购合同上标明的约定收款账号用 contract_account。照抄账户及流水号的前导零与遮盖字符。流水号字段注明尾号或只显示部分字符时，quote 保留同一栏所印的限定词。不得补写隐藏位。不要把交易状态、流水号或金额解释成银行验真结果。
+另外逐行查看回单页脚和备注区。异于流水栏的独立文字明确说明交易流水号只显示尾号、展示位数或已脱敏时，以 transfer_ref_note 单列这一整行原文。账号、卡号的展示说明属于其他字段。保持流水栏与独立说明各自的逐字引文。
 contract_id 是资料明确记载的合同编号（包括在发票、验收单中的合同编号）。发票票面明列的发票代码和发票号码要分别抄为 invoice_code、invoice_id，保留所有前导零。二十位票号应完整抄为一个 invoice_id。不要从票号、税号、校验码、章或二维码推算代码。
 buyer/seller 抄全称。total 是整张单据的含税总额，net/tax 是整票不含税合计与税额合计；禁止以单价、行金额、执行进度代替合计。
 金额 value 抄印刷的小写数字（含小数、千位符）；quote 保留量纲。currency 需看到确切币种（人民币、CNY等），不要从地域推断。

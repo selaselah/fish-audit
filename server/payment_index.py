@@ -1,7 +1,8 @@
 """Keep the two searchable projections of a bank workpaper consistent with its archived facts."""
 
 from config import BANK, CaseError
-from payment_reference import FORMAT, marked_fields, verify
+from payment_notes import pending_notes
+from payment_reference import FORMAT, check
 
 
 PROJECTIONS = (
@@ -31,13 +32,15 @@ def install(db, *, new_column):
             changes = " ".join(f"INSERT OR IGNORE INTO payment_index_pending VALUES({source}.case_id);" for source in sources)
             db.execute(f"CREATE TRIGGER IF NOT EXISTS {name} AFTER {operation} ON {table} BEGIN {changes} END")
     version = db.execute("PRAGMA user_version").fetchone()[0]
-    if version < 7 or new_column or required - existing:
+    if version < 8 or new_column or required - existing:
+        if version < 8:
+            db.execute("UPDATE payment_index SET reference_eligible=NULL WHERE reference_eligible IS NOT NULL")
         db.execute("INSERT OR IGNORE INTO payment_index_pending SELECT id FROM cases WHERE profile=? AND rev>0", (BANK,))
-        if version < 7:
-            db.execute("PRAGMA user_version=7")
+        if version < 8:
+            db.execute("PRAGMA user_version=8")
 
 
-def checked_references(db, case_id, paper):
+def checked_references(db, case_id, paper, *, compare_as=FORMAT):
     graph = paper["graph"]
     def text(doc,page):
         row = db.execute("SELECT text FROM pages WHERE case_id=? AND doc=? AND number=?", (case_id,doc,page)).fetchone()
@@ -45,12 +48,7 @@ def checked_references(db, case_id, paper):
             raise ValueError("缺少回单流水说明所在的归档文字层")
         return row[0]
     try:
-        marked = marked_fields(graph,text)
-        if "payment_reference.py" in paper["policy"].get("code_sha256",{}):
-            if paper["policy"].get("payment_references") != FORMAT:
-                raise ValueError("流水完整性核验格式与出具版本不一致")
-            verify(graph,marked)
-        return marked
+        return check(graph,paper["policy"],text,compare_as=compare_as)
     except (KeyError,TypeError,ValueError) as exc:
         raise CaseError("回单流水的原文或完整性核验记录不符，请核对来源。",409) from exc
 
@@ -60,6 +58,8 @@ class LegacyPartialTransfer(CaseError):
         self.case_id,self.revision,self.fields = case_id,revision,fields
         action = "请退回补件并核对完整流水。" if peer else "请保留本版并重新审计，核对完整流水。"
         detail = "旧版累计金额引用了历史回单上的部分流水号。" if historical else "旧版底稿将含遮盖位或仅列尾号的回单用于流水核对。"
+        if pending_notes(fields):
+            detail = "所据回单的流水展示说明仍待核图，旧版底稿已将该流水用于比对或累计。"
         super().__init__(detail+action,409)
 
 

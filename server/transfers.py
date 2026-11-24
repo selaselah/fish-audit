@@ -3,6 +3,7 @@
 import re
 
 from calculations import in_yuan, money, normalized
+from payment_notes import note_refs, pending_notes
 
 
 RULES = {
@@ -52,9 +53,11 @@ def check_transfers(graph, docs, values, record, parsed_date):
     partial = [m for m in graph.get("transfer_references",{}).get("facts",[]) if m["unit"]==bank]
     trace = None
     if partial:
-        refs = [m["fact"] for m in partial]
+        refs = list(dict.fromkeys([*(m["fact"] for m in partial),*note_refs(partial)]))
         basis.extend(refs)
-        record("B05","missing","回单流水号有遮盖或只列尾号。请取得完整流水号，核对交易状态和付款日期。",refs,[bank])
+        detail = ("回单同页有一条待核的流水展示说明，请对照页图核实该说明和流水栏。" if pending_notes(partial) else
+                  "回单流水号有遮盖或只列尾号。请取得完整流水号，核对交易状态和付款日期。")
+        record("B05","missing",detail,refs,[bank])
     else:
         trace = values("B05",[(bank,"transfer_ref"),(bank,"transfer_status"),(contract,"signed_on"),(bank,"paid_on")])
     settled = False

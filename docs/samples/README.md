@@ -84,3 +84,7 @@ PYTHONPATH=server server/.venv/bin/python -m unittest discover -s server/tests -
 ### 遮盖流水与只列尾号的回单
 
 运行 `server/.venv/bin/python docs/samples/partial_receipts.py --run`，工作台将分别接收中段印有 XX 的回单，以及流水栏印有 0042、同页另行说明仅显示后四位的回单。脚本核对上传原件、原文提示、分期规则状态及累计金额是否暂缓。使用 `--run-id` 可生成新的一组演练合同。
+
+### 照片流水栏和页脚说明
+
+`server/.venv/bin/python docs/samples/partial_receipts.py --photo --run` 生成一份合同 PDF 和一张带水印的 JPEG 回单，通过本地接口上传、等候模型读图并检查分期付款结果。脚本核对照片 SHA-256，并按生成时留存的抬头、付款户名、流水和说明原文模拟核图，所用演练身份和操作均记入底稿。可用 `--run-id` 指定另一组样本。

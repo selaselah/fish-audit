@@ -187,16 +187,29 @@ try {
     const [field]=report.graph.transfer_references.facts;
     const source=report.graph.facts.find(f=>f.id===field.fact);
     await call('Page.navigate',{url:root+'/workpaper/'+partialTransfer+'?'+new URLSearchParams({rev:task.rev,fact:field.fact})});
-    await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth && document.querySelector(".located")?.textContent.includes("流水号待补全")','visible partial reference on its original page');
+    const pending=field.state==='pending_note';
+    await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth && document.querySelector(".located")?.textContent.includes('+JSON.stringify(pending?'流水展示说明待核图':'流水号待补全')+')','visible partial reference on its original page');
     const shown=await evaluate('document.querySelector(".located").textContent');
     assert.ok(shown.includes(source.quote));
     for (const line of field.lines) assert.ok(shown.includes(line.text));
+    if (field.notes?.length) {
+      const [note]=field.notes;
+      assert.ok(shown.includes(note.quote));
+      await evaluate('[...document.querySelectorAll(".located button")].find(b=>b.textContent==="定位同页展示说明").click()');
+      assert.equal(await evaluate('document.activeElement.dataset.fact'),note.fact);
+      assert.ok(await evaluate('document.querySelector(".located").textContent.includes('+JSON.stringify(note.quote)+')'));
+      for (const width of [1440,1024,820,768,390,320]) {
+        await call('Emulation.setDeviceMetricsOverride',{width,height:860,deviceScaleFactor:1,mobile:false});
+        assert.ok(await evaluate('document.querySelector("#page-dialog").scrollWidth<=document.querySelector("#page-dialog").clientWidth+1'),'photo reference dialog at '+width);
+      }
+    }
     await call('Page.navigate',{url:root+'/workpaper/'+partialTransfer+'?rev='+task.rev});
-    for (const [rule,detail] of [['B05','只列尾号'],['B06','部分流水号'],['B08','复算分期付款']]) {
+    for (const rule of ['B05','B06','B08']) {
       const finding=report.findings.find(f=>f.rule===rule);
       assert.equal(finding.status,'missing');
       assert.ok(finding.evidence.includes(field.fact));
-      await wait('document.querySelector('+JSON.stringify('[data-finding="'+finding.id+'"]')+')?.textContent.includes('+JSON.stringify(detail)+')',rule+' visible review finding');
+      for (const note of field.notes || []) assert.ok(finding.evidence.includes(note.fact));
+      await wait('document.querySelector('+JSON.stringify('[data-finding="'+finding.id+'"]')+')?.textContent.includes('+JSON.stringify(finding.detail)+')',rule+' visible review finding');
     }
     for (const width of [1440,1024,820,768,390,320]) {
       await call('Emulation.setDeviceMetricsOverride',{width,height:860,deviceScaleFactor:1,mobile:false});

@@ -7,6 +7,7 @@ from datetime import date
 from decimal import Decimal
 
 from calculations import in_yuan, money, normalized
+from payment_notes import pending_notes
 
 
 LIMIT = 32
@@ -91,6 +92,8 @@ def installment_record(graph, findings, payer, reference):
 
 
 def calculate(current, history):
+    if current.get("reference_note_pending"):
+        return {"state":"missing","reason":"本案流水展示说明尚待核图，请先核实完整流水号再复算分期付款。"}
     if current.get("partial_reference"):
         return {"state":"missing","reason":"本案回单流水号有遮盖或只列尾号，请取得完整流水后复算分期付款。"}
     if not current["entry"]:
@@ -102,6 +105,8 @@ def calculate(current, history):
     rows = [(first,"")]
     for match in history["matches"]:
         item = match["entry"]
+        if pending_notes(match.get("incomplete_references",[])):
+            return {"state":"missing","reason":f"历史底稿「{match['title']}」的流水展示说明尚待核图，请核实后再复算。"}
         if match.get("incomplete_references"):
             return {"state":"missing","reason":f"历史底稿「{match['title']}」的回单流水号有遮盖或只列尾号，请核对完整流水后复算。"}
         if not item or any(item[k]!=first[k] for k in ("contract_sha256","contract_total","account")):

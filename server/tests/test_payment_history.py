@@ -20,6 +20,7 @@ from graph import build_graph, link_procedures
 from identity import Directory
 from jobs import CODE_DIGESTS, METHODS
 from payment_history import LIMIT
+from payment_reference import LEGACY_FORMAT, attach as attach_references
 from policy import link_sources
 from storage import Store, encode
 from test_transfers import receipt_material
@@ -33,7 +34,8 @@ class PaymentHistoryTests(unittest.TestCase):
         self.root = Path(temp.name)
         self.store = Store(self.root)
 
-    def workpaper(self, case_id, *, fresh=True, history=True, workspace="local", user=None, contract_variant=0, legacy=False, **fields):
+    def workpaper(self, case_id, *, fresh=True, history=True, workspace="local", user=None, contract_variant=0,
+                  legacy=False, reference_v1=False, **fields):
         docs, pages = receipt_material(**fields)
         for doc, page in zip(docs, pages):
             # The controlled extractor supplies the text layer. The bundle still carries real image bytes.
@@ -51,7 +53,12 @@ class PaymentHistoryTests(unittest.TestCase):
             self.store.create(case_id, "演练 "+case_id, docs, case_id, case_id, BANK, workspace, user)
             for doc, page in zip(docs, pages):
                 self.store.put_pages(case_id, doc["id"], [page])
-        with patch("graph.attach_payment_references") if legacy else nullcontext():
+        attachment = nullcontext()
+        if legacy:
+            attachment = patch("graph.attach_payment_references")
+        elif reference_v1:
+            attachment = patch("graph.attach_payment_references",lambda graph,read: attach_references(graph,read,LEGACY_FORMAT))
+        with attachment:
             graph = build_graph(docs, pages, self.store.attestations(case_id), self.store.amendments(case_id))
         graph["profile"] = BANK
         lookup = (lambda signature: self.store.payment_history(case_id, signature)) if history else None
@@ -63,10 +70,15 @@ class PaymentHistoryTests(unittest.TestCase):
         link_sources(graph)
         policy = {**VERSION, "profile": BANK, "code_sha256": CODE_DIGESTS, "calculations": FORMAT, "archived_methods": True}
         methods = METHODS
-        if legacy:
-            policy.pop("payment_references")
-            policy["code_sha256"] = {k:v for k,v in CODE_DIGESTS.items() if k!="payment_reference.py"}
-            methods = {k:v for k,v in METHODS.items() if k!="payment_reference.py"}
+        if legacy or reference_v1:
+            omitted = {"payment_notes.py"}
+            if legacy:
+                omitted.add("payment_reference.py")
+                policy.pop("payment_references")
+            else:
+                policy["payment_references"]=LEGACY_FORMAT
+            policy["code_sha256"] = {k:v for k,v in CODE_DIGESTS.items() if k not in omitted}
+            methods = {k:v for k,v in METHODS.items() if k not in omitted}
         if not history or legacy:
             policy.pop("payment_checks")
             policy["code_sha256"] = {k:v for k,v in policy["code_sha256"].items() if k!="payment_checks.py"}
@@ -440,7 +452,7 @@ class PaymentHistoryTests(unittest.TestCase):
         with self.store.connect() as db:
             self.assertIsNone(db.execute("SELECT 1 FROM contract_payments WHERE case_id='other'").fetchone())
             self.assertIsNotNone(db.execute("SELECT 1 FROM payment_index_pending WHERE case_id='other'").fetchone())
-            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 7)
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 8)
 
     def test_damaged_signed_payment_archive_cannot_silently_disappear(self):
         self.installment("signed")
@@ -511,6 +523,88 @@ class PaymentHistoryTests(unittest.TestCase):
             self.sign("old-total")
         self.assertEqual((historical.exception.case_id,historical.exception.revision),("paid",1))
         self.assertEqual(self.store.detail("old-total")["status"],"ready")
+
+    def test_separate_photo_note_withholds_totals_before_confirmation_and_survives_offline_export(self):
+        opts={"reference":"0042","photo_note":("transfer_ref_note","交易流水号说明：仅显示后四位")}
+        initial=self.installment("photo",**opts)
+        bank=[f for f in initial["graph"]["facts"] if f["doc"]=="d02"]
+        note=next(f["id"] for f in bank if f["field"]=="transfer_ref_note")
+        number=next(f["id"] for f in bank if f["field"]=="transfer_ref")
+        self.store.review("photo",1,"演练","逐项核对回单栏位","confirm",[f["id"] for f in bank if f["id"]!=note])
+        pending=self.installment("photo",fresh=False,**opts)
+        self.store.review("photo",2,"演练","核对同页展示说明","confirm",[note])
+        complete=self.installment("photo",fresh=False,**opts)
+        for rev,paper,state in ((2,pending,"pending_note"),(3,complete,"partial")):
+            field,=paper["graph"]["transfer_references"]["facts"]
+            self.assertEqual((field["fact"],field["notes"][0]["fact"],field["state"]),(number,note,state))
+            for rule in ("B05","B06","B07","B08"):
+                check=next(f for f in paper["findings"] if f["rule"]==rule)
+                self.assertEqual(check["status"],"missing")
+                self.assertTrue({number,note}<=set(check["evidence"]),rule)
+            calc=paper["graph"]["payment_history"]["installments"]["calculation"]
+            self.assertEqual(calc["state"],"missing")
+            self.assertNotIn("paid_total",calc)
+            bundle=io.BytesIO()
+            export_bundle(self.store,"photo",rev,bundle)
+            self.assertEqual(verify(bundle,True)[:2],("photo",rev))
+        from payment_reference import check
+        from verify import verify_transcription
+        for mutation in ("edge","note_field","note_status","source","decision","receipt"):
+            bad=deepcopy(complete)
+            graph=bad["graph"]
+            info=next(f for f in graph["facts"] if f["id"]==note)
+            marked=graph["transfer_references"]["facts"][0]["notes"][0]
+            if mutation=="edge": graph["edges"]=[e for e in graph["edges"] if e["type"]!="qualifies_transfer_ref"]
+            if mutation=="note_field": marked["fact"]=number
+            if mutation=="note_status": marked["status"]="visual"
+            if mutation=="source": info["quote"]="交易流水号说明：仅显示末三位"
+            if mutation=="decision": info["attestation"]["decision"]="dispute"
+            if mutation=="receipt": del info["attestation"]["source_check"]
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                check(graph,bad["policy"],lambda doc,page:"")
+                calls={(t["doc"],t["page"]):t for t in bad["calls"]["pages"]}
+                verify_transcription(info,calls,{n["id"]:n for n in graph["nodes"]},"流水展示说明",note_policy=bad["policy"])
+
+    def test_v1_signed_photo_is_screened_by_new_comparisons_and_old_approval(self):
+        from payment_index import LegacyPartialTransfer
+        opts={"reference":"0042","photo_note":("other","交易流水号说明：仅显示后四位"),"reference_v1":True}
+        with patch("payment_index.checked_references",return_value=[]):
+            for case in ("paid-photo","stale-photo","peer-photo"):
+                first=self.installment(case,**opts)
+                self.store.review(case,1,"演练","核实模拟原图全部引文","confirm",[f["id"] for f in first["graph"]["facts"] if f["doc"]=="d02"])
+                old=self.installment(case,fresh=False,**opts)
+                self.assertEqual(old["graph"]["transfer_references"],{"format":LEGACY_FORMAT,"facts":[]})
+                self.assertEqual(old["graph"]["payment_history"]["installments"]["calculation"]["paid_total"],"4200.00")
+            self.store.review("paid-photo",2,"演练","核对模拟旧版","approve")
+            self.store.review("peer-photo",2,"演练","转独立复核","escalate")
+            total=self.installment("stale-total",reference="YL-NEW",reference_v1=True)
+            self.assertEqual(total["graph"]["payment_history"]["installments"]["calculation"]["paid_total"],"8400.00")
+        with self.store.connect(True) as db:
+            db.execute("PRAGMA user_version=7")
+        self.store=Store(self.root)
+        current=self.installment("current",reference="0042")
+        self.assert_controls(current,"ok","missing")
+        window=current["graph"]["payment_history"]["installments"]
+        hist,=window["matches"]
+        self.assertEqual((hist["case_id"],hist["rev"],hist["entry"]),("paid-photo",2,None))
+        note,=hist["incomplete_references"][0]["notes"]
+        self.assertEqual((note["field"],note["quote"],note["status"]),("other","交易流水号说明：仅显示后四位","confirmed"))
+        self.assertIn(note["fact"],[e["fact"] for e in hist["evidence"]])
+        self.assertNotIn("paid_total",window["calculation"])
+        with self.store.connect() as db:
+            self.assertEqual(db.execute("SELECT reference_eligible FROM payment_index WHERE case_id='paid-photo'").fetchone()[0],0)
+        for case,rev in (("paid-photo",2),("current",1),("stale-total",1)):
+            out=io.BytesIO()
+            export_bundle(self.store,case,rev,out)
+            self.assertEqual(verify(out,case=="current")[:2],(case,rev))
+        for case,rev,source in (("stale-photo",2,"stale-photo"),("stale-total",1,"paid-photo")):
+            with self.assertRaises(LegacyPartialTransfer) as denied:
+                self.store.review(case,rev,"演练","旧底稿待复核","approve")
+            self.assertEqual((denied.exception.case_id,denied.exception.fields[0]["notes"][0]),(source,note))
+        pin=self.store.detail("peer-photo")["referrals"][0]
+        finding=next(f["id"] for f in old["findings"] if f["rule"]=="B05")
+        with self.assertRaises(LegacyPartialTransfer):
+            self.store.resolve_referral("peer-photo",2,pin["report_hash"],pin["signoff_hash"],"复核员","查看原页","approve",[finding])
 
     def test_corrupt_reference_eligibility_or_native_text_cannot_release_a_payment_report(self):
         self.installment("first")

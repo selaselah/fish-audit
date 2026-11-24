@@ -4,9 +4,12 @@ import hashlib
 import re
 
 from calculations import normalized
+from payment_notes import annotated_fields, note_edges
 
 
-FORMAT = "receipt-reference-v1"
+LEGACY_FORMAT = "receipt-reference-v1"
+FORMAT = "receipt-reference-v2"
+SUPPORTED = {LEGACY_FORMAT,FORMAT}
 LABEL = re.compile(r"(?:交易|银行)?流水号")
 LAST = r"(?:尾号|(?:后|末)[0-9一二三四五六七八九十]+位)"
 PART = re.compile(r"(?:仅(?:显示|展示|保留|列示|列出)?)?" + LAST + r"|已(?:脱敏|遮盖|隐去部分位数)")
@@ -76,9 +79,12 @@ def excluded_edges(graph, marked):
             and (unit := fact.get("unit",fact["doc"])) in units}
 
 
-def attach(graph, read_text):
+def attach(graph, read_text, version=FORMAT):
     marked = marked_fields(graph, read_text)
-    graph["transfer_references"] = {"format":FORMAT, "facts":marked}
+    if version==FORMAT:
+        marked = annotated_fields(graph,marked,partial_line)
+        graph["edges"].extend(note_edges(marked))
+    graph["transfer_references"] = {"format":version, "facts":marked}
     replacements = excluded_edges(graph, marked)
     if replacements:
         old = set()
@@ -90,11 +96,32 @@ def attach(graph, read_text):
         graph["nodes"] = [n for n in graph["nodes"] if n["id"] not in unused]
 
 
-def verify(graph, marked):
-    if graph.get("transfer_references") != {"format":FORMAT, "facts":marked}:
+def verify(graph, marked, version=FORMAT):
+    if graph.get("transfer_references") != {"format":version, "facts":marked}:
         raise ValueError("遮盖流水的原页字段或说明行不符")
     expected = excluded_edges(graph, marked)
     edges = [e for e in graph["edges"] if e["type"]=="incomplete_transfer_ref"]
     if (len(edges)!=len(expected) or {e["evidence"][0]:e for e in edges}!=expected or
             any(e["type"]=="transfer_ref" and any(ref in expected for ref in e["evidence"]) for e in graph["edges"])):
         raise ValueError("不完整的流水号进入了精确比对，或缺少原文关系")
+    if version==FORMAT:
+        actual = [e for e in graph["edges"] if e["type"] in {"proposed_transfer_note","qualifies_transfer_ref"}]
+        if actual!=note_edges(marked):
+            raise ValueError("同页流水说明的引文关系或核图状态不符")
+
+
+def issued_format(policy):
+    modules = policy.get("code_sha256",{})
+    return FORMAT if "payment_notes.py" in modules else LEGACY_FORMAT if "payment_reference.py" in modules else None
+
+
+def check(graph, policy, read_text, *, compare_as=FORMAT):
+    issued = issued_format(policy)
+    if (policy.get("payment_references")!=issued or graph.get("transfer_references",{}).get("format")!=issued
+            or compare_as not in SUPPORTED):
+        raise ValueError("流水完整性核验格式与发行程序不符")
+    printed = marked_fields(graph,read_text)
+    annotated = annotated_fields(graph,printed,partial_line) if FORMAT in (issued,compare_as) else []
+    if issued:
+        verify(graph,annotated if issued==FORMAT else printed,issued)
+    return annotated if compare_as==FORMAT else printed

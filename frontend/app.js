@@ -178,10 +178,21 @@ function openPage(docId, pageNumber, highlight) {
       row.append(el('small','原文含遮盖位或只列尾号。取得完整票号后可重新核对。','small'));
     const partialTransfer = state.bundle.report.graph.transfer_references?.facts.find(m=>m.fact===fact.id);
     if (partialTransfer) {
-      row.append(el('strong','流水号待补全'));
+      const pending = partialTransfer.state==='pending_note';
+      row.append(el('strong',pending?'流水展示说明待核图':'流水号待补全'));
       for (const line of partialTransfer.lines.filter(l=>l.number!==fact.source_line?.number))
         row.append(el('blockquote','本页第 '+line.number+' 行 · '+line.text));
-      row.append(el('small','取得完整流水后可查找相同回单、复算累计付款。','small'));
+      for (const note of partialTransfer.notes || []) {
+        const source = pageFacts.find(f=>f.id===note.fact);
+        if (source) row.append(el('blockquote',note.quote),tag(note.status),action('定位同页展示说明',()=>{
+          locate(source);
+          const target = right.querySelector('.located');
+          target.tabIndex=-1;
+          target.focus({preventScroll:true});
+          target.scrollIntoView({block:'nearest'});
+        },'ref'));
+      }
+      row.append(el('small',pending?'核对这条说明后可重新审计。':'取得完整流水后可查找相同回单、复算累计付款。','small'));
     }
     if (fact.visual_check) row.append(el('small', '模型二次读图 · ' +
       ({clear:'可辨认', conflict:'存在差异', unreadable:'无法核实'}[fact.visual_check] || fact.visual_check), 'small'));
@@ -338,8 +349,10 @@ function installmentDetails(history) {
   const calc = history.calculation;
   if (calc.state!=='calculated') return lazyFold('核对累计范围',()=>[
     el('p',calc.reason),...history.matches.flatMap(m=>m.incomplete_references?.length
-      ? m.incomplete_references.map(field=>Team.paperLink(m.title+' · R'+m.rev+' · 流水 '+field.value,m.case_id,'source-jump',
-          new URLSearchParams({rev:m.rev,fact:field.fact})))
+      ? m.incomplete_references.flatMap(field=>[
+          Team.paperLink(m.title+' · R'+m.rev+' · 流水 '+field.value,m.case_id,'source-jump',new URLSearchParams({rev:m.rev,fact:field.fact})),
+          ...(field.notes || []).map(note=>Team.paperLink('展示说明 · '+note.quote,m.case_id,'source-jump',
+            new URLSearchParams({rev:m.rev,fact:note.fact})))])
       : [Team.paperLink(m.title+' · R'+m.rev,m.case_id,'source-jump',new URLSearchParams({rev:m.rev}))])]);
   return lazyFold('逐笔复算分期付款',()=>{
     const ledger = box('installment-ledger');
@@ -677,6 +690,11 @@ function showInvoiceReviewConflict(container,problem,choice) {
       const row=el('li');
       row.append(el('strong',field.value),anchor);
       for (const line of field.lines || []) row.append(el('small','第 '+line.number+' 行 · '+line.text,'small'));
+      for (const note of field.notes || []) {
+        const source=Team.paperLink('展示说明 · '+note.quote,partial.case_id,'source-jump',new URLSearchParams({rev:partial.rev,fact:note.fact}));
+        source.target='_blank'; source.rel='noopener';
+        row.append(source,tag(note.status));
+      }
       list.append(row);
     }
     container.replaceChildren(el('strong',problem.message),list);
