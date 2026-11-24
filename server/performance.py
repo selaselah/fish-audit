@@ -632,7 +632,8 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True):
         change["evidence"] = list(dict.fromkeys(change["evidence"]+signed["evidence"]))
     authority = None
     batch_signers = {}
-    if version in BATCH_FORMATS and signed["status"]=="ok" and not (extra_units or change or repairs or retests):
+    compare_printed_names = signed["status"]=="ok" or graph.get("delivery_batch_sources",{}).get("format")==delivery_batches.FORMAT
+    if version in BATCH_FORMATS and compare_printed_names and not (extra_units or change or repairs or retests):
         batch_signers=delivery_batches.signing_plan(graph,contract)
     if version in SIGNATORY_FORMATS and not batch_signers:
         authority = check_acceptance_authority(graph,contract,receipts,retests,contract_supported=signed["status"]=="ok",

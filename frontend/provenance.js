@@ -151,18 +151,32 @@ function receiptPacketPanel(packets, graph) {
     file.dataset.packetStatus=packet.status;
     file.append(box('flow',el('strong',documents.get(packet.doc).name),
       el('span',split?packet.pages.length+' 张可独立核对的验收单':'单据归属待人工核对',split?'small':'signer-pending')));
+    const problems=new Map();
+    for (const page of packet.pages.filter(p=>p.reasons.length)) {
+      const reason=page.reasons.find(r=>/重复|续页|字符|遮盖|影像/.test(r)) || page.reasons[0];
+      if (!problems.has(reason)) problems.set(reason,box('flow packet-problem',el('span',reason)));
+      const field=/续页/.test(reason)?'continuation':/遮盖/.test(reason)?'partial_number':/编号/.test(reason)?'acceptance_number':null;
+      const evidence=page.rows.find(r=>r.field===field);
+      const button=action('核对第 '+page.page+' 页',()=>openPage(page.doc,page.page,evidence?.facts[0],evidence?.facts.length?null:evidence?.line),'ref');
+      button.dataset.packetIssue=page.doc+'/p'+page.page;
+      problems.get(reason).append(button);
+    }
+    file.append(...problems.values());
     for (const page of packet.pages) {
       const pageRef=page.doc+'/p'+page.page;
       const row=el('section','','packet-page');
       row.dataset.packetPage=pageRef;
       const scope=page.rows.find(r=>r.field==='acceptance_scope');
-      row.append(box('flow',citation(pageRef),el('strong',scope?.quote || '验收范围待核')));
+      const original=action('第 '+page.page+' 页',()=>openPage(page.doc,page.page,scope?.facts[0],scope?.facts.length?null:scope?.line),'ref');
+      original.setAttribute('aria-label',documents.get(page.doc).name+' · 第 '+page.page+' 页，查看验收原页');
+      const title=scope?.quote.replace(/^[^：:]+[：:]\s*/u,'') || '验收范围待核';
+      row.append(box('flow packet-page-heading',el('strong',title),original));
       for (const proof of page.rows.filter(r=>['acceptance_number','continuation','partial_number'].includes(r.field))) {
-        row.append(reservationSource(proof,graph));
+        row.append(reservationSource(proof,graph,true));
       }
       if (page.reasons.length) row.append(el('p',page.reasons.join('。')+'。','signer-pending'));
       const context=page.rows.filter(r=>['acceptance','contract_id','accepted_on'].includes(r.field));
-      if (context.length) row.append(lazyFold('核对页首、合同号与验收日期',()=>context.map(r=>reservationSource(r,graph))));
+      if (context.length) row.append(lazyFold('核对页首、合同号与验收日期',()=>context.map(r=>reservationSource(r,graph,true))));
       file.append(row);
     }
     panel.append(file);
@@ -363,12 +377,14 @@ function contractEffectPanel(finding,graph) {
   return panel;
 }
 
-function reservationSource(line,graph) {
+function reservationSource(line,graph,withinPage=false) {
   const {facts,documents}=graphIndex(graph);
   const fact=line.facts.map(id=>facts.get(id)).find(f=>f?.quote===line.quote);
   const location='第 '+line.page+' 页'+(line.line?' · 第 '+line.line+' 行':' · 影像引文');
-  const button=action((documents.get(line.doc)?.name || '原件')+' · '+location,
+  const full=(documents.get(line.doc)?.name || '原件')+' · '+location;
+  const button=action(withinPage && line.line?'核对第 '+line.line+' 行':full,
     ()=>openPage(line.doc,line.page,fact?.id,fact?null:line.line),'ref');
+  if (withinPage) button.setAttribute('aria-label',full);
   const row=box('batch-source reservation-note',el('q',line.quote),button);
   row.dataset.reservationSource=fact?.id || line.doc+'/p'+line.page+'/l'+line.line;
   if (!line.line && fact) row.append(tag(fact.status));

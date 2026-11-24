@@ -2,7 +2,7 @@
 
 ## 验收单合成一份 PDF
 
-运行 `server/.venv/bin/python docs/samples/receipt_packets.py` 生成中文水印资料。加 `--run --run-id 本次演练编号` 可走本机上传、逐页多模态识别、合成原件校对与审计流程。`--cases ordered borrowed quality duplicate continuation masked` 分别覆盖倒序装订、只在其他页签名、实测超限、重复单号、归属不清的续页和不完整编号。每个案例仍保留独立的合同、质保确认与银行回单。脚本按原件摘要、物理页和生成时印刷的文字进行补正和签认，演练不会替审计员签收业务结论。
+运行 `server/.venv/bin/python docs/samples/receipt_packets.py` 生成中文水印资料。加 `--run --run-id 本次演练编号` 可走本机上传、逐页多模态识别、合成原件校对与审计流程。`--cases ordered borrowed quality duplicate continuation masked` 分别覆盖倒序装订、只在其他页签名、实测超限、重复单号、归属不清的续页和不完整编号。另有 `retest`、`wrong_defect` 和 `approval`，分别演练同一册内的整改闭环、复验引用错误缺陷号，以及合同约定的董事会决议缺件但验收单均已签齐。每个案例仍保留独立的合同、质保确认与银行回单。脚本按原件摘要、物理页和生成时印刷的文字进行补正和签认，演练不会替审计员签收业务结论。
 
 
 ## 分批验收人与终验签字人

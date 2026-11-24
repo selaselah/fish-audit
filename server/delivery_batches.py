@@ -16,7 +16,11 @@ from reinspection import LINK_KEYS, linked
 LEGACY = "contract-delivery-batches-v1"
 SIGNING_FORMAT = "contract-delivery-batches-v2"
 FINAL_FORMAT = "contract-delivery-batches-v3"
-FORMAT = "contract-delivery-batches-v4"
+FINAL_SIGNING_FORMAT = "contract-delivery-batches-v4"
+FORMAT = "contract-delivery-batches-v5"
+FINAL_SIGNING_FORMATS = (FINAL_SIGNING_FORMAT,FORMAT)
+FINAL_FORMS = (FINAL_FORMAT,*FINAL_SIGNING_FORMATS)
+BATCH_SIGNING_FORMATS = (SIGNING_FORMAT,*FINAL_FORMS)
 FINAL_REFS = "batch_receipt_refs"
 LABELS = {"delivery_batch":("分批交付","约定交付批次","批次交付明细"),
           "batch_clause":("分批验收约定","分批验收条款","批次验收约定"),
@@ -187,10 +191,10 @@ def page_sources(graph,read_text,version=FORMAT):
             contract_fields.update(("warranty_period","warranty_condition"))
         if "payment_window_sources" in graph:
             contract_fields.add("payment_deadline")
-        if version in (SIGNING_FORMAT,FINAL_FORMAT,FORMAT):
+        if version in BATCH_SIGNING_FORMATS:
             contract_fields.add(CLAUSE)
         separate_units=set()
-        if version==FORMAT:
+        if version in FINAL_SIGNING_FORMATS:
             separate_units={f.get("unit",f["doc"]) for f in graph["facts"] if f["field"]=="batch_clause"
                             and f.get("unit",f["doc"]) in contracts and separate_clause(f)}
         coverage=covered_rows(graph,read_text,contracts-separate_units,contract_fields,contract_row,"分批合同")
@@ -198,7 +202,7 @@ def page_sources(graph,read_text,version=FORMAT):
             return contract_row(field,value,quote) or field==CLAUSE and bool(final_signers(quote)) and covers(field,value,quote)
         coverage+=covered_rows(graph,read_text,separate_units,contract_fields,separate_row,"另行终验合同")
         receipt_fields=set(RECEIPT_FIELDS)
-        if version in (FINAL_FORMAT,FORMAT):
+        if version in FINAL_FORMS:
             receipt_fields.add(FINAL_REFS)
         def receipt_row(field,value,quote):
             return covers(field,value,quote) and (field!=FINAL_REFS or bool(receipt_numbers(parts(quote)[1])))
@@ -305,7 +309,7 @@ def allocations(contract,native_spacing):
 
 def signing_plan(graph,contract):
     source=graph.get("delivery_batch_sources",{})
-    if source.get("format") not in (SIGNING_FORMAT,FINAL_FORMAT,FORMAT) or not source["signals"] or not readable(source,contract.unit) or not rule(contract)[0]:
+    if source.get("format") not in BATCH_SIGNING_FORMATS or not source["signals"] or not readable(source,contract.unit) or not rule(contract)[0]:
         return {}
     clauses=graph.get("acceptance_authority_sources",{}).get("clauses",[])
     if not clauses or contract.incomplete(CLAUSE):
@@ -317,7 +321,7 @@ def signing_plan(graph,contract):
     indices=[r["index"] for r in schedule]
     plan={}
     final=None
-    separate=source["format"]==FORMAT and separate_clause(one(contract,"batch_clause"))
+    separate=source["format"] in FINAL_SIGNING_FORMATS and separate_clause(one(contract,"batch_clause"))
     for row in clauses:
         fact=facts.get(row["fact"])
         if not row["native"] or row["unit"]!=contract.unit or not fact or (fact.get("source_line") or {}).get("text")!=row["quote"]:
@@ -382,7 +386,7 @@ def record(contract,doc,source,native_spacing,requirements,signatures,separate,f
     is_final=bool(separate and related and scope and raw_body(scope) in FINAL_SCOPES)
     requirement=final_requirement if is_final else requirements.get(index)
     ref_fact=one(doc,FINAL_REFS) if is_final else None
-    unexpected_refs=source.get("format") in (FINAL_FORMAT,FORMAT) and not is_final and bool(doc.fields[FINAL_REFS] or FINAL_REFS in doc.uncertain)
+    unexpected_refs=source.get("format") in FINAL_FORMS and not is_final and bool(doc.fields[FINAL_REFS] or FINAL_REFS in doc.uncertain)
     if is_final or unexpected_refs:
         fields.extend(doc.evidence(FINAL_REFS))
     def local_line(line):
@@ -521,7 +525,7 @@ def inspect(graph,contract,receipts,*,other_terms,native_spacing=False,requireme
     requirements=requirements or {}
     schedule,plan_problem=allocations(contract,native_spacing)
     independent,final,rule_fact=rule(contract)
-    separate=bool(source.get("format") in (FINAL_FORMAT,FORMAT) and independent and separate_clause(rule_fact))
+    separate=bool(source.get("format") in FINAL_FORMS and independent and separate_clause(rule_fact))
     contract_clear=readable(source,contract.unit)
     riders=external_riders(graph,source,contract.unit)
     if not contract_clear:
@@ -673,8 +677,9 @@ def verify_sources(report,read_text,*,signing=False):
     marker=policy["delivery_batches"]
     source=page_sources(graph,read_text,marker)
     version=policy.get("version","")
-    if (marker not in (LEGACY,SIGNING_FORMAT,FINAL_FORMAT,FORMAT) or "2026.11.25.07"<=version<"2026.11.25.08" and marker!=SIGNING_FORMAT or
-        "2026.11.25.08"<=version<"2026.11.25.09" and marker!=FINAL_FORMAT or version>="2026.11.25.09" and marker!=FORMAT or
+    if (marker not in (LEGACY,*BATCH_SIGNING_FORMATS) or "2026.11.25.07"<=version<"2026.11.25.08" and marker!=SIGNING_FORMAT or
+        "2026.11.25.08"<=version<"2026.11.25.09" and marker!=FINAL_FORMAT or
+        "2026.11.25.09"<=version<"2026.11.25.11" and marker!=FINAL_SIGNING_FORMAT or version>="2026.11.25.11" and marker!=FORMAT or
         policy.get("performance_checks") not in BATCH_FORMATS or
         graph.get("delivery_batch_sources")!=source or gaps(source)!=[g for g in graph["gaps"] if g["quality"]=="delivery_batch_clause"]):
         raise ValueError("分批条款原文、资料归属或页内覆盖与归档不符")

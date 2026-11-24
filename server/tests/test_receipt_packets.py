@@ -2,10 +2,13 @@ import copy
 import unittest
 
 from controls import VERSION, execute
+from delivery_batches import FINAL_SIGNING_FORMAT, evidence_edges, page_sources
 from graph import build_graph
-from receipt_packets import verify_sources
+from performance import compute
+from receipt_packets import LEGACY, sources, verify_sources
 from test_delivery_batches import states
 from test_final_signers import example
+from test_reinspection import graph as reinspection_graph
 
 
 def packet(*,original=None,modify=None):
@@ -40,6 +43,44 @@ def packet(*,original=None,modify=None):
 
 
 class ReceiptPacketTests(unittest.TestCase):
+    def test_printed_joint_signatures_and_outstanding_contract_approval_are_independently_visible(self):
+        original=example(contract_edits={"effect_clause":"本合同自双方盖章并经甲方董事会批准后生效"})
+        g,read=packet(original=original)
+        contract=next(f for f in compute(g) if f["rule"]=="H01")
+        self.assertEqual(contract["status"],"missing")
+        self.assertIn("董事会",contract["detail"])
+        for material in (original,g):
+            h,phases,cash=states(material)
+            batch=h["batch_acceptance"]
+            self.assertEqual([r["signing"]["status"] for r in batch["records"]],["ok"]*3)
+            self.assertNotIn("待取得本批验收人的独立签字栏",h["detail"])
+            self.assertEqual([p["status"] for p in phases],["missing"]*4)
+            self.assertEqual(cash["status"],"missing")
+            self.assertFalse(batch["completion_on"])
+            self.assertEqual(evidence_edges([h,*phases]),[])
+        g["delivery_batch_sources"]=page_sources(g,read,FINAL_SIGNING_FORMAT)
+        h,ps,_=states(g)
+        self.assertTrue(all("signing" not in r for r in h["batch_acceptance"]["records"]))
+        self.assertEqual([p["status"] for p in ps],["missing"]*4)
+
+    def test_reinspection_number_does_not_start_a_second_delivery(self):
+        def change(i,field,label,value):
+            return "2026-09-27" if field=="paid_on" else value
+        for mismatch in (False,True):
+            def edit(i,field,label,value):
+                if mismatch and i==4 and field=="defect_number":
+                    return value+"9"
+                return change(i,field,label,value)
+            grouped,read=packet(original=reinspection_graph(edit))
+            self.assertEqual(grouped["receipt_packet_sources"]["packets"],[])
+            result=next(h for h in compute(grouped) if h["rule"]=="H02")
+            source=next(h for h in compute(reinspection_graph(edit)) if h["rule"]=="H02")
+            self.assertEqual((result["status"],result["reinspection"]["state"]),(source["status"],source["reinspection"]["state"]))
+            self.assertEqual(result["reinspection"]["state"],"open" if mismatch else "closed")
+            self.assertEqual([s["unit"] for s in result["reinspection"]["steps"]],["unit/file/p3","unit/file/p2","unit/file/p1"])
+            former=sources(grouped,read,LEGACY)
+            self.assertEqual(former["packets"][0]["status"],"review")
+
     def test_reordered_pages_keep_each_signature_and_condition_with_its_own_receipt(self):
         for original,status in ((example(),"ok"),(example(["郑敏"]),"missing"),
                                 (example(contract_edits={"effect_clause":"本合同自双方盖章并经甲方董事会批准后生效"}),"missing")):
@@ -106,7 +147,7 @@ class ReceiptPacketTests(unittest.TestCase):
         g,read=packet()
         report={"policy":VERSION,"graph":g,"findings":execute(g,g["profile"])}
         verify_sources(report,read)
-        for change in ("quote","edge","owner","section","policy","number","raw","assignment"):
+        for change in ("quote","edge","owner","section","policy","number","raw","assignment","older_version"):
             bad=copy.deepcopy(report)
             graph=bad["graph"]
             p=graph["receipt_packet_sources"]["packets"][0]["pages"][1]
@@ -124,5 +165,7 @@ class ReceiptPacketTests(unittest.TestCase):
                 graph["documents_by_kind"]["acceptance"].append("unit/file/p2")
             elif change=="policy":
                 del bad["policy"]["receipt_packets"]
+            elif change=="older_version":
+                bad["policy"]["version"]="2026.11.25.09"
             with self.assertRaises(ValueError):
                 verify_sources(bad,(lambda d,n:read(d,n)+"改") if change=="raw" else read)

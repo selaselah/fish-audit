@@ -9,8 +9,10 @@ from acceptance_authority import TITLES, covers, parts
 from delivery_batches import receipt_numbers
 
 
-FORMAT = "numbered-acceptance-pages-v1"
+LEGACY = "numbered-acceptance-pages-v1"
+FORMAT = "numbered-acceptance-pages-v2"
 SINCE = "2026.11.25.10"
+DISTINCT_RETEST = "2026.11.25.11"
 LABELS = {"acceptance_number":("验收单编号","验收报告编号"), "contract_id":("合同编号","合同号"),
           "acceptance_scope":("验收范围","验收批次","验收阶段"), "accepted_on":("验收日期","验收时间")}
 NAMES = {"acceptance":"验收标题","acceptance_number":"本单编号","contract_id":"合同编号",
@@ -23,7 +25,7 @@ def native_value(raw):
     return normalize("NFKC",raw).strip()
 
 
-def inspect_page(doc, number, node, text, facts, kinds):
+def inspect_page(doc, number, node, text, facts, kinds, version):
     proofs = defaultdict(list)
     for line, raw in enumerate(text.splitlines(), 1):
         label, body = parts(raw)
@@ -52,9 +54,16 @@ def inspect_page(doc, number, node, text, facts, kinds):
     native = node.get("layer")=="text" and node.get("clause_text_only") is True
     title = proofs["acceptance"]
     own = proofs["acceptance_number"]
-    observed = any(f["field"] in ("acceptance","acceptance_number") for f in facts)
     another = any(f["field"] in kinds-{"acceptance"} and f["status"] in ("anchored","confirmed")
                   and (f.get("source_line") or {}).get("rects") for f in facts)
+    observed = any(f["field"]=="acceptance" for f in facts)
+    for fact in facts:
+        if fact["field"]!="acceptance_number":
+            continue
+        label,_ = parts(fact["quote"])
+        if (version==LEGACY or label in LABELS["acceptance_number"] or not another and
+                label not in ("复验单编号","复验报告编号","原验收单编号","所附批次验收单号")):
+            observed = True
     number_text = parts(own[0]["quote"])[1] if len(own)==1 else ""
     errors = []
     if not native:
@@ -76,7 +85,7 @@ def inspect_page(doc, number, node, text, facts, kinds):
             "reasons":errors}, bool(observed or title or own), another, max(len(title),len(own))
 
 
-def sources(graph, read_text):
+def sources(graph, read_text, version=FORMAT):
     by_doc, by_page = defaultdict(dict), defaultdict(list)
     partial = {(g["doc"],g["page"]) for g in graph["gaps"] if g["quality"] in ("partial","unreadable")}
     other_hints = {(g["doc"],g["page"]) for g in graph["gaps"] if g.get("title_hint") not in (None,"acceptance")}
@@ -97,7 +106,7 @@ def sources(graph, read_text):
             text = read_text(doc,n) if node.get("layer")=="text" else ""
             if node.get("layer")=="text" and node.get("text_sha256") and hashlib.sha256(text.encode()).hexdigest()!=node["text_sha256"]:
                 raise ValueError("合订验收原页文字与归档摘要不符")
-            page,signal,other,count = inspect_page(doc,n,node,text,by_page[doc,n],kinds)
+            page,signal,other,count = inspect_page(doc,n,node,text,by_page[doc,n],kinds,version)
             if (doc,n) in partial:
                 page["reasons"].append("原页辨读记录尚有缺口")
             if (doc,n) in other_hints:
@@ -114,7 +123,7 @@ def sources(graph, read_text):
                 p["reasons"].append("本单编号在合订件内重复")
         status = "review" if any(p["reasons"] for p in entries) else "split"
         packets.append({"doc":doc,"status":status,"pages":entries})
-    return {"format":FORMAT,"packets":packets}
+    return {"format":version,"packets":packets}
 
 
 def gaps(source):
@@ -140,8 +149,9 @@ def verify_sources(report,read_text,*,signing=False):
         if signing and any(f["rule"]=="H02" and f["status"]=="ok" for f in report["findings"]) and sources(graph,read_text)["packets"]:
             raise ValueError("旧版验收结论涉及多页验收资料，请按现行程序重审后签收。")
         return
-    expected = sources(graph,read_text)
-    if (marker!=FORMAT or saved!=expected or
+    required = FORMAT if policy.get("version","")>=DISTINCT_RETEST else LEGACY
+    expected = sources(graph,read_text,required)
+    if (policy.get("version","")<SINCE or marker!=required or saved!=expected or
             [g for g in graph["gaps"] if g["quality"]=="receipt_packet"]!=gaps(expected) or
             [e for e in graph["edges"] if e["type"]=="acceptance_page_identity"]!=edges(expected)):
         raise ValueError("验收单边界、原页编号或引文关系与归档不符")

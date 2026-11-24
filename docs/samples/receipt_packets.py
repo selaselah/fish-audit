@@ -9,7 +9,7 @@ from batch_final import FINAL, LABELS, TITLES
 from contract_milestones import PROFILE, confirm_printed_records
 from final_signers import SPACING, signed_records
 from generate import ROOT, draw_pdf_page, embedded_font
-from quality_reinspection import reconcile_training_pages
+from quality_reinspection import reconcile_training_pages, reinspection_records, verify_report as verify_reinspection
 from run import BASE, get, submit
 from warranty_release import check_training_watermark
 
@@ -17,24 +17,32 @@ from warranty_release import check_training_watermark
 PACKET = "交付验收合订件"
 CASES = {"ordered":"终验在首页的三张独立验收单", "borrowed":"同一本合订件的分批签字未出现在终验页",
          "quality":"合订终验页签齐但实测柜温超限", "duplicate":"合订件两张验收单印有同一编号",
-         "continuation":"三张有编号的验收单另附一页未标所属单号的续页", "masked":"合订验收单自己的编号仅见尾号"}
+         "continuation":"三张有编号的验收单另附一页未标所属单号的续页", "masked":"合订验收单自己的编号仅见尾号",
+         "retest":"初验、整改和合格复验三种资料合订", "wrong_defect":"合订复验引用了另一项缺陷编号",
+         "approval":"验收单全部签齐而合同约定的董事会批准缺件"}
 
 
 def generate(seed, mode):
     code=hashlib.sha256((seed+"-"+mode).encode()).hexdigest()[:8].upper()
     folder=ROOT/"39-同类验收单合订件"/code
     folder.mkdir(parents=True,exist_ok=True)
-    records=signed_records(code,mode if mode in ("borrowed","quality") else "joint")
-    first,second="第一批验收报告","第二批验收报告"
-    if mode in ("duplicate","masked"):
-        reference=dict(records[first])["验收单编号"] if mode=="duplicate" else "****-"+code[-4:]
-        records[second]=[(k,reference if k=="验收单编号" else v) for k,v in records[second]]
-    pages=[FINAL,second,first]
-    titles={**TITLES}
-    if mode=="continuation":
-        extra="验收记录续页"
-        pages.append(extra)
-        records[extra]=[("交接说明","封条待核实，本页所属验收单号待补")]
+    if mode in ("retest","wrong_defect"):
+        records=reinspection_records(code,"closed" if mode=="retest" else "mismatch")
+        pages=["复验报告","整改记录单","验收报告"]
+    else:
+        records=signed_records(code,mode if mode in ("borrowed","quality") else "joint")
+        if mode=="approval":
+            records["采购合同"]=[(k,"本合同自双方盖章并经甲方董事会批准后生效" if k=="生效条款" else v)
+                                 for k,v in records["采购合同"]]
+        first,second="第一批验收报告","第二批验收报告"
+        if mode in ("duplicate","masked"):
+            reference=dict(records[first])["验收单编号"] if mode=="duplicate" else "****-"+code[-4:]
+            records[second]=[(k,reference if k=="验收单编号" else v) for k,v in records[second]]
+        pages=[FINAL,second,first]
+        if mode=="continuation":
+            extra="验收记录续页"
+            pages.append(extra)
+            records[extra]=[("交接说明","封条待核实，本页所属验收单号待补")]
     layout={name:[name] for name in records if name not in pages}
     layout[PACKET]=pages
     font=embedded_font("ReceiptPacketCJK")
@@ -42,7 +50,7 @@ def generate(seed, mode):
         paper=canvas.Canvas(str(folder/(filename+".pdf")),pagesize=(595,842),invariant=1)
         paper.setTitle(filename)
         for form in forms:
-            draw_pdf_page(paper,titles.get(form,form),records[form],font=font,spacing=SPACING)
+            draw_pdf_page(paper,TITLES.get(form,form),records[form],font=font,spacing=SPACING)
             paper.showPage()
         paper.save()
     return folder,records,layout
@@ -59,6 +67,10 @@ def settle(cid,folder,records,layout):
 
 def validate(report,mode):
     graph=report["graph"]
+    if mode in ("retest","wrong_defect"):
+        assert graph["receipt_packet_sources"]["packets"]==[]
+        verify_reinspection(report,"closed" if mode=="retest" else "mismatch")
+        return
     packet,=graph["receipt_packet_sources"]["packets"]
     doc=next(d for d in graph["documents"] if d["id"]==packet["doc"])
     assert doc["name"]==PACKET+".pdf" and len(graph["documents"])==4
@@ -66,7 +78,8 @@ def validate(report,mode):
     phases=[f for f in checks if f["rule"]=="H04"]
     inspection=next(f for f in checks if f["rule"]=="H02")
     payment=next(f for f in checks if f["rule"]=="H05")
-    assert next(f["status"] for f in checks if f["rule"]=="H01")=="ok"
+    contract=next(f for f in checks if f["rule"]=="H01")
+    assert contract["status"]==("missing" if mode=="approval" else "ok")
     assert [p["stage"]["share"] for p in phases]==["20","35","35","10"]
     assert payment["stage"]["share"]=="10"
     pages=packet["pages"]
@@ -93,6 +106,11 @@ def validate(report,mode):
     units=[f"unit/{doc['id']}/p{n}" for n in (3,2,1)]
     assert [b["records"] for b in accepted["batches"]]==[[units[0]],[units[1]]]
     assert accepted["separate_final"]["records"]==[units[2]]
+    if mode=="approval":
+        assert "董事会" in contract["detail"] and all(r["signing"]["status"]=="ok" for r in accepted["records"])
+        assert [p["status"] for p in phases]==["missing"]*4 and payment["status"]=="missing"
+        assert not accepted["completion_on"] and verdict=="review"
+        return
     expected={"ordered":("ok","ok","ok","pass"),"borrowed":("missing","missing","missing","review"),
               "quality":("issue","risk","missing","reject")}[mode]
     assert (inspection["status"],phases[-1]["status"],payment["status"],verdict)==expected,(mode,verdict,inspection["detail"])

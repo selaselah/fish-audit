@@ -2,10 +2,12 @@
 
 ## 验收合订件的原页归属
 
-规则 `2026.11.25.10` 保存 `policy.receipt_packets=numbered-acceptance-pages-v1`。报告的 `graph.receipt_packet_sources.packets[]` 按上传原件列出审查过的验收页。每条含原件 `doc`、`status` 和 `pages[]`。页记录有物理页 `page`、原文编号 `number`、文字版式标记 `text_only`、待核原因 `reasons[]`、原行 `rows[]`。原行记录字段、页、行号、引文和能与原行逐字对应的观察 ID。
+规则 `2026.11.25.11` 保存 `policy.receipt_packets=numbered-acceptance-pages-v2`。版本 v2 按原页栏目区分验收单号、复验单号和引用号。同一本册只有一张初验单、另两页分别是已识别的整改与复验材料时，`packets` 为空，H02 的 `reinspection.steps` 保存三种角色及各自原页。规则 `2026.11.25.10` 的 v1 底稿按其原版复算。报告的 `graph.receipt_packet_sources.packets[]` 按上传原件列出审查过的验收页。每条含原件 `doc`、`status` 和 `pages[]`。页记录有物理页 `page`、原文编号 `number`、文字版式标记 `text_only`、待核原因 `reasons[]`、原行 `rows[]`。原行记录字段、页、行号、引文和能与原行逐字对应的观察 ID。
 
 `split` 表示各张验收单可分别核对。所有字段和签认保留物理 `doc/page`，`unit` 指向该页的逻辑单据。每个 `acceptance_page_identity` 关系从逻辑单据指向标题或本单编号，引文包含页 ID 及观察 ID。`review` 表示该组合内的验收依据尚待核实，理由也发布到 `graph.gaps` 的 `receipt_packet` 项。H02 及依赖该资料的付款条件保留相关页的证据引用。签收与离线核验按底稿版本检查归属、页码、文本、图关系及原件摘要。
 
+
+规则 `2026.11.25.11` 同时使用 `policy.delivery_batches=contract-delivery-batches-v5`。当书面签认条款和对应原单俱全，H02 可记录各页签字人与条款所列姓名是否对应。即使签字观察均已核图，合同尚欠生效审批时，各批结论和付款条件仍显示待核，`completion_on` 为空。可沿 H01 的引文查看缺件，沿 H02 的 `signing.signed` 查看已核的签字。v4 底稿按原有判断顺序复算。
 
 规则 `2026.11.25.09` 使用 `policy.delivery_batches=contract-delivery-batches-v4`。在各批独立付款且另行终验的合同中，H02 的 `batch_acceptance.separate_final.signing_requirement` 保存合同逐字可核的终验签认要求，`required` 是指定姓名，`clause_ref` 定位条款。合同有这项要求、尚缺终验原件时，仍返回要求及空的 `separate_final.records`。
 

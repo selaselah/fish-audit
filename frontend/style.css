@@ -147,7 +147,10 @@ textarea { width: 100%; resize: vertical; }
 .packet-file { padding:12px 14px; border:1px solid var(--line); border-radius:6px; }
 .packet-file + .packet-file { margin-top:8px; }
 .packet-file > .flow { justify-content:space-between; }
+.packet-file > .packet-problem { justify-content:flex-start; gap:6px 10px; margin-top:8px; }
 .packet-page { padding-top:10px; margin-top:10px; border-top:1px solid var(--line); overflow-wrap:anywhere; }
+.packet-page-heading { justify-content:space-between; }
+.packet-page .reservation-note { border-top:0; }
 .packet-page .ref { max-width:100%; white-space:normal; }
 .batch-source { display:flex; align-items:baseline; flex-wrap:wrap; gap:3px 10px; margin:6px 0; }
 .batch-source q,.batch-source .ref,.batch-receipt { min-width:0; max-width:100%; white-space:pre-wrap; overflow-wrap:anywhere; }

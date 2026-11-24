@@ -274,7 +274,15 @@ try {
         const original=report.graph.documents.find(d=>d.id===page.doc).name+' · 第 '+page.page+' 页';
         await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-title").textContent==='+JSON.stringify(original)
           +' && document.querySelector("#page-dialog img")?.naturalWidth>0','original acceptance page in shared PDF');
+        const scope=page.rows.find(r=>r.field==='acceptance_scope');
+        if (scope?.facts.length) assert.equal(await evaluate('document.querySelector(".located")?.dataset.fact'),scope.facts[0]);
         await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+        if (page.reasons.length) {
+          const jump='document.querySelector('+JSON.stringify('[data-packet-issue="'+ref+'"]')+')';
+          await evaluate(jump+'.click()');
+          await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-title").textContent==='+JSON.stringify(original),'unresolved receipt page');
+          await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+        }
         const detail=page.rows.filter(r=>['acceptance','contract_id','accepted_on'].includes(r.field));
         if (detail.length) await evaluate(group+'.querySelector("details").open=true');
         await verifyRemarks(group,page.rows.filter(r=>r.field!=='acceptance_scope'));
@@ -728,7 +736,12 @@ try {
     }
     for (const width of [1440,1024,820,768,390,320]) {
       await call('Emulation.setDeviceMetricsOverride',{width,height:880,deviceScaleFactor:1,mobile:false});
-      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll(".phase-summary li,.phase-results,.clause-source,.mandate-dates,.mandate-side,.quality-change,.change-comparison,.change-source,.acceptance-authority,.signature-record,.signer-source,.contract-date-evidence,.delivery-batches,.batch-source,.batch-record,.batch-receipt")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'performance layout at '+width);
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll(".phase-summary li,.phase-results,.clause-source,.mandate-dates,.mandate-side,.quality-change,.change-comparison,.change-source,.acceptance-authority,.signature-record,.signer-source,.contract-date-evidence,.delivery-batches,.batch-source,.batch-record,.batch-receipt,.receipt-packets,.packet-file,.packet-page")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'performance layout at '+width);
+      if (packets.length && process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
+        await evaluate('document.querySelectorAll(".packet-page details").forEach(d=>d.open=false);document.querySelector(".receipt-packets").scrollIntoView({block:"start"});window.scrollBy(0,-40)');
+        const shot=await call('Page.captureScreenshot',{format:'png'});
+        await writeFile(join(process.env.AUDIT_UI_SHOTS,'receipt-pages-'+performanceCase+'-'+width+'.png'),Buffer.from(shot.data,'base64'));
+      }
       if (batches && process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
         await evaluate('document.querySelector(".delivery-batches").scrollIntoView({block:"start"});window.scrollBy(0,-40)');
         const capture=await call('Page.captureScreenshot',{format:'png'});
