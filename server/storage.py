@@ -19,7 +19,8 @@ from installments import LIMIT as INSTALLMENT_LIMIT, calculate as calculate_inst
 from invoice_approval import receipt as invoice_approval_receipt, validate as validate_invoice_approval
 from invoice_comparison import FORMAT as INVOICE_LOOKUP, actionables, archived_identity, lookup_numbers, screen
 from invoice_identity import InvoiceIdentities
-from invoice_history import INDEX_FIELDS, InvoiceHistoryChanged, differences as invoice_differences, indexed_invoices
+from invoice_history import (INDEX_FIELDS, InvoiceHistoryChanged, differences as invoice_differences,
+                             indexed_invoices, install_index_guard, pending_signed_indexes)
 from invoice_proof import source_record as invoice_source_record
 from payment_history import LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_facts, payment_record
 from peer_review import different_reviewers, review_record, valid_findings, verify_review
@@ -208,6 +209,7 @@ class Store:
                         raise CaseError("已有付款底稿摘要不符，无法重建合同付款索引。",409)
                     self.index_payment(db, row["id"], row["rev"], json.loads(row["content"]))
                 db.execute("PRAGMA user_version=4")
+            install_index_guard(db)
             install_capacity(db)
         os.chmod(self.path, 0o600)
 
@@ -416,6 +418,7 @@ class Store:
         project(db, case_id, revision, report)
         self.index_payment(db, case_id, revision, report)
         db.executemany("INSERT INTO invoice_index VALUES(?,?,?,?,?,?,?,?,?,?)", self.index_rows(case_id, revision, report))
+        db.execute("DELETE FROM invoice_index_pending WHERE case_id=? AND rev<=?",(case_id,revision))
 
     def method_source(self, checksum):
         with self.connect() as db:
@@ -483,19 +486,42 @@ class Store:
                     raise CaseError("已签收票号的原文依据不符，无法引用前案。",409) from error
                 match.update(source=source,signoff_hash=signature)
 
+    def reconcile_invoice_index(self,db,case_id):
+        for prior,revision in pending_signed_indexes(db,case_id).fetchall():
+            content,_ = self.signed_version(db,prior,revision)
+            paper = json.loads(content)
+            if paper.get("case_id")!=prior:
+                raise CaseError("签收底稿的案件归属与历史同票索引不符，已停止本次查验。",409)
+            expected = set(self.index_rows(prior,revision,paper))
+            present = {tuple(r) for r in db.execute("SELECT "+",".join(INDEX_FIELDS)+" FROM invoice_index WHERE case_id=? AND rev=?",
+                                                    (prior,revision))}
+            if present-expected:
+                raise CaseError("历史同票索引与已签收底稿的号码或引文冲突，已停止本次查验。",409)
+            missing = sorted(expected-present)
+            if missing:
+                db.executemany("INSERT INTO invoice_index VALUES(?,?,?,?,?,?,?,?,?,?)",missing)
+                event(db,prior,"invoice_index",f"已按签收底稿 R{revision} 补全 {len(missing)} 条票号检索记录。")
+            db.execute("DELETE FROM invoice_index_pending WHERE case_id=? AND rev=?",(prior,revision))
+
     def prior_invoices(self, case_id, keys):
         if not keys:
             return []
-        with self.connect() as db:
-            db.execute("BEGIN")
-            matches = indexed_invoices(db,case_id,keys)
-            self.verify_invoice_sources(db,matches)
-            for match in matches:
-                if match["peer_source_rev"] is None:
-                    del match["peer_source_rev"]
-                if not match["checked_field"]:
-                    del match["checked_field"]
-            return matches
+        # Read the guard and the signed candidates in one snapshot. Acquire a write lock only for a repair.
+        while True:
+            with self.connect() as db:
+                db.execute("BEGIN")
+                if pending_signed_indexes(db,case_id).fetchone() is None:
+                    matches = indexed_invoices(db,case_id,keys)
+                    self.verify_invoice_sources(db,matches)
+                    break
+            with self.connect(True) as db:
+                self.reconcile_invoice_index(db,case_id)
+        for match in matches:
+            if match["peer_source_rev"] is None:
+                del match["peer_source_rev"]
+            if not match["checked_field"]:
+                del match["checked_field"]
+        return matches
 
     @staticmethod
     def index_payment(db, case_id, revision, report):
@@ -638,6 +664,8 @@ class Store:
         graph = paper["graph"]
         if graph.get("profile",paper["policy"].get("profile")) != BANK:
             keys = sorted({edge["to"] for edge in invoice_number_edges(graph)})
+            if keys:
+                self.reconcile_invoice_index(db,case_id)
             current = indexed_invoices(db,case_id,keys)
             combined = paper["policy"].get("invoice_lookup")==INVOICE_LOOKUP
             self.verify_invoice_sources(db,current,include_identity=combined)

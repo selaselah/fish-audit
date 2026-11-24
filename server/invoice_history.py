@@ -6,6 +6,35 @@ from config import CaseError
 INDEX_FIELDS = ("case_id","rev","doc","fact","page","number_key","quote","source_hash","page_hash","document_kind")
 
 
+def install_index_guard(db):
+    """Track changed projections; upgrades also check the latest pre-existing workpapers."""
+    triggers = (("invoice_index","insert",("NEW",)),("invoice_index","delete",("OLD",)),
+                ("invoice_index","update",("OLD","NEW")),("reports","insert",("NEW",)),("reports","update",("OLD","NEW")))
+    names = {f"invoice_check_{table}_{operation}" for table,operation,_ in triggers} | {"invoice_index_pending"}
+    installed = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type IN ('table','trigger')")}
+    db.execute("""CREATE TABLE IF NOT EXISTS invoice_index_pending(case_id TEXT NOT NULL,rev INTEGER NOT NULL,
+               PRIMARY KEY(case_id,rev)) WITHOUT ROWID""")
+    for table,operation,versions in triggers:
+        steps = " ".join(f"""INSERT OR IGNORE INTO invoice_index_pending(case_id,rev)
+                            VALUES({source}.case_id,{source}.rev);""" for source in versions)
+        db.execute(f"""CREATE TRIGGER IF NOT EXISTS invoice_check_{table}_{operation}
+                   AFTER {operation} ON {table} BEGIN {steps} END""")
+    version = db.execute("PRAGMA user_version").fetchone()[0]
+    if version<5 or names-installed:
+        db.execute("""INSERT OR IGNORE INTO invoice_index_pending
+                   SELECT r.case_id,r.rev FROM reports r JOIN cases c ON c.id=r.case_id AND c.rev=r.rev""")
+        if version<5:
+            db.execute("PRAGMA user_version=5")
+
+
+def pending_signed_indexes(db,case_id):
+    return db.execute("""SELECT p.case_id,p.rev FROM invoice_index_pending p
+                      CROSS JOIN cases c ON c.id=p.case_id AND c.rev=p.rev
+                      CROSS JOIN signoffs s ON s.case_id=p.case_id AND s.rev=p.rev
+                      WHERE c.workspace=(SELECT workspace FROM cases WHERE id=?) AND c.id<>?
+                      AND c.status IN ('closed','in_review')""",(case_id,case_id))
+
+
 class InvoiceHistoryChanged(CaseError):
     def __init__(self, differences, peer):
         self.differences = differences

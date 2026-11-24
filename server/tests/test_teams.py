@@ -203,6 +203,65 @@ class EnterpriseFlow(unittest.TestCase):
         self.assertEqual(admin.post(cases+second+"/signoff",headers=headers,json=choice).status_code,409)
         self.assertEqual(admin.get(cases+second).json["decisions"],[])
 
+    def test_missing_signed_index_recovers_once_and_stale_approval_still_conflicts(self):
+        from concurrent.futures import ThreadPoolExecutor
+        from threading import Barrier
+        from graph import entity_id
+        admin,wid,headers=self.register("repair-invoice-index")
+        outsider,foreign,auth=self.register("foreign-invoice-index")
+        first=self.checked_invoice(admin,wid,headers,"before-index-gap")
+        second=self.checked_invoice(admin,wid,headers,"pending-at-index-gap")
+        other=self.checked_invoice(outsider,foreign,auth,"foreign-index-gap")
+        choice={"rev":2,"decision":"approve","note":"演练签收。"}
+        root=f"/api/w/{wid}/cases/"
+        self.assertEqual(admin.post(root+first+"/signoff",headers=headers,json=choice).status_code,200)
+        self.assertEqual(outsider.post(f"/api/w/{foreign}/cases/{other}/signoff",headers=auth,json=choice).status_code,200)
+        saved=self.store.report(first,2)
+        with self.store.connect(True) as db:
+            db.execute("DELETE FROM invoice_index WHERE case_id IN (?,?)",(first,other))
+        conflict=admin.post(root+second+"/signoff",headers=headers,json=choice)
+        self.assertEqual(conflict.status_code,409)
+        self.assertEqual([row["current"]["case_id"] for row in conflict.json["invoice_history"]["changes"]],[first])
+        self.assertEqual(admin.get(root+second).json["decisions"],[])
+        keys=[entity_id("invoice_number","DEMO-537")]
+        gate=Barrier(2)
+        def lookup(_):
+            gate.wait(5)
+            return [r["case_id"] for r in self.store.prior_invoices(second,keys)]
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            self.assertEqual(list(pool.map(lookup,[1,2])),[[first],[first]])
+        with self.store.connect() as db:
+            self.assertEqual([tuple(r) for r in db.execute("SELECT case_id,count(*) FROM events WHERE stage='invoice_index' GROUP BY case_id")],[(first,1)])
+            self.assertEqual(db.execute("SELECT count(*) FROM invoice_index WHERE case_id=?",(other,)).fetchone()[0],0)
+        self.assertEqual(self.store.report(first,2),saved)
+        with self.store.connect(True) as db:
+            db.execute("UPDATE invoice_index SET number_key='另一号码' WHERE case_id=?",(first,))
+        with self.assertRaisesRegex(CaseError,"同票索引"):
+            self.store.prior_invoices(second,keys)
+
+    def test_upgrade_recovers_an_older_missing_index_and_stops_on_damaged_source(self):
+        from graph import entity_id
+        admin,wid,headers=self.register("legacy-index-recovery")
+        first=self.checked_invoice(admin,wid,headers,"legacy-index-source")
+        second=self.submit(admin,wid,headers,"legacy-index-next")
+        root=f"/api/w/{wid}/cases/"
+        self.assertEqual(admin.post(root+first+"/signoff",headers=headers,json={"rev":2,"decision":"return","note":"演练。"}).status_code,200)
+        with self.store.connect(True) as db:
+            db.execute("DROP TRIGGER invoice_check_invoice_index_delete")
+            db.execute("DELETE FROM invoice_index WHERE case_id=?",(first,))
+            db.execute("DELETE FROM invoice_index_pending")
+            db.execute("PRAGMA user_version=4")
+        upgraded=Store(self.store.root)
+        keys=[entity_id("invoice_number","DEMO-537")]
+        self.assertEqual([r["case_id"] for r in upgraded.prior_invoices(second,keys)],[first])
+        with upgraded.connect(True) as db:
+            db.execute("DELETE FROM invoice_index WHERE case_id=?",(first,))
+            db.execute("UPDATE reports SET content=content||' ' WHERE case_id=? AND rev=2",(first,))
+        with self.assertRaisesRegex(CaseError,"归档摘要"):
+            upgraded.prior_invoices(second,keys)
+        with upgraded.connect() as db:
+            self.assertFalse(db.execute("SELECT 1 FROM invoice_index WHERE case_id=?",(first,)).fetchone())
+
     def test_same_serial_different_codes_at_issuance_and_at_signature(self):
         admin,wid,headers=self.register("printed-codes")
         base="/api/w/"+wid+"/cases/"
