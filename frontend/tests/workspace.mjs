@@ -30,7 +30,8 @@ const installmentCase = caseArgument('--installment-case');
 const replayCase = caseArgument('--replay-case');
 const recoveringCase = caseArgument('--recovering-case');
 const invoiceConflict = caseArgument('--invoice-conflict-case');
-const seeded = sampleDesk || paymentCase || supplementCase || peerCase || fieldCase || installmentCase || replayCase || recoveringCase || invoiceConflict;
+const invoiceSource = caseArgument('--invoice-source-case');
+const seeded = sampleDesk || paymentCase || supplementCase || peerCase || fieldCase || installmentCase || replayCase || recoveringCase || invoiceConflict || invoiceSource;
 const root = recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
 if (recoveringCase) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
 const children = [];
@@ -134,6 +135,47 @@ try {
     await call('Page.navigate',{url:jump});
     await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth && document.querySelector(".located")?.textContent.includes('+JSON.stringify(fact.quote)+')','signed invoice on its original page');
     console.log('PASS · Stale invoice approval, preserved draft note, six widths, exact original'+(process.argv.includes('--live')?' and manually initiated rerun':''));
+  } else if (invoiceSource) {
+    const base=root+'/api/cases/'+invoiceSource;
+    const task=await (await fetch(base)).json();
+    assert.ok(task.title.startsWith('合成演练 · '));
+    const {report}=await (await fetch(base+'/reports/'+task.rev)).json();
+    const finding=report.findings.find(f=>f.rule==='I02' && f.status==='risk');
+    const prior=report.graph.prior_invoices.find(m=>finding.evidence.includes(m.id) && m.source?.basis==='native_line');
+    assert.ok(prior);
+    await call('Page.navigate',{url:root+'/workpaper/'+invoiceSource+'?rev='+task.rev+'&finding='+finding.id});
+    await wait('document.querySelector("#trace-select")?.value==='+JSON.stringify(finding.id),'pinned I02 evidence path');
+    await evaluate('[...document.querySelectorAll(".trace-sources summary")].find(s=>s.textContent.startsWith('+JSON.stringify(prior.title)+')).click()');
+    await wait('document.querySelector(".trace-sources .invoice-source")?.textContent.includes('+JSON.stringify(prior.quote)+')','historical field in the evidence path');
+    await click('审计结论');
+    const selector='[data-finding="'+finding.id+'"]';
+    await wait('!!document.querySelector('+JSON.stringify(selector)+')','I02 finding');
+    await evaluate('[...document.querySelector('+JSON.stringify(selector)+').querySelectorAll("summary")].find(s=>s.textContent.startsWith("核对前案签收依据")).click()');
+    const sel=JSON.stringify(selector+' .invoice-source');
+    await wait('document.querySelector('+sel+')?.textContent.includes('+JSON.stringify(prior.quote)+')','signed original invoice citation');
+    assert.ok(await evaluate('document.querySelector('+sel+').textContent.includes("第 '+prior.source.line+' 行")'));
+    await evaluate('document.querySelector('+sel+').querySelector("summary").click()');
+    await wait('document.querySelector('+sel+').textContent.includes('+JSON.stringify(prior.signoff_hash)+')','signed opinion digest');
+    const urls=await evaluate('[...document.querySelector('+sel+').querySelectorAll("a")].map(a=>a.href)');
+    assert.equal(new URL(urls[0]).searchParams.get('fact'),prior.fact);
+    assert.equal(new URL(urls[0]).searchParams.get('rev'),String(prior.rev));
+    assert.equal(new URL(urls[1]).pathname,'/api/cases/'+prior.case_id+'/documents/'+prior.doc+'/original');
+    assert.equal(new URL(urls[1]).searchParams.get('rev'),String(prior.rev));
+    const original=await fetch(urls[1]);
+    assert.equal(original.status,200);
+    assert.equal(createHash('sha256').update(Buffer.from(await original.arrayBuffer())).digest('hex'),prior.source_hash);
+    for (const width of [1440,1024,820,768,390,320]) {
+      await call('Emulation.setDeviceMetricsOverride',{width,height:880,deviceScaleFactor:1,mobile:false});
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && document.querySelector('+sel+').scrollWidth<=document.querySelector('+sel+').clientWidth+1'),'invoice proof at '+width);
+      if (process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
+        await evaluate('document.querySelector('+sel+').scrollIntoView({block:"center"})');
+        const capture=await call('Page.captureScreenshot',{format:'png'});
+        await writeFile(join(process.env.AUDIT_UI_SHOTS,'invoice-source-'+width+'.png'),Buffer.from(capture.data,'base64'));
+      }
+    }
+    await call('Page.navigate',{url:urls[0]});
+    await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth && document.querySelector(".located")?.textContent.includes('+JSON.stringify(prior.quote)+')','signed native invoice opened at its original quote');
+    console.log('PASS · I02 signed source, original bytes, exact line, both revisions and six responsive widths');
   } else if (recoveringCase) {
     const workspace=process.env.SYNTHETIC_RECOVERY_WORKSPACE;
     assert.match(workspace || '',/^[0-9a-f]{32}$/);

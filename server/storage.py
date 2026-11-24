@@ -14,6 +14,7 @@ from field_sources import FieldSources, check_archived_files, check_cited_files,
 from graph import compact, invoice_number_edges
 from installments import LIMIT as INSTALLMENT_LIMIT, calculate as calculate_installments
 from invoice_history import INDEX_FIELDS, InvoiceHistoryChanged, differences as invoice_differences, indexed_invoices
+from invoice_proof import source_record as invoice_source_record
 from payment_history import LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_facts, payment_record
 from peer_review import different_reviewers, review_record, valid_findings, verify_review
 from supplements import compare_return
@@ -394,7 +395,7 @@ class Store:
                              fact["quote"], fact["source_sha256"], fact["page_sha256"], kind))
         return rows
 
-    def invoice_sources(self,db,matches):
+    def verify_invoice_sources(self,db,matches):
         groups = {}
         for match in matches:
             groups.setdefault((match["case_id"],match["rev"]),[]).append(match)
@@ -404,7 +405,30 @@ class Store:
             indexed = set(self.index_rows(prior,rev,archived))
             if any(tuple(match[key] for key in INDEX_FIELDS) not in indexed for match in group):
                 raise CaseError("历史同票索引与已签收底稿所记的票号或引文不符。",409)
-            yield prior,rev,archived,signoff,group
+            graph = archived["graph"]
+            facts = {f["id"]:f for f in graph["facts"]}
+            nodes = {n["id"]:n for n in graph["nodes"]}
+            check_cited_files(db,prior,self.files/prior,graph,[facts[m["fact"]] for m in group])
+            selected = {m["fact"] for m in group if m["checked_field"]}
+            observed = {m["fact"] for m in group if any((facts[m["fact"]].get(k) or {}).get("source_check")
+                                                        for k in ("attestation","amendment"))}
+            if selected != observed:
+                raise CaseError("同票索引与历史票号的人工核图存证不符。",409)
+            if selected:
+                self.check_graph_field_history(prior,rev,graph,selected)
+            signature = hashlib.sha256(canonical(signoff)).hexdigest()
+            texts = {}
+            for match in group:
+                doc,page = match["doc"],match["page"]
+                if (doc,page) not in texts:
+                    texts[doc,page] = db.execute("SELECT text FROM pages WHERE case_id=? AND doc=? AND number=?",
+                                                (prior,doc,page)).fetchone()["text"]
+                try:
+                    source = invoice_source_record(facts[match["fact"]],nodes[f"{doc}/p{page}"],texts[doc,page],
+                                                   match["number_key"],signoff["time"])
+                except (KeyError,TypeError,ValueError) as error:
+                    raise CaseError("已签收票号的原文依据不符，无法引用前案。",409) from error
+                match.update(source=source,signoff_hash=signature)
 
     def prior_invoices(self, case_id, keys):
         if not keys:
@@ -412,18 +436,7 @@ class Store:
         with self.connect() as db:
             db.execute("BEGIN")
             matches = indexed_invoices(db,case_id,keys)
-            for prior,rev,archived,signoff,group in self.invoice_sources(db,matches):
-                selected = {match["fact"] for match in group if match["checked_field"]}
-                if selected:
-                    graph = archived["graph"]
-                    observations = self.check_graph_field_history(prior,rev,graph,selected)
-                    if not selected <= {f["id"] for f in graph["facts"] if any((f.get(k) or {}).get("source_check") for k in ("attestation","amendment"))}:
-                        raise CaseError("同票索引所引的字段缺少历史核图存证。",409)
-                    check_archived_files(db,prior,self.files/prior,observations)
-                    signature = hashlib.sha256(canonical(signoff)).hexdigest()
-                    for match in group:
-                        if match["checked_field"]:
-                            match["signoff_hash"] = signature
+            self.verify_invoice_sources(db,matches)
             for match in matches:
                 if match["peer_source_rev"] is None:
                     del match["peer_source_rev"]
@@ -564,10 +577,7 @@ class Store:
         if graph.get("profile",paper["policy"].get("profile")) != BANK:
             keys = sorted({edge["to"] for edge in invoice_number_edges(graph)})
             current = indexed_invoices(db,case_id,keys)
-            for _,_,_,signoff,group in self.invoice_sources(db,current):
-                digest = hashlib.sha256(canonical(signoff)).hexdigest()
-                for match in group:
-                    match["signoff_hash"] = digest
+            self.verify_invoice_sources(db,current)
             changes = invoice_differences(graph.get("prior_invoices",[]),current)
             if changes:
                 raise InvoiceHistoryChanged(changes,peer)

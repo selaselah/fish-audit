@@ -358,6 +358,11 @@ function finding(item) {
     ...item.calculations.map(calculationPanel)));
   if (item.rule==='B08' && state.bundle.report.graph.payment_history?.installments)
     node.append(installmentDetails(state.bundle.report.graph.payment_history.installments));
+  if (item.rule==='I02') {
+    const index=graphIndex(state.bundle.report.graph);
+    const sources=item.evidence.map(id=>index.prior.get(id)).filter(row=>row?.source?.format==='signed-invoice-v1');
+    if (sources.length) node.append(lazyFold('核对前案签收依据（'+sources.length+'）',()=>sources.map(signedInvoiceSource)));
+  }
   if (item.evidence.length) node.append(lazyFold('查看本项全部引文（'+item.evidence.length+'）',()=>[box('chips',...item.evidence.map(citation))]));
   if (graphIndex(state.bundle.report.graph).nodes.has('finding/'+item.id)) node.append(action('查看证据路径',()=>{
     state.traceKey=state.detail.id+'@'+state.bundle.rev; state.traceId=item.id;
@@ -421,8 +426,8 @@ function graphPanel() {
       el('strong',nodes.get(edge.from).label),el('span','记载'+(facts.get(edge.evidence[0])?.label || edge.type)),
       box('chips',...edge.evidence.map(citation))))))));
   if (!groups.length) panel.append(el('p', '请在原件与引文中核对待确认记录，核图后系统会重建关系。'));
-  if (graph.prior_invoices?.length) panel.append(fold('跨案同号记录', ...graph.prior_invoices.map(row =>
-    box('line', Team.paperLink(row.title+' · R'+row.rev,row.case_id,'case-link',new URLSearchParams({rev:row.rev,fact:row.fact})), el('p', '历史人工决定 · ' + statusName(row.decision) + ' · ' +
+  if (graph.prior_invoices?.length) panel.append(lazyFold('跨案同号记录', ()=>graph.prior_invoices.map(row =>
+    row.source?.format==='signed-invoice-v1' ? signedInvoiceSource(row) : box('line', Team.paperLink(row.title+' · R'+row.rev,row.case_id,'case-link',new URLSearchParams({rev:row.rev,fact:row.fact})), el('p', '历史人工决定 · ' + statusName(row.decision) + ' · ' +
       (row.document_kind === 'unclassified' ? '原资料类型待核' : '发票')),
       el('blockquote', row.quote), citation(row.id), el('small', '历史底稿 SHA-256 · ' + row.report_hash, 'small'),
       ...(row.signoff_hash ? [el('small','人工签收 SHA-256 · '+row.signoff_hash,'small')] : [])))));

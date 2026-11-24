@@ -32,6 +32,23 @@ function lazyFold(title, build) {
   return details;
 }
 
+function signedInvoiceSource(row) {
+  const source = row.source;
+  const basis = {native_line:'原生文字层匹配',field_check:'审计人员已核对原件与页图',
+    historical_record:'历史底稿记载的票号',historical_confirmation:'历史人工确认记录'}[source.basis];
+  const origin = Team.paperLink('查看签收版原页',row.case_id,'source-jump',new URLSearchParams({rev:row.rev,fact:row.fact}));
+  origin.target='_blank'; origin.rel='noopener';
+  const original = link('下载前案原件',Team.cases()+'/'+row.case_id+'/documents/'+row.doc+'/original?rev='+row.rev,'source-jump');
+  const where = '第 '+row.page+' 页'+(source.line ? ' · 第 '+source.line+' 行' : '');
+  const hashes = lazyFold('核对文件摘要',()=>[
+    el('p','原件 SHA-256'),el('code',row.source_hash),el('p','页图 SHA-256'),el('code',row.page_hash),
+    el('p','文字层 SHA-256'),el('code',source.text_sha256),el('p','签收底稿 SHA-256'),el('code',row.report_hash),
+    el('p','人工签收 SHA-256'),el('code',row.signoff_hash)]);
+  return box('invoice-source',el('strong',row.title+' · R'+row.rev),
+    el('small','人工决定 · '+statusName(row.decision)+' · '+time(source.signed_at),'small'),
+    el('blockquote',row.quote),el('small',basis+' · '+where,'small'),box('chips',origin,original),hashes);
+}
+
 function traceEvidence(report, finding, index) {
   const supported = new Set(report.graph.edges.filter(e=>e.type==='supports_result' && e.to==='finding/'+finding.id).map(e=>e.from));
   const groups = new Map();
@@ -63,7 +80,7 @@ function traceEvidence(report, finding, index) {
   for (const rows of archived.values()) {
     const first = rows[0];
     panel.append(lazyFold(first.title+' · R'+first.rev+' · '+statusName(first.decision),()=>rows.map(row=>
-      box('trace-quote',citation(row.id),el('blockquote',row.quote)))));
+      row.source?.format==='signed-invoice-v1' ? signedInvoiceSource(row) : box('trace-quote',citation(row.id),el('blockquote',row.quote)))));
   }
   if (other.length) panel.append(box('chips',...other));
   if (!groups.size && !archived.size && !other.length) {

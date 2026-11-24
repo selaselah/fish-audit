@@ -60,7 +60,9 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 
 新记录的 `source_check` 保存动作 `confirm`、`correct` 或 `add`，以及案件、底稿版本与摘要、文档编号、页码、原件与页图的 SHA-256 和 UTC 核对时间。新版底稿的字段通过 `attestation` 或 `amendment` 引用这项记录。ZIP 在 `field-checks/r{版本}/report.json` 保存所引旧底稿的原始字节，每个版本一份。操作针对导出版本时直接引用包内的 `report.json`。旧记录沿用其历史字段，只有实际执行过这项校验的操作才有 `source_check`。
 
-跨案同票命中带核图存证的票号时，`graph.prior_invoices` 的该条记录含 `checked_field` 和历史人工决定的 `signoff_hash`。导出包的 `prior/{案件}/r{版本}/` 下可核对签收意见、当时的底稿及票号原页。跨案付款检查同样会重新核对其所引人工字段的原件与页图。
+当 `policy.invoice_sources` 为 `signed-invoice-v1` 时，每条 `graph.prior_invoices` 记录均含前案底稿摘要 `report_hash`、人工签收摘要 `signoff_hash`、原件和页图摘要。其 `source` 保存依据类别 `basis`、原文字层的 SHA-256、可定位的行号及签收时间。`native_line` 表示原生文字行匹配，`field_check` 表示带原件核对记录的人工确认。`historical_record` 和 `historical_confirmation` 分别表示旧版底稿的字段记录与旧版人工确认。
+
+证据包的 `prior/{案件}/r{版本}/` 包含所据的 `report.json`、`signoff.json`、对应发票原件、页图和文字层。引用过人工核图或独立复核的版本还带有相应的来源底稿。旧包可按所记的证据格式校验。跨案付款检查也会核对所引人工字段的原件与页图。
 
 最终决定的字段为 `rev`、`reviewer`、`decision`、`note`，决定可为 `approve`、`return` 或 `escalate`。已归档、正在重算或提交过期版本返回 409。下载及操作均以任务和版本为范围。错误响应采用 `{"error":"可读说明"}`。
 

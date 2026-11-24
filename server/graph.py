@@ -3,6 +3,7 @@ import re
 import unicodedata
 from collections import defaultdict
 
+from invoice_proof import invoice_number_edges
 from model import FIELDS
 
 
@@ -311,18 +312,6 @@ def link_procedures(graph, findings, calls):
             nodes.append({"id": check_id, "type": "model_call", "label": "逐字段视觉复检",
                           "response_id": check.get("response_id"), "model": check["model"]})
             edges.append({"from": page_id, "to": check_id, "type": "inspected_by", "evidence": [page_id]})
-
-
-def invoice_number_edges(graph, include_unclassified=False):
-    documents = set(graph["documents_by_kind"].get("invoice", []))
-    if include_unclassified:
-        classified = {doc for group in graph["documents_by_kind"].values() for doc in group}
-        documents.update(doc["id"] for doc in audit_documents(graph) if doc["id"] not in classified)
-    edges = [edge for edge in graph["edges"] if edge["type"] == "invoice_id" and edge["from"] in documents]
-    by_doc = defaultdict(set)
-    for edge in edges:
-        by_doc[edge["from"]].add(edge["to"])
-    return [edge for edge in edges if len(by_doc[edge["from"]]) == 1]
 
 
 def attach_prior_invoices(graph, matches):

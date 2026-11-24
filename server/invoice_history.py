@@ -43,7 +43,8 @@ def differences(previous,current):
     for key in sorted(before.keys() | after.keys()):
         old,new = before.get(key),after.get(key)
         if (old and new and all(old.get(field)==new.get(field) for field in fields)
-                and ("signoff_hash" not in old or old["signoff_hash"]==new["signoff_hash"])):
+                and ("signoff_hash" not in old or old["signoff_hash"]==new["signoff_hash"])
+                and ("source" not in old or old["source"]==new["source"])):
             continue
         changes.append({"previous":reference(old),"current":reference(new)})
     return changes

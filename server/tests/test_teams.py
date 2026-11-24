@@ -1,5 +1,6 @@
 import hashlib
 import io
+import json
 import os
 import tempfile
 import unittest
@@ -10,6 +11,8 @@ from unittest.mock import patch
 from PIL import Image
 
 from config import CaseError
+from documents import prepare
+from invoice_proof import source_record
 from jobs import Worker
 from main import create_app
 from storage import Store
@@ -97,6 +100,78 @@ class EnterpriseFlow(unittest.TestCase):
         self.assertTrue(any(f["rule"]=="I02" and f["status"]=="risk" for f in report["findings"]))
         self.assertEqual(admin.get(base+"/reports/2").json["sha256"],previous)
         self.assertEqual(admin.post(base+"/signoff",headers=headers,json={**choice,"rev":3,"note":"已核前案，按演练意见签收。"}).status_code,200)
+
+    def test_native_invoice_exports_signed_original_and_rejects_changed_evidence(self):
+        admin,wid,headers = self.register("native-invoice")
+        # Supply a controlled native layer. Both the original upload and the saved page are real files.
+        lines = ["采购发票","发票号码：DEMO-537"]
+        def native_page(*args,**kwargs):
+            pages = prepare(*args,**kwargs)
+            pages[0].update(text="\n".join(lines),layer={"type":"text","lines":{
+                "1":[[.1,.1,.6,.2]],"2":[[.1,.3,.6,.4]]}})
+            return pages
+        cases = "/api/w/"+wid+"/cases/"
+        with patch("jobs.prepare",native_page):
+            first = self.submit(admin,wid,headers,"native-invoice-first")
+            self.worker.run(self.store.claim())
+            choice = {"rev":1,"decision":"approve","note":"已核演练发票。"}
+            self.assertEqual(admin.post(cases+first+"/signoff",headers=headers,json=choice).status_code,200)
+            second = self.submit(admin,wid,headers,"native-invoice-second")
+            self.worker.run(self.store.claim())
+        with admin.get(cases+second+"/reports/1/bundle") as response:
+            self.assertEqual(response.status_code,200)
+            data = response.data
+        self.assertEqual(verify(io.BytesIO(data),True)[:2],(second,1))
+        prefix = "prior/"+first+"/r1/"
+        with zipfile.ZipFile(io.BytesIO(data)) as bundle:
+            files = {k:bundle.read(k) for k in bundle.namelist()}
+        match = json.loads(files["report.json"])["graph"]["prior_invoices"][0]
+        self.assertEqual((match["source"]["basis"],match["source"]["line"]),("native_line",2))
+        self.assertEqual(files[prefix+"originals/d01.jpg"],self.source)
+        self.assertEqual(files[prefix+"d01/1.txt"].decode().splitlines()[1],match["quote"])
+        self.assertEqual(hashlib.sha256(files[prefix+"signoff.json"]).hexdigest(),match["signoff_hash"])
+        for name,replacement in (("d01/1.txt","票号错误".encode()),("originals/d01.jpg",b"different"),
+                                 ("signoff.json",files[prefix+"signoff.json"].replace("已核".encode(),"待核".encode())),
+                                 ("report.json",None)):
+            with self.subTest(file=name):
+                changed = files.copy()
+                path = prefix+name
+                if replacement is None:
+                    del changed[path]
+                else:
+                    changed[path] = replacement
+                manifest = json.loads(changed.pop("manifest.json"))
+                manifest["files"] = [{"path":p,"bytes":len(b),"sha256":hashlib.sha256(b).hexdigest()} for p,b in changed.items()]
+                buffer = io.BytesIO()
+                with zipfile.ZipFile(buffer,"w") as bundle:
+                    for p,b in changed.items():
+                        bundle.writestr(p,b)
+                    bundle.writestr("manifest.json",json.dumps(manifest))
+                with self.assertRaises(ValueError):
+                    verify(buffer)
+        with self.store.connect(True) as db:
+            db.execute("UPDATE pages SET text='错误文字' WHERE case_id=?",(first,))
+        with self.assertRaisesRegex(CaseError,"原文依据"):
+            self.store.prior_invoices(second,[match["number_key"]])
+        self.assertEqual(admin.post(cases+second+"/signoff",headers=headers,json=choice).status_code,409)
+        with self.store.connect(True) as db:
+            db.execute("UPDATE pages SET text=? WHERE case_id=?",("\n".join(lines),first))
+        (self.store.files/first/"d01"/"original.jpg").write_bytes(b"changed original")
+        with self.assertRaisesRegex(CaseError,"来源摘要"):
+            self.store.prior_invoices(second,[match["number_key"]])
+        self.assertEqual(admin.post(cases+second+"/signoff",headers=headers,json=choice).status_code,409)
+        self.assertEqual(admin.get(cases+second).json["decisions"],[])
+
+    def test_historical_invoice_source_describes_the_available_line_or_confirmation(self):
+        from graph import entity_id
+        key = entity_id("invoice_number","YL-01")
+        fact = {"field":"invoice_id","quote":"发票号码：YL-01","value":"YL-01","status":"anchored"}
+        self.assertEqual(source_record(fact,{},"",key,"t")["basis"],"historical_record")
+        fact.update(status="confirmed",attestation={"decision":"confirm"})
+        self.assertEqual(source_record(fact,{},"",key,"t")["basis"],"historical_confirmation")
+        fact.update(status="anchored",source_line={"number":1,"text":"另一行","rects":[[.1,.2,.4,.3]]})
+        with self.assertRaisesRegex(ValueError,"逐字引文"):
+            source_record(fact,{},"另一行",key,"t")
 
     def test_changed_referral_blocks_peer_approval_and_keeps_return_available(self):
         admin,wid,headers = self.register("invoice-pin-owner")
@@ -299,6 +374,7 @@ class EnterpriseFlow(unittest.TestCase):
         current = second.get(cases+repeat+"/reports/2").json["report"]
         row = current["graph"]["prior_invoices"][0]
         self.assertEqual((row["case_id"],row["rev"],row["peer_source_rev"],row["decision"]),(prior,3,2,"return"))
+        self.assertEqual(row["source"]["basis"],"field_check")
         with second.get(cases+repeat+"/reports/2/bundle") as response:
             archive = io.BytesIO(response.data)
             self.assertEqual(verify(archive,True)[:2],(repeat,2))

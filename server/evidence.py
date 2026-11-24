@@ -4,6 +4,7 @@ import zipfile
 from config import CaseError
 from documents import digest
 from field_receipts import field_actions, validate_field_actions
+from invoice_proof import FORMAT as INVOICE_SOURCE_FORMAT
 from payment_history import payment_matches_with_evidence
 from peer_review import verify_referrals, verify_review
 from storage import encode
@@ -126,7 +127,12 @@ def export_bundle(store, case_id, revision, stream):
             write(f"pages/{doc}/{number}.jpg", (store.files / case_id / doc / f"{number}.jpg").read_bytes(), source["page_sha256"])
             write(f"pages/{doc}/{number}.txt", page["text"].encode(), nodes[f"{doc}/p{number}"].get("text_sha256"))
         included = set()
+        invoices = []
+        full_invoices = report["policy"].get("invoice_sources") == INVOICE_SOURCE_FORMAT
         for match in report["graph"].get("prior_invoices", []):
+            if full_invoices or "peer_source_rev" in match or match.get("checked_field"):
+                invoices.append(match)
+                continue
             label = (match["case_id"], match["rev"], match["doc"], match["page"])
             if label in included:
                 continue
@@ -135,11 +141,12 @@ def export_bundle(store, case_id, revision, stream):
             path = f"prior/{match['case_id']}/r{match['rev']}/{match['doc']}/{match['page']}.jpg"
             write(path, historic.read_bytes(), match["page_hash"])
         payments = payment_matches_with_evidence(report["graph"].get("payment_history", {"matches":[]}))
-        invoices = [m for m in report["graph"].get("prior_invoices",[]) if "peer_source_rev" in m or m.get("checked_field")]
         references = {}
         for match in [*invoices,*payments]:
             key = match["case_id"],match["rev"]
-            group = references.setdefault(key,{"report_hash":match["report_hash"],"signoff_hash":None,"facts":set(),"pages":set()})
+            group = references.setdefault(key,{"report_hash":match["report_hash"],"signoff_hash":None,"facts":set(),"pages":set(),"text_hashes":{}})
+            if match.get("source"):
+                group["text_hashes"][match["doc"],match["page"]] = match["source"]["text_sha256"]
             if "signoff_hash" in match:
                 group["signoff_hash"] = match["signoff_hash"]
             for item in match.get("evidence",[match]):
@@ -168,7 +175,7 @@ def export_bundle(store, case_id, revision, stream):
                 path = f"{root}/{doc}/{page}"
                 if (prior, rev, doc, page) not in included:
                     write(path + ".jpg", (store.files / prior / doc / f"{page}.jpg").read_bytes(), node["sha256"])
-                write(path + ".txt", pages[doc, page]["text"].encode(), node.get("text_sha256"))
+                write(path + ".txt", pages[doc, page]["text"].encode(), group["text_hashes"].get((doc,page),node.get("text_sha256")))
         if "supplement" in report:
             write_returned_source(store, report, write)
         manifest = {"case_id": case_id, "revision": revision, "report_sha256": bundle["sha256"],
