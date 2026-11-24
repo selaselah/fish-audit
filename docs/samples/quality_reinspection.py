@@ -84,7 +84,7 @@ def verify_report(report, mode):
         assert report["graph"]["quality_references"]["holds"]==[]
 
 
-def reconcile_training_pages(cid,folder,records,*,case_titles=None,field_labels=None,document_types=None,printed_titles=None,row_spacing=34):
+def reconcile_training_pages(cid,folder,records,*,case_titles=None,field_labels=None,document_types=None,printed_titles=None,row_spacing=34,exact_fields=()):
     path="/api/cases/"+cid
     detail=get(path)
     expected={title+".pdf":hashlib.sha256((folder/(title+".pdf")).read_bytes()).hexdigest() for title in records}
@@ -118,8 +118,14 @@ def reconcile_training_pages(cid,folder,records,*,case_titles=None,field_labels=
             doc=docs[source.name]
             facts=[f for f in graph["facts"] if f["doc"]==doc and f["page"]==1]
             same=[f for f in facts if normalize(f["quote"])==normalize(line)]
-            correct=any(f["field"]==field and f["status"] in ("anchored","confirmed") for f in same)
+            strict=field in exact_fields
+            if strict:
+                assert line in printed.splitlines(), (source.name,line)
+            correct=any(f["field"]==field and f["status"] in ("anchored","confirmed") and
+                        (not strict or f["quote"]==line) for f in same)
             wrong=[f for f in same if f["field"]!=field and f["status"]=="visual" and not f.get("amendment")]
+            if strict:
+                wrong.extend(f for f in same if f["field"]==field and f["quote"]!=line and not f.get("amendment"))
             if field in separate and ordered_lines.count(normalize(line))==1:
                 merged=normalize(line)
                 for following in ordered_lines[ordered_lines.index(merged)+1:]:

@@ -100,7 +100,7 @@ if __name__=="__main__":
         queued.append((mode,cid,folder,records))
     for mode,cid,folder,records in queued:
         reconcile_training_pages(cid,folder,records,case_titles=CASES.values(),field_labels=FIELD_LABELS,
-                                 printed_titles=TITLES,row_spacing=SPACING)
+                                 printed_titles=TITLES,row_spacing=SPACING,exact_fields=("delivery_batch","delivered_serials"))
         report=confirm_printed_records(cid,folder,records)
         validate(report,mode)
         print(mode,"R"+str(get("/api/cases/"+cid)["rev"]),report["result"]["verdict"],flush=True)
