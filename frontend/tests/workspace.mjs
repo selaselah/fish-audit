@@ -231,7 +231,10 @@ try {
         const row=panel+'.querySelector('+JSON.stringify('[data-effect-source="'+ref+'"]')+')';
         assert.equal(await evaluate(row+'.querySelector("q").textContent'),item.quote);
         assert.equal(await evaluate(row+'.querySelector("small").textContent'),item.line?'原页文字层第 '+item.line+' 行':'影像读图引文');
-        if (!item.line && fact) assert.ok(await evaluate(row+'.querySelector(".tag").classList.contains('+JSON.stringify(fact.status)+')'));
+        if (!item.line && fact) {
+          const label={visual:'待核原图',confirmed:'人工已确认',disputed:'人工有异议',unsupported:'引用不支持取值',anchored:'已匹配文字层'}[fact.status];
+          assert.equal(await evaluate(row+'.querySelector(".tag").textContent'),label);
+        }
         await evaluate(row+'.querySelector("button").click()');
         await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth>0','contract condition on original');
         if (fact) assert.equal(await evaluate('document.querySelector(".located").dataset.fact'),fact.id);
