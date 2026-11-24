@@ -132,6 +132,19 @@ try {
       await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.textContent.includes('+JSON.stringify(fact.quote)+')','pinned contract clause');
       await evaluate('document.querySelector("#page-dialog [data-close]").click()');
     }
+    for (const rule of ['H01','H02']) {
+      const f=report.findings.find(row=>row.rule===rule);
+      const node='document.querySelector('+JSON.stringify('[data-finding="'+f.id+'"] .performance-comparison')+')';
+      await evaluate(node+'.open=true');
+      const selected=rule==='H01'?['effect_clause','approval_result']:['measured_result','acceptance_result'];
+      for (const source of report.graph.facts.filter(v=>selected.includes(v.field) && f.evidence.includes(v.id))) {
+        const row='document.querySelector('+JSON.stringify('[data-source-fact="'+source.id+'"]')+')';
+        await wait(row+'?.textContent.includes('+JSON.stringify(source.quote)+')','original '+source.field);
+        await evaluate(row+'.querySelector("button").click()');
+        await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.textContent.includes('+JSON.stringify(source.quote)+')','cited '+source.field);
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
+    }
     for (const width of [1440,1024,820,768,390,320]) {
       await call('Emulation.setDeviceMetricsOverride',{width,height:880,deviceScaleFactor:1,mobile:false});
       assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll(".clause-source")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'performance layout at '+width);

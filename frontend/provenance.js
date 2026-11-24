@@ -37,6 +37,29 @@ function lazyFold(title, build) {
   return details;
 }
 
+function performanceComparison(finding, graph) {
+  const comparisons = {
+    H01: ['对照生效条件与签署依据',['effect_clause','buyer_signature','seller_signature','contract_state','approval_authority','approval_result','approved_on','approval_signer']],
+    H02: ['对照验收范围、标准与结果',['acceptance_scope','quantity_agreed','quantity_accepted','acceptance_criteria','inspection_basis','measured_result','acceptance_result','acceptance_exception','acceptance_signer']],
+    H05: ['对照付款和履约日期',['payment_designation','paid_on','effect_on','approved_on','accepted_on','warranty_release']],
+  };
+  const spec = comparisons[finding.rule];
+  if (!spec) return null;
+  const [title,fields] = spec;
+  const index = graphIndex(graph);
+  const citations = finding.evidence.map(ref=>index.facts.get(ref)).filter(f=>f && fields.includes(f.field));
+  citations.sort((a,b)=>fields.indexOf(a.field)-fields.indexOf(b.field));
+  if (!citations.length) return null;
+  const details = lazyFold(title,()=>citations.map(fact=>{
+    const row = box('performance-source',el('blockquote',fact.quote),box('flow',tag(fact.status),citation(fact.id)));
+    row.dataset.sourceFact = fact.id;
+    return row;
+  }));
+  details.classList.add('performance-comparison');
+  details.open = ['risk','issue'].includes(finding.status);
+  return details;
+}
+
 function accountPreview(fact, page) {
   const figure=el('figure','','account-preview');
   const caption=el('figcaption',fact.name+' · 第 '+fact.page+' 页');

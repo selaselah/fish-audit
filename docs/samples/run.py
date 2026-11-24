@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 import subprocess
 import time
 from urllib.request import Request, urlopen
@@ -60,7 +61,8 @@ def verify(index, report):
         assert all(fact["status"] in ("visual", "unsupported") for fact in report["graph"]["facts"])
     elif index == 3:
         assert result["verdict"] == "review" and ("M02", "risk") in statuses
-        assert any("2 张不同号码发票合计 11,300.00 元" in item["detail"] for item in report["findings"])
+        assert any(re.search(r"2 张不同(?:号码|标识)发票合计 11,300\.00 元", item["detail"])
+                   for item in report["findings"] if item["rule"]=="M02")
     elif index == 4:
         assert result["verdict"] == "reject" and {("T03","issue"), ("T04","risk")} <= statuses
         assert any("差额 150.00 元" in item["detail"] for item in report["findings"])

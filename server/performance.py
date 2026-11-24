@@ -8,6 +8,8 @@ from decimal import Decimal
 
 
 PROFILE = "cn-contract-performance/v1"
+FIRST_FORMAT = "contract-performance-v1"
+FORMAT = "contract-performance-v2"
 RULES = {
     "H01": ("合同签署与约定生效条件", "核对合同双方、签订日期、生效条款和签署栏的人工核图记录，保留附加条件及状态疑点。"),
     "H02": ("交付范围与验收质量", "按合同编号、标的和采购方关联验收资料，核对日期、验收范围、结论、签认和遗留事项。"),
@@ -32,6 +34,10 @@ LABELS = {
     "payment_stage": ("付款期次", "首付款", "预付款", "进度款", "验收款", "质保金", "尾款"),
     "warranty_release": ("质保期满确认", "质保期满记录"),
     "effect_on": ("实际生效日期", "生效确认日期"),
+    "approval_authority": ("审批机构", "决议机构"),
+    "approval_result": ("审批决定", "决议结果"),
+    "approved_on": ("审批日期", "决议日期"),
+    "approval_signer": ("审批签认", "决议签认"),
     "payment_designation": ("付款期次说明", "款项用途", "转账用途", "付款用途"),
 }
 FIELD_NAMES = {k: names[0] for k, names in LABELS.items()}
@@ -42,6 +48,9 @@ SIGNATURE = r"(?:[（(](?:已盖章|已签章|已签字|已签名)[）)]|已盖�
 PARTIES = r"(?:甲乙|合同)?双方"
 EFFECT = re.compile(r"(?:本合同|合同|本协议)?(?:自|经|在)?" + PARTIES +
                     r"(?:签字或盖章|签名或盖章|签署|签章|盖章|签字|签名)(?:之日|当日)?(?:起|后|时)?(?:即)?生效")
+BOARD_CONDITION = re.compile(r"(?:本合同|合同|本协议)?(?:自|经)?" + PARTIES +
+                             r"(?:签字或盖章|签名或盖章|签署|签章|盖章|签字|签名)(?:并|且)(?:经)?"
+                             r"(甲方|乙方|采购方|供应方)董事会批准(?:之日|当日)?(?:起|后|时)?(?:即)?生效")
 FINAL_SCOPES = {"全部","全部交付","全部交付终验","全部交付最终验收","全部标的最终验收","最终验收","整体验收","终验","全量验收"}
 PASS = {"合格","验收合格","全部合格","通过","验收通过","最终验收合格","终验合格"}
 CLEAN = {"无","无遗留事项","无保留事项","无整改事项","无异常"}
@@ -150,11 +159,37 @@ def result(rule, status, detail, refs, units, stage=None):
     return item
 
 
-def effect(contract):
+def check_approval(contract, approvals, party):
+    fields = ("contract_approval","contract_id","buyer","seller","approval_authority","approval_result","approved_on","approval_signer")
+    refs = [ref for doc in approvals for ref in doc.evidence(*fields)]
+    if len(approvals) != 1:
+        return "missing","待取得并确定本合同所据的一份董事会审批记录。",refs
+    approval = approvals[0]
+    if not all(contract.single(k) and contract.single(k) == approval.single(k) for k in ("contract_id","buyer","seller")):
+        return "missing","审批记录的合同号和双方尚未与本合同逐项对应。",refs
+    authority = contract.single("buyer" if party in ("甲方","采购方") else "seller") + "董事会"
+    if approval.body("approval_authority") != authority:
+        return "missing","审批记录所列机构尚未与约定的“"+authority+"”对应。",refs
+    decision = approval.body("approval_result")
+    if decision in ("未批准","不予批准","未通过","否决","暂缓批准","退回补议"):
+        return "risk","约定的审批机构记载“"+decision+"”，请核实后续决议及生效条件。",refs
+    if decision not in ("批准","已批准","同意批准","批准本合同") or not approval.signed("approval_signer") or approval.incomplete(*fields):
+        return "missing","待核对明确的批准决定和经原页核图的审批签认。",refs
+    approved = day(approval.single("approved_on"))
+    effective = day(contract.single("effect_on"))
+    if not approved:
+        return "missing","审批记录缺少可核的决定日期。",refs
+    if effective and effective < approved:
+        return "risk","材料所列生效日早于约定审批机构的批准日，请核对生效时点。",refs
+    return "ok","约定的董事会批准决定、日期和签认已有材料支持。",refs
+
+
+def effect(contract, approvals=(), version=FORMAT):
     fields = ("contract","contract_id","buyer","seller","signed_on","effect_clause","contract_state","effect_on","valid_until",
               "buyer_signature","seller_signature","adjustment")
     refs = contract.evidence(*fields)
     terms = contract.body("effect_clause")
+    board = BOARD_CONDITION.fullmatch(terms) if version == FORMAT else None
     state = contract.body("contract_state")
     missing = []
     if not contract.single("contract_id"):
@@ -164,7 +199,7 @@ def effect(contract):
         missing.append("可区分的合同双方")
     if not day(contract.single("signed_on")):
         missing.append("可核的签订日期")
-    if not terms or not EFFECT.fullmatch(terms):
+    if not board and not EFFECT.fullmatch(terms):
         missing.append("生效约定及其中每项条件的证明")
     mode = "seal" if "盖章" in terms and "或" not in terms else "sign" if ("签字" in terms or "签名" in terms) and "或" not in terms else None
     for field, party, name in (("buyer_signature",buyer,"甲方"),("seller_signature",seller,"乙方")):
@@ -184,7 +219,24 @@ def effect(contract):
         status, detail = "missing", "待核对" + "、".join(missing) + "。"
     else:
         status, detail = "ok", "合同编号、双方、签订日期及签署栏相符；双方签署的约定生效条件已有材料支持。"
-    return result("H01",status,detail,refs,[contract.unit])
+    scope = [contract.unit]
+    if board:
+        approval_status, note, evidence = check_approval(contract,approvals,board[1])
+        refs.extend(evidence)
+        scope.extend(doc.unit for doc in approvals)
+        if status == "ok" or approval_status == "risk":
+            status = approval_status
+        if status == "ok":
+            detail = "双方签署栏与合同主体相符。" + note
+        else:
+            detail = (detail if missing or changed else "") + note
+    elif approvals:
+        status = "missing"
+        detail += " 另有审批资料，请核对其与合同约定、授权和现行状态的关系。"
+        scope.extend(doc.unit for doc in approvals)
+        for doc in approvals:
+            refs.extend(doc.evidence("contract_approval","approval_result","approval_authority"))
+    return result("H01",status,detail,refs,scope)
 
 
 def inspect_quality(required, basis, reading):
@@ -351,7 +403,17 @@ def warranty(contract, releases, accepted):
     return None, refs
 
 
-def compute(graph):
+def matches_stage(designation, row):
+    label = row["label"]
+    if not label or not designation:
+        return False
+    if label == designation:
+        return True
+    ordinal = re.fullmatch(r"第(" + ORD + r")期",designation)
+    return bool(ordinal and row["index"] is not None and row["index"] == number(ordinal[1]))
+
+
+def compute(graph, version=FORMAT):
     kinds = graph["documents_by_kind"]
     def materials(kind):
         return [Material(graph, unit) for unit in kinds.get(kind, ())]
@@ -363,7 +425,8 @@ def compute(graph):
                 for rule in ("H01","H02","H03","H04")]
     contract = contracts[0]
     receipts, releases = materials("acceptance"), materials("warranty")
-    signed, accepted = effect(contract), acceptance(contract, receipts)
+    approvals = materials("contract_approval") if version==FORMAT else []
+    signed, accepted = effect(contract,approvals,version), acceptance(contract, receipts)
     plan, rows = schedule(contract)
     classified = {u for group in kinds.values() for u in group}
     for doc in graph.get("audit_documents",graph["documents"]):
@@ -385,9 +448,10 @@ def compute(graph):
     stages = []
     for idx, row in enumerate(rows, 1):
         kind = row["kind"]
-        stage = {"name":row["label"] or f"第{idx}期","share":row["share"],"clause":row["text"],"clause_ref":row["ref"]}
+        fallback_label = f"条款 {idx}" if version == FORMAT else f"第{idx}期"
+        stage = {"name":row["label"] or fallback_label,"share":row["share"],"clause":row["text"],"clause_ref":row["ref"]}
         refs = [row["ref"], *signed["evidence"]]
-        scope = [contract.unit]
+        scope = signed["scope"].copy() if version == FORMAT else [contract.unit]
         if kind in ("acceptance","warranty"):
             refs += accepted["evidence"]
             scope += accepted["scope"]
@@ -415,8 +479,9 @@ def compute(graph):
         designation = bank.body("payment_designation")
         refs = bank.evidence("bank_receipt","contract_id","payment_designation","paid_on","transfer_status","payer","payee")
         scope = [contract.unit,bank.unit]
-        matching = [(r,s) for r,s in stages if designation and (designation == s["stage"]["name"]
-                    or (r["label"] and designation == r["label"]))]
+        matching = [(r,s) for r,s in stages if matches_stage(designation,r)]
+        if version == FIRST_FORMAT:
+            matching = [(r,s) for r,s in stages if designation and designation == s["stage"]["name"]]
         paid = day(bank.single("paid_on"))
         linked = all(contract.single(left) and contract.single(left) == bank.single(right)
                      for left,right in (("contract_id","contract_id"),("buyer","payer"),("seller","payee")))
@@ -446,14 +511,14 @@ def compute(graph):
 def verify_findings(report):
     policy = report["policy"]
     marker = policy.get("performance_checks")
-    if "performance.py" in policy.get("code_sha256", {}) and marker != "contract-performance-v1":
+    if "performance.py" in policy.get("code_sha256", {}) and marker not in (FIRST_FORMAT,FORMAT):
         raise ValueError("底稿缺少对应的合同履约程序版本")
     if marker is None:
         return
     profile = policy["profile"]
-    if marker != "contract-performance-v1" or report["graph"].get("profile") != profile:
+    if marker not in (FIRST_FORMAT,FORMAT) or report["graph"].get("profile") != profile:
         raise ValueError("合同履约范围或程序版本不符")
-    expected = [] if profile == "cn-travel-reimbursement/v1" else compute(report["graph"])
+    expected = [] if profile == "cn-travel-reimbursement/v1" else compute(report["graph"],marker)
     found = [f for f in report["findings"] if f["rule"] in RULES]
     if len(found) != len(expected):
         raise ValueError("合同履约程序数量与证据图谱不符")

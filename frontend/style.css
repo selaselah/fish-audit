@@ -87,6 +87,9 @@ textarea { width: 100%; resize: vertical; }
 .chips { margin-top: 9px; display: flex; flex-wrap: wrap; gap: 6px; }
 .clause-source { display:flex; align-items:baseline; flex-wrap:wrap; gap:6px 12px; padding:9px 12px; margin:9px 0; border-inline-start:3px solid var(--green); background:var(--soft); }
 .clause-source q { overflow-wrap:anywhere; }
+.performance-source { padding:8px 0; border-bottom:1px solid var(--line); }
+.performance-source blockquote { margin:0 0 4px; }
+.performance-source .flow { gap:5px 10px; }
 .ref { font-size: .82rem; min-height: 36px; padding: 5px 9px; color: var(--green); }
 .mono, code, pre { font-family: var(--mono); font-size: .82rem; overflow-wrap: anywhere; }
 pre { white-space: pre-wrap; max-height: 35vh; overflow: auto; background: #f4f7f6; padding: 12px; }

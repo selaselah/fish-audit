@@ -4,7 +4,7 @@ import unittest
 from config import BANK, PERFORMANCE, PROFILE, TRAVEL
 from controls import VERSION, conclusion, execute
 from graph import build_graph
-from performance import verify_findings
+from performance import FIRST_FORMAT, compute, verify_findings
 
 
 CONTRACT = [
@@ -26,7 +26,10 @@ WARRANTY = [("warranty","","质保期满确认单"),*CONTRACT[1:5],("warranty_re
 BANK_DOC = [("bank_receipt","","银行付款回单"),("contract_id","合同编号","YL-121"),("payer","付款户名","演练甲"),
             ("payee","收款户名","演练乙"),("paid_on","付款日期","2026-09-21"),("transfer_status","交易状态","交易成功"),
             ("payment_designation","款项用途","第二期")]
-SIGN_FIELDS = {"buyer_signature","seller_signature","acceptance_signer"}
+APPROVAL = [("contract_approval","","合同审批单"),*CONTRACT[1:4],("approval_authority","审批机构","演练甲董事会"),
+            ("approval_result","审批决定","批准"),("approved_on","审批日期","2026-09-01"),
+            ("approval_signer","审批签认","演练孙宁（已签字）")]
+SIGN_FIELDS = {"buyer_signature","seller_signature","acceptance_signer","approval_signer"}
 
 
 def material(groups, edit=None, confirm=True, omissions=()):
@@ -116,6 +119,30 @@ class PerformanceTests(unittest.TestCase):
         stages = rows(graph,"H04")
         self.assertEqual([r["status"] for r in stages],["ok","ok","missing"])
         self.assertEqual(len({r["stage"]["clause_ref"] for r in stages}),1)
+
+    def test_explicit_stage_identity_and_earlier_release(self):
+        c = [r for r in CONTRACT if r[0] not in ("payment_stage","payment_term")]
+        c.append(("payment_term","结算条款","合同生效后支付30%，最终验收合格后支付60%，质保期满后支付10%"))
+        edit = lambda i,f,l,v:"第2期" if f=="payment_designation" else v
+        g = material([c,RECEIPT,BANK_DOC],edit)
+        self.assertEqual(rows(g,"H04")[1]["stage"]["name"],"条款 2")
+        self.assertEqual(rows(g,"H05")[0]["status"],"missing")
+        self.assertEqual(next(f["status"] for f in compute(g,FIRST_FORMAT) if f["rule"]=="H05"),"ok")
+        self.assertEqual(rows(material([CONTRACT,RECEIPT,BANK_DOC],edit),"H05")[0]["status"],"ok")
+
+    def test_approval_condition_needs_matching_decision_and_date(self):
+        c = [(f,l,"本合同自双方盖章并经甲方董事会批准后生效" if f=="effect_clause" else v) for f,l,v in CONTRACT]
+        success = material([c,APPROVAL,RECEIPT])
+        self.assertEqual(rows(success,"H01")[0]["status"],"ok")
+        self.assertIn("d02",rows(success,"H04")[0]["scope"])
+        self.assertEqual(rows(material([c,RECEIPT]),"H01")[0]["status"],"missing")
+        for field,value,expect in (("buyer","演练丙","missing"),("approval_authority","演练乙董事会","missing"),
+                                   ("approval_result","退回补议","risk"),("approved_on","2026-09-10","risk"),
+                                   ("approval_signer",None,"missing"),("approval_result","有条件批准","missing")):
+            with self.subTest(field=field):
+                graph = material([c,APPROVAL,RECEIPT],lambda i,f,l,v:value if i==2 and f==field else v)
+                self.assertEqual(rows(graph,"H01")[0]["status"],expect)
+                self.assertNotEqual(rows(graph,"H04")[0]["status"],"ok")
 
     def test_actual_timing_requires_identified_phase_and_associated_transfer(self):
         for field,value,status in (("paid_on","2026-09-03","risk"),("payment_designation","货款","missing"),

@@ -399,6 +399,10 @@ function finding(item) {
   node.dataset.finding = item.id;
   node.tabIndex = -1;
   if (item.stage) node.insertBefore(box('clause-source',el('q',item.stage.clause), citation(item.stage.clause_ref)),node.children[1]);
+  if (item.rule.startsWith('H')) {
+    const comparison = performanceComparison(item,state.bundle.report.graph);
+    if (comparison) node.append(comparison);
+  }
   if (item.scope.length) node.append(el('small', '检查范围 · ' + item.scope.map(id =>
     state.bundle.report.graph.audit_documents?.find(doc => doc.id === id)?.name ||
     state.detail.documents.find(doc => doc.id === id)?.name || id).join('、'), 'small'));
@@ -884,7 +888,7 @@ $('#upload-title').addEventListener('input', () => { state.key = null; });
 function profileChanged() {
   state.key = null;
   if ($('#upload-profile').value === performanceProfile) {
-    $('#profile-note').textContent = '上传一份合同，可附验收单、质保期满确认单和列明期次的回单。逐项查看生效约定、验收范围、整改事项及每期付款前提。';
+    $('#profile-note').textContent = '上传一份合同，可附合同审批单、验收单、质保期满确认单和列明期次的回单。逐项查看生效约定、验收范围、整改事项及每期付款前提。';
     return;
   }
   if ($('#upload-profile').value === bankProfile) {

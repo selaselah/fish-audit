@@ -10,7 +10,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "server"))
 from calculations import CalculationEvidence
 from config import DATA
-from controls import conclusion, execute
+from controls import VERSION, conclusion, execute
+from rule_replay import replay_from_git
 from bank import check as check_bank
 from run import verify
 
@@ -28,11 +29,20 @@ def replay(database, run_id, bank_run_id=None):
                 raise ValueError(f"未找到指定演练组的第 {index+1} 案")
             saved = json.loads(row[1])
             graph = saved["graph"]
-            findings = execute(graph, saved["policy"]["profile"])
-            CalculationEvidence(graph).verify(findings)
-            findings.extend(f for f in saved["findings"] if f["rule"] == "X01")
+            legacy_candidates = any("identity" not in prior for prior in graph.get("prior_invoices",[]))
+            if legacy_candidates:
+                replayed = replay_from_git(saved)
+                if replayed["state"] != "verified":
+                    raise ValueError("旧版同票候选需由对应版本程序复算：" + replayed.get("message",replayed["state"]))
+                findings, policy = saved["findings"], saved["policy"]
+                print("旧版候选按签发版本复算",replayed["commit"][:12])
+            else:
+                policy = {**VERSION,"profile":saved["policy"]["profile"]}
+                findings = execute(graph,policy["profile"])
+                findings.extend(f for f in saved["findings"] if f["rule"] == "X01")
+                CalculationEvidence(graph).verify(findings)
             result = conclusion(findings)
-            outcome = {"findings":findings, "result":result, "graph":graph}
+            outcome = {"findings":findings, "result":result, "graph":graph, "policy":policy}
             if bank:
                 check_bank(outcome, bool(index))
             else:

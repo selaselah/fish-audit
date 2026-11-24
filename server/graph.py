@@ -13,13 +13,14 @@ from payment_reference import attach as attach_payment_references, partial_line,
 
 
 KINDS = {"invoice": "发票", "contract": "合同", "acceptance": "验收单"}
-TITLE_FIELDS = {**KINDS, "claim": "报销", "bank_receipt":"回单", "warranty":"质保期满确认"}
+TITLE_FIELDS = {**KINDS, "claim": "报销", "bank_receipt":"回单", "warranty":"质保期满确认","contract_approval":"审批"}
 PRINTED_TITLES = {label: field for field, labels in {
     "invoice": ("发票", "采购发票", "住宿服务发票", "增值税专用发票", "增值税普通发票", "增值税电子普通发票",
                 "电子发票(普通发票)", "电子发票(增值税专用发票)"),
     "contract": ("采购合同", "设备采购合同", "购销合同", "采购协议"),
     "acceptance": ("验收单", "到货验收单", "验收报告", "采购验收单", "设备验收单"),
     "warranty": ("质保期满确认单", "质保期满确认书"),
+    "contract_approval": ("合同审批单","合同审批记录","董事会合同审批记录"),
     "bank_receipt": ("银行付款回单", "银行转账回单", "电子银行回单", "银行电子回单", "转账回单"),
     "claim": ("报销单", "差旅报销单", "差旅费报销单", "费用报销单"),
 }.items() for label in labels}
@@ -80,6 +81,9 @@ def labelled(field, value, quote):
     if field=="transfer_ref_note":
         return value in quote and partial_line(quote)
     if field in TITLE_FIELDS:
+        printed = PRINTED_TITLES.get(quote)
+        if printed and printed != field:
+            return False
         word = "验收" if field == "acceptance" else TITLE_FIELDS[field]
         return value == quote and word in value and len(value) <= 48 and not any(
             label in value for label in ("号码", "编号", "结论", "日期", "参见", "附录", "附件清单", "提交", "缺少"))
