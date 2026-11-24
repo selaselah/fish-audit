@@ -710,7 +710,7 @@ def compute(graph, version=FORMAT):
                 item["scope"].append(doc["id"])
     if version==FORMAT and not batch:
         closed = accepted.get("reinspection",{}).get("state")=="closed"
-        if acceptance_reservations.apply(accepted,graph.get("acceptance_reservation_sources",{})):
+        if acceptance_reservations.apply(accepted,graph.get("acceptance_reservation_sources",{}),graph):
             accepted_on = None
             if closed:
                 original = evaluate(contract,receipts)

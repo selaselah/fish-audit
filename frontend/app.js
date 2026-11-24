@@ -310,11 +310,11 @@ function openPage(docId, pageNumber, highlight, lineHint) {
   }
   const reservations=state.bundle?.report.graph.acceptance_reservation_sources;
   if (reservations && lineHint && !gaps.some(g=>g.line===lineHint)) {
-    const source=reservations.lines.find(s=>s.doc===docId && s.page===pageNumber && s.line===lineHint);
-    if (source) gaps.push({...source,quality:'reservation_reference'});
+    const source=[...reservations.lines,...(reservations.supplier_rows || [])].find(s=>s.doc===docId && s.page===pageNumber && s.line===lineHint);
+    if (source) gaps.push({...source,quality:['seller','delivery_note'].includes(source.kind)?'supplier_reference':'reservation_reference'});
   }
   for (const gap of gaps) {
-    const label = {addendum_reference:'补充协议所据原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文'}[gap.quality] || '待核的原文字层';
+    const label = {addendum_reference:'补充协议所据原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
     const section = box('evidence-row',el('h4',label+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
     section.dataset.gapLine = String(gap.line);
     if (gap.line===lineHint) {
@@ -507,6 +507,7 @@ function finding(item) {
   if (item.payment_window) node.append(paymentWindowPanel(item,state.bundle.report.graph));
   if (item.acceptance_reservations?.lines.length || item.acceptance_reservations?.mixed_pages.length)
     node.append(reservationPanel(item,state.bundle.report.graph));
+  if (item.acceptance_reservations?.supplier) node.append(supplierPanel(item.acceptance_reservations.supplier,state.bundle.report.graph));
   if (item.batch_acceptance) {
     const {graph,findings}=state.bundle.report;
     node.append(deliveryBatchPanel(item.batch_acceptance,graph,findings.filter(f=>f.rule==='H04')));
@@ -599,7 +600,7 @@ function graphPanel() {
   const graph = state.bundle.report.graph;
   const {nodes,facts} = graphIndex(graph);
   const docIds = new Set((graph.audit_documents || graph.documents).map(doc => doc.id));
-  const relations = graph.edges.filter(edge => docIds.has(edge.from) && !['contains','section_page','acceptance_reservation'].includes(edge.type));
+  const relations = graph.edges.filter(edge => docIds.has(edge.from) && !['contains','section_page','acceptance_reservation','supplier_identity_basis'].includes(edge.type));
   const panel = box('panel', el('h2', '本案证据关系'), el('p', graph.nodes.length + ' 个节点 · ' +
     graph.edges.length + ' 条关系 · ' + graph.facts.length + ' 条提取记录', 'muted'));
   const grouped = new Map();
@@ -607,6 +608,12 @@ function graphPanel() {
   if (reservations?.length) {
     const list=lazyFold('验收保留意见与签收原页（'+reservations.length+'）',()=>reservations.map(line=>reservationSource(line,graph)));
     list.classList.add('reservation-relations');
+    panel.append(list);
+  }
+  const supplierRows=graph.acceptance_reservation_sources?.supplier_rows;
+  if (supplierRows?.length) {
+    const list=lazyFold('供应方与交付原件（'+supplierRows.length+'）',()=>supplierRows.map(s=>reservationSource(s,graph)));
+    list.classList.add('supplier-relations');
     panel.append(list);
   }
   const comparisons=graph.edges.filter(e=>e.type==='payment_window_comparison');

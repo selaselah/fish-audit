@@ -166,8 +166,12 @@ try {
     const phaseChecks=report.findings.filter(f=>f.rule==='H04');
     const phases=phaseChecks.filter(f=>f.stage);
     const batches=report.findings.find(f=>f.rule==='H02')?.batch_acceptance;
-    if (phases.length) assert.deepEqual(phases.map(f=>f.stage.share),batches?['20','35','35','10']:['30','60','10']);
-    else assert.ok(phaseChecks.length && phaseChecks.every(f=>f.status==='missing'));
+    const plan=report.findings.find(f=>f.rule==='H03');
+    if (plan.status==='ok') {
+      assert.ok(phases.length && phases.every(f=>Number(f.stage.share)>0));
+      assert.ok(Math.abs(phases.reduce((sum,f)=>sum+Number(f.stage.share),0)-100)<1e-8);
+    }
+    if (!phases.length) assert.ok(phaseChecks.length && phaseChecks.every(f=>f.status==='missing'));
     await wait('!!document.querySelector("#new-case")','new audit');
     await evaluate('document.querySelector("#new-case").click()');
     await evaluate('const p=document.querySelector("#upload-profile");p.value="cn-contract-performance/v1";p.dispatchEvent(new Event("change"));');
@@ -183,9 +187,13 @@ try {
       assert.equal(await evaluate('document.activeElement.dataset.finding'),item.id);
     };
     for (const f of report.findings.filter(f=>['H01','H02','H03'].includes(f.rule))) await jump(summary,f);
+    const planHeading=plan.status!=='ok'?'付款期次待核':phases.length===1?'单期全额付款':'分 '+phases.length+' 期付款';
+    assert.equal(await evaluate(summary+'.querySelector('+JSON.stringify('[data-jump-finding="'+plan.id+'"] span')+').textContent'),planHeading);
     assert.equal(await evaluate(summary+'.querySelectorAll(".phase-summary li").length'),phases.length);
     for (const phase of phases) {
       const row=summary+'.querySelector('+JSON.stringify('[data-phase-finding="'+phase.id+'"]')+')';
+      assert.equal(await evaluate(row+'.querySelector(".phase-source").textContent'),
+        phase.stage.name+(phase.stage.share?' · '+phase.stage.share+'%':''));
       assert.equal(await evaluate(row+'.querySelector("q").textContent'),phase.stage.clause);
       await evaluate(row+'.querySelector(".phase-source").click()');
       await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(phase.stage.clause_ref),'phase contract original from overview');
@@ -243,6 +251,19 @@ try {
         await evaluate('document.querySelector("#page-dialog [data-close]").click()');
       }
     };
+    const supplier=reservations?.supplier;
+    if (supplier) {
+      const panel='document.querySelector(".supplier-review")';
+      assert.equal(await evaluate(panel+'.open'),supplier.status!=='ok');
+      await evaluate(panel+'.open=true');
+      await verifyRemarks(panel,supplier.lines);
+      for (const page of supplier.pages.filter(p=>!supplier.names[p.unit] || !p.native || !p.text_only)) {
+        const button=panel+'.querySelector('+JSON.stringify('[data-supplier-page="'+page.doc+'/p'+page.page+'"]')+')';
+        await evaluate(button+'.click()');
+        await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth>0','supplier original page');
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
+    }
     assert.equal(await evaluate('!!document.querySelector(".reservation-review")'),hasRemarks);
     if (hasRemarks) {
       const panel='document.querySelector(".reservation-review")';
@@ -614,6 +635,15 @@ try {
           await writeFile(join(process.env.AUDIT_UI_SHOTS,'payment-window-'+performanceCase+'-'+width+'.png'),Buffer.from(capture.data,'base64'));
         }
       }
+      if (supplier) {
+        const panel='document.querySelector(".supplier-review")';
+        assert.ok(await evaluate(panel+'.clientWidth>0 && '+panel+'.scrollWidth<='+panel+'.clientWidth+1'),'supplier panel at '+width);
+        if (process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
+          await evaluate(panel+'.open=true;'+panel+'.scrollIntoView({block:"start"});window.scrollBy(0,-100)');
+          const capture=await call('Page.captureScreenshot',{format:'png'});
+          await writeFile(join(process.env.AUDIT_UI_SHOTS,'supplier-'+performanceCase+'-'+width+'.png'),Buffer.from(capture.data,'base64'));
+        }
+      }
       if (hasRemarks) {
         const panel='document.querySelector(".reservation-review")';
         assert.ok(await evaluate(panel+'.clientWidth>0 && '+panel+'.scrollWidth<='+panel+'.clientWidth+1'),'inspection remarks at '+width);
@@ -649,6 +679,12 @@ try {
     await click('查看证据路径','document.querySelector('+JSON.stringify('[data-finding="'+target.id+'"]')+')');
     await wait('document.querySelector("#trace-select")?.value==='+JSON.stringify(target.id),'acceptance evidence graph');
     const allRemarks=report.graph.acceptance_reservation_sources?.lines || [];
+    const supplierRows=report.graph.acceptance_reservation_sources?.supplier_rows || [];
+    if (supplierRows.length) {
+      const panel='document.querySelector(".supplier-relations")';
+      await evaluate(panel+'.open=true');
+      await verifyRemarks(panel,supplierRows);
+    }
     assert.equal(await evaluate('!!document.querySelector(".reservation-relations")'),Boolean(allRemarks.length));
     if (allRemarks.length) {
       const panel='document.querySelector(".reservation-relations")';

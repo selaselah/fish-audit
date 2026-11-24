@@ -1,5 +1,7 @@
 # 本机审计接口
 
+规则 `2026.11.25.04` 使用 `policy.acceptance_reservations=acceptance-reservations-v2`。H02 的 `acceptance_reservations.supplier` 包含 `status`、`detail`、逐项名称 `names`、所据 `pages` 与 `lines`。名称以资料或分册单元为键，取自受支持的原文字段。`graph.acceptance_reservation_sources.supplier_rows` 列示 `seller` 原行和 `delivery_note` 附注，`supplier_identity_basis` 关系从资料单元连到该页。申请通过旧版底稿时，会重查原已判相符的终验供货主体及第三方交付线索。
+
 规则 `2026.11.25.03` 的 `policy.contract_effect` 为 `contract-effect-sources-v2`。有单独签章日期记载时，H01 的 `effect_review.conditions` 保留 `kind=seal_date` 的原件引文，`effect_review.seals.dates` 按 `buyer_sealed_on`、`seller_sealed_on` 保存证据支持的日期。`declared_on` 为原件所列生效日，`completed_on` 为按约定核准的最后盖章日，未核清时为 `null`。旧版仍按原规则回放，申请通过时会重新核验所据主合同的日期。
 
 基础地址为 `http://127.0.0.1:8000`。接口与前端同源。审计资料只在当前电脑的本地工作区共享。所有时间戳以 UTC 保存，网页按北京时间显示。

@@ -1,7 +1,7 @@
 import copy
 import unittest
 
-from acceptance_reservations import classify, edges, sources, verify
+from acceptance_reservations import LEGACY, classify, edges, sources, verify
 from controls import VERSION, execute
 from performance import compute, verify_findings
 from performance_versions import PAYMENT_WINDOW_FORMAT
@@ -23,6 +23,36 @@ def original(read_note=True, reading="柜温3℃"):
 
 
 class AcceptanceReservationsTests(unittest.TestCase):
+    def test_supplier_is_evidenced_on_each_original_and_each_dependent_stage(self):
+        for material_name,expected in [(None,"missing"),("演练丙","risk"),("演练乙","ok"),("同合同","missing"),("演练*","missing")]:
+            receipt=[(k,l,material_name if k=="seller" else v) for k,l,v in RECEIPT if k!="seller" or material_name]
+            graph=material([CONTRACT,receipt,WARRANTY,BANK_DOC])
+            items=compute(graph)
+            self.assertEqual(items[1]["acceptance_reservations"]["supplier"]["status"],expected)
+            self.assertEqual(items[3]["status"],"ok")
+            if expected!="ok":
+                self.assertTrue(all(f["status"]!="ok" for f in (items[1],*items[4:])))
+        graph=repaired(lambda i,k,l,v:None if i==4 and k=="seller" else v)
+        self.assertNotEqual(compute(graph)[1]["status"],"ok")
+
+    def test_delivery_note_survives_omission_and_old_signoff(self):
+        raw="实际供货单位：青山演练交付中心"
+        graph=material([CONTRACT,RECEIPT,WARRANTY,BANK_DOC],omissions=[(2,raw)])
+        text={d["id"]:"\n".join(f["quote"] for f in graph["facts"] if f["doc"]==d["id"]) for d in graph["documents"]}
+        text["d02"]+="\n"+raw
+        read=lambda d,p:text[d]
+        current=compute(graph)[1]
+        row,=[s for s in current["acceptance_reservations"]["supplier"]["lines"] if s["kind"]=="delivery_note"]
+        self.assertEqual((row["quote"],row["facts"]),(raw,[]))
+        self.assertTrue(row["line"] and current["status"]=="missing")
+        graph["acceptance_reservation_sources"]=sources(graph,read,LEGACY)
+        graph["edges"]=[e for e in graph["edges"] if e["type"]!="supplier_identity_basis"]
+        old={"graph":graph,"policy":{**VERSION,"version":"2026.11.25.03","acceptance_reservations":LEGACY},"findings":compute(graph)}
+        self.assertEqual(old["findings"][1]["status"],"ok")
+        verify(old,read)
+        with self.assertRaisesRegex(ValueError,"旧版验收供应方"):
+            verify(old,read,signing=True)
+
     def test_printed_term_survives_an_omission_and_holds_only_dependent_payments(self):
         graph, read = original()
         findings = compute(graph)

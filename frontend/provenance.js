@@ -40,6 +40,7 @@ function lazyFold(title, build) {
 function performanceOverview(findings, graph) {
   const overview = el('section','','performance-overview');
   const summary = box('performance-statuses');
+  const phases = findings.filter(f=>f.rule==='H04' && f.stage);
   const inspect = (item, label) => {
     const button = action('', () => {
       const target = document.querySelector('[data-finding="'+CSS.escape(item.id)+'"]');
@@ -51,14 +52,21 @@ function performanceOverview(findings, graph) {
     button.append(el('span',label),tag(item.status));
     return button;
   };
-  for (const [rule,label] of [['H01','签署与生效'],['H02','交付验收'],['H03','付款安排']]) {
+  for (const [rule,label] of [['H01','签署与生效'],['H02','交付验收']]) {
     const item = findings.find(f=>f.rule===rule);
     if (item) summary.append(inspect(item,label));
   }
+  const plan = findings.find(f=>f.rule==='H03');
+  if (plan) {
+    let label = '付款期次待核';
+    if (plan.status==='ok') {
+      if (phases.length>1) label = '分 '+phases.length+' 期付款';
+      else if (phases.length===1 && Number(phases[0].stage.share)===100) label = '单期全额付款';
+    }
+    summary.append(inspect(plan,label));
+  }
   overview.setAttribute('aria-label','履约结论与期次');
   overview.append(summary);
-  const phases = findings.filter(f=>f.rule==='H04' && f.stage);
-  if (!phases.length) return overview;
   const list = el('ol','','phase-summary');
   const payments = findings.filter(f=>f.rule==='H05');
   const index = graphIndex(graph);
@@ -84,7 +92,7 @@ function performanceOverview(findings, graph) {
     row.append(box('phase-contract',source,el('q',stage.clause)),results);
     list.append(row);
   }
-  overview.append(list);
+  if (phases.length) overview.append(list);
   for (const item of payments.filter(f=>!f.stage)) overview.append(inspect(item,'回单期次待核 · '+paymentLabel(item)));
   return overview;
 }
@@ -262,6 +270,27 @@ function reservationSource(line,graph) {
   row.dataset.reservationSource=fact?.id || line.doc+'/p'+line.page+'/l'+line.line;
   if (!line.line && fact) row.append(tag(fact.status));
   return row;
+}
+
+function supplierPanel(check,graph) {
+  const {documents}=graphIndex(graph);
+  const panel=fold('核对合同与验收供应方');
+  panel.classList.add('supplier-review');
+  panel.open=check.status!=='ok';
+  for (const unit of new Set(check.pages.map(p=>p.unit))) {
+    const pages=check.pages.filter(p=>p.unit===unit);
+    const first=pages[0];
+    const section=box('line',el('strong',(documents.get(first.doc)?.name || '原件')+' · '+(check.names[unit] || '供应方待核')));
+    section.dataset.supplierUnit=unit;
+    for (const line of check.lines.filter(s=>s.unit===unit)) section.append(reservationSource(line,graph));
+    for (const page of pages.filter(p=>!check.names[unit] || !p.native || !p.text_only)) {
+      const button=action('查看第 '+page.page+' 页',()=>openPage(page.doc,page.page),'ref');
+      button.dataset.supplierPage=page.doc+'/p'+page.page;
+      section.append(button);
+    }
+    panel.append(section);
+  }
+  return panel;
 }
 
 function reservationPanel(finding,graph) {

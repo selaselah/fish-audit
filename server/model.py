@@ -91,6 +91,7 @@ unit 单独抄明示的金额单位（如“金额单位：元”），value 抄
 授权委托书抬头单列为 power_of_attorney。合同上的甲方、乙方代理人签字栏各用 buyer_agent_signature 或 seller_agent_signature，所引该方委托书编号分别用 buyer_grant_ref、seller_grant_ref。签名需照录可见文字。委托书自身的编号用 grant_number，被授权的合同编号仍用 contract_id。委托单位用 grant_principal、受托人用 grant_agent、交易相对方用 grant_counterparty、采购标的仍用 subject。代理事项与权限分别用 grant_task 和 grant_scope。授权出具日、起始日、截止日分别用 granted_on、grant_from、grant_until。逐字保留授权限制、权限上限和授权状态，用 grant_conditions、grant_state。委托单位签章用 grant_signature。抄录完整标签、日期、否定与例外，不从文件名或其他页取值。
 独立整改记录标题用 remediation，复验报告标题用 reinspection。原验收及复验自身的单号均用 acceptance_number，所引“原验收单编号”用 original_acceptance。逐份抄录缺陷编号 defect_number、整改记录编号 repair_number 及对应缺陷文字 repair_subject。整改记录上实际措施、整改状态、完成日期及签认分别用 repair_action、repair_result、repaired_on、repair_signer。复验报告的复验日期、范围、结论及签认沿用 accepted_on、acceptance_scope、acceptance_result、acceptance_signer。复验单的“缺陷关闭结论”用 defect_closure。每份材料的检验依据用 inspection_basis，只有合同本身约定的验收标准用 acceptance_criteria。只抄所见，不补齐关联编号或缺陷处理过程。
 居中抬头“复验报告”“整改记录单”各自单列标题事实，value 与 quote 均为完整抬头。正文的“整改记录编号”在整改单和复验报告中一律是 repair_number，value 只写印刷的整串编号，quote 抄完整标签和值。原验收单编号与本页的复验单编号需分行区分。
+验收或复验的供应方字段照录该页所列名称。另列实际交付单位、委托或第三方供货说明时，用 other 分别抄录整行，保留各角色和名称。
 验收或复验的结论栏与签收附注分别抄录。附注提到暂收、只核数量或外观、性能未测、需另行终验等，用 other 保留逐字引文，包括页末、签字旁或嵌入影像中的原文。保持正式结论栏原样。
 验收、整改及缺陷编号含“尾号”、星号或遮盖字符时，照录所见及限定词。若页脚或另栏标明某个编号只显示部分字符，另以 other 收录这整行说明，保留它所指的编号名称。
 按页面实际印刷的单据标题确定类型。住宿服务发票、运输服务发票等标题用 invoice；只有报销申请人填写的报销单标题才用 claim。同属一次差旅不改变票据本身的类型。

@@ -2,13 +2,27 @@
 
 import hashlib
 import re
+import unicodedata
 from collections import defaultdict
 
 from calculations import normalized
 from performance_versions import FORMAT as CURRENT
 
 
-FORMAT = "acceptance-reservations-v1"
+LEGACY = "acceptance-reservations-v1"
+FORMAT = "acceptance-reservations-v2"
+SELLER = {"供应方","供方","卖方","乙方","供应商","供货方","供货单位","销售方","销方"}
+DELIVERY = re.compile(r"实际(?:供货|供应|交付)(?:单位|方|人|商)?|(?:代为|代行|委托|代替|代为其|受托|另行指定).{0,22}(?:供货|交付|交货)|第三方(?:供货|交付|送货)")
+INCOMPLETE = re.compile(r"[*＊×□…]|待定|待填|不详|未提供|同(?:主)?合同|另见|尾号|^(?:无|略|乙方|供方|卖方|同上|—+|-+)$")
+
+
+def supplier_kind(raw):
+    label,sep,_=unicodedata.normalize("NFKC",raw).strip().partition(":")
+    if DELIVERY.search(normalized(raw)) or label.strip() in {"交付单位","送货单位","发货单位","代供单位","受托供货方"}:
+        return "delivery_note"
+    if sep and label.strip() in SELLER:
+        return "seller"
+    return None
 LABELS = {"验收备注", "验收保留意见", "验收附注", "签收说明", "验收限制", "保留意见", "复验备注", "复验保留意见"}
 CLEAR = {"无", "无保留意见", "无验收保留意见", "无其他验收限制"}
 LIMIT = re.compile(
@@ -31,12 +45,14 @@ def classify(quote):
     return None
 
 
-def sources(graph, read_text):
+def sources(graph, read_text, format=FORMAT):
     units = {unit for kind in ("acceptance", "reinspection") for unit in graph["documents_by_kind"].get(kind, [])}
     sections = {(d["source"], d["page"]): d["id"] for d in graph.get("audit_documents", []) if "source" in d}
     observations = defaultdict(list)
     for fact in graph["facts"]:
         observations[fact["doc"], fact["page"]].append(fact)
+    contracts=set(graph["documents_by_kind"].get("contract",[])) if format==FORMAT else set()
+    supplier_rows, supplier_pages = [], []
     pages, lines = [], []
     for node in graph["nodes"]:
         if node["type"] != "page":
@@ -44,34 +60,82 @@ def sources(graph, read_text):
         doc, number = node["id"].rsplit("/p", 1)
         page = int(number)
         unit = sections.get((doc, page), doc)
-        if unit not in units:
+        if unit not in units and unit not in contracts:
             continue
         place = {"unit": unit, "doc": doc, "page": page}
         native = node.get("layer") == "text"
-        pages.append({**place, "native": native, "text_only": node.get("clause_text_only") is True})
+        coverage={**place,"native":native,"text_only":node.get("clause_text_only") is True}
+        if unit in units:
+            pages.append(coverage)
+        if format==FORMAT:
+            supplier_pages.append({**coverage,"role":"contract" if unit in contracts else "receipt"})
         anchored = defaultdict(list)
         for fact in observations[doc, page]:
             loc = fact.get("source_line") or {}
             if native and loc.get("rects"):
                 anchored[loc["number"], loc["text"]].append(fact["id"])
-            elif kind := classify(fact["quote"]):
+            elif format==FORMAT and (party_kind:=supplier_kind(fact["quote"])):
+                supplier_rows.append({**place,"line":None,"kind":party_kind,"quote":fact["quote"],"facts":[fact["id"]]})
+                if unit in units and (kind:=classify(fact["quote"])):
+                    lines.append({**place,"line":None,"kind":kind,"quote":fact["quote"],"facts":[fact["id"]]})
+            elif unit in units and (kind := classify(fact["quote"])):
                 lines.append({**place, "line": None, "kind": kind, "quote": fact["quote"], "facts": [fact["id"]]})
         if native:
             text = read_text(doc, page)
             if not isinstance(text, str) or hashlib.sha256(text.encode()).hexdigest() != node.get("text_sha256"):
                 raise ValueError("验收保留意见所据的原页文字摘要不符")
             for i, raw in enumerate(text.splitlines(), 1):
-                if kind := classify(raw):
+                if format==FORMAT and (party_kind:=supplier_kind(raw)):
+                    supplier_rows.append({**place,"line":i,"kind":party_kind,"quote":raw,"facts":anchored[i,raw]})
+                if unit in units and (kind := classify(raw)):
                     lines.append({**place, "line": i, "kind": kind, "quote": raw, "facts": anchored[i, raw]})
-    return {"format": FORMAT, "pages": pages, "lines": lines}
+    result={"format":format,"pages":pages,"lines":lines}
+    if format==FORMAT:
+        result.update(supplier_rows=supplier_rows,supplier_pages=supplier_pages)
+    return result
 
 
 def edges(ledger):
-    return [{"type": "acceptance_reservation", "from": row["unit"], "to": f"{row['doc']}/p{row['page']}",
-             "line": row["line"], "evidence": [f"{row['doc']}/p{row['page']}", *row["facts"]]} for row in ledger["lines"]]
+    result=[]
+    for key,relation in (("lines","acceptance_reservation"),("supplier_rows","supplier_identity_basis")):
+        for row in ledger.get(key,[]):
+            page=f"{row['doc']}/p{row['page']}"
+            result.append({"type":relation,"from":row["unit"],"to":page,"line":row["line"],"evidence":[page,*row["facts"]]})
+    return result
 
 
-def apply(finding, ledger):
+def supplier_check(ledger, scope, graph):
+    pages=[p for p in ledger["supplier_pages"] if p["unit"] in scope]
+    rows=[s for s in ledger["supplier_rows"] if s["unit"] in scope]
+    names={}
+    facts={f["id"]:f for f in graph["facts"]}
+    by_unit=defaultdict(set)
+    for fact in graph["facts"]:
+        if fact["field"]=="seller":
+            by_unit[fact.get("unit",fact["doc"])].add(fact["id"])
+    for unit in dict.fromkeys(p["unit"] for p in pages):
+        entries=[s for s in rows if s["unit"]==unit and s["kind"]=="seller"]
+        if len(entries)!=1 or not entries[0]["line"]:
+            continue
+        source=entries[0]
+        supported=[facts[ref] for ref in source["facts"] if ref in facts and facts[ref]["field"]=="seller"
+                   and facts[ref]["status"] in ("anchored","confirmed") and facts[ref]["quote"]==source["quote"]]
+        if len(supported)==1 and by_unit[unit]=={supported[0]["id"]}:
+            raw=source["quote"].replace("：",":").partition(":")[2].strip()
+            if raw and not INCOMPLETE.search(raw) and supported[0]["value"].strip() in (raw,source["quote"]):
+                names[unit]=raw
+    if len(set(names.values()))>1:
+        status,detail="risk","合同与验收或复验原件所列供应方名称不一致，请核实主体归属及有无委托交付约定。"
+    elif any(row["kind"]=="delivery_note" for row in rows):
+        status,detail="missing","另有实际供货或委托交付说明，须取得其与合同供应方的关系及对应交付依据。"
+    elif len(names)!=len({p["unit"] for p in pages}) or any(not p["native"] or not p["text_only"] for p in pages):
+        status,detail="missing","须核对合同及各次验收原页的完整供应方名称、影像附注或补充可关联的交付凭证。"
+    else:
+        status,detail="ok","合同与所据验收原件的供应方名称相符。"
+    return {"status":status,"detail":detail,"pages":pages,"lines":rows,"names":names}
+
+
+def apply(finding, ledger, graph=None):
     scope = set(finding["scope"])
     pages = [p for p in ledger.get("pages", []) if p["unit"] in scope]
     if not pages:
@@ -80,9 +144,25 @@ def apply(finding, ledger):
     mixed = [p for p in pages if not p["native"] or not p["text_only"]]
     refs = [f"{p['doc']}/p{p['page']}" for p in pages] + [ref for row in lines for ref in row["facts"]]
     finding["acceptance_reservations"] = {"pages": pages, "lines": lines, "mixed_pages": mixed}
+    supplier_hold=False
+    if ledger.get("format")==FORMAT and graph is not None:
+        supplier=supplier_check(ledger,scope,graph)
+        finding["acceptance_reservations"]["supplier"]=supplier
+        refs.extend(f"{p['doc']}/p{p['page']}" for p in supplier["pages"])
+        refs.extend(ref for s in supplier["lines"] for ref in s["facts"])
+        supplier_hold=supplier["status"]!="ok"
+        if supplier_hold:
+            if finding["status"]=="ok":
+                finding.update(status=supplier["status"],detail=supplier["detail"])
+            else:
+                if finding["status"]=="missing" and supplier["status"]=="risk":
+                    finding["status"]="risk"
+                finding["detail"]+=" "+supplier["detail"]
+            if finding.get("reinspection"):
+                finding["reinspection"]["state"]="open"
     finding["evidence"] = list(dict.fromkeys([*finding["evidence"], *refs]))
     if not (lines or mixed):
-        return False
+        return supplier_hold
     printed_limit = any(s["line"] and s["kind"] == "limited" for s in lines)
     before = finding["status"]
     if before not in ("issue", "risk"):
@@ -108,11 +188,17 @@ def verify(report, read_text, *, signing=False):
         if signing:
             for f in report["findings"]:
                 if f["rule"] == "H02" and f["status"] == "ok" and not f.get("batch_acceptance"):
-                    if apply(dict(f, reinspection=dict(f.get("reinspection") or {})), sources(graph, read_text)):
+                    if apply(dict(f, reinspection=dict(f.get("reinspection") or {})), sources(graph, read_text),graph):
                         raise ValueError("旧版终验仍有保留意见或原页影像待核，请重新审计后签收。")
         return
-    ledger = sources(graph, read_text)
-    actual = [e for e in graph["edges"] if e["type"] == "acceptance_reservation"]
-    if (marker != FORMAT or policy.get("performance_checks") != CURRENT
+    if signing and marker==LEGACY:
+        current=sources(graph,read_text)
+        for f in report["findings"]:
+            if f["rule"]=="H02" and f["status"]=="ok" and not f.get("batch_acceptance"):
+                if supplier_check(current,set(f["scope"]),graph)["status"]!="ok":
+                    raise ValueError("旧版验收供应方或第三方供货依据待核，请按现行程序重审后签收。")
+    ledger = sources(graph,read_text,marker)
+    actual = [e for e in graph["edges"] if e["type"] in ("acceptance_reservation","supplier_identity_basis")]
+    if (marker not in (FORMAT,LEGACY) or policy.get("version","")>="2026.11.25.04" and marker!=FORMAT or policy.get("performance_checks") != CURRENT
             or graph.get("acceptance_reservation_sources") != ledger or actual != edges(ledger)):
         raise ValueError("验收保留意见、整页影像覆盖或证据关系与归档不符")
