@@ -98,6 +98,39 @@ function reinspectionTrail(chain, graph) {
   return panel;
 }
 
+function mandatePanel(entries, graph) {
+  const panel = box('mandate-review', el('h4', '书面签约授权'));
+  const index = graphIndex(graph);
+  for (const entry of entries) {
+    const title = {buyer:'甲方',seller:'乙方',unassigned:'待归属'}[entry.side];
+    const section = box('mandate-side', box('flow', el('strong', title+(entry.agent?' · '+entry.agent:'')), tag(entry.status)));
+    section.dataset.mandateSide = entry.side;
+    const facts = entry.evidence.map(ref => index.facts.get(ref)).filter(Boolean);
+    const dates = el('dl', '', 'mandate-dates');
+    for (const [field,key,label] of [['signed_on','signed_on','合同签约'],['granted_on','issued_on','委托书出具'],
+                                     ['grant_from','valid_from','授权起始'],['grant_until','valid_until','授权截止']]) {
+      const value = el('dd');
+      value.append(el('span',entry[key] || '待核'));
+      for (const fact of facts.filter(f => f.field===field)) value.append(citation(fact.id));
+      dates.append(box('', el('dt',label), value));
+    }
+    section.append(dates);
+    const fields = new Set([entry.signature_field, 'grant_agent','grant_scope','grant_conditions','grant_signature','grant_state']);
+    for (const fact of facts.filter(f => fields.has(f.field))) {
+      const line = box('reinspection-line', el('span', fact.quote), citation(fact.id));
+      line.dataset.mandateFact = fact.id;
+      section.append(line);
+    }
+    for (const page of (graph.delegation_coverage?.pages || []).filter(p => entry.units.includes(p.unit))) {
+      if (!page.native) section.append(el('p', '委托书第 '+page.page+' 页为影像，需通读完整授权范围。', 'small'));
+      for (const line of page.uncovered) section.append(box('reinspection-line', el('span', line.quote),
+        action('核对委托书第 '+line.line+' 行',()=>openPage(page.doc,page.page,null,line.line),'ref')));
+    }
+    panel.append(section);
+  }
+  return panel;
+}
+
 function accountPreview(fact, page) {
   const figure=el('figure','','account-preview');
   const caption=el('figcaption',fact.name+' · 第 '+fact.page+' 页');

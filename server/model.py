@@ -17,7 +17,7 @@ from protocol import canonical, response_request
 
 FIELDS = {
     **PERFORMANCE_FIELDS, "warranty":"质保期满确认单标题", "contract_approval":"合同审批单标题",
-    "remediation":"整改记录单标题","reinspection":"整改复验报告标题",
+    "remediation":"整改记录单标题","reinspection":"整改复验报告标题","power_of_attorney":"授权委托书标题",
     "invoice": "发票标题", "contract": "合同标题", "acceptance": "验收单标题",
     "contract_id": "合同编号", "invoice_id": "发票号码", "invoice_code":"发票代码", "buyer": "采购方",
     "seller": "供应方", "total": "含税总额", "net": "不含税合计", "tax": "税额合计",
@@ -84,6 +84,7 @@ unit 单独抄明示的金额单位（如“金额单位：元”），value 抄
 明列的合同有效截止日用 valid_until。合同约定交付数量和验收标准分别用 quantity_agreed 和 acceptance_criteria，验收材料上的实际验收数量、实测标准分别用 quantity_accepted 和 inspection_basis。数量连同单位完整抄录。
 验收报告的实测结果用 measured_result，逐字抄录指标、数值、正负号及单位，与检验依据分别记录。
 合同审批单或董事会合同审批记录的抬头用 contract_approval；审批记录与被审批的合同是两种资料。审批机构、签认、决定及决定日期分别用 approval_authority、approval_signer、approval_result、approved_on。保留决定中的否定、暂缓及其他条件。
+授权委托书抬头单列为 power_of_attorney。合同上的甲方、乙方代理人签字栏各用 buyer_agent_signature 或 seller_agent_signature，所引该方委托书编号分别用 buyer_grant_ref、seller_grant_ref。签名需照录可见文字。委托书自身的编号用 grant_number，被授权的合同编号仍用 contract_id。委托单位用 grant_principal、受托人用 grant_agent、交易相对方用 grant_counterparty、采购标的仍用 subject。代理事项与权限分别用 grant_task 和 grant_scope。授权出具日、起始日、截止日分别用 granted_on、grant_from、grant_until。逐字保留授权限制、权限上限和授权状态，用 grant_conditions、grant_state。委托单位签章用 grant_signature。抄录完整标签、日期、否定与例外，不从文件名或其他页取值。
 独立整改记录标题用 remediation，复验报告标题用 reinspection。原验收及复验自身的单号均用 acceptance_number，所引“原验收单编号”用 original_acceptance。逐份抄录缺陷编号 defect_number、整改记录编号 repair_number 及对应缺陷文字 repair_subject。整改记录上实际措施、整改状态、完成日期及签认分别用 repair_action、repair_result、repaired_on、repair_signer。复验报告的复验日期、范围、结论及签认沿用 accepted_on、acceptance_scope、acceptance_result、acceptance_signer。复验单的“缺陷关闭结论”用 defect_closure。每份材料的检验依据用 inspection_basis，只有合同本身约定的验收标准用 acceptance_criteria。只抄所见，不补齐关联编号或缺陷处理过程。
 居中抬头“复验报告”“整改记录单”各自单列标题事实，value 与 quote 均为完整抬头。正文的“整改记录编号”在整改单和复验报告中一律是 repair_number，value 只写印刷的整串编号，quote 抄完整标签和值。原验收单编号与本页的复验单编号需分行区分。
 验收、整改及缺陷编号含“尾号”、星号或遮盖字符时，照录所见及限定词。若页脚或另栏标明某个编号只显示部分字符，另以 other 收录这整行说明，保留它所指的编号名称。
@@ -314,7 +315,7 @@ def audit_graph(graph, controls):
     procedures = [{"rule": item["rule"], "status": item["status"], "observation": item["detail"],
                    "evidence": item["evidence"], "methods": MAPPING[item["rule"]]} for item in controls]
     for procedure, finding in zip(procedures, controls):
-        for key in ("stage","reinspection"):
+        for key in ("stage","reinspection","delegations"):
             if key in finding:
                 procedure[key] = finding[key]
     method_ids = {key for row in procedures for key in row["methods"]}

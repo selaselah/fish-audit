@@ -6,13 +6,15 @@ from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 from reinspection import LABELS as REINSPECTION_FIELDS, assess as assess_reinspection, verify_number_links
+from delegation import LABELS as DELEGATION_FIELDS, checks as check_delegations
 
 
 PROFILE = "cn-contract-performance/v1"
 FIRST_FORMAT = "contract-performance-v1"
 BOARD_FORMAT = "contract-performance-v2"
-FORMAT = "contract-performance-v3"
-SUPPORTED = (FIRST_FORMAT,BOARD_FORMAT,FORMAT)
+REINSPECTION_FORMAT = "contract-performance-v3"
+FORMAT = "contract-performance-v4"
+SUPPORTED = (FIRST_FORMAT, BOARD_FORMAT, REINSPECTION_FORMAT, FORMAT)
 RULES = {
     "H01": ("合同签署与约定生效条件", "核对合同双方、签订日期、生效条款和签署栏的人工核图记录，保留附加条件及状态疑点。"),
     "H02": ("交付范围与验收质量", "按合同编号、标的和采购方关联验收资料，核对日期、验收范围、结论、签认和遗留事项。"),
@@ -22,6 +24,7 @@ RULES = {
 }
 LABELS = {
     **REINSPECTION_FIELDS,
+    **DELEGATION_FIELDS,
     "effect_clause": ("生效条款", "合同生效条件", "生效条件", "合同生效条款"),
     "buyer_signature": ("甲方签署", "甲方签章", "采购方签署", "买方签章"),
     "seller_signature": ("乙方签署", "乙方签章", "供应方签署", "卖方签章"),
@@ -103,6 +106,7 @@ def complete_line(field, value, quote):
 class Material:
     def __init__(self, graph, unit):
         self.unit = unit
+        self.mandate_pages = [p for p in graph.get("delegation_coverage", {}).get("pages", []) if p["unit"]==unit]
         self.quality_holds = [h for h in graph.get("quality_references", {}).get("holds", []) if h["unit"] == unit]
         self.fields = defaultdict(list)
         self.refs = []
@@ -192,7 +196,7 @@ def check_approval(contract, approvals, party):
     return "ok","约定的董事会批准决定、日期和签认已有材料支持。",refs
 
 
-def effect(contract, approvals=(), version=FORMAT):
+def effect(contract, approvals=(), version=FORMAT, grants=()):
     fields = ("contract","contract_id","buyer","seller","signed_on","effect_clause","contract_state","effect_on","valid_until",
               "buyer_signature","seller_signature","adjustment")
     refs = contract.evidence(*fields)
@@ -210,7 +214,17 @@ def effect(contract, approvals=(), version=FORMAT):
     if not board and not EFFECT.fullmatch(terms):
         missing.append("生效约定及其中每项条件的证明")
     mode = "seal" if "盖章" in terms and "或" not in terms else "sign" if ("签字" in terms or "签名" in terms) and "或" not in terms else None
+    delegations = check_delegations(contract, grants) if version==FORMAT else []
     for field, party, name in (("buyer_signature",buyer,"甲方"),("seller_signature",seller,"乙方")):
+        side = field.removesuffix("_signature")
+        delegate = next((item for item in delegations if item["side"]==side), None)
+        if delegate and mode!="seal":
+            if delegate["status"]!="ok":
+                missing.append(name+"代理签署的书面授权")
+            if (delegate["signature_field"]!=field and (contract.fields[field] or field in contract.uncertain)
+                    and not contract.signed(field, party, mode)):
+                missing.append(name+"同时列明的多个签署栏及其关系")
+            continue
         if not party or not contract.signed(field, party, mode):
             missing.append(name + "签署栏及与该方相符的核图签认")
     changes = [n for n in contract.notes if re.search(r"补充协议|解除|终止|待审批|待批准|授权委托",n["quote"])]
@@ -244,7 +258,17 @@ def effect(contract, approvals=(), version=FORMAT):
         scope.extend(doc.unit for doc in approvals)
         for doc in approvals:
             refs.extend(doc.evidence("contract_approval","approval_result","approval_authority"))
-    return result("H01",status,detail,refs,scope)
+    if delegations:
+        for item in delegations:
+            refs.extend(item["evidence"])
+            scope.extend(item["units"])
+            detail += " " + item["detail"]
+            if item["status"]=="risk" or status=="ok":
+                status = item["status"]
+    finding = result("H01",status,detail,refs,scope)
+    if delegations:
+        finding["delegations"] = delegations
+    return finding
 
 
 def inspect_quality(required, basis, reading):
@@ -434,8 +458,8 @@ def compute(graph, version=FORMAT):
     contract = contracts[0]
     receipts, releases = materials("acceptance"), materials("warranty")
     approvals = materials("contract_approval") if version != FIRST_FORMAT else []
-    signed = effect(contract,approvals,version)
-    if version == FORMAT:
+    signed = effect(contract,approvals,version,materials("power_of_attorney") if version==FORMAT else ())
+    if version in (REINSPECTION_FORMAT,FORMAT):
         accepted, accepted_on = assess_reinspection(contract,receipts,materials("remediation"),materials("reinspection"),acceptance)
     else:
         accepted = acceptance(contract, receipts)
@@ -533,7 +557,7 @@ def verify_findings(report):
     profile = policy["profile"]
     if marker not in SUPPORTED or report["graph"].get("profile") != profile:
         raise ValueError("合同履约范围或程序版本不符")
-    if marker==FORMAT:
+    if marker in (REINSPECTION_FORMAT,FORMAT):
         verify_number_links(report["graph"])
     expected = [] if profile == "cn-travel-reimbursement/v1" else compute(report["graph"],marker)
     found = [f for f in report["findings"] if f["rule"] in RULES]
@@ -543,7 +567,7 @@ def verify_findings(report):
         rule = saved["rule"]
         position = report["findings"].index(saved) + 1
         if (any(saved.get(key) != val for key, val in entry.items()) or saved.get("stage") != entry.get("stage")
-                or saved.get("reinspection") != entry.get("reinspection")
+                or saved.get("reinspection") != entry.get("reinspection") or saved.get("delegations") != entry.get("delegations")
                 or (saved.get("id"),saved.get("version"),saved.get("title"),saved.get("basis")) !=
                 (f"{rule}-{position}",policy["version"],*RULES[rule])):
             raise ValueError("合同履约结论、期次或引文与证据图谱不符")

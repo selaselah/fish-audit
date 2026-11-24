@@ -95,6 +95,13 @@ textarea { width: 100%; resize: vertical; }
 .reinspection-steps { list-style:none; margin:0; padding:0 0 0 12px; border-inline-start:2px solid var(--line); }
 .reinspection-steps li + li { margin-top:14px; }
 .reinspection-line { display:flex; align-items:baseline; flex-wrap:wrap; gap:2px 12px; margin:4px 0; overflow-wrap:anywhere; }
+.mandate-review { margin:12px 0; padding:14px; background:var(--soft); border-radius:6px; }
+.mandate-review h4 { margin:0 0 10px; }
+.mandate-side + .mandate-side { margin-top:14px; }
+.mandate-dates { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr)); gap:8px; margin:12px 0; }
+.mandate-dates > div { min-width:0; border-inline-start:2px solid var(--line); padding-inline-start:8px; }
+.mandate-dates dt { font-size:.8rem; color:var(--muted); }
+.mandate-dates dd { display:flex; flex-direction:column; align-items:flex-start; gap:3px; margin:2px 0; font-variant-numeric:tabular-nums; }
 .ref { font-size: .82rem; min-height: 36px; padding: 5px 9px; color: var(--green); }
 .mono, code, pre { font-family: var(--mono); font-size: .82rem; overflow-wrap: anywhere; }
 pre { white-space: pre-wrap; max-height: 35vh; overflow: auto; background: #f4f7f6; padding: 12px; }

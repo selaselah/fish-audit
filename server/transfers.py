@@ -16,14 +16,20 @@ RULES = {
 }
 
 
-def check_transfers(graph, docs, values, record, parsed_date):
+def check_transfers(graph, docs, values, record, parsed_date, verified_grants=()):
     kinds = graph["documents_by_kind"]
     contracts, receipts = kinds.get("contract",[]), kinds.get("bank_receipt",[])
     ids = [doc["id"] for doc in docs]
     titles = [f["id"] for f in graph["facts"] if f["field"] in ("contract","bank_receipt") and f["status"] in ("anchored","confirmed")]
-    complete = (len(contracts) == len(receipts) == 1 and len(ids) == len(set(contracts+receipts)) == 2
-                and set(ids) == set(contracts+receipts) and not any(v for k,v in kinds.items() if k not in ("contract","bank_receipt")))
-    record("B01","ok" if complete else "missing", f"核得合同 {len(contracts)} 份、银行回单 {len(receipts)} 份，本案共 {len(ids)} 份单据。", titles,ids)
+    grants = set(verified_grants)
+    core = set(contracts+receipts)
+    complete = (len(contracts) == len(receipts) == 1 and len(core)==2 and not grants.intersection(core)
+                and set(ids)==core|grants and all(not names or (kind=="power_of_attorney" and set(names)==grants)
+                    for kind,names in kinds.items() if kind not in ("contract","bank_receipt")))
+    detail = f"核得合同 {len(contracts)} 份、银行回单 {len(receipts)} 份，本案共 {len(ids)} 份单据。"
+    if grants:
+        detail += f"其中 {len(grants)} 份书面委托已在合同签署程序中核对。"
+    record("B01","ok" if complete else "missing",detail,titles,ids)
     if not complete:
         for rule in ("B02","B03","B04","B05"):
             record(rule,"missing","请先建立单合同与单份银行回单的对应关系。",titles,ids)

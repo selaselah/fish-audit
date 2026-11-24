@@ -6,6 +6,8 @@
 
 涉及整改的 H02 可包含 `reinspection`。其中 `state` 为 `open` 或 `closed`，`steps` 按原验收、整改、复验三种角色列出实际收到的来源。每步保存 `role`（`original`、`repair`、`final`）、`unit`（文件或分册页）、`date`（ISO 日期或 null）及 `evidence`（原页证据编号）。当次是否可以据此认定验收或付款条件满足，分别由 H02、H04 和 H05 的状态说明。
 
+当 `policy.delegation_checks` 为 `written-contract-mandate-v1`，涉及代理签署的 H01 会给出 `delegations`。每项含 `side`（`buyer`、`seller` 或 `unassigned`）、签字栏字段 `signature_field`、可读到的姓名 `agent`、委托书归属 `units`、`status`、`detail` 和 `evidence`。四个 ISO 日期字段 `signed_on`、`issued_on`、`valid_from`、`valid_until` 的未知值为 null。`graph.delegation_coverage.pages` 按原件页列出是否有可核原生文字层，以及尚未归入已核授权字段的行号和原文。图谱可用 `grant_principal`、`grant_counterparty` 关联采购主体，用 `buyer_grant_ref` 或 `seller_grant_ref` 核对委托书自己的 `grant_number`。
+
 当 `policy.quality_number_classification` 为 `printed-quality-number-v1` 时，按原页标签改归的编号事实带有 `origin: "printed_quality_number"`。`field` 是核对后的分类，`model_field` 保留初次分类，`value` 和 `quote` 保留当时抄录。按 `doc` 和 `page` 找到 `calls.pages[].check`，事实编号末尾 `f` 后的数字及 `classification_index` 分别对应原分类和印刷标签的候选项。两项的具体输入在 `input`，判断在 `output.checks`。底稿支持按 `?rev=版本号&fact=事实编号` 定位页图。
 
 `policy.quality_references` 为 `quality-reference-visibility-v1` 时，`graph.quality_references.holds` 记录需补全的验收、整改或缺陷编号。每项含原观察 `fact`、字段名 `field`、原始取值、页码及资料归属，可定位行在 `lines` 中，图像页上的相关读图引文在 `observations` 中。对应图谱边的类型带 `incomplete_` 前缀，直接连到本页事实。若旧版的缺陷关闭依赖这种部分编号，签收通过接口返回 409，说明需要重审。

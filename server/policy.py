@@ -10,6 +10,15 @@ EVIDENCE = {"title": "《中国注册会计师审计准则第1301号——审计
             "url": "https://www.cicpa.org.cn/ztzl1/Professional_standards/xxzztx/zyzz/sjzz/202105/P020240412542695263912.pdf",
             "edition": "2022-12-22 修订", "scope": "注册会计师审计的方法参考，用于说明证据评估与追加程序思路。"}
 SOURCES = {
+    "written-mandate": {"title":"《中华人民共和国民法典》","edition":"2020-05-28 通过",
+        "url":"https://www.samr.gov.cn/zw/zfxxgk/fdzdgknr/bgt/art/2023/art_60fb3863b7364b759123a42d1df568ca.html",
+        "locator":"第一百六十二、一百六十五、一百六十八、一百七十一至一百七十三条",
+        "scope":"书面委托代理的审查背景。追认、表见代理和其他授权依据须结合个案审查。",
+        "summary":"书面委托须说明代理人、代理事项、权限及期限，并有委托方签名或盖章。程序核对材料所载的签约权限及签约时点。"},
+    "contract-signing": {"title":"财政部会计司解读《企业内部控制应用指引第16号——合同管理》","edition":"2010-07-06",
+        "url":"https://kjs.mof.gov.cn/zhengcejiedu/201007/t20100706_325984.htm","locator":"（五）合同签署",
+        "scope":"对外签约、书面授权及用印管理的企业内控参考。",
+        "summary":"签署环节关注签约权限、授权委托材料及用印程序。"},
     "contract-effect": {"title":"《中华人民共和国民法典》","edition":"2020-05-28 通过",
         "url":"https://fjca.miit.gov.cn/zwgk/zcwj/wjfb/art/2020/art_9f0ef44677164c5eb3a5585bf82a07cb.html",
         "locator":"第一百四十三条、第四百九十条、第五百零二条",
@@ -44,7 +53,7 @@ SOURCES = {
     "follow-up": {**EVIDENCE, "locator": "第十五条",
                   "summary": "不同来源的材料相互矛盾或可靠性存疑时，应考虑调整检查或追加程序。"},
 }
-MAPPING = {"H01":["contract-effect","purchase-records"],"H02":["receipt","evidence-quality"],
+MAPPING = {"H01":["contract-effect","written-mandate","contract-signing","purchase-records"],"H02":["receipt","evidence-quality"],
            "H03":["payment","purchase-records"],"H04":["payment","receipt"],"H05":["payment","evidence-quality"],
            "B01":["purchase-records","evidence-quality"],"B02":["payment"],"B03":["payment","follow-up"],
            "B08":["installment-tracking","follow-up"],

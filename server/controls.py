@@ -20,6 +20,7 @@ from policy import ACCOUNTING, MAPPING, SOURCES
 from reinspection import closed_steps
 from quality_labels import FORMAT as QUALITY_NUMBER_FORMAT
 from quality_references import FORMAT as QUALITY_REFERENCE_FORMAT
+from delegation import FORMAT as DELEGATION_FORMAT
 from transfers import RULES as TRANSFER_RULES, check_transfers
 
 
@@ -48,6 +49,7 @@ CATALOG = {
 }
 VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING, "performance_checks":PERFORMANCE_FORMAT,
            "quality_number_classification":QUALITY_NUMBER_FORMAT, "quality_references":QUALITY_REFERENCE_FORMAT,
+           "delegation_checks":DELEGATION_FORMAT,
            "sources": SOURCES, "rule_sources": MAPPING, "invoice_sources": INVOICE_SOURCE_FORMAT,
            "invoice_approval": INVOICE_APPROVAL_FORMAT,"invoice_identity":INVOICE_IDENTITY_FORMAT,"invoice_lookup":INVOICE_LOOKUP,
            "invoice_number_masks":MASK_FORMAT,"payment_references":PAYMENT_REFERENCE_FORMAT,"payment_checks":PAYMENT_CHECKS}
@@ -120,7 +122,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
     def with_performance():
         for item in performance:
             record(item["rule"],item["status"],item["detail"],item["evidence"],item["scope"])
-            for key in ("stage","reinspection"):
+            for key in ("stage","reinspection","delegations"):
                 if key in item:
                     findings[-1][key] = item[key]
         return findings
@@ -128,7 +130,9 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
     if profile == PERFORMANCE:
         return with_performance()
     if profile == BANK:
-        check_transfers(graph, docs, values, record, parsed_date)
+        verified_grants = {unit for finding in performance if finding["rule"]=="H01" and finding["status"]=="ok"
+                           for entry in finding.get("delegations", []) if entry["status"]=="ok" for unit in entry["units"]}
+        check_transfers(graph, docs, values, record, parsed_date, verified_grants)
         signature = payment_record(graph, findings)
         if payment_lookup is not None:
             attach_history(graph, payment_lookup(signature))
@@ -168,7 +172,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
     if chain:
         support.update((chain["original"],chain["repair"]))
         kinds = {**kinds,"acceptance":[chain["final"]]}
-    optional = set(kinds.get("contract_approval",[])+kinds.get("warranty",[]))
+    optional = set(kinds.get("contract_approval",[])+kinds.get("warranty",[])+kinds.get("power_of_attorney",[]))
     for item in performance:
         if item["status"]=="ok":
             support.update(optional.intersection(item["scope"]))

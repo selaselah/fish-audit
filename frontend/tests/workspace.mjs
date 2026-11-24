@@ -184,6 +184,25 @@ try {
       await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.textContent.includes('+JSON.stringify(fact.quote)+')','pinned contract clause');
       await evaluate('document.querySelector("#page-dialog [data-close]").click()');
     }
+    for (const entry of report.findings.find(f => f.rule==='H01').delegations || []) {
+      const panel='document.querySelector('+JSON.stringify('[data-mandate-side="'+entry.side+'"]')+')';
+      assert.deepEqual(await evaluate('[...'+panel+'.querySelectorAll("dd > span")].map(s=>s.textContent)'),
+        [entry.signed_on,entry.issued_on,entry.valid_from,entry.valid_until].map(d=>d || '待核'));
+      for (const fact of report.graph.facts.filter(f => entry.evidence.includes(f.id) && [entry.signature_field,'grant_scope','grant_signature'].includes(f.field))) {
+        const row=panel+'.querySelector('+JSON.stringify('[data-mandate-fact="'+fact.id+'"]')+')';
+        assert.ok(await evaluate(row+'.textContent.includes('+JSON.stringify(fact.quote)+')'));
+        await evaluate(row+'.querySelector("button").click()');
+        await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(fact.id),'delegated signature or authority');
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
+      for (const page of report.graph.delegation_coverage.pages.filter(p=>entry.units.includes(p.unit))) {
+        for (const line of page.uncovered) {
+          await click('核对委托书第 '+line.line+' 行', panel);
+          await wait('document.querySelector(".located[data-gap-line] blockquote")?.textContent==='+JSON.stringify(line.quote),'unreviewed authority condition');
+          await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+        }
+      }
+    }
     for (const rule of ['H01','H02']) {
       const f=report.findings.find(row=>row.rule===rule);
       const node='document.querySelector('+JSON.stringify('[data-finding="'+f.id+'"] .performance-comparison')+')';
@@ -229,7 +248,7 @@ try {
     }
     for (const width of [1440,1024,820,768,390,320]) {
       await call('Emulation.setDeviceMetricsOverride',{width,height:880,deviceScaleFactor:1,mobile:false});
-      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll(".clause-source")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'performance layout at '+width);
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll(".clause-source,.mandate-dates,.mandate-side")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'performance layout at '+width);
     }
     const target=report.findings.find(f=>f.rule==='H02');
     await click('查看证据路径','document.querySelector('+JSON.stringify('[data-finding="'+target.id+'"]')+')');

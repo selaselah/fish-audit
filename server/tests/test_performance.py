@@ -29,7 +29,8 @@ BANK_DOC = [("bank_receipt","","银行付款回单"),("contract_id","合同编�
 APPROVAL = [("contract_approval","","合同审批单"),*CONTRACT[1:4],("approval_authority","审批机构","演练甲董事会"),
             ("approval_result","审批决定","批准"),("approved_on","审批日期","2026-09-01"),
             ("approval_signer","审批签认","演练孙宁（已签字）")]
-SIGN_FIELDS = {"buyer_signature","seller_signature","acceptance_signer","approval_signer","repair_signer"}
+SIGN_FIELDS = {"buyer_signature","seller_signature","acceptance_signer","approval_signer","repair_signer",
+               "buyer_agent_signature","seller_agent_signature","grant_signature"}
 
 
 def material(groups, edit=None, confirm=True, omissions=()):

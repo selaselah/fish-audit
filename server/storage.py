@@ -29,6 +29,7 @@ import payment_index
 from performance import verify_findings as verify_performance
 from quality_labels import verify_report as verify_quality_numbers
 from quality_references import verify_report as verify_quality_references
+from delegation import verify_sources as verify_delegation_sources
 from peer_review import different_reviewers, review_record, valid_findings, verify_review
 from payment_reference import FORMAT as PAYMENT_REFERENCE_FORMAT, SUPPORTED as REFERENCE_FORMATS
 from supplements import compare_return
@@ -702,20 +703,41 @@ class Store:
             del row["total"]
         return {"count":count,"matches":rows}
 
-    def payment_approval_sources(self, case_id, revision, actor, *, peer=False):
+    def approval_sources(self, case_id, revision, actor, *, peer=False):
         # Read each distinct source file before opening the signature's write transaction.
         with self.connect() as db:
             db.execute("BEGIN")
             authorize_case_write(db,case_id,actor)
-            row = db.execute("""SELECT r.content,r.hash,r.created FROM cases c JOIN reports r ON r.case_id=c.id AND r.rev=c.rev
-                              WHERE c.id=? AND c.rev=? AND c.profile=? AND c.status=?""",
-                             (case_id,revision,BANK,"in_review" if peer else "ready")).fetchone()
+            row = db.execute("""SELECT r.content,r.hash,r.created,c.profile FROM cases c JOIN reports r ON r.case_id=c.id AND r.rev=c.rev
+                              WHERE c.id=? AND c.rev=? AND c.status=?""",
+                             (case_id,revision,"in_review" if peer else "ready")).fetchone()
             if row is None:
                 return None
             if hashlib.sha256(row["content"].encode()).hexdigest()!=row["hash"]:
                 raise CaseError("待签收底稿与留存的版本摘要不符。",409)
             paper = json.loads(row["content"])
             graph = paper["graph"]
+            if row["profile"]!=BANK:
+                signing = next((f for f in paper["findings"] if f.get("delegations")), None)
+                if not signing:
+                    return None
+                named = set(signing["evidence"])
+                fields = [f["id"] for f in graph["facts"] if f["id"] in named]
+                units = {d["id"]:d.get("source", d["id"]) for d in graph.get("audit_documents", graph["documents"])}
+                originals = {units[unit] for unit in signing["scope"]}
+                pages = {(p["doc"],p["page"]) for p in paper["calls"]["pages"] if p["doc"] in originals}
+                registered = {(r["doc"],r["number"]) for r in db.execute("SELECT doc,number FROM pages WHERE case_id=?",(case_id,))
+                              if r["doc"] in originals}
+                if pages!=registered or {doc for doc,_ in pages}!=originals:
+                    raise CaseError("合同或委托书的原页清单与入库记录不一致。",409)
+                source = FieldSources.from_graph(db,self.files/case_id,case_id,revision,row["hash"],graph,fields,pages,check_text=True)
+                self.check_graph_field_history(case_id,revision,graph,set(fields))
+                try:
+                    source.read_files()
+                except SourceFileError as error:
+                    doc = next(d["name"] for d in graph["documents"] if d["id"]==error.path.parent.name)
+                    raise CaseError(f"签收前核对 R{revision}《{doc}》失败。{error}",409) from error
+                return [(source,None)]
             pages = {(p["doc"],p["page"]) for p in paper["calls"]["pages"]}
             registered = {(r["doc"],r["number"]) for r in db.execute("SELECT doc,number FROM pages WHERE case_id=?",(case_id,))}
             documents = {r[0] for r in db.execute("SELECT id FROM docs WHERE case_id=?",(case_id,))}
@@ -797,11 +819,20 @@ class Store:
                 verify_quality_numbers(paper,page_text)
                 try:
                     verify_quality_references(paper, page_text, signing=True)
+                    verify_delegation_sources(paper, page_text)
                 except ValueError as error:
                     raise CaseError(str(error), 409) from error
             except (KeyError,TypeError,ValueError) as error:
                 raise CaseError("本版审计建议与逐项发现不一致，请核对所据底稿。",409) from error
         graph = paper["graph"]
+        if graph.get("profile")!=BANK and any(f.get("delegations") for f in paper["findings"]):
+            if not payment_sources or len(payment_sources)!=1:
+                raise CaseError("签收前需重新核对合同签字栏与授权委托原件。",409)
+            source = payment_sources[0][0]
+            if (source.case_id,source.revision,source.report_hash)!=(case_id,revision,row["hash"]):
+                raise CaseError("授权委托原件所据的签收版已变化。",409)
+            source.guard(db)
+            event(db,case_id,"mandate_sources",f"签收前核对 R{revision} 的合同签字、委托书及相关页图，共 {len(source.files)} 个文件。")
         if graph.get("profile") == PERFORMANCE:
             return None
         if graph.get("profile",paper["policy"].get("profile")) != BANK:
@@ -1056,7 +1087,7 @@ class Store:
         if visibility is not None and (decision!="confirm" or fact_ids is None):
             raise CaseError("请在确认回单引文时记录流水展示范围。",400)
         sources = self.check_field_sources(case_id,revision,fact_ids,None,actor,visibility=visibility) if fact_ids is not None and decision=="confirm" else None
-        payment_sources = self.payment_approval_sources(case_id,revision,actor) if fact_ids is None and decision=="approve" else None
+        payment_sources = self.approval_sources(case_id,revision,actor) if fact_ids is None and decision=="approve" else None
         with self.connect(True) as db:
             workspace = authorize_case_write(db, case_id, actor)
             if fact_ids is not None:
@@ -1108,7 +1139,7 @@ class Store:
                       WHERE id=? AND rev=? AND status='closed'""", key)
 
     def resolve_referral(self, case_id, revision, report_hash, signoff_hash, reviewer, note, decision, findings, actor=None):
-        payment_sources = self.payment_approval_sources(case_id,revision,actor,peer=True) if decision=="approve" else None
+        payment_sources = self.approval_sources(case_id,revision,actor,peer=True) if decision=="approve" else None
         with self.connect(True) as db:
             authorize_case_write(db, case_id, actor)
             referral = db.execute("""SELECT f.*,c.rev AS latest,c.status FROM case_referrals f JOIN cases c ON c.id=f.case_id

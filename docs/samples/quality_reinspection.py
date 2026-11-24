@@ -79,12 +79,15 @@ def verify_report(report, mode):
         assert report["graph"]["quality_references"]["holds"]==[]
 
 
-def reconcile_training_pages(cid,folder,records):
+def reconcile_training_pages(cid,folder,records,*,case_titles=None,field_labels=None,document_types=None):
     path="/api/cases/"+cid
     detail=get(path)
     expected={title+".pdf":hashlib.sha256((folder/(title+".pdf")).read_bytes()).hexdigest() for title in records}
-    assert detail["title"] in {"合成演练 · "+name for name in CASES.values()}
-    assert {d["name"]:d["sha256"] for d in detail["documents"]}==expected
+    allowed = {"合成演练 · "+name for name in (case_titles or CASES.values())}
+    if detail["title"] not in allowed or {d["name"]:d["sha256"] for d in detail["documents"]}!=expected:
+        raise ValueError("案例名称或原件摘要与本次水印演练不符")
+    fields = {**LABELS, **(field_labels or {})}
+    types = {**TITLES, **(document_types or {})}
     docs={d["name"]:d["id"] for d in detail["documents"]}
     report=wait(cid)
     for title,rows in records.items():
@@ -95,11 +98,11 @@ def reconcile_training_pages(cid,folder,records):
         source_lines={normalize(line) for line in printed.splitlines()}
         targets=[]
         for index,(label,value) in enumerate(rows):
-            if label in LABELS:
+            if label in fields:
                 top=(842-649+34*index)/842
                 region="top" if top<1/3 else "bottom" if top>=2/3 else "middle"
-                targets.append((LABELS[label],value,label+"："+value,region))
-        targets.append((TITLES[title],title,title,"top"))
+                targets.append((fields[label],value,label+"："+value,region))
+        targets.append((types[title],title,title,"top"))
         counts=Counter(f for f,_,_,_ in targets)
         for field,value,line,region in targets:
             assert normalize(line) in source_lines

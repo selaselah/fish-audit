@@ -22,6 +22,7 @@ from peer_review import journal_decision, verify_referrals, verify_review
 from performance import LABELS as PERFORMANCE_FIELDS, verify_findings as verify_performance
 from quality_labels import verify_report as verify_quality_numbers
 from quality_references import verify_report as verify_quality_references
+from delegation import verify_sources as verify_delegation_sources
 from protocol import canonical, response_request
 from rule_replay import check_receipt, replay_from_git, replay_installed
 from supplements import compare_return
@@ -227,6 +228,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
         return bundle.read(f"{page_dir}/{doc}/{page}.txt").decode()
     verify_quality_numbers(report, page_text)
     verify_quality_references(report, page_text)
+    verify_delegation_sources(report, page_text)
     if "conclusions.py" in report["policy"].get("code_sha256",{}):
         verify_result(report)
     graph = report["graph"]
@@ -254,7 +256,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
     quality_notes = {note["fact"] for h in graph.get("quality_references", {}).get("holds", [])
                      for note in h["observations"]}
     texts = {}
-    reinspection_refs = {ref for item in report["findings"] if item.get("reinspection") for ref in item["evidence"]}
+    performance_refs = {ref for item in report["findings"] if item.get("reinspection") or item.get("delegations") for ref in item["evidence"]}
     for fact in graph["facts"]:
         require(fact["source_sha256"] == nodes[fact["doc"]]["sha256"] and
                 fact["page_sha256"] == nodes[f"{fact['doc']}/p{fact['page']}"]["sha256"], "取值与来源不符")
@@ -285,7 +287,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
         elif invoice_number or (version in REFERENCE_FORMATS and fact["field"]=="transfer_ref"):
             verify_transcription(fact,page_calls,nodes,"票号" if invoice_number else "流水号")
         elif (report["policy"].get("performance_checks") and fact["field"] in PERFORMANCE_FIELDS or
-              fact["id"] in reinspection_refs and fact.get("origin")!="verified_printed_heading"):
+              fact["id"] in performance_refs and fact.get("origin")!="verified_printed_heading"):
             verify_transcription(fact,page_calls,nodes,"履约条款与签认")
             decision = fact.get("attestation") or {}
             require((fact["status"]=="confirmed") == (decision.get("decision")=="confirm"),"履约字段与核图决定不符")

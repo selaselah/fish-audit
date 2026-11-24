@@ -275,7 +275,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
       section.classList.add('located');
       focusRow=section;
     }
-    const field = gap.field || gap.title_hint;
+    const field = gap.quality==='mandate_clause' ? null : gap.field || gap.title_hint;
     if (editable && field) {
       const unresolved=pageFacts.filter(f=>['visual','unsupported'].includes(f.status));
       const matching=unresolved.filter(f=>f.source_line?.number===gap.line && f.source_line.text===gap.quote);
@@ -439,6 +439,7 @@ function finding(item) {
   node.tabIndex = -1;
   if (item.stage) node.insertBefore(box('clause-source',el('q',item.stage.clause), citation(item.stage.clause_ref)),node.children[1]);
   if (item.reinspection) node.append(reinspectionTrail(item.reinspection,state.bundle.report.graph));
+  if (item.delegations) node.append(mandatePanel(item.delegations, state.bundle.report.graph));
   if (item.rule.startsWith('H')) {
     const comparison = performanceComparison(item,state.bundle.report.graph);
     if (comparison) node.append(comparison);
@@ -928,7 +929,7 @@ $('#upload-title').addEventListener('input', () => { state.key = null; });
 function profileChanged() {
   state.key = null;
   if ($('#upload-profile').value === performanceProfile) {
-    $('#profile-note').textContent = '上传一份合同，可附审批单、验收单、质保期满确认单和列明期次的回单。发生整改时，一并提交原验收、整改记录和最终复验报告。';
+    $('#profile-note').textContent = '上传合同及本次要核对的履约资料。代理人签约可附授权委托书，另可提交审批单、验收单、整改复验记录、质保期满确认单及分期回单。';
     return;
   }
   if ($('#upload-profile').value === bankProfile) {
