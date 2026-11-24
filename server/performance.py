@@ -646,7 +646,8 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True):
     plan, rows = schedule(contract,warranty_checks=version in WARRANTY_FORMATS,deadlines=version in PAYMENT_WINDOW_FORMATS)
     batch = None
     if version in BATCH_FORMATS:
-        batch = delivery_batches.inspect(graph,contract,receipts,native_spacing=version in EFFECT_FORMATS,requirements=batch_signers,
+        batch = delivery_batches.inspect(graph,contract,receipts,native_spacing=version in EFFECT_FORMATS,
+                    requirements=batch_signers.get("batches"),final_requirement=batch_signers.get("final"),
                     other_terms=bool(signed["status"]!="ok" or extra_units or change or authority or repairs or retests or
                                      any(r.fields[k] or k in r.uncertain for r in receipts for k in ("original_acceptance","repair_number","defect_closure"))))
     batch_rows = {r["index"]:r for r in batch["batches"]} if batch else {}

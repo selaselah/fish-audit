@@ -5,7 +5,7 @@ import re
 from collections import defaultdict
 from unicodedata import normalize
 
-from acceptance_authority import CLAUSE, LABELS as SIGNING_LABELS, covers, parts, required_names, signed_name
+from acceptance_authority import CLAUSE, LABELS as SIGNING_LABELS, covers, instruction, parts, required_names, signed_name
 from calculations import normalized
 from contract_changes import labelled_sources
 from delegation import complete_id, covered_rows
@@ -15,7 +15,8 @@ from reinspection import LINK_KEYS, linked
 
 LEGACY = "contract-delivery-batches-v1"
 SIGNING_FORMAT = "contract-delivery-batches-v2"
-FORMAT = "contract-delivery-batches-v3"
+FINAL_FORMAT = "contract-delivery-batches-v3"
+FORMAT = "contract-delivery-batches-v4"
 FINAL_REFS = "batch_receipt_refs"
 LABELS = {"delivery_batch":("分批交付","约定交付批次","批次交付明细"),
           "batch_clause":("分批验收约定","分批验收条款","批次验收约定"),
@@ -119,6 +120,24 @@ def signing_clause(quote):
     return (index,names) if index is not None and names else None
 
 
+def final_signers(quote):
+    _,body=parts(quote)
+    if not body.startswith(("终验","最终验收")) or re.search(r"任选|任一|之一|或|代为|代签|授权|同上|同前|待定|待填",body):
+        return None
+    directive=instruction(quote)
+    return directive[2] if directive and directive[1]=="final" else None
+
+
+def separate_clause(fact):
+    terms=raw_body(fact).strip("。").split(",") if fact else []
+    return len(terms)==2 and terms[0] in INDEPENDENT and terms[1] in SEPARATE_FINAL
+
+
+def literal_value(fact):
+    body=raw_body(fact) if fact else ""
+    return bool(body and normalize("NFKC",fact["value"]).strip() in (body,normalize("NFKC",fact["source_line"]["text"]).strip()))
+
+
 def page_sources(graph,read_text,version=FORMAT):
     contracts=set(graph["documents_by_kind"].get("contract",[]))
     receipts=set(graph["documents_by_kind"].get("acceptance",[]))
@@ -168,11 +187,18 @@ def page_sources(graph,read_text,version=FORMAT):
             contract_fields.update(("warranty_period","warranty_condition"))
         if "payment_window_sources" in graph:
             contract_fields.add("payment_deadline")
-        if version in (SIGNING_FORMAT,FORMAT):
+        if version in (SIGNING_FORMAT,FINAL_FORMAT,FORMAT):
             contract_fields.add(CLAUSE)
-        coverage=covered_rows(graph,read_text,contracts,contract_fields,contract_row,"分批合同")
-        receipt_fields=set(RECEIPT_FIELDS)
+        separate_units=set()
         if version==FORMAT:
+            separate_units={f.get("unit",f["doc"]) for f in graph["facts"] if f["field"]=="batch_clause"
+                            and f.get("unit",f["doc"]) in contracts and separate_clause(f)}
+        coverage=covered_rows(graph,read_text,contracts-separate_units,contract_fields,contract_row,"分批合同")
+        def separate_row(field,value,quote):
+            return contract_row(field,value,quote) or field==CLAUSE and bool(final_signers(quote)) and covers(field,value,quote)
+        coverage+=covered_rows(graph,read_text,separate_units,contract_fields,separate_row,"另行终验合同")
+        receipt_fields=set(RECEIPT_FIELDS)
+        if version in (FINAL_FORMAT,FORMAT):
             receipt_fields.add(FINAL_REFS)
         def receipt_row(field,value,quote):
             return covers(field,value,quote) and (field!=FINAL_REFS or bool(receipt_numbers(parts(quote)[1])))
@@ -279,7 +305,7 @@ def allocations(contract,native_spacing):
 
 def signing_plan(graph,contract):
     source=graph.get("delivery_batch_sources",{})
-    if source.get("format") not in (SIGNING_FORMAT,FORMAT) or not source["signals"] or not readable(source,contract.unit) or not rule(contract)[0]:
+    if source.get("format") not in (SIGNING_FORMAT,FINAL_FORMAT,FORMAT) or not source["signals"] or not readable(source,contract.unit) or not rule(contract)[0]:
         return {}
     clauses=graph.get("acceptance_authority_sources",{}).get("clauses",[])
     if not clauses or contract.incomplete(CLAUSE):
@@ -290,21 +316,32 @@ def signing_plan(graph,contract):
         return {}
     indices=[r["index"] for r in schedule]
     plan={}
+    final=None
+    separate=source["format"]==FORMAT and separate_clause(one(contract,"batch_clause"))
     for row in clauses:
         fact=facts.get(row["fact"])
+        if not row["native"] or row["unit"]!=contract.unit or not fact or (fact.get("source_line") or {}).get("text")!=row["quote"]:
+            return {}
+        names=final_signers(row["quote"]) if separate else None
+        if names:
+            if final or not literal_value(fact) or final_signers(fact["quote"])!=names:
+                return {}
+            final={"required":names,"clause_ref":fact["id"]}
+            continue
         parsed=signing_clause(row["quote"])
-        if (not parsed or not row["native"] or row["unit"]!=contract.unit or not fact or
-                (fact.get("source_line") or {}).get("text")!=row["quote"] or signing_clause(fact["quote"])!=parsed):
+        if not parsed or signing_clause(fact["quote"])!=parsed or separate and not literal_value(fact):
             return {}
         batch,names=parsed
         for index in indices if batch==0 else [batch]:
             if index not in indices or index in plan:
                 return {}
             plan[index]={"required":names,"clause_ref":fact["id"]}
-    return plan if plan.keys()==set(indices) else {}
+    if plan and plan.keys()!=set(indices) or not plan and not final:
+        return {}
+    return {"batches":plan,"final":final}
 
 
-def check_batch_signatures(requirement,rows,*,applicable,complete):
+def check_batch_signatures(requirement,rows,*,applicable,complete,scope="本批"):
     required=requirement["required"]
     signed=[s["name"] for s in rows if s["confirmed"]]
     missing=[name for name in required if name not in signed]
@@ -312,19 +349,19 @@ def check_batch_signatures(requirement,rows,*,applicable,complete):
     if not applicable:
         status,detail="missing","需先核对本单的合同、双方、标的及签认条款适用日期。"
     elif not complete:
-        status,detail="missing","本批签认原页或附注待核，需核对整页及可能影响签认的其他约定。"
+        status,detail="missing",scope+"签认原页或附注待核，需核对整页及可能影响签认的其他约定。"
     elif extra:
-        status,detail="risk","本批签字栏所列"+"、".join(extra)+"与合同指定人员不符，需核实代签授权。"
+        status,detail="risk",scope+"签字栏所列"+"、".join(extra)+"与合同指定人员不符，需核实代签授权。"
     elif missing:
-        status,detail="missing","本批尚缺"+"、".join(missing)+"逐人核对原页的签字。"
+        status,detail="missing",scope+"尚缺"+"、".join(missing)+"逐人核对原页的签字。"
     elif len(signed)!=len(required) or len(signed)!=len(rows):
-        status,detail="missing","本批有多余、重复或待辨的签字栏，须核对每一栏的原件。"
+        status,detail="missing",scope+"有多余、重复或待辨的签字栏，须核对每一栏的原件。"
     else:
-        status,detail="ok","本批指定的"+"、".join(required)+"均有独立签字栏及核图记录。"
+        status,detail="ok",scope+"指定的"+"、".join(required)+"均有独立签字栏及核图记录。"
     return {**requirement,"signed":rows,"missing_names":missing,"other_names":extra,"status":status,"detail":detail}
 
 
-def record(contract,doc,source,native_spacing,requirements,signatures,separate):
+def record(contract,doc,source,native_spacing,requirements,signatures,separate,final_requirement):
     from performance import CLEAN, PASS, inspect_quality, printed_day
     scope=one(doc,"acceptance_scope")
     match=SCOPE.fullmatch(raw_body(scope)) if scope else None
@@ -343,14 +380,15 @@ def record(contract,doc,source,native_spacing,requirements,signatures,separate):
     related=(linked(contract,doc) and complete_id(contract.body("contract_id")) and all(labelled_sources(m,LINK_KEYS) for m in (contract,doc))
              and all(body(contract,k) and body(contract,k)==body(doc,k) for k in LINK_KEYS))
     is_final=bool(separate and related and scope and raw_body(scope) in FINAL_SCOPES)
+    requirement=final_requirement if is_final else requirements.get(index)
     ref_fact=one(doc,FINAL_REFS) if is_final else None
-    unexpected_refs=source.get("format")==FORMAT and not is_final and bool(doc.fields[FINAL_REFS] or FINAL_REFS in doc.uncertain)
+    unexpected_refs=source.get("format") in (FINAL_FORMAT,FORMAT) and not is_final and bool(doc.fields[FINAL_REFS] or FINAL_REFS in doc.uncertain)
     if is_final or unexpected_refs:
         fields.extend(doc.evidence(FINAL_REFS))
     def local_line(line):
         if is_final and parts(line)[0] in LABELS[FINAL_REFS]:
             return bool(receipt_numbers(parts(line)[1]))
-        return normalized(line).rstrip("。") in LOCAL_NOTES or (index in requirements and related and signed_name(line))
+        return normalized(line).rstrip("。") in LOCAL_NOTES or (requirement and related and signed_name(line))
     open_scope=unexpected_refs or not pages or any(not p["text_only"] or not p["native"] or
                any(not local_line(l["quote"]) for l in p["uncovered"]) for p in pages)
     result={"unit":doc.unit,"index":index,"scope_ref":scope["id"] if scope else None,"number":number or None,"scope_unclear":open_scope,
@@ -363,10 +401,17 @@ def record(contract,doc,source,native_spacing,requirements,signatures,separate):
         result.update(role="final",refs_ref=ref_fact["id"] if ref_fact else None,
                       receipt_numbers=printed_references(ref_fact))
     signing=None
-    if index in requirements:
-        signing=check_batch_signatures(requirements[index],[s for s in signatures if s["unit"]==doc.unit],
+    raw_signatures_only=False
+    if requirement:
+        rows=[s for s in signatures if s["unit"]==doc.unit]
+        if is_final:
+            owned={f["id"]:f for f in doc.fields["acceptance_signer"]}
+            rows=[{**s,"confirmed":bool(s["confirmed"] and literal_value(owned.get(s["fact"])))} for s in rows]
+            uncovered=[line for p in pages for line in p["uncovered"]]
+            raw_signatures_only=bool(uncovered and not open_scope and all(signed_name(l["quote"]) for l in uncovered))
+        signing=check_batch_signatures(requirement,rows,
                     applicable=bool(related and day and effective and day>effective and (not until or day<=until)),
-                    complete=readable(source,doc.unit))
+                    complete=readable(source,doc.unit) or raw_signatures_only,scope="终验" if is_final else "本批")
         result["signing"]=signing
         result["evidence"]=list(dict.fromkeys([*fields,signing["clause_ref"],
             *(ref for s in signing["signed"] for ref in (s["facts"] or [f"{s['doc']}/p{s['page']}"]))]))
@@ -388,6 +433,8 @@ def record(contract,doc,source,native_spacing,requirements,signatures,separate):
         status,reason="missing","原验收记录缺少明确的本批范围。"
     elif outcome in {"不合格","验收不合格","未通过","拒收"} or qc=="issue":
         status,reason="issue",detail if qc=="issue" else "原验收记录明确记载“"+outcome+"”。"
+    elif raw_signatures_only and signing["status"]!="ok":
+        status,reason=signing["status"],signing["detail"]
     elif is_final and not open_scope and any(p["uncovered"] for p in pages):
         status,reason="missing","终验原页尚有未经逐行核对的引用或附注，须核对所附批次验收单号。"
     elif not readable(source,doc.unit) or doc.incomplete(*RECEIPT_FIELDS) or not identifier(number):
@@ -420,7 +467,7 @@ def record(contract,doc,source,native_spacing,requirements,signatures,separate):
     return result
 
 
-def reconcile_final(finals, batches, records, *, held, named_signers):
+def reconcile_final(finals, batches, records, *, held, needs_final_authority):
     by_unit={r["unit"]:r for r in records}
     basis=[{"index":b["index"],"unit":unit,"number":by_unit[unit]["number"],"number_ref":by_unit[unit]["number_ref"]}
            for b in batches for unit in b["records"]]
@@ -438,7 +485,7 @@ def reconcile_final(finals, batches, records, *, held, named_signers):
         return finding(final["status"],final["detail"])
     if held or not batches or any(b["status"]!="ok" for b in batches):
         return finding("missing","须先核清各批验收、合同效力和未决附注，再确认终验依据。")
-    if named_signers:
+    if needs_final_authority:
         return finding("missing","合同指定了分批验收人，另行终验的签认权限仍待核实。")
     if not final["receipt_numbers"]:
         return finding("missing","终验单缺少可逐项核对的完整批次验收单号，需核对原件的引用栏。")
@@ -467,26 +514,28 @@ def reconcile_final(finals, batches, records, *, held, named_signers):
     return finding("ok","终验单逐份列明各批验收单号，交付范围、实测质量及签认均有原件支持。")
 
 
-def inspect(graph,contract,receipts,*,other_terms,native_spacing=False,requirements=None):
+def inspect(graph,contract,receipts,*,other_terms,native_spacing=False,requirements=None,final_requirement=None):
     source=graph.get("delivery_batch_sources",{})
     if not source.get("signals"):
         return None
     requirements=requirements or {}
     schedule,plan_problem=allocations(contract,native_spacing)
     independent,final,rule_fact=rule(contract)
-    separate=bool(source.get("format")==FORMAT and independent and raw_body(rule_fact).strip("。").split(",")[-1] in SEPARATE_FINAL)
+    separate=bool(source.get("format") in (FINAL_FORMAT,FORMAT) and independent and separate_clause(rule_fact))
     contract_clear=readable(source,contract.unit)
     riders=external_riders(graph,source,contract.unit)
     if not contract_clear:
         plan_problem="合同含待辨原行、影像附注或尚未核清的页内条款。"
     base=contract.evidence("contract",*LINK_KEYS,"delivery_batch","batch_clause","quantity_agreed","acceptance_criteria","effect_on","valid_until")
     signing_refs={requirement["clause_ref"] for requirement in requirements.values()}
+    if final_requirement:
+        signing_refs.add(final_requirement["clause_ref"])
     base.extend(ref for s in source["signals"] for ref in (s["facts"] or [f"{s['doc']}/p{s['page']}"]) if ref not in signing_refs)
     base.extend(n["fact"] for n in source["visual_notes"] if n["unit"]==contract.unit)
     base.extend(f"{p['doc']}/p{p['page']}" for p in source["pages"] if p["unit"]==contract.unit)
     base.extend(r["ref"] for r in riders)
     signatures=graph.get("acceptance_authority_sources",{}).get("signatures",[])
-    records=[record(contract,doc,source,native_spacing,requirements,signatures,separate) for doc in receipts]
+    records=[record(contract,doc,source,native_spacing,requirements,signatures,separate,final_requirement) for doc in receipts]
     finals=[r for r in records if r.get("role")=="final"]
     expected={r["index"] for r in schedule}
     unknown=[r for r in records if r["scope_unclear"] or r.get("role")=="final" and len(finals)>1 or
@@ -544,7 +593,9 @@ def inspect(graph,contract,receipts,*,other_terms,native_spacing=False,requireme
         results.append({**allocation,"status":status,"detail":detail,"records":[r["unit"] for r in selected],
                         "date":selected[0]["date"] if status=="ok" else None,"scope":scope,"evidence":evidence})
     final_check=reconcile_final(finals,results,records,held=bool(plan_problem or other_terms or riders or unknown),
-                                named_signers=bool(requirements)) if separate else None
+                                needs_final_authority=bool(requirements and not final_requirement)) if separate else None
+    if final_check and final_requirement:
+        final_check["signing_requirement"]=final_requirement
     outcomes=[*results,*unknown]+([final_check] if final_check else [])
     status=next((s for s in ("issue","risk","missing") if any(r["status"]==s for r in outcomes)),"ok")
     if status=="ok" and (not results or not (final or final_check) or plan_problem or other_terms or unknown):
@@ -566,7 +617,8 @@ def inspect(graph,contract,receipts,*,other_terms,native_spacing=False,requireme
             **({"separate_final":final_check} if final_check else {}),
             "contract_clear":contract_clear,"riders":riders,"rule_ref":rule_fact["id"] if rule_fact else None,"records":records,"batches":results,
             "scope":list(dict.fromkeys([contract.unit,*(r["unit"] for r in records)])),
-            "evidence":list(dict.fromkeys([*base,*(r["clause_ref"] for r in requirements.values()),*(ref for r in records for ref in r["evidence"])]))}
+            "evidence":list(dict.fromkeys([*base,*(r["clause_ref"] for r in requirements.values()),
+                *([final_requirement["clause_ref"]] if final_requirement else []),*(ref for r in records for ref in r["evidence"])]))}
 
 
 def payment_index(row,contract):
@@ -603,6 +655,10 @@ def evidence_edges(findings):
         for batch in final["basis"]:
             result.append({"type":"batch_final_basis","from":receipt["refs_ref"],"to":batch["number_ref"],
                            "evidence":entry["evidence"]})
+        signing=receipt.get("signing")
+        if signing and signing["status"]=="ok":
+            for row in signing["signed"]:
+                result.append({"type":"final_named_signature","from":signing["clause_ref"],"to":row["fact"],"evidence":entry["evidence"]})
     return result
 
 
@@ -617,11 +673,12 @@ def verify_sources(report,read_text,*,signing=False):
     marker=policy["delivery_batches"]
     source=page_sources(graph,read_text,marker)
     version=policy.get("version","")
-    if (marker not in (LEGACY,SIGNING_FORMAT,FORMAT) or "2026.11.25.07"<=version<"2026.11.25.08" and marker!=SIGNING_FORMAT or
-        version>="2026.11.25.08" and marker!=FORMAT or policy.get("performance_checks") not in BATCH_FORMATS or
+    if (marker not in (LEGACY,SIGNING_FORMAT,FINAL_FORMAT,FORMAT) or "2026.11.25.07"<=version<"2026.11.25.08" and marker!=SIGNING_FORMAT or
+        "2026.11.25.08"<=version<"2026.11.25.09" and marker!=FINAL_FORMAT or version>="2026.11.25.09" and marker!=FORMAT or
+        policy.get("performance_checks") not in BATCH_FORMATS or
         graph.get("delivery_batch_sources")!=source or gaps(source)!=[g for g in graph["gaps"] if g["quality"]=="delivery_batch_clause"]):
         raise ValueError("分批条款原文、资料归属或页内覆盖与归档不符")
-    edges=[e for e in graph["edges"] if e["type"] in ("delivery_batch_acceptance","batch_payment_basis","batch_named_signature","batch_final_basis")]
+    edges=[e for e in graph["edges"] if e["type"] in ("delivery_batch_acceptance","batch_payment_basis","batch_named_signature","batch_final_basis","final_named_signature")]
     if evidence_edges(report["findings"])!=edges:
         raise ValueError("分批验收或分期付款的证据关系不符")
     expected=sorted((f.get("unit",f["doc"]),f["id"],f["field"],(f["id"],)) for f in graph["facts"]

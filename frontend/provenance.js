@@ -173,6 +173,39 @@ function deliveryBatchPanel(entry, graph, phases) {
   }
   const proofFields=new Set(['acceptance_number','accepted_on','delivered_serials','quantity_accepted','inspection_basis','measured_result',
                              'acceptance_result','acceptance_exception','acceptance_signer','acceptance_criteria']);
+  function signingPanel(group,key,scope,label) {
+    const requirement=group.signing_requirement;
+    const title=scope+(requirement.required.length>1?'共同签认':'指定签认人');
+    const outcomes=group.records.map(unit=>records.get(unit)).filter(r=>r.signing);
+    const status=outcomes.find(r=>r.signing.status!=='ok')?.signing.status || (outcomes.length?'ok':'missing');
+    const signing=box('batch-signing',box('flow',el('strong',title),tag(status)),sourceRow(requirement.clause_ref));
+    signing.dataset.batchSigning=String(key);
+    signing.id='batch-signing-'+key;
+    signing.tabIndex=-1;
+    signing.setAttribute('role','group');
+    signing.setAttribute('aria-label',label);
+    signing.dataset.status=status;
+    if (!outcomes.length && key==='final') signing.append(el('p','待取得终验原件，核对'+requirement.required.join('、')+'的签字。','signer-pending'));
+    for (const r of outcomes) {
+      const check=r.signing;
+      const result=box('batch-signed-record');
+      result.dataset.signingRecord=r.unit;
+      if (outcomes.length>1) result.append(el('strong',r.number || '验收单号待核'));
+      for (const signature of check.signed) {
+        const row=reservationSource(signature.native && !signature.fact?{...signature,facts:[]}:signature,graph);
+        row.append(el('span',signature.confirmed?'已核图':'签字待核图','small'));
+        result.append(row);
+      }
+      const explain=check.status!=='ok' && (key!=='final' || group.detail!==check.detail);
+      if (explain) result.append(el('p',check.detail,'signer-pending'));
+      const missing=check.missing_names.filter(n=>!explain || !check.detail.includes(n));
+      const extra=check.other_names.filter(n=>!explain || !check.detail.includes(n));
+      if (missing.length) result.append(el('p','缺少已核签字 · '+missing.join('、'),'small'));
+      if (extra.length) result.append(el('p','另有签字 · '+extra.join('、'),'small'));
+      signing.append(result);
+    }
+    return signing;
+  }
   const final=entry.separate_final;
   const finalDocuments=new Map();
   if (final) {
@@ -194,6 +227,7 @@ function deliveryBatchPanel(entry, graph, phases) {
       if (proof.length) group.append(lazyFold('核对终验单日期、设备、实测与签字',()=>proof.map(sourceRow)));
       section.append(group);
     }
+    if (final.signing_requirement) section.append(signingPanel(final,'final','终验','合同约定的终验签认'));
     const issued=final.basis.filter(b=>b.number_ref);
     if (issued.length) {
       const list=el('ul','','final-originals');
@@ -214,33 +248,7 @@ function deliveryBatchPanel(entry, graph, phases) {
     if (due.length) title.append(el('span',due.join('、'),'batch-payment'));
     section.append(title,sourceRow(b.clause_ref));
     for (const unit of b.records) section.append(receipt(records.get(unit)));
-    if (b.signing_requirement) {
-      const requirement=b.signing_requirement;
-      const signing=box('batch-signing',el('strong',requirement.required.length>1?'本批共同签认':'本批指定签认人'),sourceRow(requirement.clause_ref));
-      signing.dataset.batchSigning=String(b.index);
-      signing.id='batch-signing-'+b.index;
-      signing.tabIndex=-1;
-      signing.setAttribute('role','group');
-      signing.setAttribute('aria-label',b.label+'验收签认');
-      const outcomes=b.records.map(unit=>records.get(unit)).filter(r=>r.signing);
-      signing.dataset.status=outcomes.find(r=>r.signing.status!=='ok')?.signing.status || (outcomes.length?'ok':'missing');
-      for (const r of outcomes) {
-        const check=r.signing;
-        const result=box('batch-signed-record');
-        result.dataset.signingRecord=r.unit;
-        if (outcomes.length>1) result.append(el('strong',r.number || '验收单号待核'));
-        for (const signature of check.signed) {
-          const row=reservationSource(signature.native && !signature.fact?{...signature,facts:[]}:signature,graph);
-          row.append(el('span',signature.confirmed?'已核图':'签字待核图','small'));
-          result.append(row);
-        }
-        if (check.status!=='ok') result.append(el('p',check.detail,'signer-pending'));
-        if (check.status==='risk' && check.missing_names.length)
-          result.append(el('p','缺少已核签字 · '+check.missing_names.join('、'),'small'));
-        signing.append(result);
-      }
-      section.append(signing);
-    }
+    if (b.signing_requirement) section.append(signingPanel(b,b.index,'本批',b.label+'验收签认'));
     if (!b.records.some(unit=>records.get(unit)?.signing?.detail===b.detail)) section.append(el('p',b.detail,'batch-detail'));
     const refs=b.evidence.filter(ref=>proofFields.has(facts.get(ref)?.field));
     if (refs.length) section.append(lazyFold('核对标准、实测与签认原文',()=>refs.map(sourceRow)));

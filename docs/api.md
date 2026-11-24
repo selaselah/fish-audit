@@ -1,5 +1,9 @@
 # 本机审计接口
 
+规则 `2026.11.25.09` 使用 `policy.delivery_batches=contract-delivery-batches-v4`。在各批独立付款且另行终验的合同中，H02 的 `batch_acceptance.separate_final.signing_requirement` 保存合同逐字可核的终验签认要求，`required` 是指定姓名，`clause_ref` 定位条款。合同有这项要求、尚缺终验原件时，仍返回要求及空的 `separate_final.records`。
+
+已归属的总单在 `batch_acceptance.records[]` 内以 `role=final` 标识。该单的 `signing` 包含逐人所据的 `signed[]`、`missing_names`、`other_names`、`status` 和 `detail`。原页有签字行而观察漏提时，可用 `doc`、`page`、`line`、`quote` 复查，`confirmed` 为 false。终验的全部条件相符后，`final_named_signature` 从合同指定终验人的观察指向总单上每一条已核签字观察，`batch_named_signature` 仍对应各批自己的签字。归档的 v1、v2 和 v3 继续按各自程序复算。
+
 规则 `2026.11.25.08` 使用 `policy.delivery_batches=contract-delivery-batches-v3`。H02 的 `batch_acceptance.separate_final` 在合同明确约定另行终验时返回 `status`、`detail`、总单所在的 `records[]`，以及各批原件编号的 `basis[]`。每个依据含批序 `index`、文档 `unit`、原单号 `number` 及观察 `number_ref`。已识别的总单在 `batch_acceptance.records[]` 中标为 `role=final`，`refs_ref` 指向其引用栏，`receipt_numbers[]` 保留原件顺序。引用栏缺失时这两个字段分别为 null 和空数组。
 
 另行终验成立时 `deemed_final` 为 false，`completion_on` 取终验单签认的验收日。`batch_final_basis` 从总单的 `batch_receipt_refs` 观察逐份指向对应批次的 `acceptance_number` 观察。人工可从两端打开原页。待核或冲突状态保留原单与引用栏，证据图仅在核查相符时建立这组关系。离线校验按归档规则版本复算。

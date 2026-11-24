@@ -413,12 +413,37 @@ try {
         await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth>0 && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(id),'batch fact on the original');
         await evaluate('document.querySelector("#page-dialog [data-close]").click()');
       };
+      const checkSigning=async (group,key,section,stages) => {
+        const authority=section+'.querySelector(".batch-signing")';
+        await openFact(authority,group.signing_requirement.clause_ref);
+        for (const name of group.signing_requirement.required) assert.ok(await evaluate(authority+'.innerText.includes('+JSON.stringify(name)+')'));
+        for (const item of stages) {
+          const locator='[data-finding="'+item.id+'"] [aria-controls="batch-signing-'+key+'"]';
+          await evaluate('document.querySelector('+JSON.stringify(locator)+').click()');
+          assert.equal(await evaluate('document.activeElement.dataset.batchSigning'),String(key));
+        }
+        const matched=batches.records.filter(r=>group.records.includes(r.unit) && r.signing);
+        assert.equal(await evaluate(authority+'.querySelectorAll("[data-signing-record]").length'),matched.length);
+        for (const record of matched) {
+          const proof=authority+'.querySelector('+JSON.stringify('[data-signing-record="'+record.unit+'"]')+')';
+          await verifyRemarks(proof,record.signing.signed.map(s=>s.native && !s.fact?{...s,facts:[]}:s));
+          const native=record.signing.signed.find(s=>s.line && s.native);
+          if (native) {
+            await evaluate('reservationSource('+JSON.stringify({...native,fact:null,facts:[]})+',state.bundle.report.graph).querySelector("button").click()');
+            await wait('document.querySelector(".located[data-gap-line] blockquote")?.textContent==='+JSON.stringify(native.quote),'signature original without a model observation');
+            await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+          }
+          for (const value of [...record.signing.missing_names,...record.signing.other_names])
+            assert.ok(await evaluate(proof+'.innerText.includes('+JSON.stringify(value)+')'));
+        }
+      };
       if (batches.rule_ref) await openFact(panel,batches.rule_ref);
       if (batches.separate_final) {
         const final=batches.separate_final;
         const section='document.getElementById("batch-final-acceptance")';
         assert.equal(await evaluate(section+'.dataset.status'),final.status);
         assert.ok(await evaluate(section+'.innerText.includes('+JSON.stringify(final.detail)+')'));
+        if (final.signing_requirement) await checkSigning(final,'final',section,report.findings.filter(f=>f.warranty_check));
         if (batches.completion_on) assert.ok(await evaluate(section+'.querySelector(".final-date").innerText.includes('+JSON.stringify(batches.completion_on)+')'));
         for (const f of report.findings.filter(f=>f.warranty_check)) {
           const locator='[data-finding="'+f.id+'"] [aria-controls="batch-final-acceptance"]';
@@ -443,27 +468,7 @@ try {
         const section=panel+'.querySelector('+JSON.stringify('[data-delivery-index="'+b.index+'"]')+')';
         assert.ok(await evaluate(section+'.innerText.includes('+JSON.stringify(b.detail)+') && '+section+'.querySelector(".tag").classList.contains('+JSON.stringify(b.status)+')'));
         await openFact(section,b.clause_ref);
-        if (b.signing_requirement) {
-          const authority=section+'.querySelector(".batch-signing")';
-          await openFact(authority,b.signing_requirement.clause_ref);
-          for (const item of report.findings.filter(f=>f.stage?.batch_index===b.index)) {
-            const locator='[data-finding="'+item.id+'"] [aria-controls="batch-signing-'+b.index+'"]';
-            await evaluate('document.querySelector('+JSON.stringify(locator)+').click()');
-            assert.equal(await evaluate('document.activeElement.dataset.batchSigning'),String(b.index));
-          }
-          for (const record of batches.records.filter(r=>b.records.includes(r.unit) && r.signing)) {
-            const proof=authority+'.querySelector('+JSON.stringify('[data-signing-record="'+record.unit+'"]')+')';
-            await verifyRemarks(proof,record.signing.signed.map(s=>s.native && !s.fact?{...s,facts:[]}:s));
-            const native=record.signing.signed.find(s=>s.line && s.native);
-            if (native) {
-              await evaluate('reservationSource('+JSON.stringify({...native,fact:null,facts:[]})+',state.bundle.report.graph).querySelector("button").click()');
-              await wait('document.querySelector(".located[data-gap-line] blockquote")?.textContent==='+JSON.stringify(native.quote),'signature original without a model observation');
-              await evaluate('document.querySelector("#page-dialog [data-close]").click()');
-            }
-            for (const value of [...record.signing.missing_names,...record.signing.other_names])
-              assert.ok(await evaluate(proof+'.innerText.includes('+JSON.stringify(value)+')'));
-          }
-        }
+        if (b.signing_requirement) await checkSigning(b,b.index,section,report.findings.filter(f=>f.stage?.batch_index===b.index));
         for (const item of batches.records.filter(r=>b.records.includes(r.unit))) {
           for (const val of [item.number,item.date,...item.serials].filter(Boolean))
             assert.ok(await evaluate(section+'.innerText.includes('+JSON.stringify(val)+')'));
@@ -715,6 +720,12 @@ try {
           assert.ok(await evaluate('[...document.querySelectorAll(".separate-final,.final-originals li,.separate-final .batch-source")].every(e=>e.scrollWidth<=e.clientWidth+1)'));
           const shot=await call('Page.captureScreenshot',{format:'png'});
           await writeFile(join(process.env.AUDIT_UI_SHOTS,'final-'+performanceCase+'-'+width+'.png'),Buffer.from(shot.data,'base64'));
+          if (batches.separate_final.signing_requirement) {
+            await evaluate('document.getElementById("batch-signing-final").scrollIntoView({block:"start"});window.scrollBy(0,-40)');
+            assert.ok(await evaluate('[...document.querySelectorAll("#batch-signing-final,#batch-signing-final .batch-signed-record")].every(e=>e.scrollWidth<=e.clientWidth+1)'));
+            const signatures=await call('Page.captureScreenshot',{format:'png'});
+            await writeFile(join(process.env.AUDIT_UI_SHOTS,'final-signers-'+performanceCase+'-'+width+'.png'),Buffer.from(signatures.data,'base64'));
+          }
         }
         if (batches.batches.some(b=>b.signing_requirement)) {
           assert.ok(await evaluate('[...document.querySelectorAll(".batch-signing,.batch-signed-record")].every(e=>e.scrollWidth<=e.clientWidth+1)'));
@@ -834,7 +845,7 @@ try {
       }
     }
     if (batches) {
-      const edges=report.graph.edges.filter(e=>['delivery_batch_acceptance','batch_payment_basis','batch_named_signature','batch_final_basis'].includes(e.type));
+      const edges=report.graph.edges.filter(e=>['delivery_batch_acceptance','batch_payment_basis','batch_named_signature','batch_final_basis','final_named_signature'].includes(e.type));
       assert.equal(await evaluate('!!document.querySelector(".batch-relations")'),!!edges.length);
       if (edges.length) await evaluate('document.querySelector(".batch-relations").open=true');
       for (const edge of edges) {

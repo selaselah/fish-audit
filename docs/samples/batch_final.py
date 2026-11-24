@@ -23,10 +23,7 @@ CASES = {
 }
 
 
-def generate(seed, mode):
-    code = hashlib.sha256((seed+"-"+mode).encode()).hexdigest()[:8].upper()
-    folder = ROOT/"37-另行终验与质保起算"/code
-    folder.mkdir(parents=True, exist_ok=True)
+def final_documents(code,mode):
     records = batch_documents(code, "separate")
     records["采购合同"].extend([("质保期限","自终验合格之日起2个月，届满日不顺延"),("质保金返还条件",CONDITION)])
     refs = [dict(records[name])["验收单编号"] for name in BATCH_TITLES]
@@ -45,6 +42,14 @@ def generate(seed, mode):
     release.append(("质保遗留事项","无未关闭缺陷"))
     bank = {"付款日期":"2026年11月22日" if mode=="early_paid" else "2026年11月27日","款项用途":"第四期","付款金额":"10,000.00"}
     records["银行付款回单"] = [(k,bank.get(k,v)) for k,v in records["银行付款回单"]]
+    return records
+
+
+def generate(seed, mode):
+    code = hashlib.sha256((seed+"-"+mode).encode()).hexdigest()[:8].upper()
+    folder = ROOT/"37-另行终验与质保起算"/code
+    folder.mkdir(parents=True, exist_ok=True)
+    records=final_documents(code,mode)
     font = embedded_font("BatchFinalCJK")
     for name,rows in records.items():
         path = folder/(name+".pdf")

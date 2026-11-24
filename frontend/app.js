@@ -516,8 +516,12 @@ function finding(item) {
   }
   if (item.warranty_check) {
     node.append(warrantyPanel(item,state.bundle.report.graph));
-    if (state.bundle.report.findings.some(f=>f.batch_acceptance?.separate_final))
-      node.append(evidenceJump('核对质保起算的终验材料','batch-final-acceptance'));
+    const final=state.bundle.report.findings.find(f=>f.batch_acceptance?.separate_final)?.batch_acceptance.separate_final;
+    if (final) {
+      const links=box('flow',evidenceJump('核对质保起算的终验材料','batch-final-acceptance'));
+      if (final.signing_requirement) links.append(evidenceJump('核对终验签字人','batch-signing-final'));
+      node.append(links);
+    }
   }
   if (item.payment_window) node.append(paymentWindowPanel(item,state.bundle.report.graph));
   if (item.acceptance_reservations?.lines.length || item.acceptance_reservations?.mixed_pages.length)
@@ -661,7 +665,8 @@ function graphPanel() {
     panel.append(links);
   }
   const batchLabels={delivery_batch_acceptance:'约定交付范围',batch_payment_basis:'本期付款条件',
-    batch_named_signature:'本批指定人员与实际签认',batch_final_basis:'终验单引用的批次验收原件'};
+    batch_named_signature:'本批指定人员与实际签认',batch_final_basis:'终验单引用的批次验收原件',
+    final_named_signature:'合同指定的终验人与总单签字'};
   const batchEdges=graph.edges.filter(e=>Object.hasOwn(batchLabels,e.type));
   if (batchEdges.length) {
     const title=batchEdges.some(e=>e.type==='batch_final_basis')?'分批验收、终验与付款依据':'分批验收与付款依据';
