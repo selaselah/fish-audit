@@ -3,9 +3,11 @@ import base64
 import hashlib
 import json
 import zipfile
+from datetime import datetime
 from pathlib import Path
 
 from calculations import CalculationEvidence, SUPPORTED
+from payment_history import LIMIT, cited_facts, payment_record
 from protocol import canonical, response_request
 
 
@@ -38,7 +40,7 @@ def replay_rules(report):
     """Only import the operator's local rule implementation after checking its recorded version."""
     local = Path(__file__).resolve().parent
     digests = report["policy"].get("code_sha256", {})
-    modules = ("config.py","controls.py","graph.py","calculations.py","model.py","policy.py","transfers.py")
+    modules = ("config.py","controls.py","graph.py","calculations.py","model.py","payment_history.py","policy.py","transfers.py")
     for name in modules:
         require(digests.get(name) == sha((local / name).read_bytes()), "严格复算需要与底稿一致的本机规则版本："+name)
     from controls import VERSION, additional, conclusion, execute
@@ -51,6 +53,64 @@ def replay_rules(report):
     findings += additional(graph, [p for p in proposals if p["procedure"] != "no_trigger"])
     require(findings == report["findings"], "用归档图谱复算的程序结果与已存底稿不符")
     require(conclusion(findings) == report["result"], "审计建议与复算结果不符")
+
+
+def verify_payment_history(bundle, hashes, report, journal):
+    graph = report["graph"]
+    history = graph["payment_history"]
+    as_of = datetime.fromisoformat(history["as_of"])
+    require(as_of.tzinfo is not None and set(history["counts"]) == {"same", "full"}, "付款检索时点或范围无效")
+    current = payment_record(graph, report["findings"])
+    seen = set()
+    nodes = {n["id"]: n for n in graph["nodes"]}
+    for kind, key in (("same", "reference"), ("full", "settlement")):
+        count = history["counts"][kind]
+        listed = sum(m["kind"] == kind for m in history["matches"])
+        require(type(count) is int and count >= 0 and listed == min(count, LIMIT)
+                and (not count or current[key]), "历史付款命中数量或本案依据不符")
+    for match in history["matches"]:
+        prior, rev, kind = match["case_id"], match["rev"], match["kind"]
+        require(kind in {"same", "full"} and prior != report["case_id"] and prior not in seen, "历史付款归属重复或范围无效")
+        seen.add(prior)
+        root = f"prior/{prior}/r{rev}"
+        report_path, signoff_path = root + "/report.json", root + "/signoff.json"
+        require(hashes[report_path] == match["report_hash"] and hashes[signoff_path] == match["signoff_hash"], "历史底稿或签收摘要不符")
+        previous, signoff = json.loads(bundle.read(report_path)), json.loads(bundle.read(signoff_path))
+        require(previous["case_id"] == signoff["case_id"] == prior and signoff["rev"] == rev
+                and signoff["title"] == match["title"] and signoff["workspace"] == journal["workspace"]
+                and previous["graph"]["profile"] == graph["profile"], "历史签收归属或核查范围不符")
+        signed_at = datetime.fromisoformat(signoff["time"])
+        require(signoff["decision"] == match["decision"] and signoff["decision"] in {"approve", "return", "escalate"}
+                and signoff["time"] == match["signed_at"] and signed_at.tzinfo is not None and signed_at <= as_of, "历史人工决定或时点不符")
+        old_graph = previous["graph"]
+        old = payment_record(old_graph, previous["findings"])
+        if kind == "same":
+            require(old["reference"] == current["reference"] and old["payer"] == current["payer"], "已签收回单流水或付款户名不符")
+        else:
+            require(signoff["decision"] == "approve" and old["settlement"] == current["settlement"]
+                    and old["reference"] != current["reference"], "历史全额付款口径或成功流水不符")
+        refs = old["same_refs" if kind == "same" else "full_refs"]
+        require(match["evidence"] == cited_facts(old_graph, prior, rev, refs), "历史凭证逐字引文或取值不符")
+        documents = {d["id"]: d for d in old_graph["documents"]}
+        facts = {f["id"]: f for f in old_graph["facts"]}
+        old_nodes = {n["id"]: n for n in old_graph["nodes"]}
+        texts = {}
+        for citation in match["evidence"]:
+            doc, page = citation["doc"], citation["page"]
+            meta = documents[doc]
+            prefix = f"{root}/{doc}/{page}"
+            require(nodes[citation["id"]]["type"] == "archived_observation" and
+                    hashes[root + "/originals/" + doc + meta["ext"]] == citation["source_sha256"] == meta["sha256"]
+                    and hashes[prefix + ".jpg"] == citation["page_sha256"] == old_nodes[f"{doc}/p{page}"]["sha256"],
+                    "历史引用缺少对应原件或页图")
+            if text_hash := old_nodes[f"{doc}/p{page}"].get("text_sha256"):
+                require(hashes[prefix + ".txt"] == text_hash, "历史文字层摘要不符")
+            line = facts[citation["fact"]].get("source_line")
+            if line:
+                if prefix not in texts:
+                    texts[prefix] = bundle.read(prefix + ".txt").decode().splitlines()
+                require(0 < line["number"] <= len(texts[prefix]) and texts[prefix][line["number"]-1] == line["text"],
+                        "历史引文与原页文字行不符")
 
 
 def verify(source, strict_rules=False):
@@ -99,6 +159,8 @@ def verify(source, strict_rules=False):
         for match in graph.get("prior_invoices", []):
             path = f"prior/{match['case_id']}/r{match['rev']}/{match['doc']}/{match['page']}.jpg"
             require(hashes[path] == match["page_hash"] and match["id"] in nodes, "历史票号证据不符")
+        if "payment_history" in graph:
+            verify_payment_history(bundle, hashes, report, journal)
         page_checks = {(t["doc"],t["page"]): t.get("check") for t in report["calls"]["pages"]}
         texts = {}
         for fact in graph["facts"]:

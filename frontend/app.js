@@ -199,10 +199,8 @@ function citation(ref) {
   const index = state.bundle && graphIndex(state.bundle.report.graph);
   const prior = index?.prior.get(ref);
   if (prior) {
-    const target = Team.cases() + '/' + prior.case_id + '/documents/' + prior.doc + '/pages/' + prior.page;
-    const source = link('已归档 · ' + prior.title + ' · R' + prior.rev + ' p.' + prior.page, target, 'button ref');
-    source.target = '_blank'; source.rel = 'noopener';
-    return source;
+    const label = prior.title+' · R'+prior.rev+' 第 '+prior.page+' 页 · '+(prior.label || '发票号码');
+    return Team.paperLink(label,prior.case_id,'button ref',new URLSearchParams({rev:String(prior.rev),fact:prior.fact}));
   }
   const [doc, rawPage] = ref.split('/');
   const page = Number((rawPage || '').slice(1));
@@ -306,6 +304,17 @@ function graphPanel() {
     box('line', link(row.title, Team.hash('case/' + row.case_id)), el('p', '历史人工决定 · ' + statusName(row.decision) + ' · ' +
       (row.document_kind === 'unclassified' ? '原资料类型待核' : '发票')),
       el('blockquote', row.quote), citation(row.id), el('small', '历史底稿 SHA-256 · ' + row.report_hash, 'small')))));
+  if (graph.payment_history) {
+    const history = graph.payment_history;
+    const comparison = (rule,kind,label) => state.bundle.report.findings.find(f=>f.rule===rule)?.status==='missing'
+      ? label+'待补证' : label+'命中 '+history.counts[kind]+' 份';
+    const matches = history.matches.map(match=>lazyFold(match.title+' · R'+match.rev,()=>[
+      el('p',(match.kind==='same'?'相同付款户名与流水':'同合同的另一笔全额流水')+' · '+statusName(match.decision)+' · '+time(match.signed_at)+' 签收'),
+      ...match.evidence.map(f=>box('trace-quote',citation(f.id),el('blockquote',f.quote))),
+      el('small','历史底稿 SHA-256 · '+match.report_hash,'small')]));
+    panel.append(fold('已签收付款底稿核查', el('p','截至 '+time(history.as_of)+'，'+comparison('B06','same','相同流水')+
+      '，'+comparison('B07','full','同合同其他全额流水')+'。'),...matches));
+  }
   if (graph.cautions?.length) panel.append(fold('原文中的结算及变更线索', ...graph.cautions.map(item =>
     box('line', el('blockquote', item.quote), el('span', '文字层第 ' + item.line + ' 行'), citation(item.page_id)))));
   if (graph.gaps.length) panel.append(fold('辨读与覆盖缺口', ...graph.gaps.map(item =>
@@ -537,7 +546,13 @@ $('#review-form').addEventListener('submit', async event => {
       reviewer: $('#reviewer').value, note: $('#review-note').value, decision: $('#review-decision').value,
       facts: pending.facts});
     $('#review-dialog').close(); chooseRevision(); await refresh();
-  } catch (error) { $('#review-error').textContent = error.message; }
+  } catch (error) {
+    const message = $('#review-error');
+    message.textContent = error.message;
+    if (error.status === 409) message.append(' ',action('查看最新执行记录',async()=>{
+      $('#review-dialog').close(); chooseRevision(); state.tab='activity'; await refresh();
+    },'text-button'));
+  }
   finally { button.disabled = false; }
 });
 $('#new-case').addEventListener('click', () => $('#upload-dialog').showModal());
@@ -549,7 +564,7 @@ $('#upload-title').addEventListener('input', () => { state.key = null; });
 function profileChanged() {
   state.key = null;
   if ($('#upload-profile').value === bankProfile) {
-    $('#profile-note').textContent = '按一份合同及一张银行回单核对付款主体、收款账号、流水状态和单笔全额差额。';
+    $('#profile-note').textContent = '上传一份合同与一张银行回单，可核对收款账户、全额差额，以及本企业已签收底稿中的重复付款线索。';
     return;
   }
   $('#profile-note').textContent = $('#upload-profile').value === travelProfile ?

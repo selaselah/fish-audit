@@ -12,29 +12,31 @@ from generate import ROOT, pdf
 from run import BASE, submit, wait
 
 
-def generate_bank(changed):
+def write_bank_pair(folder, ident, account, reference, changed=False, paid_on="2026年10月19日"):
     font_files = (os.getenv("AUDIT_CJK_FONT"),"/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
                   "/System/Library/Fonts/Supplemental/Arial Unicode.ttf", "C:/Windows/Fonts/msyh.ttc")
     source = next((Path(f) for f in font_files if f and Path(f).is_file()),None)
     if source is None:
         raise SystemExit("请通过 AUDIT_CJK_FONT 指定支持中文、可嵌入的 TrueType 字体。")
     pdfmetrics.registerFont(TTFont("BankSampleCJK",str(source)))
-    title = "收款账户变更与超付" if changed else "合同与回单相符"
-    folder = ROOT / (("09-" if changed else "08-")+title)
     folder.mkdir(exist_ok=True,parents=True)
-    suffix = "092" if changed else "081"
-    ident = "YL-BANK-"+suffix
     buyer,seller = "青岚演练商贸中心","石桥演练设备中心"
-    account = "000000000000000081"
     currency = [("币种","人民币"),("金额单位","元")]
     contract = [("合同编号",ident),("采购方",buyer),("供应方",seller),
                 ("约定收款账号",account),("含税总额","8,400.00"),("结算条款","一次性全额结算"),
                 ("签约日期","2026年10月12日"),*currency]
     bank = [("合同编号",ident),("付款户名",buyer),("收款户名",seller),
             ("收款账号","000000000000000092" if changed else account),("付款金额","8,550.00" if changed else "8,400.00"),
-            ("交易流水号","YL-TRANSFER-"+suffix),("交易状态","交易成功"),("付款日期","2026年10月19日"),*currency]
+            ("交易流水号",reference),("交易状态","交易成功"),("付款日期",paid_on),*currency]
     pdf(folder/"采购合同.pdf","采购合同",contract,font="BankSampleCJK")
     pdf(folder/"银行付款回单.pdf","银行付款回单",bank,font="BankSampleCJK")
+
+
+def generate_bank(changed):
+    title = "收款账户变更与超付" if changed else "合同与回单相符"
+    folder = ROOT / (("09-" if changed else "08-")+title)
+    suffix = "092" if changed else "081"
+    write_bank_pair(folder, "YL-BANK-"+suffix, "000000000000000081", "YL-TRANSFER-"+suffix, changed)
     return title,folder
 
 

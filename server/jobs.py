@@ -14,7 +14,7 @@ from storage import encode
 
 
 METHODS = {name: (SERVER / name).read_bytes() for name in
-           ("calculations.py", "capacity.py", "config.py", "controls.py", "documents.py", "graph.py", "jobs.py", "model.py", "policy.py", "protocol.py", "storage.py", "transfers.py")}
+           ("calculations.py", "capacity.py", "config.py", "controls.py", "documents.py", "graph.py", "jobs.py", "model.py", "payment_history.py", "policy.py", "protocol.py", "storage.py", "transfers.py")}
 CODE_DIGESTS = {name: digest(source) for name, source in METHODS.items()}
 
 
@@ -104,7 +104,7 @@ class Worker:
         keys = {edge["to"] for edge in invoice_number_edges(graph)}
         attach_prior_invoices(graph, store.prior_invoices(case_id, sorted(keys)))
         store.progress(case_id, "controls", 82, f"图谱含 {len(graph['edges'])} 条关系，正在执行所选范围的检查程序。")
-        findings = execute(graph, profile)
+        findings = execute(graph, profile, lambda signature: store.payment_history(case_id, signature))
         store.progress(case_id, "expert", 91, "专家代理正在核阅证据关系与规则结果。")
         proposals, trace = self.audit(graph, findings)
         findings += additional(graph, proposals)

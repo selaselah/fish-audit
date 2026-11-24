@@ -24,7 +24,8 @@ SOURCES = {
                   "summary": "不同来源的材料相互矛盾或可靠性存疑时，应考虑调整检查或追加程序。"},
 }
 MAPPING = {"B01":["purchase-records","evidence-quality"],"B02":["payment"],"B03":["payment","follow-up"],
-           "B04":["payment","voucher"],"B05":["evidence-quality","follow-up"],"E01": ["voucher", "evidence-quality"], "P01": ["purchase-records"], "P02": ["purchase-records"],
+           "B04":["payment","voucher"],"B05":["evidence-quality","follow-up"],
+           "B06":["payment","follow-up"],"B07":["payment","follow-up"],"E01": ["voucher", "evidence-quality"], "P01": ["purchase-records"], "P02": ["purchase-records"],
            "P03": ["purchase-records"], "I01": ["voucher", "follow-up"], "M01": ["voucher"],
            "C01": ["payment"], "M02": ["purchase-records", "payment"], "D01": ["purchase-records"],
            "A01": ["receipt"], "S01": ["receipt"], "X01": ["follow-up"],

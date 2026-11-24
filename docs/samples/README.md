@@ -38,3 +38,7 @@ PYTHONPATH=server server/.venv/bin/python -m unittest discover -s server/tests -
 ## 银行回单演练
 
 `server/.venv/bin/python docs/samples/bank.py` 生成两套带水印的虚构合同与回单，使用可嵌入的本机中文 TrueType 字体。加 `--run` 会实际上传并核对两案结论。第一套合同与付款同为 8,400 元，收款账户相符。第二套回单为 8,550 元，较合同高 150 元，且与约定收款账户不同。长账号出现模型多读数字时，程序会保留待核引文，审计人员可打开原页逐项更正后重算。测试账号和页面均无交易效力。
+
+### 跨任务付款回单
+
+`server/.venv/bin/python docs/samples/cross_payments.py --run` 在本地演示库顺序提交三项任务。脚本先核对合成原件摘要、合同号、账户、流水及通过建议，再以「合成演练验收」签收自身生成的首次付款。随后提交原回单副本和另一张全额付款回单，两案分别应命中 B06 和 B07，停在待人工验收。单独运行脚本会仅生成带水印的 PDF。指定新的 `--run-id` 会生成独立的合同号及流水，可重复演练。

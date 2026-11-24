@@ -21,3 +21,7 @@ server/.venv/bin/python docs/samples/replay.py
 对于当前规则版本，可以进一步从归档图谱离线重跑全部确定性检查、专家选择的追加程序及总建议。使用 `server/.venv/bin/python server/verify.py --rules 证据包.zip`。校验器先比对本机程序摘要，只运行本机代码。该模式适合独立复核；历史版本需要对应版本的可信检出。原件真伪和银行实际清算需要另行取得证据。
 
 加入付款回单两案后，`server/.venv/bin/python docs/samples/replay.py --bank-run-id synthetic-bank-v1` 在本机九案上复现了 20 条算式、50 个带原件引用的操作数。核图更正与模型原始读数可在各版底稿中分别审阅。
+
+## 跨底稿引文与签收
+
+W3C PROV-DM 分别描述信息的修订、引用、原始来源和责任主体。一份底稿引用另一份签收底稿时，本项目保留前案版本、逐字引文、页图、原件与签收记录，并将实际取用的证据连到本案程序结果。复核时可以分别回答「这句话出自哪一版哪一页」和「当时作出什么人工决定」。[W3C PROV-DM，第 5.2 节](https://www.w3.org/TR/prov-dm/#component2)

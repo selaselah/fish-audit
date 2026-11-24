@@ -6,12 +6,14 @@ from calculations import CalculationEvidence, in_yuan, money
 from config import BANK, PROFILE, RULE_VERSION, TRAVEL
 from graph import KINDS, audit_documents, compact, entity_id
 from model import FIELDS, SIGNALS, expert_candidates
+from payment_history import HISTORY_RULES, attach_history, check_history, payment_record
 from policy import ACCOUNTING, MAPPING, SOURCES
 from transfers import RULES as TRANSFER_RULES, check_transfers
 
 
 CATALOG = {
     **TRANSFER_RULES,
+    **HISTORY_RULES,
     "E01": ("原件与证据覆盖", "每页均可辨读，关键字段具备可定位文字或人工核图记录。"),
     "P01": ("采购资料完整性", "单合同、一次全额验收结算范围内需要一份合同、一份发票和一份验收资料。"),
     "P02": ("合同编号关联", "沿各份资料的合同编号关系，验证三份资料是否指向同一合同。"),
@@ -54,7 +56,7 @@ def parsed_date(fact):
         return None
 
 
-def execute(graph, profile=PROFILE):
+def execute(graph, profile=PROFILE, payment_lookup=None):
     findings = []
     evidence = CalculationEvidence(graph)
     docs = audit_documents(graph)
@@ -98,6 +100,11 @@ def execute(graph, profile=PROFILE):
            gaps + ids(unverified), doc_ids)
     if profile == BANK:
         check_transfers(graph, docs, values, record, parsed_date)
+        signature = payment_record(graph, findings)
+        if payment_lookup is not None:
+            attach_history(graph, payment_lookup(signature))
+        if "payment_history" in graph:
+            check_history(signature, graph["payment_history"], record, doc_ids)
         return findings
     numbers = defaultdict(list)
     amounts_valid = {}

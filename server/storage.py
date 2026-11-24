@@ -1,3 +1,4 @@
+import hashlib
 import json
 import os
 import sqlite3
@@ -7,8 +8,9 @@ from datetime import datetime, timezone
 
 from backup import MARKER
 from capacity import admit, install as install_capacity, settings
-from config import CaseError, PROFILE
+from config import BANK, CaseError, PROFILE
 from graph import compact, invoice_number_edges
+from payment_history import LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_facts, payment_record
 from workbench import prepare_index, project
 
 
@@ -116,6 +118,17 @@ class Store:
                                    self.index_rows(row["id"], row["rev"], json.loads(row["content"])))
                 db.execute("PRAGMA user_version=1")
             self.fts_enabled = prepare_index(db)
+            db.execute("""CREATE TABLE IF NOT EXISTS payment_index(
+                case_id TEXT PRIMARY KEY, rev INTEGER NOT NULL, payer TEXT NOT NULL, reference TEXT NOT NULL,
+                settlement TEXT, FOREIGN KEY(case_id,rev) REFERENCES reports(case_id,rev))""")
+            db.execute("CREATE INDEX IF NOT EXISTS payment_reference ON payment_index(payer,reference)")
+            db.execute("CREATE INDEX IF NOT EXISTS payment_settlement ON payment_index(settlement) WHERE settlement IS NOT NULL")
+            if db.execute("PRAGMA user_version").fetchone()[0] < 3:
+                rows = db.execute("""SELECT c.id,c.rev,r.content FROM cases c JOIN reports r ON r.case_id=c.id
+                                   AND r.rev=c.rev WHERE c.profile=?""", (BANK,))
+                for row in rows:
+                    self.index_payment(db, row["id"], row["rev"], json.loads(row["content"]))
+                db.execute("PRAGMA user_version=3")
             install_capacity(db)
         os.chmod(self.path, 0o600)
 
@@ -241,6 +254,7 @@ class Store:
                            [(report["policy"]["code_sha256"][name], contents) for name, contents in methods.items()])
             db.execute("INSERT INTO reports VALUES(?,?,?,?,?)", (case_id, revision, now, digest, encode(report)))
             project(db, case_id, revision, report)
+            self.index_payment(db, case_id, revision, report)
             invoice_rows = self.index_rows(case_id, revision, report)
             db.executemany("INSERT INTO invoice_index VALUES(?,?,?,?,?,?,?,?,?,?)", invoice_rows)
             db.execute("""UPDATE cases SET rev=?,status='ready',stage='ready',progress=100,
@@ -281,6 +295,87 @@ class Store:
                               AND c.id<>? AND i.number_key IN ({placeholders})
                               ORDER BY i.case_id,i.rev,i.fact""", (case_id, case_id, *keys))
             return [dict(row) for row in rows]
+
+    @staticmethod
+    def index_payment(db, case_id, revision, report):
+        if report["graph"].get("profile") != BANK:
+            return
+        signature = payment_record(report["graph"], report["findings"])
+        db.execute("DELETE FROM payment_index WHERE case_id=?", (case_id,))
+        if signature["reference"]:
+            db.execute("INSERT INTO payment_index(case_id,rev,payer,reference,settlement) VALUES(?,?,?,?,?)",
+                       (case_id, revision, signature["payer"], signature["reference"], signature["settlement"]))
+
+    @staticmethod
+    def payment_matches(db, case_id, signature, as_of):
+        """One snapshot shared by the evidence query and the approval-time recheck."""
+        counts, matches = {"same": 0, "full": 0}, []
+        checks = []
+        if signature["reference"]:
+            checks.append(("same", "i.payer=? AND i.reference=?", (signature["payer"], signature["reference"])))
+        if signature["settlement"]:
+            checks.append(("full", "i.settlement=? AND i.reference<>? AND s.decision='approve'",
+                           (signature["settlement"], signature["reference"])))
+        for kind, predicate, params in checks:
+            rows = db.execute(f"""SELECT i.case_id,i.rev,c.title,r.hash AS report_hash,s.decision,s.time AS signed_at,
+                                  count(*) OVER() AS total FROM payment_index i
+                                  JOIN cases c ON c.id=i.case_id AND c.rev=i.rev
+                                  JOIN signoffs s ON s.case_id=i.case_id AND s.rev=i.rev
+                                  JOIN reports r ON r.case_id=i.case_id AND r.rev=i.rev
+                                  WHERE c.workspace=(SELECT workspace FROM cases WHERE id=?) AND c.status='closed'
+                                  AND c.id<>? AND s.time<=? AND {predicate}
+                                  ORDER BY s.time DESC,i.case_id LIMIT ?""",
+                              (case_id, case_id, as_of, *params, PAYMENT_HISTORY_LIMIT))
+            for row in rows:
+                match = dict(row)
+                counts[kind] = match.pop("total")
+                matches.append({"kind": kind, **match})
+        return {"as_of": as_of, "counts": counts, "matches": matches}
+
+    @staticmethod
+    def signed_source(db, case_id, prior_id, revision):
+        row = db.execute("""SELECT r.content,r.hash,c.workspace,c.title,s.case_id,s.rev,s.decision,s.reviewer,s.note,s.time,s.actor
+                            FROM reports r JOIN cases c ON c.id=r.case_id
+                            JOIN signoffs s ON s.case_id=r.case_id AND s.rev=r.rev
+                            WHERE c.workspace=(SELECT workspace FROM cases WHERE id=?) AND c.id<>? AND c.id=? AND r.rev=?""",
+                         (case_id, case_id, prior_id, revision)).fetchone()
+        if not row:
+            raise CaseError("未找到本工作区对应的历史签收底稿。", 409)
+        signoff = dict(row)
+        content, checksum = signoff.pop("content").encode(), signoff.pop("hash")
+        if hashlib.sha256(content).hexdigest() != checksum:
+            raise CaseError("历史底稿内容与归档摘要不符。", 409)
+        return content, signoff
+
+    def payment_history(self, case_id, signature):
+        with self.connect() as db:
+            db.execute("BEGIN")
+            history = self.payment_matches(db, case_id, signature, stamp())
+            for match in history["matches"]:
+                prior, rev = match["case_id"], match["rev"]
+                content, signoff = self.signed_source(db, case_id, prior, rev)
+                report = json.loads(content)
+                record = payment_record(report["graph"], report["findings"])
+                indexed = db.execute("SELECT payer,reference,settlement FROM payment_index WHERE case_id=? AND rev=?",
+                                     (prior, rev)).fetchone()
+                if any(record[field] != indexed[field] for field in indexed.keys()):
+                    raise CaseError("历史付款索引与已签收底稿中的原文不一致，无法出具本次跨案结果。", 409)
+                match["signoff_hash"] = hashlib.sha256(canonical(signoff)).hexdigest()
+                refs = record["same_refs" if match["kind"] == "same" else "full_refs"]
+                match["evidence"] = cited_facts(report["graph"], prior, rev, refs)
+            return history
+
+    def recheck_payment_approval(self, db, case_id, revision):
+        row = db.execute("SELECT * FROM payment_index WHERE case_id=? AND rev=?", (case_id, revision)).fetchone()
+        if not row:
+            return
+        previous = json.loads(db.execute("SELECT content FROM reports WHERE case_id=? AND rev=?",
+                                         (case_id, revision)).fetchone()[0])["graph"].get("payment_history", {})
+        current = self.payment_matches(db, case_id, row, stamp())
+        def keys(history):
+            return [(m["kind"], m["case_id"], m["rev"]) for m in history.get("matches", [])]
+        if previous.get("counts", {"same": 0, "full": 0}) != current["counts"] or keys(previous) != keys(current):
+            raise CaseError("底稿生成后出现了新的已签收付款线索。请在执行记录中选择「保留此版并重新审计」，核对最新凭证后再通过。", 409)
 
     def rerun(self, case_id, revision, actor=None):
         with self.connect(True) as db:
@@ -391,6 +486,8 @@ class Store:
                            message='人工核图已保存，等待重算',updated=? WHERE id=?""", (now, case_id))
                 event(db, case_id, "attestation", f"{reviewer} 核对 {len(fact_ids)} 条引文，已保存意见并提交重算。")
             else:
+                if decision == "approve":
+                    self.recheck_payment_approval(db, case_id, revision)
                 db.execute("INSERT INTO signoffs(case_id,rev,decision,reviewer,note,time,actor) VALUES(?,?,?,?,?,?,?)", (case_id, revision, decision, reviewer, note, now,actor))
                 db.execute("UPDATE cases SET status='closed',message='人工验收已归档',updated=? WHERE id=?", (now, case_id))
                 event(db, case_id, "closed", f"{reviewer} 已验收底稿 R{revision}。")

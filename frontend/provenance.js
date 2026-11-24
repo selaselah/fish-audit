@@ -3,10 +3,16 @@ const graphIndexes = new WeakMap();
 function graphIndex(graph) {
   let index = graphIndexes.get(graph);
   if (!index) {
+    const prior = new Map((graph.prior_invoices || []).map(row=>[row.id,row]));
+    for (const match of graph.payment_history?.matches || []) {
+      for (const fact of match.evidence) {
+        prior.set(fact.id,{...fact,case_id:match.case_id,rev:match.rev,title:match.title,decision:match.decision});
+      }
+    }
     index = {
       facts:new Map(graph.facts.map(f=>[f.id,f])),
       documents:new Map(graph.documents.map(d=>[d.id,d])),
-      prior:new Map((graph.prior_invoices || []).map(r=>[r.id,r])),
+      prior,
       nodes:new Map(graph.nodes.map(n=>[n.id,n])),
     };
     graphIndexes.set(graph,index);
@@ -28,6 +34,7 @@ function lazyFold(title, build) {
 function traceEvidence(report, finding, index) {
   const supported = new Set(report.graph.edges.filter(e=>e.type==='supports_result' && e.to==='finding/'+finding.id).map(e=>e.from));
   const groups = new Map();
+  const archived = new Map();
   const other = [];
   for (const ref of finding.evidence) {
     if (!supported.has(ref)) continue;
@@ -35,7 +42,12 @@ function traceEvidence(report, finding, index) {
     if (fact) {
       if (!groups.has(fact.doc)) groups.set(fact.doc,[]);
       groups.get(fact.doc).push(fact);
-    } else if (index.prior.has(ref) || index.nodes.get(ref)?.type==='page') {
+    } else if (index.prior.has(ref)) {
+      const prior = index.prior.get(ref);
+      const group = prior.case_id + '/' + prior.rev;
+      if (!archived.has(group)) archived.set(group,[]);
+      archived.get(group).push(prior);
+    } else if (index.nodes.get(ref)?.type==='page') {
       other.push(citation(ref));
     }
   }
@@ -47,8 +59,13 @@ function traceEvidence(report, finding, index) {
     }));
     panel.append(source);
   }
+  for (const rows of archived.values()) {
+    const first = rows[0];
+    panel.append(lazyFold(first.title+' · R'+first.rev+' · '+statusName(first.decision),()=>rows.map(row=>
+      box('trace-quote',citation(row.id),el('blockquote',row.quote)))));
+  }
   if (other.length) panel.append(box('chips',...other));
-  if (!groups.size && !other.length) {
+  if (!groups.size && !archived.size && !other.length) {
     panel.append(el('p','本项没有可定位的取值引文。','muted'));
     if (finding.scope.length) panel.append(el('p','检查范围包含 '+finding.scope.map(id=>index.nodes.get(id)?.label || id).join('、')));
   }

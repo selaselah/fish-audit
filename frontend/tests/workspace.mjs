@@ -14,7 +14,10 @@ await once(socket, 'listening');
 const port = socket.address().port;
 await new Promise(resolve => socket.close(resolve));
 const sampleDesk = process.argv.includes('--sample-desk');
-const root = 'http://127.0.0.1:' + (sampleDesk ? 8000 : port);
+const paymentArgument = process.argv.indexOf('--payment-case');
+const paymentCase = paymentArgument > -1 ? process.argv[paymentArgument+1] : null;
+if (paymentArgument > -1) assert.match(paymentCase || '',/^[a-f0-9]{32}$/);
+const root = 'http://127.0.0.1:' + (sampleDesk || paymentCase ? 8000 : port);
 const children = [];
 const faults = [];
 function start(binary, args, env = process.env) {
@@ -34,7 +37,7 @@ async function until(read, label, timeout = 15000) {
 }
 let ws;
 try {
-  if (!sampleDesk) start(process.env.AUDIT_PYTHON || 'server/.venv/bin/python', ['server/main.py'], {...process.env,
+  if (!sampleDesk && !paymentCase) start(process.env.AUDIT_PYTHON || 'server/.venv/bin/python', ['server/main.py'], {...process.env,
     PORT:String(port), AUDIT_BIND:'127.0.0.1', AUDIT_ACCESS_MODE:'saas', AUDIT_PUBLIC_ORIGIN:root,
     AUDIT_DATA_DIR:join(scratch, 'data')});
   await until(async () => (await fetch(root+'/api/health')).ok,'service');
@@ -74,7 +77,35 @@ try {
   const click = (label, container='document') => evaluate('[...'+container+'.querySelectorAll("button,a")].find(b=>b.textContent==='+JSON.stringify(label)+' && b.getClientRects().length).click()');
   await call('Runtime.enable');
   await call('Page.navigate',{url:root});
-  if (sampleDesk) {
+  if (paymentCase) {
+    const base = root+'/api/cases/'+paymentCase;
+    const detail = await (await fetch(base)).json();
+    assert.ok(detail.title.startsWith('合成演练 · '),'use a marked training task');
+    const report = (await (await fetch(base+'/reports/'+detail.rev)).json()).report;
+    const match = report.graph.payment_history.matches[0];
+    const citation = match.evidence.find(f=>f.field==='transfer_ref');
+    const rule = match.kind === 'same' ? 'B06' : 'B07';
+    await call('Page.navigate',{url:root+'/workpaper/'+paymentCase});
+    await wait('!!document.querySelector(".finding")','payment finding');
+    await evaluate('(()=>{const target=[...document.querySelectorAll(".finding")].find(f=>f.querySelector(".mono")?.textContent==='+JSON.stringify(rule)+'); [...target.querySelectorAll("button")].find(b=>b.textContent==="查看证据路径").click()})()');
+    await wait('document.querySelector("#trace-select")?.value.startsWith('+JSON.stringify(rule+'-')+')','payment evidence path');
+    await evaluate('for(const d of document.querySelectorAll(".trace-sources > details")) d.open=true');
+    const historical = await wait('[...document.querySelectorAll(".trace-sources a")].find(a=>a.textContent.endsWith("交易流水号"))?.href','archived transfer link');
+    assert.equal(new URL(historical).pathname,'/workpaper/'+match.case_id);
+    assert.equal(new URL(historical).searchParams.get('fact'),citation.fact);
+    for (const width of [1440,1024,820,768,390,320]) {
+      await call('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),'payment trace layout at '+width);
+    }
+    await evaluate('[...document.querySelectorAll(".trace-sources a")].find(a=>a.textContent.endsWith("交易流水号")).click()');
+    const located = 'document.querySelector("#page-dialog")?.open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(citation.fact);
+    await wait(located,'historical fact opened in app');
+    assert.ok(await evaluate('document.querySelector(".located").textContent.includes('+JSON.stringify(citation.value)+')'));
+    await call('Page.navigate',{url:historical});
+    await wait(located,'archived revision reopened from independent URL');
+    assert.ok(await evaluate('document.querySelector("#case-title").textContent==='+JSON.stringify(match.title)));
+    console.log('PASS · '+rule+' links a signed payment to its exact historical revision and printed transfer reference across six viewport widths');
+  } else if (sampleDesk) {
     await wait('!!document.querySelector(".case-link")','seeded workbench');
     for (const width of [1440,1024,820,768,390,320]) {
       await call('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:width<600});

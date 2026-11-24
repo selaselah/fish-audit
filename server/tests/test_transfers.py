@@ -7,34 +7,38 @@ from controls import conclusion, execute
 from graph import build_graph
 
 
+def receipt_material(**overrides):
+    accounts = "000000000000000081"
+    shared = [("currency","币种","人民币"),("unit","金额单位","元"),("contract_id","合同编号","YL-081")]
+    rows = [
+        [("contract","","采购合同"),("buyer","采购方","演练甲"),("seller","供应方","演练乙"),
+         ("contract_account","约定收款账号",accounts),("payment_term","结算条款","一次性全额结算"),
+         ("signed_on","签约日期","2026-10-12"),("total","含税总额","8,400.00"),*shared],
+        [("bank_receipt","","银行付款回单"),("payer","付款户名","演练甲"),("payee","收款户名","演练乙"),
+         ("payee_account","收款账号",accounts),("transfer_amount","付款金额","8,400.00"),
+         ("paid_on","付款日期","2026-10-19"),("transfer_status","交易状态","交易成功"),
+         ("transfer_ref","交易流水号","YL-081-A"),*shared]]
+    docs,pages=[],[]
+    for n,plain in enumerate(rows,1):
+        doc=f"d{n:02d}"; facts=[]
+        for field,label,value in plain:
+            value=overrides.get(field,value)
+            if value is not None:
+                facts.append({"field":field,"value":value,"quote":label+"："+value if label else value,"region":"top"})
+        docs.append({"id":doc,"name":doc,"sha256":"synthetic"})
+        pages.append({"doc":doc,"number":1,"sha256":"page","text":"\n".join(f["quote"] for f in facts),
+                      "layer":{"type":"text","lines":{str(i):[[0,.1,.9,.12]] for i in range(1,len(facts)+1)}},
+                      "extraction":{"output":{"quality":"readable","facts":facts}}})
+    return docs, pages
+
+
 class ReceiptControls(unittest.TestCase):
     def evaluate(self, **overrides):
-        accounts = "000000000000000081"
-        shared = [("currency","币种","人民币"),("unit","金额单位","元"),("contract_id","合同编号","YL-081")]
-        rows = [
-            [("contract","","采购合同"),("buyer","采购方","演练甲"),("seller","供应方","演练乙"),
-             ("contract_account","约定收款账号",accounts),("payment_term","结算条款","一次性全额结算"),
-             ("signed_on","签约日期","2026-10-12"),("total","含税总额","8,400.00"),*shared],
-            [("bank_receipt","","银行付款回单"),("payer","付款户名","演练甲"),("payee","收款户名","演练乙"),
-             ("payee_account","收款账号",accounts),("transfer_amount","付款金额","8,400.00"),
-             ("paid_on","付款日期","2026-10-19"),("transfer_status","交易状态","交易成功"),
-             ("transfer_ref","交易流水号","YL-081-A"),*shared]]
-        docs,pages=[],[]
-        for n,plain in enumerate(rows,1):
-            doc=f"d{n:02d}"; facts=[]
-            for field,label,value in plain:
-                value=overrides.get(field,value)
-                if value is not None:
-                    facts.append({"field":field,"value":value,"quote":label+"："+value if label else value,"region":"top"})
-            docs.append({"id":doc,"name":doc,"sha256":"synthetic"})
-            pages.append({"doc":doc,"number":1,"sha256":"page","text":"\n".join(f["quote"] for f in facts),
-                          "layer":{"type":"text","lines":{str(i):[[0,.1,.9,.12]] for i in range(1,len(facts)+1)}},
-                          "extraction":{"output":{"quality":"readable","facts":facts}}})
-        graph=build_graph(docs,pages,{})
-        graph["profile"]=BANK
-        self.graph=graph
-        findings=execute(graph,BANK)
-        CalculationEvidence(graph).verify(findings)
+        docs, pages = receipt_material(**overrides)
+        self.graph = build_graph(docs, pages, {})
+        self.graph["profile"] = BANK
+        findings = execute(self.graph, BANK)
+        CalculationEvidence(self.graph).verify(findings)
         return findings
 
     def test_settled_receipt_and_mismatched_accounts(self):

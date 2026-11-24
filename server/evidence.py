@@ -1,3 +1,4 @@
+import json
 import zipfile
 
 from config import CaseError
@@ -56,6 +57,28 @@ def export_bundle(store, case_id, revision, stream):
             historic = store.files / match["case_id"] / match["doc"] / f"{match['page']}.jpg"
             path = f"prior/{match['case_id']}/r{match['rev']}/{match['doc']}/{match['page']}.jpg"
             write(path, historic.read_bytes(), match["page_hash"])
+        for match in report["graph"].get("payment_history", {}).get("matches", []):
+            prior, rev = match["case_id"], match["rev"]
+            root = f"prior/{prior}/r{rev}"
+            with store.connect() as db:
+                content, signoff = store.signed_source(db, case_id, prior, rev)
+            write(root + "/report.json", content, match["report_hash"])
+            write(root + "/signoff.json", encode(signoff).encode(), match["signoff_hash"])
+            graph = json.loads(content)["graph"]
+            documents = {d["id"]: d for d in graph["documents"]}
+            prior_nodes = {n["id"]: n for n in graph["nodes"]}
+            pages = {(p["doc"], p["number"]): p for p in store.pages(prior)}
+            cited = {(f["doc"], f["page"]) for f in match["evidence"]}
+            for doc in sorted({doc for doc, page in cited}):
+                meta = documents[doc]
+                original = "original" + meta["ext"]
+                write(root + "/originals/" + doc + meta["ext"], (store.files / prior / doc / original).read_bytes(), meta["sha256"])
+            for doc, page in sorted(cited):
+                node = prior_nodes[f"{doc}/p{page}"]
+                path = f"{root}/{doc}/{page}"
+                if (prior, rev, doc, page) not in included:
+                    write(path + ".jpg", (store.files / prior / doc / f"{page}.jpg").read_bytes(), node["sha256"])
+                write(path + ".txt", pages[doc, page]["text"].encode(), node.get("text_sha256"))
         manifest = {"case_id": case_id, "revision": revision, "report_sha256": bundle["sha256"],
                     "encoding": "UTF-8", "files": files}
         archive.writestr("manifest.json", encode(manifest))
