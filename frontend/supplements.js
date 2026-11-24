@@ -66,7 +66,7 @@ function returnComparison(report, revision) {
   const retained = new Set(source.retained.map(r=>r.doc));
   panel.append(fold('本次资料 · 沿用 '+retained.size+' 份，新增 '+(originals.size-retained.size)+' 份',
     ...[...originals.values()].map(d=>box('line',el('span',retained.has(d.id)?'沿用':'新增'),
-      link(d.name,base()+'/documents/'+d.id+'/original')))));
+      link(d.name,workpaperSource(d.id,'original'))))));
   if (source.parent_rule_version!==report.policy.version) panel.append(el('p','前案规则集 '+source.parent_rule_version+'，本次规则集 '+report.policy.version+'。','muted'));
   for (const group of source.comparisons) {
     const open = group.after.filter(f=>f.status!=='ok').length;

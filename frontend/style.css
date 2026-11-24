@@ -99,6 +99,12 @@ details > summary { cursor: pointer; color: var(--green); padding: 7px 0; }
 #retain-files { min-width: 0; border: 1px solid var(--line); border-radius: 6px; padding: 8px 12px; }
 #retain-files .check-label { padding: 5px 0; overflow-wrap: anywhere; }
 #supplement-family .source-jump { overflow-wrap: anywhere; }
+.file-progress summary { overflow-wrap: anywhere; cursor: pointer; }
+.file-progress summary > span { margin-inline-start: .8em; color: var(--muted); font-size: .86rem; }
+.checkpoint-document { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.checkpoint-pages { list-style: none; margin: 8px 0 0; padding: 0; }
+.checkpoint-pages li { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px; padding: 6px 8px; font-size: .88rem; }
+.checkpoint-active { background: var(--soft); }
 blockquote { margin: 8px 0; background: #f4f7f6; border-left: 2px solid #adbfba; padding: 7px 12px; white-space: pre-wrap; }
 dialog { width: min(570px, 94vw); max-height: 91vh; border: 1px solid var(--line); border-radius: 9px; padding: clamp(17px, 2.5vw, 28px); color: var(--ink); box-shadow: 0 15px 70px #15312c33; }
 dialog.wide-dialog { width: min(1140px,95vw); }

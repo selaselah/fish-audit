@@ -241,7 +241,19 @@ try {
       await call('DOM.setFileInputFiles',{nodeId,files:[file]});
       await evaluate('document.querySelector("#upload-title").value="合成演练 · 三单合订"; document.querySelector("#upload-form").requestSubmit()');
       await wait('location.hash.includes("/case/") && !!document.querySelector("#progress-panel progress")','submitted');
+      await wait('document.querySelector("#checkpoint-totals")?.textContent.includes("已分页 3 页") && !!document.querySelector(".checkpoint-active")','saved pagination and active model page',120000);
+      await evaluate('window.trainingProgressRow=document.querySelector(".checkpoint-document");window.trainingProgressRow.open=true');
+      const range = await evaluate('fetch(document.querySelector(".checkpoint-pages a").href,{headers:{Range:"bytes=0-7"}}).then(async r=>[r.status,(await r.arrayBuffer()).byteLength,!!r.headers.get("ETag")])');
+      assert.deepEqual(range,[206,8,true]);
+      await wait('[...document.querySelectorAll(".checkpoint-pages span")].some(s=>s.textContent.includes("已记录视觉复检"))','stored visual check',240000);
       await wait('document.querySelector("#case-status")?.textContent==="待验收"','multimodal audit', 540000);
+      assert.ok(await evaluate('window.trainingProgressRow===document.querySelector(".checkpoint-document") && window.trainingProgressRow.open'));
+      assert.ok(await evaluate('document.querySelector("#checkpoint-totals").textContent.includes("已提取 3 页") && !document.querySelector(".checkpoint-active")'));
+      for (const width of [1440,1024,820,768,320,390]) {
+        await call('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:1,mobile:width<600});
+        assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),'expanded employee progress at '+width);
+      }
+      console.log('PASS · Saved per-page extraction and visual checks, verified live preview and preserved expanded document');
       assert.ok(await evaluate('document.querySelector("#report-tools").hidden'),'employee scope');
       const detail = await evaluate('location.hash');
       await evaluate('document.querySelector("#nav-account").click()');
@@ -257,19 +269,62 @@ try {
       const report = await evaluate('fetch("/api/w/'+path[1]+'/cases/'+path[3]+'/reports/1").then(r=>r.json())');
       console.log(JSON.stringify({verdict:report.report.result.verdict,pages:report.report.graph.nodes.filter(n=>n.type==='page').length,
         findings:report.report.findings.length, calculations:report.report.findings.flatMap(f=>f.calculations||[]).length}));
-      if (report.report.result.verdict !== 'pass') {
+      const needsReview = report.report.result.verdict === 'review';
+      if (needsReview) {
         console.log(JSON.stringify({gaps:report.report.graph.gaps, pending:report.report.graph.facts.filter(f=>!['anchored','confirmed'].includes(f.status)).map(f=>[f.page,f.field,f.status]), rules:report.report.findings.filter(f=>f.status!=='ok').map(f=>[f.rule,f.detail])}));
-        throw new Error('Golden procurement packet needs review');
-      }
+        assert.ok(report.report.graph.gaps.some(g=>g.doc==='d01' && g.page===1 && g.field==='payment_term' &&
+          g.quote?.endsWith('验收后一次性全额结算')),'review links to the printed contract clause');
+        assert.ok(report.report.findings.some(f=>f.rule==='M02' && f.status==='missing'),'unverified payment terms block the full-settlement calculation');
+        assert.ok(report.report.findings.filter(f=>f.status!=='ok').every(f=>['E01','C01','M02','X01'].includes(f.rule)),'only the evidenced contract clause needs review');
+      } else assert.equal(report.report.result.verdict,'pass','golden procurement result');
       const calcCount = report.report.findings.flatMap(f=>f.calculations || []).length;
-      assert.ok(calcCount >= 3, 'operand-linked audit');
+      assert.ok(calcCount >= (needsReview ? 1 : 3), 'operand-linked audit');
       await evaluate('const detailEl = document.querySelector("#case-panel .formula .ref"); for (let a=detailEl.parentElement; a; a=a.parentElement) if(a.tagName==="DETAILS") a.open=true; detailEl.click()');
       await wait('document.querySelector("#page-dialog").open && !!document.querySelector(".evidence-row.located")','operand citation');
+      const sourceUrl = await wait('document.querySelector("#page-dialog img")?.naturalWidth && document.querySelector("#page-dialog .image-sheet + a").href','verified source image loaded');
+      assert.equal(new URL(sourceUrl).searchParams.get('rev'),'1');
+      const page = /\/documents\/(d[0-9]+)\/pages\/([0-9]+)$/.exec(new URL(sourceUrl).pathname);
+      assert.ok(page);
+      const temporaryPage = join(scratch,'data','cases',path[3],page[1],page[2]+'.jpg');
+      const savedPage = await readFile(temporaryPage);
       await evaluate('document.querySelector("#page-dialog").close()');
+      try {
+        await writeFile(temporaryPage,Buffer.from('changed local test fixture'));
+        await evaluate('detailEl.click()');
+        await wait('document.querySelector("#page-dialog [role=alert]")?.textContent.includes("原页加载失败")','changed test image refused');
+        assert.ok(await evaluate('!document.querySelector("#page-dialog input:enabled")'));
+      } finally {
+        await writeFile(temporaryPage,savedPage);
+        await evaluate('if(document.querySelector("#page-dialog").open) document.querySelector("#page-dialog").close()');
+      }
+      await evaluate('detailEl.click()');
+      await wait('!!document.querySelector("#page-dialog input:enabled")','verified bytes restored for review');
+      await evaluate('document.querySelector("#page-dialog").close()');
+      let revision = 1;
+      let referForReview = needsReview;
+      if (process.argv.includes('--dispute') && !needsReview) {
+        const term = report.report.graph.facts.find(f=>f.field==='payment_term' && f.doc==='d01' && f.page===1);
+        assert.ok(term);
+        await evaluate('location.hash='+JSON.stringify(detail+'?rev=1&fact='+encodeURIComponent(term.id)));
+        await wait('document.querySelector("#page-dialog")?.open && !!document.querySelector(".located input:enabled")','printed payment term');
+        await evaluate('document.querySelector(".located input").click()');
+        await click('记录所选引文的核图意见','document.querySelector("#page-dialog")');
+        await evaluate('document.querySelector("#review-decision").value="dispute";document.querySelector("#review-note").value="合成演练，审计员对该合同结算条款的取值提出异议。";document.querySelector("#review-form").requestSubmit()');
+        revision = 2;
+        await wait('document.querySelector("#version").value==="2" && document.querySelector("#case-status").textContent==="待验收"','recalculated workpaper after dispute',240000);
+        const revised = await evaluate('fetch("/api/w/'+path[1]+'/cases/'+path[3]+'/reports/2").then(r=>r.json()).then(b=>b.report)');
+        assert.equal(revised.graph.facts.find(f=>f.id===term.id)?.status,'disputed');
+        assert.equal(revised.findings.find(f=>f.rule==='M02')?.status,'missing');
+        assert.equal(revised.result.verdict,'review');
+        referForReview = true;
+      }
       await click('填写验收意见');
-      await evaluate('document.querySelector("#review-decision").value="approve";document.querySelector("#review-note").value="已核合成演练三份原页及金额复算。";document.querySelector("#review-form").requestSubmit()');
+      const decision = referForReview ? 'escalate' : 'approve';
+      const note = referForReview ? '合成演练：合同结算条款尚待核实，提交复核。' : '已核合成演练三份原页及金额复算。';
+      await evaluate('document.querySelector("#review-decision").value='+JSON.stringify(decision)+';document.querySelector("#review-note").value='+JSON.stringify(note)+';document.querySelector("#review-form").requestSubmit()');
       await wait('document.querySelector("#case-status").textContent==="已归档"','auditor signoff');
-      const bundleUrl = '/api/w/'+path[1]+'/cases/'+path[3]+'/reports/1/bundle';
+      assert.equal(await evaluate('fetch("/api/w/'+path[1]+'/cases/'+path[3]+'").then(r=>r.json()).then(c=>c.decisions.at(-1).decision)'),decision);
+      const bundleUrl = '/api/w/'+path[1]+'/cases/'+path[3]+'/reports/'+revision+'/bundle';
       const b64 = await evaluate('fetch('+JSON.stringify(bundleUrl)+').then(r=>r.blob()).then(b=>new Promise(res=>{const f=new FileReader(); f.onload=()=>res(f.result.split(",")[1]);f.readAsDataURL(b)}))');
       const zip = join(scratch,'signed.zip');
       await writeFile(zip,Buffer.from(b64,'base64'));
@@ -279,12 +334,13 @@ try {
       await evaluate('document.querySelector("#library-query").value="YL-FP-071";document.querySelector("#library-form").requestSubmit()');
       await wait('!!document.querySelector(".source-jump")','indexed invoice number');
       await evaluate('document.querySelector(".source-jump").click()');
-      await wait('document.querySelector("#page-dialog").open && !!document.querySelector(".evidence-row.located") && location.hash.includes("rev=1")','source opened on its indexed revision');
+      await wait('document.querySelector("#page-dialog").open && !!document.querySelector(".evidence-row.located") && location.hash.includes("rev='+revision+'")','source opened on its indexed revision');
       await evaluate('document.querySelector("#page-dialog").close(); document.querySelector("#nav-team").click()');
       await wait('document.querySelector(".usage-list")','workspace usage');
       const usage = await evaluate('fetch("/api/workspaces/'+path[1]+'/team").then(r=>r.json()).then(d=>d.usage)');
       assert.ok(usage.requests >= 4 && usage.input_tokens > 0 && usage.output_tokens > 0,'provider usage recorded');
       console.log(JSON.stringify({requests:usage.requests,input_tokens:usage.input_tokens,output_tokens:usage.output_tokens}));
+      console.log('Signed '+decision+' on R'+revision);
       console.log('PASS · Employee upload, live audit, operand citation, signoff, offline replay and cross-case source retrieval');
     }
   }

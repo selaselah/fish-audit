@@ -17,6 +17,7 @@ const tone = {ready: 'risk', closed: 'ok', failed: 'issue', pass: 'ok', review: 
   visual: 'risk', unsupported: 'issue', disputed: 'issue', confirmed: 'ok', anchored: 'ok'};
 const statusName = value => labels[value] || value;
 const base = () => Team.cases() + '/' + state.detail.id;
+const workpaperSource = (doc,path) => base()+'/documents/'+doc+'/'+path+(state.bundle ? '?rev='+state.bundle.rev : '');
 const time = value => new Date(value).toLocaleString('zh-CN', {hour12: false, month: '2-digit',
   day: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Shanghai'});
 
@@ -111,12 +112,23 @@ function sourceEntry(source) {
   return box('line', url, el('p', source.locator + ' · ' + source.edition, 'small'),
     el('p', source.summary), el('p', source.scope, 'muted'));
 }
+async function loadReviewImage(image, source) {
+  const response = await fetch(source, {cache:'no-store'});
+  if (!response.ok) throw new Error('原页加载失败');
+  const objectUrl = URL.createObjectURL(await response.blob());
+  try {
+    image.src = objectUrl;
+    await image.decode();
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
 function openPage(docId, pageNumber, highlight) {
   const item = state.detail.documents.find(doc => doc.id === docId);
   if (!item) return;
-  const pageUrl = base() + '/documents/' + docId + '/pages/' + pageNumber;
+  const pageUrl = workpaperSource(docId,'pages/'+pageNumber);
   const image = el('img', '', 'page-image');
-  image.src = pageUrl; image.alt = item.name + ' 第 ' + pageNumber + ' 页';
+  image.alt = item.name + ' 第 ' + pageNumber + ' 页';
   const enlarged = link('单独打开页图', pageUrl); enlarged.target = '_blank'; enlarged.rel = 'noopener';
   const overlay = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   overlay.setAttribute('viewBox', '0 0 1000 1000');
@@ -187,6 +199,15 @@ function openPage(docId, pageNumber, highlight) {
   submit.disabled = true;
   if (editable && pageFacts.length) right.append(submit);
   if (editable) right.append(action('补录本页字段', () => openAmend(docId, pageNumber, null)));
+  const controls = editable ? [...right.querySelectorAll('button:enabled,input:enabled')] : [];
+  for (const control of controls) control.disabled = true;
+  loadReviewImage(image,pageUrl).then(()=>{
+    for (const control of controls) control.disabled=false;
+  },()=>{
+    image.hidden=true; overlay.setAttribute('hidden','');
+    const notice=el('p','原页加载失败，可单独打开页图查看原因。','note');
+    notice.setAttribute('role','alert'); left.prepend(notice);
+  });
   $('#page-title').textContent = item.name + ' · 第 ' + pageNumber + ' 页';
   $('#page-content').replaceChildren(box('page-view', left, right));
   $('#page-dialog').showModal();
@@ -216,7 +237,7 @@ $('.skip').addEventListener('click', event => {
 function sourceList() {
   const panel = box('panel', el('h2', '提交资料'));
   for (const item of state.detail.documents) {
-    const download = link('下载原件', base() + '/documents/' + item.id + '/original');
+    const download = link('下载原件', workpaperSource(item.id,'original'));
     const pages = box('chips');
     for (let number = 1; number <= item.pages; number++) {
       pages.append(action('查看第 ' + number + ' 页', () => openPage(item.id, number), 'ref'));
@@ -395,6 +416,7 @@ function renderCase() {
     }));
   }
   const bundle = state.bundle;
+  PageProgress.render(data,bundle?.rev);
   renderSupplementFamily(data,bundle?.rev);
   $('#report-tools').hidden = !bundle;
   if (!bundle) {
@@ -415,6 +437,7 @@ function renderCase() {
 }
 function clearCaseView() {
   state.detail = null; state.bundle = null;
+  PageProgress.reset();
   $('#supplement-family').hidden = true; $('#supplement-family').replaceChildren();
   for (const id of ['case-panel','case-title','case-meta','case-status','progress-panel','page-content'])
     $('#'+id).replaceChildren();
@@ -531,7 +554,11 @@ async function openAmend(doc, page, fact, printed) {
     $('#amend-reviewer').value=Team.current ? Team.session.user.name : ''; $('#amend-reviewer').readOnly=!!Team.current;
     $('#amend-error').textContent = '';
     $('#amend-title').textContent = fact ? '核图更正字段' : '核图补录字段';
-    $('#amend-image').src = base() + '/documents/' + doc + '/pages/' + page;
+    const image = el('img','','page-image');
+    image.id = 'amend-image'; image.alt = '本次核对的原页';
+    $('#amend-image').replaceWith(image);
+    const source = workpaperSource(doc,'pages/'+page);
+    const submit = $('#amend-submit'); submit.disabled = true;
     const item = current.documents.find(item => item.id === doc);
     $('#amend-context').textContent = item.name + ' · 第 ' + page + ' 页 · 底稿 R' + state.bundle.rev;
     const select = $('#amend-field'); select.replaceChildren(new Option('请选择字段', ''));
@@ -542,10 +569,17 @@ async function openAmend(doc, page, fact, printed) {
     $('#amend-region').value = fact?.region || 'top';
     $('#page-dialog').close();
     $('#amend-dialog').showModal();
+    try {
+      await loadReviewImage(image,source);
+      if (image.isConnected) submit.disabled = false;
+    } catch {
+      if (image.isConnected) $('#amend-error').textContent = '原页加载失败，请重新打开并核对原图。';
+    }
   } catch (error) { alertText(error); }
 }
 $('#amend-form').addEventListener('submit', async event => {
   event.preventDefault();
+  if ($('#amend-submit').disabled) return;
   const {id, ...source} = state.amend;
   const button = $('#amend-submit'); button.disabled = true;
   try {

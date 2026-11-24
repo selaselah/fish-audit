@@ -12,6 +12,7 @@ from config import BANK, CaseError, PROFILE
 from graph import compact, invoice_number_edges
 from payment_history import LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_facts, payment_record
 from supplements import compare_return
+from work_progress import checkpoints, install as install_progress, set_activity
 from workbench import prepare_index, project
 
 
@@ -129,6 +130,7 @@ class Store:
                                    self.index_rows(row["id"], row["rev"], json.loads(row["content"])))
                 db.execute("PRAGMA user_version=1")
             self.fts_enabled = prepare_index(db)
+            install_progress(db)
             columns = {row["name"] for row in db.execute("PRAGMA table_info(case_supplements)")}
             for name in ("parent_hash", "signoff_hash"):
                 if name not in columns:
@@ -217,13 +219,15 @@ class Store:
                 db.execute("""INSERT OR REPLACE INTO worker_turn(workspace,turn)
                            SELECT ?,coalesce(max(turn),0)+1 FROM worker_turn""",(row["workspace"],))
                 db.execute("UPDATE cases SET status='running',updated=? WHERE id=?", (stamp(), row["id"]))
+                set_activity(db, row["id"], None)
                 return row["id"]
         return None
 
-    def progress(self, case_id, stage, percent, message):
+    def progress(self, case_id, stage, percent, message, activity=None):
         with self.connect(True) as db:
             db.execute("UPDATE cases SET stage=?,progress=?,message=?,updated=? WHERE id=?",
                        (stage, percent, message, stamp(), case_id))
+            set_activity(db, case_id, activity)
             event(db, case_id, stage, message)
 
     def fail(self, case_id, message):
@@ -474,7 +478,7 @@ class Store:
             return compare_return(current, json.loads(data), signoff, row["parent_hash"],
                                   json.loads(row["retained"]), row["note"])
 
-    def detail(self, case_id, owner=None):
+    def detail(self, case_id, owner=None, *, with_progress=False):
         with self.connect() as db:
             db.execute("BEGIN")
             case = db.execute("""SELECT id,title,profile,workspace,submitter,submitter_name,created,updated,status,stage,progress,message,error,rev
@@ -483,6 +487,8 @@ class Store:
                 raise CaseError("未找到该审计任务。", 404)
             detail = dict(case)
             detail["documents"] = [dict(row) for row in db.execute("SELECT id,name,ext,size,sha256,pages FROM docs WHERE case_id=? ORDER BY id", (case_id,))]
+            if with_progress:
+                detail["page_progress"] = checkpoints(db, case, detail["documents"])
             detail["events"] = [dict(row) for row in db.execute("SELECT seq,time,stage,message FROM events WHERE case_id=? ORDER BY seq", (case_id,))]
             detail["revisions"] = [dict(row) for row in db.execute("SELECT rev,created,hash FROM reports WHERE case_id=? ORDER BY rev DESC", (case_id,))]
             detail["decisions"] = [dict(row) for row in db.execute("SELECT rev,decision,reviewer,actor,note,time FROM signoffs WHERE case_id=? ORDER BY rev", (case_id,))]
@@ -500,6 +506,8 @@ class Store:
             row = db.execute("SELECT content,hash,created FROM reports WHERE case_id=? AND rev=?", (case_id, rev)).fetchone()
             if not row:
                 raise CaseError("未找到该版本底稿。", 404)
+            if hashlib.sha256(row["content"].encode()).hexdigest() != row["hash"]:
+                raise CaseError("底稿内容与该版本留存的摘要不符。", 409)
             return {"rev": rev, "sha256": row["hash"], "created": row["created"], "report": json.loads(row["content"])}
 
     def attestations(self, case_id):

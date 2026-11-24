@@ -41,6 +41,30 @@ def text_field(value, name, limit):
     return value.strip()
 
 
+def verified_download(path, expected, name, mimetype, *, attachment):
+    stream = tempfile.SpooledTemporaryFile(max_size=2*1024**2)
+    try:
+        hasher = hashlib.sha256()
+        try:
+            with path.open("rb") as source:
+                while chunk := source.read(128*1024):
+                    hasher.update(chunk)
+                    stream.write(chunk)
+        except FileNotFoundError as exc:
+            raise CaseError("存证文件缺失，请核对本机资料或备份。", 409) from exc
+        if hasher.hexdigest() != expected:
+            raise CaseError("存证文件与记录的摘要不符，无法提供此原件或页图。", 409)
+        size = stream.tell()
+        stream.seek(0)
+        response = send_file(stream, download_name=name, mimetype=mimetype, as_attachment=attachment,
+                             conditional=False, etag=expected)
+        response.content_length = size
+        return response.make_conditional(request, accept_ranges=True, complete_length=size)
+    except BaseException:
+        stream.close()
+        raise
+
+
 def save_original(folder, doc, name, stream, remaining):
     name = text_field((name or "").replace("\\", "/").split("/")[-1], "文件名", 200)
     ext = Path(name).suffix.lower()
@@ -168,11 +192,26 @@ def create_app(store, worker):
     def signer(data):
         return g.actor["name"] if g.actor else text_field(data.get("reviewer"), "审计人员姓名", 50)
 
+    def verify_revision_source(case_id, node_id, checksum):
+        revisions = request.args.getlist("rev")
+        if not revisions:
+            return
+        if g.role == "employee":
+            raise CaseError("查看底稿版本需要审计人员或管理员权限。", 403)
+        if len(revisions) != 1 or not re.fullmatch(r"[1-9][0-9]{0,8}", revisions[0]):
+            raise CaseError("底稿版本无效。", 400)
+        graph = store.report(case_id, int(revisions[0]))["report"]["graph"]
+        node = next((n for n in graph["nodes"] if n["id"] == node_id and n["type"] in {"document","page"}), None)
+        if not node:
+            raise CaseError("该底稿版本中没有此原件或页图。", 404)
+        if node["sha256"] != checksum:
+            raise CaseError("资料记录与所选底稿中的来源摘要不符。", 409)
+
     @app.after_request
     def headers(response):
         response.headers.update({"X-Content-Type-Options": "nosniff", "Cache-Control": "no-store",
                                  "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer",
-                                 "Content-Security-Policy": "default-src 'self'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"})
+                                 "Content-Security-Policy": "default-src 'self'; img-src 'self' data: blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"})
         return response
 
     @app.errorhandler(CaseError)
@@ -216,7 +255,7 @@ def create_app(store, worker):
 
     @app.get("/<filename>")
     def asset(filename):
-        if filename not in {"app.js", "team.js", "desk.js", "provenance.js", "supplements.js", "style.css"}:
+        if filename not in {"app.js", "team.js", "desk.js", "provenance.js", "supplements.js", "checkpoints.js", "style.css"}:
             raise CaseError("资源不存在。", 404)
         return send_file(FRONTEND / filename)
 
@@ -266,7 +305,7 @@ def create_app(store, worker):
 
     @business.get("/cases/<case_id>")
     def detail(case_id):
-        data = store.detail(case_id, g.actor["id"] if g.role == "employee" else None)
+        data = store.detail(case_id, g.actor["id"] if g.role == "employee" else None, with_progress=True)
         if g.role == "employee":
             data["revisions"] = []
         data["can_review"] = g.role != "employee"
@@ -303,16 +342,19 @@ def create_app(store, worker):
         match = next((item for item in store.documents(case_id) if item["id"] == doc), None)
         if not match:
             raise CaseError("资料不存在。", 404)
-        return send_file(store.files / case_id / doc / ("original" + match["ext"]), as_attachment=True,
-                         download_name=match["name"], mimetype="application/octet-stream")
+        verify_revision_source(case_id, doc, match["sha256"])
+        return verified_download(store.files / case_id / doc / ("original" + match["ext"]), match["sha256"],
+                                 match["name"], "application/octet-stream", attachment=True)
 
     @business.get("/cases/<case_id>/documents/<doc>/pages/<int:number>")
     def page_image(case_id, doc, number):
         with store.connect() as db:
-            exists = db.execute("SELECT 1 FROM pages WHERE case_id=? AND doc=? AND number=?", (case_id, doc, number)).fetchone()
-        if not exists:
+            row = db.execute("SELECT sha256 FROM pages WHERE case_id=? AND doc=? AND number=?", (case_id, doc, number)).fetchone()
+        if not row:
             raise CaseError("页图不存在。", 404)
-        return send_file(store.files / case_id / doc / f"{number}.jpg", mimetype="image/jpeg")
+        verify_revision_source(case_id, f"{doc}/p{number}", row["sha256"])
+        return verified_download(store.files / case_id / doc / f"{number}.jpg", row["sha256"],
+                                 f"{number}.jpg", "image/jpeg", attachment=False)
 
     @business.post("/cases/<case_id>/retry")
     def retry(case_id):

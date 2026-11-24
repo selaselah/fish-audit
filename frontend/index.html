@@ -12,6 +12,7 @@
   <script src="/desk.js" defer></script>
   <script src="/provenance.js" defer></script>
   <script src="/supplements.js" defer></script>
+  <script src="/checkpoints.js" defer></script>
   <script src="/app.js" defer></script>
 </head>
 <body>
@@ -79,6 +80,10 @@
       <a class="back" href="#desk">返回任务台账</a>
       <div class="heading"><div><p class="eyebrow" id="case-meta"></p><h1 id="case-title"></h1></div><span id="case-status"></span></div>
       <div id="progress-panel" class="board progress-panel" aria-live="polite"></div>
+      <details id="file-progress" class="panel file-progress" hidden>
+        <summary><strong>逐份资料进度</strong><span id="checkpoint-totals"></span></summary>
+        <div id="checkpoint-files"></div>
+      </details>
       <section id="supplement-family" class="panel" aria-label="补件往来" hidden></section>
       <div id="report-tools" hidden><nav class="tabs" aria-label="底稿视图" id="tabs"></nav>
         <label class="version">底稿版本 <select id="version"></select></label></div>

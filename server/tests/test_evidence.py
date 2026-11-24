@@ -401,13 +401,21 @@ class LocalFlowTests(unittest.TestCase):
         case_id = self.submit().json["id"]
         original_extract = self.worker.extract
         counts = {"check":0}
+        def progress():
+            return self.client.get("/api/cases/"+case_id).json["page_progress"]
+        self.assertEqual(progress()["documents"],{"d01":[]})
 
         def fresh_page(path):
+            self.assertEqual(progress()["activity"],{"doc":"d01","page":1,"operation":"read"})
+            self.assertEqual(progress()["documents"]["d01"],[{"page":1,"state":"prepared"}])
             result, trace = original_extract(path)
             del trace["check"]
             return result, trace
 
         def interrupted_check(path, trace):
+            saved = progress()
+            self.assertEqual(saved["counts"],{"prepared":1,"read":1,"checked":0})
+            self.assertEqual(saved["activity"],{"doc":"d01","page":1,"operation":"check"})
             counts["check"] += 1
             raise CaseError("合成的连接中断")
 
@@ -421,11 +429,76 @@ class LocalFlowTests(unittest.TestCase):
                 first.run(self.store.claim())
             reopened = Store(self.root)
             reopened.recover()
+            self.assertIsNone(progress()["activity"])
+            self.assertEqual(progress()["documents"]["d01"],[{"page":1,"state":"read"}])
             self.assertEqual(reopened.claim(), case_id)
             Worker(reopened, fresh_page, self.worker.audit, recovered_check).run(case_id)
         self.assertEqual(self.extract_calls, 1)
         self.assertEqual(counts["check"], 2)
         self.assertEqual(reopened.detail(case_id)["status"], "ready")
+        self.assertEqual(progress(),{"counts":{"prepared":1,"read":1,"checked":1},"documents":{"d01":[{"page":1,"state":"checked"}]},"activity":None})
+
+    def test_unchecked_extraction_counts_and_checkpoint_index_backfill(self):
+        cid = self.submit().json["id"]
+        def empty_page(path):
+            output = {"quality":"readable","facts":[]}
+            return output, {"model":"fixture","output":output}
+        with patch("jobs.RECHECK_EVIDENCE",False):
+            Worker(self.store,empty_page,self.worker.audit).run(self.store.claim())
+        with self.store.connect(True) as db:
+            db.execute("DROP INDEX page_checkpoint_states")
+        reopened = Store(self.root)
+        data = reopened.detail(cid,with_progress=True)["page_progress"]
+        self.assertEqual(data["counts"],{"prepared":1,"read":1,"checked":0})
+        self.assertEqual(data["documents"]["d01"],[{"page":1,"state":"read"}])
+        from work_progress import PAGE_STATE
+        with reopened.connect() as db:
+            plan = db.execute(f"EXPLAIN QUERY PLAN SELECT doc,number,{PAGE_STATE} FROM pages INDEXED BY page_checkpoint_states WHERE case_id=? ORDER BY doc,number",(cid,))
+            self.assertTrue(any("page_checkpoint_states" in row[-1] for row in plan))
+        with reopened.connect(True) as db:
+            db.execute("UPDATE pages SET extraction=? WHERE case_id=?",("damaged checkpoint",cid))
+        broken = reopened.detail(cid,with_progress=True)["page_progress"]
+        self.assertEqual(broken["counts"],{"prepared":1,"read":0,"checked":0})
+        self.assertEqual(broken["documents"]["d01"],[{"page":1,"state":"invalid"}])
+
+    def test_preview_checks_the_served_bytes_and_exposes_failed_page_location(self):
+        cid = self.submit().json["id"]
+        base = "/api/cases/"+cid+"/documents/d01/"
+        self.worker.run(self.store.claim())
+        with self.client.get(base+"original",headers={"Range":"bytes=2-9"}) as response:
+            self.assertEqual((response.status_code,response.data),(206,self.photo[2:10]))
+        with self.client.head(base+"original") as response:
+            self.assertEqual(response.content_length,len(self.photo))
+        with self.client.get(base+"pages/1") as response:
+            self.assertEqual(response.mimetype,"image/jpeg")
+            etag = response.headers["ETag"]
+            self.assertEqual(response.content_length,len(response.data))
+        with self.client.get(base+"pages/1",headers={"If-None-Match":etag}) as cache:
+            self.assertEqual(cache.status_code,304)
+        with self.client.get(base+"pages/1?rev=1") as pinned:
+            self.assertEqual(pinned.headers["ETag"],etag)
+        self.assertEqual(self.client.get(base+"original?rev=9").status_code,404)
+        self.assertEqual(self.client.get(base+"original?rev=bad").status_code,400)
+        with self.store.connect(True) as db:
+            db.execute("UPDATE pages SET sha256=? WHERE case_id=?",("different registered page",cid))
+        self.assertEqual(self.client.get(base+"pages/1?rev=1").status_code,409)
+        with self.store.connect(True) as db:
+            db.execute("UPDATE pages SET sha256=? WHERE case_id=?",(etag.strip('"'),cid))
+        folder = self.store.files/cid/"d01"
+        (folder/"1.jpg").write_bytes(b"changed")
+        self.assertEqual(self.client.get(base+"pages/1",headers={"If-None-Match":etag}).status_code,409)
+        self.store.rerun(cid,1)
+        with self.assertRaises(CaseError) as failure:
+            self.worker.run(self.store.claim())
+        self.store.fail(cid,str(failure.exception))
+        detail = self.client.get("/api/cases/"+cid).json
+        self.assertEqual(detail["status"],"failed")
+        self.assertEqual(detail["page_progress"]["activity"],{"doc":"d01","page":1,"operation":"integrity"})
+        (folder/"original.jpg").unlink()
+        self.assertEqual(self.client.get(base+"original").status_code,409)
+        with self.store.connect(True) as db:
+            db.execute("UPDATE reports SET content=content || ' ' WHERE case_id=? AND rev=1",(cid,))
+        self.assertEqual(self.client.get("/api/cases/"+cid+"/reports/1").status_code,409)
 
     def test_disputed_value_still_requires_literal_quote_to_confirm(self):
         def inconsistent(path):

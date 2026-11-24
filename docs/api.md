@@ -8,7 +8,7 @@
 | `GET /api/controls` | 采购及差旅程序编号、规则版本、适用背景与来源 |
 | `POST /api/cases` | multipart 表单，`title` 和一个或多个同名 `files` 字段，返回 HTTP 202 和 `id` |
 | `GET /api/cases` | 台账，含处理进度、建议、底稿版本和人工决定 |
-| `GET /api/cases/{id}` | 原件清单、阶段、百分比、事件、版本和验收历史 |
+| `GET /api/cases/{id}` | 原件清单、阶段、百分比、逐页进度 `page_progress`、事件、版本和验收历史 |
 | `GET /api/cases/{id}/reports/{rev}` | 特定版本的完整底稿、生成时间及摘要 |
 | `GET /api/cases/{id}/reports/{rev}/bundle` | 下载该版本原件、页图、文字层、底稿与导出时的日志 ZIP |
 | `GET /api/cases/{id}/reports/{rev}/methods/{name}` | 阅读该版本配套的程序源码，文件名取自底稿中的 `policy.code_sha256`。保存了源码快照的版本可用 |
@@ -28,6 +28,12 @@
 curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf' \
   -F 'files=@验收照片.jpg' http://127.0.0.1:8000/api/cases
 ```
+
+## 逐页进度与资料预览
+
+任务详情的 `page_progress.counts` 分别给出已分页 `prepared`、已提取 `read`、已有视觉复检记录 `checked` 的页数。三项分别计数，已复检页也计入已提取页。`documents` 以原件编号列出页码及最近保存的状态，`invalid` 表示提取记录需要检查。`activity` 提供当前处理或中断位置的原件、页码及步骤，队列中、已完成及整案处理阶段可为空。完成视觉复检的页仍可能有待人工确认的字段。
+
+原件下载和页图预览在响应前核对 SHA-256。请求支持 ETag、HEAD 和字节范围。审计人员或管理员可加 `?rev=版本号`，同时校验所选底稿及其图谱中的来源摘要，底稿引用默认使用这个入口。员工可从本人任务读取已登记的当前原件和页图。已登记的文件缺失或内容与相应摘要不符时返回 409。
 
 ## 核图与最终决定
 

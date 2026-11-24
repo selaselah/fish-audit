@@ -14,7 +14,7 @@ from storage import encode
 
 
 METHODS = {name: (SERVER / name).read_bytes() for name in
-           ("calculations.py", "capacity.py", "config.py", "controls.py", "documents.py", "graph.py", "jobs.py", "model.py", "payment_history.py", "policy.py", "protocol.py", "storage.py", "supplements.py", "transfers.py")}
+           ("calculations.py", "capacity.py", "config.py", "controls.py", "documents.py", "graph.py", "jobs.py", "model.py", "payment_history.py", "policy.py", "protocol.py", "storage.py", "supplements.py", "transfers.py", "work_progress.py")}
 CODE_DIGESTS = {name: digest(source) for name, source in METHODS.items()}
 
 
@@ -65,9 +65,10 @@ class Worker:
         page_count = 0
         for index, doc in enumerate(docs):
             source = folder / doc["id"] / ("original" + doc["ext"])
-            store.progress(case_id, "prepare", 3 + 13 * index // len(docs), f"核对原件并分页（{index+1}/{len(docs)}）· {doc['name']}")
-            if digest(source.read_bytes()) != doc["sha256"]:
-                raise CaseError("原件摘要与提交时不一致，已停止计算。")
+            store.progress(case_id, "prepare", 3 + 13 * index // len(docs), f"核对原件并分页（{index+1}/{len(docs)}）· {doc['name']}",
+                           (doc["id"], None, "prepare"))
+            if not source.is_file() or digest(source.read_bytes()) != doc["sha256"]:
+                raise CaseError("原件缺失或摘要与提交时不一致，已停止计算。")
             if not doc["pages"]:
                 pages = prepare(source, MAX_PAGES - page_count)
                 store.put_pages(case_id, doc["id"], pages)
@@ -82,18 +83,22 @@ class Worker:
         pages = store.pages(case_id)
         for index, page in enumerate(pages):
             path = folder / page["doc"] / f"{page['number']}.jpg"
-            if digest(path.read_bytes()) != page["sha256"]:
-                raise CaseError("页图摘要与分页记录不一致，已停止计算。")
+            if not path.is_file() or digest(path.read_bytes()) != page["sha256"]:
+                store.progress(case_id, "extract", 18 + 54 * index // page_count, "校验已分页的原页图。",
+                               (page["doc"], page["number"], "integrity"))
+                raise CaseError("页图缺失或摘要与分页记录不一致，已停止计算。")
             trace = page["extraction"]
             if trace is None:
                 store.progress(case_id, "extract", 18 + 54 * index // page_count,
-                               f"多模态读取第 {index+1}/{page_count} 页 · {names[page['doc']]} 第 {page['number']} 页")
+                               f"多模态读取第 {index+1}/{page_count} 页 · {names[page['doc']]} 第 {page['number']} 页",
+                               (page["doc"], page["number"], "read"))
                 _, trace = self.extract(path)
                 store.save_extraction(case_id, page, trace)
                 page["extraction"] = trace
             candidates = heading_candidates(page) if RECHECK_EVIDENCE and not trace.get("check") else []
             if RECHECK_EVIDENCE and (trace["output"]["facts"] or candidates) and not trace.get("check"):
-                store.progress(case_id, "extract", 18 + 54 * index // page_count, f"第 {index+1}/{page_count} 页逐字段视觉复检。")
+                store.progress(case_id, "extract", 18 + 54 * index // page_count, f"第 {index+1}/{page_count} 页逐字段视觉复检。",
+                               (page["doc"], page["number"], "check"))
                 trace["heading_candidates"] = candidates
                 self.check(path, trace)
                 trace.pop("heading_candidates", None)

@@ -65,6 +65,9 @@ class EnterpriseFlow(unittest.TestCase):
         while cid := self.store.claim():
             self.worker.run(cid)
         self.assertEqual([r["id"] for r in employee.get("/api/w/"+a+"/cases").json["cases"]],[emp_case])
+        checkpoint = employee.get("/api/w/"+a+"/cases/"+emp_case).json["page_progress"]
+        self.assertEqual(checkpoint["documents"],{"d01":[{"page":1,"state":"checked"}]})
+        self.assertEqual(employee.get("/api/w/"+a+"/cases/"+emp_case+"/documents/d01/pages/1?rev=1").status_code,403)
         for tail in ("","/reports/1","/reports/1/bundle","/documents/d01/original","/documents/d01/pages/1"):
             self.assertEqual(other.get("/api/w/"+b+"/cases/"+emp_case+tail).status_code,404)
         self.assertEqual(employee.get("/api/w/"+a+"/cases/"+administrator_case).status_code,404)
