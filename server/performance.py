@@ -10,6 +10,7 @@ from delegation import LABELS as DELEGATION_FIELDS, PARTY_SIGNATURES, checks as 
 from contract_changes import LABELS as ADDENDUM_FIELDS, LIMIT, SOURCE_LABELS, candidates as change_candidates, labelled_sources, resolve as resolve_change
 from acceptance_authority import LABELS as AUTHORITY_FIELDS, SIGN_LABELS, check as check_acceptance_authority
 import delivery_batches
+import contract_effect
 
 
 PROFILE = "cn-contract-performance/v1"
@@ -22,8 +23,10 @@ NATIVE_FORMAT = "contract-performance-v6"
 ADDENDUM_FORMAT = "contract-performance-v7"
 SIGNATORY_FORMAT = "contract-performance-v8"
 DATE_FORMAT = "contract-performance-v9"
-FORMAT = "contract-performance-v10"
-DATE_FORMATS = (DATE_FORMAT,FORMAT)
+BATCH_FORMAT = "contract-performance-v10"
+FORMAT = contract_effect.PERFORMANCE
+BATCH_FORMATS = (BATCH_FORMAT,FORMAT)
+DATE_FORMATS = (DATE_FORMAT,*BATCH_FORMATS)
 SIGNATORY_FORMATS = (SIGNATORY_FORMAT,*DATE_FORMATS)
 ADDENDUM_FORMATS = (ADDENDUM_FORMAT,*SIGNATORY_FORMATS)
 MANDATE_FORMATS = (DELEGATION_FORMAT, IDENTITY_FORMAT, NATIVE_FORMAT, *ADDENDUM_FORMATS)
@@ -558,6 +561,8 @@ def compute(graph, version=FORMAT):
     approvals = materials("contract_approval") if version != FIRST_FORMAT else []
     grants = materials("power_of_attorney") if version in MANDATE_FORMATS else ()
     signed = effect(contract, approvals, version, grants)
+    if version==FORMAT:
+        contract_effect.review(signed,graph.get("contract_effect_sources",{}),contract.unit)
     if version in DATE_FORMATS:
         add_date_checks(signed,period_checks(contract))
     classified = {u for group in kinds.values() for u in group}
@@ -588,8 +593,8 @@ def compute(graph, version=FORMAT):
         accepted_on = day(receipts[0].single("accepted_on")) if accepted["status"]=="ok" else None
     plan, rows = schedule(contract)
     batch = None
-    if version==FORMAT:
-        batch = delivery_batches.inspect(graph,contract,receipts,
+    if version in BATCH_FORMATS:
+        batch = delivery_batches.inspect(graph,contract,receipts,native_spacing=version==FORMAT,
                     other_terms=bool(signed["status"]!="ok" or extra_units or change or authority or repairs or retests or
                                      any(r.fields[k] or k in r.uncertain for r in receipts for k in ("original_acceptance","repair_number","defect_closure"))))
     batch_rows = {r["index"]:r for r in batch["batches"]} if batch else {}
@@ -817,6 +822,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("acceptance_authority") != entry.get("acceptance_authority")
                 or saved.get("date_checks") != entry.get("date_checks")
                 or saved.get("batch_acceptance") != entry.get("batch_acceptance")
+                or saved.get("effect_review") != entry.get("effect_review")
                 or (saved.get("id"),saved.get("version"),saved.get("title"),saved.get("basis")) !=
                 (f"{rule}-{position}",policy["version"],*RULES[rule])):
             raise ValueError("合同履约结论、期次或引文与证据图谱不符")

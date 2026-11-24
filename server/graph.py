@@ -16,6 +16,7 @@ from quality_references import attach as record_quality_references
 from delegation import ENTITY_TYPES as DELEGATION_ENTITIES, TITLES as MANDATE_TITLES, attach as record_mandate_pages, printed_value as mandate_value
 from contract_changes import NUMBER_TYPES as ADDENDUM_NUMBERS, TITLES as ADDENDUM_TITLES, attach as record_addenda, number_target
 import delivery_batches
+import contract_effect
 from acceptance_authority import CLAUSE as AUTHORITY_CLAUSE, SIGNER as ACCEPTANCE_SIGNATURE, attach as record_signatories, witness_edges
 
 
@@ -296,6 +297,7 @@ def build_graph(docs, pages, attestations, amendments=()):
     partition_documents(graph, pages)
     withhold_partial_numbers(graph)
     texts = {(page["doc"],page["number"]):page["text"] for page in pages}
+    graph["contract_effect_sources"]=contract_effect.sources(graph,lambda doc,number:texts[doc,number])
     record_mandate_pages(graph, lambda doc, number: texts[doc, number])
     record_addenda(graph, lambda doc, number: texts[doc, number])
     delivery_batches.attach(graph, lambda doc, number: texts[doc,number])

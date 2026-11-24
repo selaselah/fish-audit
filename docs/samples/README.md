@@ -132,6 +132,10 @@ server/.venv/bin/python docs/samples/delivery_batches.py --run --run-id syntheti
 
 `--cases` 可选 `complete`（两批合格）、`missing`（缺第二批原件）、`quality`（报告称合格但第二批实测 8℃ 超出合同 4℃ 上限）、`duplicate`（两批登记相同设备）、`early`（9 月 15 日支付的第三期早于 9 月 20 日第二批验收）、`separate`（另行终验）及 `image`（原页附有影像暂收说明）。省略 `--run` 可仅生成资料。
 
+### 双方盖章后仍有附加生效条件
+
+`server/.venv/bin/python docs/samples/contract_effect.py --run` 上传三笔水印采购案。`approved` 随合同提交约定的董事会批准决议，`written` 在合同页末印有另须取得书面批准的条件，`image` 把同一条件写在嵌入的影像框内。三案分别核对 H01 及履约付款条件。脚本仅对摘要一致的合成原件模拟字段补录、签认及人工核图。
+
 ### 复现首次读图的编号误分类
 
 运行 `server/.venv/bin/python docs/samples/quality_readback.py --run`，可用上述复验后付款案例的 R1 重测。脚本校验原版本证据包，把两份 PDF 与固定种子重新生成的水印样本逐字节比较，并检查重渲染的页图和文字层。随后只将两张水印页图连同真实初读候选送入视觉复检，将回执另存入演练目录。原底稿仍可照常打开。

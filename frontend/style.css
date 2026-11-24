@@ -115,6 +115,8 @@ textarea { width: 100%; resize: vertical; }
 .quality-change h4 { margin:0; }
 .contract-date-evidence { margin:12px 0; padding:10px 14px; border-inline-start:3px solid #946421; background:var(--soft); }
 .contract-date-evidence h4 { margin:0 0 5px; }
+.effect-review { margin:14px 0; padding:12px 14px; background:#faf6ed; border-inline-start:3px solid #9c7139; }
+.effect-review h4 { margin:0 0 6px; }
 .delivery-batches { margin:16px 0; padding:clamp(10px,2vw,20px); border:1px solid var(--line); border-radius:6px; background:#f7f9f5; }
 .batch-heading,.batch-record > .flow { display:flex; align-items:baseline; flex-wrap:wrap; gap:4px 10px; }
 .batch-heading { justify-content:space-between; margin-bottom:6px; }

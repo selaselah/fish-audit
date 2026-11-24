@@ -215,6 +215,35 @@ function deliveryBatchPanel(entry, graph, phases) {
   return panel;
 }
 
+function contractEffectPanel(finding,graph) {
+  const {conditions,mixed_pages}=finding.effect_review;
+  if (!conditions.length && !mixed_pages.length) return null;
+  const {facts,documents}=graphIndex(graph);
+  const panel=box('effect-review',el('h4','需核对的生效条件'));
+  const cited=new Set(conditions.flatMap(s=>s.facts));
+  for (const ref of finding.evidence) {
+    const fact=facts.get(ref);
+    if (fact?.field==='effect_clause' && !cited.has(ref))
+      panel.append(box('batch-source',el('q',fact.source_line?.text || fact.quote),citation(ref)));
+  }
+  for (const item of conditions) {
+    const fact=item.facts.map(id=>facts.get(id)).find(f=>f?.quote===item.quote);
+    const button=action((documents.get(item.doc)?.name || '合同')+' · 第 '+item.page+' 页',
+      ()=>openPage(item.doc,item.page,fact?.id,fact?null:item.line),'ref');
+    const row=box('batch-source',el('q',item.quote),button);
+    row.append(el('small',item.line?'原页文字层第 '+item.line+' 行':'影像读图引文','small'));
+    if (!item.line && fact) row.append(tag(fact.status));
+    row.dataset.effectSource=fact?.id || item.doc+'/p'+item.page+'/l'+item.line;
+    panel.append(row);
+  }
+  for (const page of mixed_pages) {
+    const original=action((documents.get(page.doc)?.name || '合同')+' · 第 '+page.page+' 页',()=>openPage(page.doc,page.page),'ref');
+    original.dataset.effectPage=page.doc+'/p'+page.page;
+    panel.append(box('batch-source',el('strong','通读整页影像及批注'),original));
+  }
+  return panel;
+}
+
 function qualityChangePanel(change, graph) {
   const index = graphIndex(graph);
   const facts = change.evidence.map(id=>index.facts.get(id)).filter(Boolean);

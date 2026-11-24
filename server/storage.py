@@ -31,6 +31,7 @@ from quality_labels import verify_report as verify_quality_numbers
 from quality_references import verify_report as verify_quality_references
 from acceptance_authority import verify_sources as verify_acceptance_authority
 from delivery_batches import verify_sources as verify_delivery_batches
+from contract_effect import verify as verify_contract_effect
 from contract_changes import verify_sources as verify_addendum_sources
 from delegation import verify_sources as verify_delegation_sources
 from peer_review import different_reviewers, review_record, valid_findings, verify_review
@@ -721,7 +722,7 @@ class Store:
             paper = json.loads(row["content"])
             graph = paper["graph"]
             if row["profile"]!=BANK:
-                checks = [f for f in paper["findings"] if f.get("delegations") or f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance")]
+                checks = [f for f in paper["findings"] if f.get("delegations") or f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review")]
                 if any(f.get("batch_acceptance") for f in checks):
                     checks.extend(f for f in paper["findings"] if f["rule"] in ("H04","H05"))
                 if not checks:
@@ -729,7 +730,7 @@ class Store:
                 named = {ref for f in checks for ref in f["evidence"]}
                 units = {d["id"]:d.get("source", d["id"]) for d in graph.get("audit_documents", graph["documents"])}
                 originals = {units[unit] for finding in checks for unit in finding["scope"]}
-                full_pages = any(f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") for f in checks)
+                full_pages = any(f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") for f in checks)
                 fields = [f["id"] for f in graph["facts"] if f["id"] in named or full_pages and f["doc"] in originals]
                 pages = {(p["doc"],p["page"]) for p in paper["calls"]["pages"] if p["doc"] in originals}
                 registered = {(r["doc"],r["number"]) for r in db.execute("SELECT doc,number FROM pages WHERE case_id=?",(case_id,))
@@ -829,9 +830,11 @@ class Store:
                     verify_addendum_sources(paper, page_text, signing=True)
                     verify_acceptance_authority(paper,page_text,signing=True)
                     verify_delivery_batches(paper,page_text,signing=True)
+                    verify_contract_effect(paper,page_text,signing=True)
                     inspected = [*paper["graph"].get("quality_addenda",{}).get("pages",[]),
                                  *paper["graph"].get("acceptance_authority_sources",{}).get("pages",[]),
-                                 *paper["graph"].get("delivery_batch_sources",{}).get("pages",[])]
+                                 *paper["graph"].get("delivery_batch_sources",{}).get("pages",[]),
+                                 *paper["graph"].get("contract_effect_sources",{}).get("pages",[])]
                     for page in inspected:
                         layer = db.execute("SELECT layer FROM pages WHERE case_id=? AND doc=? AND number=?",
                                            (case_id,page["doc"],page["page"])).fetchone()
@@ -845,14 +848,17 @@ class Store:
         changed = any(f.get("quality_change") for f in paper["findings"])
         named_acceptance = any(f.get("acceptance_authority") for f in paper["findings"])
         batches = any(f.get("batch_acceptance") for f in paper["findings"])
+        effect_checked = any(f.get("effect_review") for f in paper["findings"])
         chronology = any(f.get("date_checks") for f in paper["findings"])
-        if graph.get("profile")!=BANK and (changed or named_acceptance or chronology or batches or any(f.get("delegations") for f in paper["findings"])):
+        if graph.get("profile")!=BANK and (changed or named_acceptance or chronology or batches or effect_checked or any(f.get("delegations") for f in paper["findings"])):
             if not payment_sources or len(payment_sources)!=1:
                 raise CaseError("签收前需重新核对合同及所据履约附件原件。",409)
             source = payment_sources[0][0]
             if (source.case_id,source.revision,source.report_hash)!=(case_id,revision,row["hash"]):
                 raise CaseError("履约原件所据的签收版已变化。",409)
             source.guard(db)
+            if effect_checked:
+                event(db,case_id,"contract_effect_sources",f"签收前核对 R{revision} 的合同原件、附加生效条件所据原页和签认依据。")
             if batches:
                 event(db,case_id,"delivery_batch_sources",f"签收前核对 R{revision} 的合同分批明细、各批验收原件及相关页图，共 {len(source.files)} 个文件。")
             if chronology:
@@ -861,7 +867,7 @@ class Store:
                 event(db,case_id,"acceptance_signature_sources",f"签收前核对 R{revision} 的具名条款、验收签字及相关页图，共 {len(source.files)} 个文件。")
             if changed:
                 event(db,case_id,"addendum_sources",f"签收前核对 R{revision} 合同、补充协议、验收原件和相关页图，共 {len(source.files)} 个文件。")
-            elif not named_acceptance and not chronology and not batches:
+            elif not named_acceptance and not chronology and not batches and not effect_checked:
                 event(db,case_id,"mandate_sources",f"签收前核对 R{revision} 的合同签字、委托书及相关页图，共 {len(source.files)} 个文件。")
         if graph.get("profile") == PERFORMANCE:
             return None

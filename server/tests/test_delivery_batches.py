@@ -3,7 +3,7 @@ import unittest
 
 from controls import VERSION, execute
 from delivery_batches import evidence_edges, verify_sources
-from performance import DATE_FORMAT, compute, verify_findings
+from performance import BATCH_FORMAT, DATE_FORMAT, compute, verify_findings
 from test_performance import CONTRACT, RECEIPT, WARRANTY, BANK_DOC, material
 
 
@@ -100,6 +100,20 @@ class DeliveryBatchTests(unittest.TestCase):
         h,phases,_=states(g)
         self.assertIn("8°C",h["batch_acceptance"]["batches"][1]["detail"])
         self.assertEqual([p["status"] for p in phases],["ok","ok","risk","risk"])
+
+    def test_spaces_after_printed_serial_label_and_inside_serial_are_distinct(self):
+        graph=sample()
+        fact=next(f for f in graph["facts"] if f["field"]=="delivery_batch")
+        fact["quote"]=fact["quote"].replace("编号 E","编号E")
+        self.assertEqual(states(graph)[0]["status"],"ok")
+        self.assertNotEqual(next(f for f in compute(graph,BATCH_FORMAT) if f["rule"]=="H02")["status"],"ok")
+        fact["source_line"]["text"]=fact["source_line"]["text"].replace("E-11","E-1 1")
+        self.assertNotEqual(states(graph)[0]["status"],"ok")
+        graph=sample()
+        fact=next(f for f in graph["facts"] if f["field"]=="delivered_serials")
+        fact["quote"]=fact["quote"].replace("、","、 ")
+        self.assertEqual(states(graph)[0]["status"],"ok")
+        self.assertNotEqual(next(f for f in compute(graph,BATCH_FORMAT) if f["rule"]=="H02")["status"],"ok")
 
     def test_payment_uses_only_its_batch_date_and_identity(self):
         for designation,paid,expected in (("第二期","2026-09-15","ok"),("第三期","2026-09-15","risk"),

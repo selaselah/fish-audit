@@ -65,6 +65,7 @@ class PaymentHistoryTests(unittest.TestCase):
         findings = execute(graph, BANK, lookup)
         calls = {"expert": {"model": "fixture", "output": {"followups": []}}, "pages": [
             {"model":"fixture", "doc":p["doc"], "page":1, "page_sha256":p["sha256"],
+             "clause_text_only":(p.get("layer") or {}).get("clause_text_only") is True,
              "output":p["extraction"]["output"]} for p in pages]}
         link_procedures(graph, findings, calls)
         link_sources(graph)

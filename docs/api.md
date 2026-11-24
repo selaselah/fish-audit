@@ -198,11 +198,19 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 
 本机通过决定会核对相关原件、页图、签认记录和来源。旧版曾给出终验相符并有未经检查的签认约定时，签收返回 409，请按当前规则重审。离线校验可用 `server/.venv/bin/python server/verify.py --rules-from-git main --render-performance 证据包.zip` 重新分页并复算指定版本的发现。
 
-## 履约日期核对
+## 附加生效条件
+
+自规则 `2026.11.24.30` 起，`policy.contract_effect` 为 `contract-effect-sources-v1`，履约程序为 `contract-performance-v11`。单合同的 H01 包含 `effect_review.conditions[]` 和 `mixed_pages[]`，分别列出有待核对的生效或状态记载，以及需要整页核图的合同页。每条记载都有 `doc`、`page`、`quote` 和 `facts`。原生文字可有 `line`，纯影像观察保留读图引用。
+
+`graph.contract_effect_sources` 保留合同原件的页清单和候核引文。发现的 `evidence` 包含各合同页，可以复查模型遗漏的正文或页末条件。原版记录可继续查看。对曾判为签署与生效相符的旧底稿签收时，若查到当版未核的条件或版式，返回 HTTP 409 并提示使用现行规则重新审计。
+
+## 分批验收与付款
 
 规则 `2026.11.24.29` 沿用下述日期校验，并用 `contract-performance-v10` 核对合同分批条款。在有相应条款的案件，H02 的 `batch_acceptance` 给出 `independent`、`deemed_final`、`completion_on`、`rule_ref`、各批 `batches[]`、验收原件 `records[]` 及可能影响合同或付款的 `riders[]`。`completion_on` 仅在合同明确约定全部合格即终验且证据完整时写入日期。每批保留合同原文引用、约定数量单位及编号、状态、原因、关联验收单和证据范围。H04/H05 的 `stage.batch_index` 与 `stage.batch_date` 指向各自所据的批次及有据的合格日期。
 
 `policy.delivery_batches` 标记为 `contract-delivery-batches-v1`。`graph.delivery_batch_sources` 保存分批线索、各页已覆盖范围、漏提的原行和影像观察。`delivery_batch_acceptance` 关系由交付批次条款指向验收范围，`batch_payment_basis` 由当期付款条款指向同一份验收记录。签收前及离线复算均核对这些关系和原文。证据包支持 `--render-performance` 从版本中的原件重现相关页图和条款版式。
+
+## 履约日期核对
 
 规则 `2026.11.24.28` 使用 `contract-performance-v9`。涉及日期疑点的 H01、H02 或 H05 附有 `date_checks[]`。每一项保存 `event`（`contract_period`、`acceptance`、`reinspection` 或 `payment`）、`status`（`risk` 或 `missing`）、案情说明 `detail` 和引用 `evidence`。原生日期的证据可定位到逐字引文和文字层原行，人工核图的日期可以回到其核图回执。H04 继承该期所据的签署、验收或质保条件。历史底稿保留当时的程序，申请签收时会重新检查原为相符的日期判断。
 

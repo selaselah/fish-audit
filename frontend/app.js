@@ -293,8 +293,13 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     const source=batches.signals.find(s=>s.doc===docId && s.page===pageNumber && s.line===lineHint);
     if (source) gaps.push({...source,quality:'delivery_batch_clause'});
   }
+  const effect=state.bundle?.report.graph.contract_effect_sources;
+  if (effect && lineHint && !gaps.some(g=>g.line===lineHint)) {
+    const source=effect.conditions.find(s=>s.doc===docId && s.page===pageNumber && s.line===lineHint);
+    if (source) gaps.push({...source,quality:'effect_reference'});
+  }
   for (const gap of gaps) {
-    const label = {addendum_reference:'补充协议所据原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文'}[gap.quality] || '待核的原文字层';
+    const label = {addendum_reference:'补充协议所据原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文'}[gap.quality] || '待核的原文字层';
     const section = box('evidence-row',el('h4',label+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
     section.dataset.gapLine = String(gap.line);
     if (gap.line===lineHint) {
@@ -472,6 +477,10 @@ function finding(item) {
   if (item.delegations) node.append(mandatePanel(item.delegations, state.bundle.report.graph));
   if (item.quality_change) node.append(qualityChangePanel(item.quality_change, state.bundle.report.graph));
   if (item.acceptance_authority) node.append(acceptanceAuthorityPanel(item.acceptance_authority, state.bundle.report.graph));
+  if (item.effect_review) {
+    const clauses=contractEffectPanel(item,state.bundle.report.graph);
+    if (clauses) node.append(clauses);
+  }
   if (item.batch_acceptance) {
     const {graph,findings}=state.bundle.report;
     node.append(deliveryBatchPanel(item.batch_acceptance,graph,findings.filter(f=>f.rule==='H04')));

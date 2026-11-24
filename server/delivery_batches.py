@@ -176,11 +176,28 @@ def rule(contract):
     return recognised, bool(recognised and len(terms)==2 and terms[1] in COMPLETION), fact
 
 
-def allocations(contract):
+def serial_field_text(fact,native_spacing):
+    printed=raw_body(fact)
+    if printed or not native_spacing:
+        return printed
+    line=fact.get("source_line") or {}
+    if not line.get("rects") or fact["status"] not in ("anchored","confirmed") or not covers(fact["field"],fact["value"],line["text"]):
+        return ""
+    label,native=parts(line["text"])
+    quoted_label,quoted=parts(fact["quote"])
+    def strip_separators(value):
+        value=re.sub(r"((?:设备编号|序列号):?)\s+(?=[A-Za-z0-9])",r"\1",value)
+        return re.sub(r"\s*([、,])\s*",r"\1",value)
+    if label==quoted_label and strip_separators(native)==strip_separators(quoted):
+        return native
+    return ""
+
+
+def allocations(contract,native_spacing):
     rows=[]
     problem=""
     for fact in contract.fields["delivery_batch"]:
-        parsed=ALLOCATION.fullmatch(raw_body(fact))
+        parsed=ALLOCATION.fullmatch(serial_field_text(fact,native_spacing))
         if not parsed or not (index:=ordinal(parsed[1])):
             problem="合同交付批次、数量、单位或设备编号仍待逐行核对。"
             continue
@@ -202,7 +219,7 @@ def allocations(contract):
     return rows,problem
 
 
-def record(contract,doc,source):
+def record(contract,doc,source,native_spacing):
     from performance import CLEAN, PASS, inspect_quality, printed_day
     scope=one(doc,"acceptance_scope")
     match=SCOPE.fullmatch(raw_body(scope)) if scope else None
@@ -211,8 +228,9 @@ def record(contract,doc,source):
     day=printed_day(doc,"accepted_on")
     effective,until=printed_day(contract,"effect_on"),printed_day(contract,"valid_until")
     qty,unit=quantity(body(doc,"quantity_accepted"))
-    serial_fact=one(doc,"delivered_serials")
-    ids=serials(raw_body(serial_fact)) if serial_fact else []
+    serial_facts=doc.fields["delivered_serials"]
+    serial_text=serial_field_text(serial_facts[0],native_spacing) if len(serial_facts)==1 and not doc.incomplete("delivered_serials") else ""
+    ids=serials(serial_text)
     fields=doc.evidence(*RECEIPT_FIELDS)
     fields.extend(n["fact"] for n in source["visual_notes"] if n["unit"]==doc.unit)
     fields.extend(f"{p['doc']}/p{p['page']}" for p in source["pages"] if p["unit"]==doc.unit)
@@ -267,11 +285,11 @@ def record(contract,doc,source):
     return result
 
 
-def inspect(graph,contract,receipts,*,other_terms):
+def inspect(graph,contract,receipts,*,other_terms,native_spacing=False):
     source=graph.get("delivery_batch_sources",{})
     if not source.get("signals"):
         return None
-    schedule,plan_problem=allocations(contract)
+    schedule,plan_problem=allocations(contract,native_spacing)
     independent,final,rule_fact=rule(contract)
     contract_clear=readable(source,contract.unit)
     riders=external_riders(graph,source,contract.unit)
@@ -282,7 +300,7 @@ def inspect(graph,contract,receipts,*,other_terms):
     base.extend(n["fact"] for n in source["visual_notes"] if n["unit"]==contract.unit)
     base.extend(f"{p['doc']}/p{p['page']}" for p in source["pages"] if p["unit"]==contract.unit)
     base.extend(r["ref"] for r in riders)
-    records=[record(contract,doc,source) for doc in receipts]
+    records=[record(contract,doc,source,native_spacing) for doc in receipts]
     expected={r["index"] for r in schedule}
     unknown=[r for r in records if r["index"] not in expected or r["scope_unclear"]]
     collisions=defaultdict(list)
@@ -377,13 +395,13 @@ def evidence_edges(findings):
 def verify_sources(report,read_text,*,signing=False):
     policy,graph=report["policy"],report["graph"]
     if not policy.get("delivery_batches"):
-        if "delivery_batches.py" in policy.get("code_sha256",{}) or "delivery_batch_sources" in graph or policy.get("performance_checks")=="contract-performance-v10":
+        if "delivery_batches.py" in policy.get("code_sha256",{}) or "delivery_batch_sources" in graph or policy.get("performance_checks") in ("contract-performance-v10","contract-performance-v11"):
             raise ValueError("分批验收程序标记缺失")
         if signing and any(f["rule"]=="H02" and f["status"]=="ok" for f in report["findings"]) and page_sources(graph,read_text)["signals"]:
             raise ValueError("旧版终验尚未逐批核对，请按现行程序重审后签收。")
         return
     source=page_sources(graph,read_text)
-    if (policy["delivery_batches"]!=FORMAT or policy.get("performance_checks")!="contract-performance-v10" or
+    if (policy["delivery_batches"]!=FORMAT or policy.get("performance_checks") not in ("contract-performance-v10","contract-performance-v11") or
         graph.get("delivery_batch_sources")!=source or gaps(source)!=[g for g in graph["gaps"] if g["quality"]=="delivery_batch_clause"]):
         raise ValueError("分批条款原文、资料归属或页内覆盖与归档不符")
     edges=[e for e in graph["edges"] if e["type"] in ("delivery_batch_acceptance","batch_payment_basis")]

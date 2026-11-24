@@ -221,6 +221,30 @@ try {
     }
     const change=report.findings.find(f=>f.rule==='H02')?.quality_change;
     const authority=report.findings.find(f=>f.rule==='H02')?.acceptance_authority;
+    const effect=report.findings.find(f=>f.rule==='H01')?.effect_review;
+    if (effect) {
+      const panel='document.querySelector(".effect-review")';
+      assert.equal(await evaluate('!!'+panel),Boolean(effect.conditions.length || effect.mixed_pages.length));
+      for (const item of effect.conditions) {
+        const fact=report.graph.facts.find(f=>item.facts.includes(f.id) && f.quote===item.quote);
+        const ref=fact?.id || item.doc+'/p'+item.page+'/l'+item.line;
+        const row=panel+'.querySelector('+JSON.stringify('[data-effect-source="'+ref+'"]')+')';
+        assert.equal(await evaluate(row+'.querySelector("q").textContent'),item.quote);
+        assert.equal(await evaluate(row+'.querySelector("small").textContent'),item.line?'原页文字层第 '+item.line+' 行':'影像读图引文');
+        if (!item.line && fact) assert.ok(await evaluate(row+'.querySelector(".tag").classList.contains('+JSON.stringify(fact.status)+')'));
+        await evaluate(row+'.querySelector("button").click()');
+        await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth>0','contract condition on original');
+        if (fact) assert.equal(await evaluate('document.querySelector(".located").dataset.fact'),fact.id);
+        else assert.equal(await evaluate('document.querySelector(".located[data-gap-line] blockquote").textContent'),item.quote);
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
+      for (const p of effect.mixed_pages) {
+        const button=panel+'.querySelector('+JSON.stringify('[data-effect-page="'+p.doc+'/p'+p.page+'"]')+')';
+        await evaluate(button+'.click()');
+        await wait('document.querySelector("#page-dialog").open && document.querySelector("#page-dialog img")?.naturalWidth>0','whole mixed contract page');
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
+    }
     if (batches) {
       const panel='document.querySelector(".delivery-batches")';
       const ledger=report.graph.delivery_batch_sources;
@@ -451,6 +475,12 @@ try {
         await evaluate('document.querySelector(".delivery-batches").scrollIntoView({block:"start"});window.scrollBy(0,-40)');
         const capture=await call('Page.captureScreenshot',{format:'png'});
         await writeFile(join(process.env.AUDIT_UI_SHOTS,'batches-'+performanceCase+'-'+width+'.png'),Buffer.from(capture.data,'base64'));
+      }
+      if (effect && (effect.conditions.length || effect.mixed_pages.length) && process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
+        await evaluate('document.querySelector(".effect-review").scrollIntoView({block:"start"});window.scrollBy(0,-45)');
+        assert.ok(await evaluate('document.querySelector(".effect-review").scrollWidth<=document.querySelector(".effect-review").clientWidth+1'));
+        const capture=await call('Page.captureScreenshot',{format:'png'});
+        await writeFile(join(process.env.AUDIT_UI_SHOTS,'effect-'+performanceCase+'-'+width+'.png'),Buffer.from(capture.data,'base64'));
       }
       if (report.findings.some(f=>f.date_checks) && process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
         await evaluate('document.querySelector(".contract-date-evidence").scrollIntoView({block:"start"});window.scrollBy(0,-140)');
