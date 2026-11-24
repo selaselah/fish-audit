@@ -37,6 +37,107 @@ function lazyFold(title, build) {
   return details;
 }
 
+function accountPreview(fact, page) {
+  const figure=el('figure','','account-preview');
+  const caption=el('figcaption',fact.name+' · 第 '+fact.page+' 页');
+  const surface=box('account-image',el('small','正在读取原页…','muted'));
+  figure.append(surface,caption);
+  const img=el('img');
+  const title=fact.name+' 第 '+fact.page+' 页';
+  img.alt=title+'整页图像';
+  const rects=page?.layer==='text' ? fact.source_line?.rects || [] : [];
+  const valid=rects.length && rects.every(r=>Array.isArray(r) && r.length===4 && r.every(n=>Number.isFinite(n) && n>=0 && n<=1) && r[0]<r[2] && r[1]<r[3]);
+  loadReviewImage(img,workpaperSource(fact.doc,'pages/'+fact.page)).then(()=>{
+    if (!valid) {
+      surface.replaceChildren(img);
+      return;
+    }
+    const width=img.naturalWidth,height=img.naturalHeight;
+    const x=Math.max(0,Math.floor(Math.min(...rects.map(r=>r[0]))*width)-10);
+    const y=Math.max(0,Math.floor(Math.min(...rects.map(r=>r[1]))*height)-8);
+    const right=Math.min(width,Math.ceil(Math.max(...rects.map(r=>r[2]))*width)+10);
+    const bottom=Math.min(height,Math.ceil(Math.max(...rects.map(r=>r[3]))*height)+8);
+    const crop=el('canvas');
+    crop.width=right-x; crop.height=bottom-y;
+    const ctx=crop.getContext('2d');
+    if (!ctx) { surface.replaceChildren(img); return; }
+    ctx.drawImage(img,x,y,crop.width,crop.height,0,0,crop.width,crop.height);
+    crop.setAttribute('role','img');
+    crop.setAttribute('aria-label',title+'第 '+fact.source_line.number+' 行原图');
+    surface.replaceChildren(crop);
+    caption.textContent+=' · 原图第 '+fact.source_line.number+' 行';
+  }).catch(()=>surface.replaceChildren(el('p','原页读取失败，可打开原页重试。','small')));
+  return figure;
+}
+
+function accountComparison(item,graph) {
+  const index=graphIndex(graph);
+  const cited=[...new Set(item.evidence)].map(id=>index.facts.get(id)).filter(Boolean);
+  const sides=[
+    {kind:'contract',field:'contract_account',label:'合同约定收款账号'},
+    {kind:'bank_receipt',field:'payee_account',label:'回单收款账号'}
+  ].map(side=>({...side,facts:cited.filter(f=>f.field===side.field && graph.documents_by_kind[side.kind]?.includes(f.unit || f.doc))}));
+  if (!sides.some(s=>s.facts.length)) return null;
+  const details=lazyFold('逐位核对收款账号',()=>{
+    const digits=f=>f.value.normalize('NFKC').replace(/\s/gu,'');
+    const pair=sides.map(s=>s.facts.length===1 ? digits(s.facts[0]) : '');
+    const completeDigits=/^[0-9]{8,32}$/;
+    const gaps=sides.flatMap((s,i)=>{
+      if (!s.facts.length) return [s.label+'缺少引文'];
+      if (s.facts.length>1) return [s.label+'有 '+s.facts.length+' 条候选引文'];
+      if (completeDigits.test(pair[i])) return [];
+      return [s.label+(/[*•●…×]|^[0-9Xx]*[Xx]{2,}[0-9Xx]*$/.test(pair[i])?'含遮盖字符':'的字符或位数待核')];
+    });
+    const comparable=!gaps.length;
+    const longer=pair[0].length>=pair[1].length ? pair[0] : pair[1];
+    const first=Array.from(longer).findIndex((_,i)=>pair[0][i]!==pair[1][i]);
+    const columns=box('account-evidence-grid');
+    for (const [i,side] of sides.entries()) {
+      const column=box('account-evidence-side',el('h4',side.label));
+      if (!side.facts.length) column.append(el('p','本项尚缺该侧账号引文。','muted'));
+      for (const f of side.facts) {
+        const card=box('account-observation');
+        card.dataset.accountFact=f.id;
+        const number=digits(f);
+        const isDigits=completeDigits.test(number);
+        card.append(tag(f.status));
+        if (isDigits) {
+          const display=el('code','','account-digits');
+          display.setAttribute('aria-label','抄录账号 '+number.split('').join(' '));
+          for (let j=0;j<number.length;j+=4) {
+            const group=el('span');
+            for (let k=j;k<Math.min(number.length,j+4);k++) {
+              if (comparable && number[k]!==pair[1-i][k]) group.append(el('mark',number[k]));
+              else group.append(number[k]);
+            }
+            display.append(group);
+          }
+          card.append(display,el('small',number.length+' 位 · '+number.match(/^0*/)[0].length+' 个前导零','small'));
+        } else {
+          card.append(el('code',f.value,'account-digits'));
+        }
+        card.append(el('blockquote',f.quote));
+        const uncovered=graph.gaps.filter(g=>g.quality==='uncovered' && g.doc===f.doc && g.page===f.page && g.field===f.field && g.quote);
+        for (const gap of uncovered) {
+          const printed=/^[^:0-9]+:([0-9]{8,32})$/.exec(gap.quote.normalize('NFKC').replace(/\s/gu,''));
+          const length=printed?' · '+printed[1].length+' 位数字':'';
+          card.append(box('account-native',el('small','待核文字层 · 第 '+gap.line+' 行'+length,'small'),el('blockquote',gap.quote)));
+        }
+        const preview=()=>accountPreview(f,index.nodes.get(f.doc+'/p'+f.page));
+        card.append(side.facts.length===1 ? preview() : lazyFold('预览这处引文的原页',()=>[preview()]),
+          action('打开原页核对引文',()=>openPage(f.doc,f.page,f.id),'ref'));
+        column.append(card);
+      }
+      columns.append(column);
+    }
+    const detail=comparable ? (first<0?'两处抄录逐位相同。':'两处抄录从左数第 '+(first+1)+' 位开始不同。')
+      : gaps.join('，')+'，请对照原页核实完整账号。';
+    return [el('p',detail,'account-difference'),columns];
+  });
+  details.classList.add('account-comparison');
+  return details;
+}
+
 const invoiceMatchLabel = {same:'完整标识相同',uncertain:'资料不足，需核对',different:'同号异代码，已排除'};
 
 function signedInvoiceSource(row, comparison=row.comparison) {
@@ -168,6 +269,10 @@ function provenancePanel(report) {
     const result=box('trace-part trace-result',el('h3','本项结论'),tag(f.status),el('p',f.detail));
     if (f.calculations?.length) result.append(lazyFold('复算金额',()=>f.calculations.map(calculationPanel)));
     trail.replaceChildren(program,traceEvidence(report,f,index),result);
+    if (f.rule==='B03') {
+      const comparison=accountComparison(f,graph);
+      if (comparison) trail.append(comparison);
+    }
     if (f.rule==='B08' && graph.payment_history?.installments) {
       const details=installmentDetails(graph.payment_history.installments);
       details.classList.add('trace-installments'); trail.append(details);

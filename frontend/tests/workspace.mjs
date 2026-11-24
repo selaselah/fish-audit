@@ -39,10 +39,11 @@ const legacyMask = caseArgument('--legacy-mask-case');
 const legacyTransfer = caseArgument('--legacy-transfer-case');
 const partialTransfer = caseArgument('--partial-transfer-case');
 const visibilityCase = caseArgument('--visibility-case');
+const accountReview = caseArgument('--account-review-case');
 const brokenPayment = caseArgument('--payment-source-case');
 const waitingCase = caseArgument('--waiting-case');
 const seeded = [sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
-                invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,brokenPayment,waitingCase].some(Boolean);
+                invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
 const root = brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
   recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
@@ -180,6 +181,91 @@ try {
     await call('Page.navigate',{url:link.href});
     await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.textContent.includes('+JSON.stringify(ref.quote)+')','prior preserved page and cited reference');
     console.log('PASS · Unavailable original blocked approval, preserved note and linked pinned receipt at six widths');
+  } else if (accountReview) {
+    const api=root+'/api/cases/'+accountReview;
+    const task=await (await fetch(api)).json();
+    assert.ok(task.title.startsWith('合成演练 · '));
+    const arg=process.argv.indexOf('--account-revision');
+    const rev=arg<0?task.rev:Number(process.argv[arg+1]);
+    assert.ok(Number.isInteger(rev) && rev>0 && rev<=task.rev);
+    const {report}=await (await fetch(api+'/reports/'+rev)).json();
+    const item=report.findings.find(f=>f.rule==='B03');
+    const graph=report.graph;
+    const fields=item.evidence.map(id=>graph.facts.find(f=>f.id===id)).filter(f=>['contract_account','payee_account'].includes(f?.field));
+    assert.equal(fields.length,2);
+    const normalized=fields.map(f=>f.value.normalize('NFKC').replace(/\s/gu,''));
+    const comparable=normalized.every(v=>/^[0-9]{8,32}$/.test(v));
+    await call('Page.navigate',{url:root+'/workpaper/'+accountReview+'?'+new URLSearchParams({rev,finding:item.id})});
+    await wait('!!document.querySelector(".account-comparison summary")','account comparison on B03');
+    assert.ok(await evaluate('!document.querySelector(".account-image")'));
+    await evaluate('const d=document.querySelector(".account-comparison");for(let a=d.parentElement;a;a=a.parentElement){if(a.tagName==="DETAILS")a.open=true;}d.querySelector("summary").click()');
+    await wait('document.querySelectorAll(".account-image img,.account-image canvas").length===2','two original receipt previews');
+    const marks=[];
+    for (const [i,f] of fields.entries()) {
+      const sel='.account-observation[data-account-fact="'+f.id+'"]';
+      const view=await evaluate('(()=>{const e=document.querySelector('+JSON.stringify(sel)+');return {digits:e.querySelector("code").textContent,quote:e.querySelector("blockquote").textContent,marked:[...e.querySelectorAll("mark")].map(m=>m.textContent).join(""),native:e.querySelector(".account-native")?.textContent || "",crop:!!e.querySelector("canvas"),original:e.querySelector("img")?.naturalWidth || 0};})()');
+      assert.equal(view.digits,/^[0-9]{8,32}$/.test(normalized[i])?normalized[i]:f.value);
+      assert.equal(view.quote,f.quote);
+      const page=graph.nodes.find(n=>n.id===f.doc+'/p'+f.page);
+      const crop=page.layer==='text' && !!f.source_line?.rects?.length;
+      assert.equal(view.crop,crop);
+      if (crop) {
+        assert.ok(await evaluate('(()=>{const c=document.querySelector('+JSON.stringify(sel+' canvas')+');return c.width>8 && c.height>3 && c.getContext("2d").getImageData(0,0,c.width,c.height).data.some((v,i)=>i%4===0 && v<150);})()'));
+      } else assert.ok(view.original>0);
+      const gap=graph.gaps.find(g=>g.field===f.field && g.doc===f.doc && g.page===f.page && g.quality==='uncovered');
+      if (gap) {
+        assert.ok(view.native.includes(gap.quote));
+        const printed=/^[^:0-9]+:([0-9]{8,32})$/.exec(gap.quote.normalize('NFKC').replace(/\s/gu,''));
+        if (printed) assert.ok(view.native.includes(printed[1].length+' 位数字'));
+      }
+      marks.push(view.marked);
+      await evaluate('document.querySelector('+JSON.stringify(sel+' button')+').click()');
+      await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(f.id)+' && document.querySelector("#page-dialog img")?.naturalWidth','same-version original account observation');
+      await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+    }
+    for (const [i,value] of normalized.entries())
+      assert.equal(marks[i],comparable?Array.from(value).filter((digit,k)=>digit!==normalized[1-i][k]).join(''):'');
+    const difference=await evaluate('document.querySelector(".account-difference").textContent');
+    if (!comparable) {
+      assert.ok(difference.includes('核实完整账号') && !difference.includes('逐位相同'));
+      const observations=['contract_account','payee_account'].flatMap((field,side)=>['00000001','00000002'].map((value,i)=>({
+        field,value,doc:'d0'+(side+1),page:1,id:'d0'+(side+1)+'/p1/f'+(i+1),quote:'演练账号：'+value,status:'visual'
+      })));
+      for (const facts of [observations,observations.filter(f=>f.field==='payee_account')]) {
+        const sample={facts,nodes:[],gaps:[],documents:[],documents_by_kind:{contract:['d01'],bank_receipt:['d02']}};
+        const check=await evaluate('(()=>{const g='+JSON.stringify(sample)+';const d=accountComparison({evidence:g.facts.map(f=>f.id)},g);d.open=true;d.dispatchEvent(new Event("toggle"));return {observations:d.querySelectorAll(".account-observation").length,marks:d.querySelectorAll("mark").length,previews:d.querySelectorAll(".account-preview").length,summary:d.querySelector(".account-difference").textContent};})()');
+        assert.equal(check.observations,facts.length);
+        assert.equal(check.marks,0);
+        assert.equal(check.previews,0);
+        assert.ok(check.summary.includes('2 条候选引文') && !check.summary.includes('逐位相同'));
+        if (facts.length===2) assert.ok(check.summary.includes('缺少引文'));
+      }
+    }
+    else if (normalized[0]===normalized[1]) assert.ok(difference.includes('逐位相同'));
+    else {
+      let position=0;
+      while (normalized[0][position]===normalized[1][position]) position++;
+      assert.ok(difference.includes('第 '+(position+1)+' 位'));
+    }
+    for (const width of [1440,1024,820,768,390,320]) {
+      await call('Emulation.setDeviceMetricsOverride',{width,height:860,deviceScaleFactor:1,mobile:false});
+      const overflow=await evaluate('Array.from(document.querySelectorAll("body *")).filter(e=>{const r=e.getBoundingClientRect();return r.width && (r.right>innerWidth+1 || (e.classList.contains("account-observation") && e.scrollWidth>e.clientWidth+1));}).slice(0,8).map(e=>[e.tagName,e.id,e.className,Math.ceil(e.getBoundingClientRect().right)])');
+      assert.deepEqual(overflow,[],'account evidence at '+width+' · '+JSON.stringify(overflow));
+    }
+    const first=fields[0];
+    const blocked=api+'/documents/'+first.doc+'/pages/'+first.page+'?rev='+rev;
+    await call('Network.enable');
+    await call('Network.setBlockedURLs',{urls:[blocked]});
+    await call('Page.navigate',{url:root+'/workpaper/'+accountReview+'?rev='+rev});
+    await wait('!!document.querySelector("[data-finding] .account-comparison")','account comparison in the audit findings');
+    await evaluate('const d=document.querySelector(".account-comparison");for(let a=d.parentElement;a;a=a.parentElement){if(a.tagName==="DETAILS")a.open=true;}d.querySelector("summary").click()');
+    const card='.account-observation[data-account-fact="'+first.id+'"]';
+    await wait('document.querySelector('+JSON.stringify(card)+')?.textContent.includes("原页读取失败")','explicit unavailable source');
+    assert.equal(await evaluate('document.querySelector('+JSON.stringify(card+' blockquote')+').textContent'),first.quote);
+    await call('Network.setBlockedURLs',{urls:[]});
+    await evaluate('document.querySelector('+JSON.stringify(card+' button')+').click()');
+    await wait('document.querySelector(".located")?.dataset.fact==='+JSON.stringify(first.id)+' && document.querySelector("#page-dialog img")?.naturalWidth','retry original after a failed preview');
+    console.log('PASS · Exact digits, source image crops or whole pages, source links and six widths · '+item.status);
   } else if (visibilityCase) {
     const api=root+'/api/cases/'+visibilityCase;
     const get=async suffix=>(await fetch(api+suffix)).json();

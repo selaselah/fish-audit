@@ -283,7 +283,8 @@ input, select, textarea { border-color: #bdc9bf; }
 .usage-list { display: grid; grid-template-columns:minmax(100px,1fr) auto; align-items: baseline; margin: 14px 0 0; }
 .usage-list dt,.usage-list dd { margin:0; padding:8px 0; border-top:1px solid var(--line); }
 .usage-list dt { color:var(--muted); } .usage-list dd { text-align:right; font-family:var(--mono); font-variant-numeric:tabular-nums; }
-.trace-panel > label { max-width: 36rem; }
+.trace-panel > label { max-width:36rem; grid-template-columns:minmax(0,1fr); }
+#trace-select { width:100%; min-width:0; }
 .trace-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) minmax(0,1fr); margin-top:18px; border:1px solid var(--line); border-radius:7px; }
 .trace-part { min-width:0; padding:16px; overflow-wrap:anywhere; }
 .trace-part + .trace-part { border-left:1px solid var(--line); }
@@ -313,3 +314,21 @@ input, select, textarea { border-color: #bdc9bf; }
 }
 .graph-stack > .panel + .panel { margin-top:16px; }
 @media(max-width:980px){ .trace-grid { grid-template-columns:1fr; } .trace-part + .trace-part {border-left:0; border-top:1px solid var(--line);} }
+.account-evidence-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,19rem),1fr)); gap:12px; }
+.trace-grid > .account-comparison { grid-column:1/-1; margin:0; padding:12px 14px; border-top:1px solid var(--line); }
+.account-evidence-side { min-width:0; padding:14px; border:1px solid var(--line); border-radius:6px; background:var(--white); }
+.account-evidence-side h4 { margin:0 0 8px; }
+.account-observation { min-width:0; overflow-wrap:anywhere; }
+.account-observation + .account-observation { border-top:1px solid var(--line); margin-top:14px; padding-top:14px; }
+.account-digits { display:flex; flex-wrap:wrap; gap:0 .36em; margin:8px 0 3px; font-size:1.07rem; line-height:1.5; }
+.account-digits span { white-space:nowrap; }
+.account-digits mark { color:#7b3307; background:#ffebc3; text-decoration:underline; text-underline-offset:3px; }
+.account-observation blockquote { margin:7px 0; overflow-wrap:anywhere; }
+.account-native { border-left:3px solid #bd9149; padding:4px 9px; margin:10px 0; background:#fffaef; }
+.account-native blockquote { margin:3px 0; }
+.account-preview { margin:12px 0 5px; }
+.account-image { display:grid; place-items:center; min-height:62px; padding:5px; border:1px solid var(--line); background:var(--soft); }
+.account-image img { display:block; max-height:160px; max-width:100%; object-fit:contain; }
+.account-image canvas { display:block; max-width:100%; height:auto; }
+.account-preview figcaption { padding-top:4px; color:var(--muted); font-size:.77rem; }
+.account-difference { font-weight:600; }

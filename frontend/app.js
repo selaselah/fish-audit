@@ -394,6 +394,10 @@ function finding(item) {
     state.detail.documents.find(doc => doc.id === id)?.name || id).join('、'), 'small'));
   if (item.calculations?.length) node.append(fold('查看金额算式与取数依据',
     ...item.calculations.map(calculationPanel)));
+  if (item.rule==='B03') {
+    const comparison=accountComparison(item,state.bundle.report.graph);
+    if (comparison) node.append(comparison);
+  }
   if (item.rule==='B08' && state.bundle.report.graph.payment_history?.installments)
     node.append(installmentDetails(state.bundle.report.graph.payment_history.installments));
   if (item.rule==='I02') {

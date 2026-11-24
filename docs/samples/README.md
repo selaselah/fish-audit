@@ -90,3 +90,7 @@ PYTHONPATH=server server/.venv/bin/python -m unittest discover -s server/tests -
 `server/.venv/bin/python docs/samples/partial_receipts.py --photo --run` 生成一份合同 PDF 和一张带水印的 JPEG 回单，通过本地接口上传、等候模型读图并检查分期付款结果。脚本核对照片 SHA-256，并按生成时留存的抬头、付款户名、流水和说明原文模拟核图，所用演练身份和操作均记入底稿。可用 `--run-id` 指定另一组样本。
 
 `--whole-photo --run` 生成完整流水恰为 0042 的水印回单，模拟核对栏内字符，留下整页展示范围供审计员判断。加 `--scan` 可用纯图像 PDF 跑同一流程。在合成照片任务中，`node frontend/tests/workspace.mjs --visibility-case 案件编号` 会先核对上传原件与本机样本摘要，再通过真实网页登记“完整显示”，检查新版是否引用操作时的底稿。
+
+### 账号抄录与原页对照
+
+在带水印的付款任务上运行 `node frontend/tests/workspace.mjs --account-review-case 案件编号 --account-revision 版本号`，检查 B03 的合同和回单引文、逐位差异、原图定位以及缩窄窗口后的可读性。该工具同时验证预览加载失败后的原页重试。省略 `--account-revision` 可检查最新底稿。
