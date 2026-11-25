@@ -685,6 +685,22 @@ function graphPanel() {
     list.classList.add('equipment-model-relations');
     panel.append(list);
   }
+  const exchangeCheck=state.bundle.report.findings.find(f=>f.equipment_models?.exchange)?.equipment_models;
+  if (exchangeCheck) {
+    const list=lazyFold('设备退回与换入的证据路径',()=>{
+      const links=graph.edges.filter(e=>['equipment_exchange_returned','equipment_exchange_received'].includes(e.type));
+      const rows=links.map(edge=>{
+        const label=edge.type==='equipment_exchange_returned'?'初验清单与交接退回清单':'交接换入清单与复验清单';
+        const row=box('line',box('flow',el('strong',label),tag(edge.status)),box('chips',citation(edge.from),citation(edge.to)));
+        row.dataset.exchangeRelation=edge.type;
+        return row;
+      });
+      if (!rows.length) rows.push(el('p','交接单的归属或所据单号待核。','muted'));
+      return [...rows,exchangeSerialLists(exchangeCheck,graph)];
+    });
+    list.classList.add('equipment-exchange-relations');
+    panel.append(list);
+  }
   if (supplierRows?.length) {
     const list=lazyFold('供应方与交付原件（'+supplierRows.length+'）',()=>supplierRows.map(s=>reservationSource(s,graph)));
     list.classList.add('supplier-relations');

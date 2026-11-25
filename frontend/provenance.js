@@ -496,6 +496,68 @@ function supplierPanel(check,graph) {
   return panel;
 }
 
+function exchangeSerialLists(check, graph) {
+  const pages=graph.equipment_model_sources.exchange.pages;
+  const grid=box('exchange-lists');
+  for (const [key,role,field,receiptLabel,formLabel] of [
+    ['returned','original','exchange_old_serials','初验实收','交接退回'],
+    ['received','final','exchange_new_serials','复验实收','交接换入']]) {
+    const decision=check.exchange.checks.find(c=>c.key===key);
+    const unit=check.records.find(r=>r.inspection_role===role)?.unit;
+    const section=box('exchange-list',box('panel-head',el('h4',decision.label),tag(decision.status)));
+    section.dataset.exchangeList=key;
+    section.id='exchange-check-'+key;
+    section.tabIndex=-1;
+    const inventory=pages.filter(p=>p.unit===unit).flatMap(p=>p.rows).filter(r=>r.kind==='delivered_serials');
+    const handover=pages.filter(p=>p.form).flatMap(p=>p.rows).filter(r=>r.kind===field);
+    const groups=[[receiptLabel,inventory],[formLabel,handover]];
+    for (const [label,rows] of key==='returned'?groups:groups.reverse()) {
+      section.append(el('small',label,'small'));
+      for (const row of rows) section.append(reservationSource(row,graph));
+      if (!rows.length) section.append(el('p','缺可定位的清单原行','muted'));
+    }
+    section.append(el('p',decision.detail));
+    grid.append(section);
+  }
+  return grid;
+}
+
+function equipmentExchangePanel(check, graph) {
+  const audit=check.exchange;
+  const ledger=graph.equipment_model_sources.exchange;
+  const panel=box('equipment-exchange',box('panel-head',el('h4','换货交接凭证'),tag(audit.status)));
+  panel.dataset.exchangeStatus=audit.status;
+  const pending=audit.checks.filter(row=>row.status!=='ok');
+  if (pending.length) panel.append(box('chips exchange-pending',el('strong','待核 '+pending.length+' 项'),
+    ...pending.map(row=>evidenceJump(row.label,'exchange-check-'+row.key))));
+  panel.append(exchangeSerialLists(check,graph));
+  const groups={scope:['title','qualification'],identity:['contract_id','buyer','seller','subject'],
+    references:['original_acceptance','acceptance_number','exchange_number'],models:['exchange_old_model','exchange_new_model'],
+    delivery:['exchange_status'],date:['exchange_on'],signatures:['buyer_signature','seller_signature']};
+  for (const row of audit.checks.filter(c=>c.key!=='returned' && c.key!=='received')) {
+    const section=lazyFold(row.label,()=>{
+      const nodes=[el('p',row.detail)];
+      const fields=groups[row.key] || [];
+      const raw=ledger.pages.flatMap(p=>p.rows).filter(r=>fields.includes(r.kind));
+      nodes.push(...raw.map(r=>reservationSource(r,graph)));
+      if (row.key==='reinspection' && check.sequence)
+        nodes.push(evidenceJump('查看整改和最终复验','equipment-reinspection-trail'));
+      else {
+        const located=new Set(raw.flatMap(r=>[...r.facts,r.doc+'/p'+r.page]));
+        const remaining=row.evidence.filter(ref=>!located.has(ref));
+        if (remaining.length) nodes.push(box('chips',...remaining.map(citation)));
+      }
+      return nodes;
+    });
+    section.querySelector('summary').append(tag(row.status));
+    section.dataset.exchangeCheck=row.key;
+    section.id='exchange-check-'+row.key;
+    section.tabIndex=-1;
+    panel.append(section);
+  }
+  return panel;
+}
+
 function equipmentModelsPanel(check,graph) {
   const {documents,facts}=graphIndex(graph);
   const {pages,lines}=graph.equipment_model_sources;
@@ -510,12 +572,13 @@ function equipmentModelsPanel(check,graph) {
     const trace=box('equipment-sequence',el('strong','整改与复验'),
       el('p',recorded?'原单、整改和复验记录对应同一缺陷，复验单记载已关闭。':'原单、整改记录及最终复验仍待对应。'),
       evidenceJump('查看原验收、整改及复验依据','equipment-reinspection-trail'));
-    if (check.sequence.outcome==='replacement_unverified') trace.append(el('p','需核对退换货凭据、设备编号和实际交接记录。'));
+    if (check.sequence.outcome==='replacement_unverified' && !check.exchange) trace.append(el('p','需核对退换货凭据、设备编号和实际交接记录。'));
     trace.dataset.modelSequence=check.sequence.outcome;
     panel.append(trace);
   }
   const grid=box('equipment-originals');
-  const roles={contract:'合同约定',acceptance:'验收实收',reinspection:'复验实收',contract_addendum:'补充协议'};
+  if (check.exchange) panel.append(equipmentExchangePanel(check,graph));
+  const roles={contract:'合同约定',acceptance:'验收实收',reinspection:'复验实收',contract_addendum:'补充协议',equipment_exchange:'换货交接原件'};
   const firstUnits=pages.filter(p=>p.role==='contract').map(p=>p.unit);
   for (const role of ['original','final']) firstUnits.push(...check.records.filter(r=>r.inspection_role===role).map(r=>r.unit));
   const units=[...new Set([...firstUnits,...pages.map(p=>p.unit)])];

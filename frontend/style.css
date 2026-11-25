@@ -139,6 +139,13 @@ textarea { width: 100%; resize: vertical; }
 .equipment-original details { margin-top:8px; }
 .equipment-sequence { margin:10px 0; padding:8px 12px; border-inline-start:2px solid var(--line); }
 .equipment-sequence p { margin:4px 0; }
+.equipment-exchange { margin:14px 0; padding-block:8px; border-block:1px solid var(--line); }
+.equipment-exchange summary .tag { margin-inline-start:8px; }
+.exchange-lists { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,255px),1fr)); gap:12px; margin-block:8px; }
+.exchange-list { min-width:0; padding:12px; background:var(--soft); overflow-wrap:anywhere; }
+.exchange-pending { margin-block:6px; }
+.exchange-list h4,.exchange-list p { margin:4px 0; }
+.exchange-list > small { display:block; margin-top:12px; }
 .stage-balances { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr)); gap:8px 12px; margin:0 0 10px; }
 .stage-balances dd,.stage-transfer { overflow-wrap:anywhere; }
 .stage-transfer { margin-top:12px; padding-top:10px; border-top:1px solid var(--line); min-width:0; }

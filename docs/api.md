@@ -1,5 +1,13 @@
 # 本机审计接口
 
+## 设备换货交接与最终复验
+
+规则 `2026.11.25.15` 使用 `printed-equipment-models-v3`。识别到设备换货交接原件或验收页所引交接单号时，`graph.equipment_model_sources.exchange` 保存候选单据及实际页行。每条原行包含物理文件、页码、行号、逐字引文和观察编号。影像中的引文按观察定位，`line` 为空。
+
+H02 的 `equipment_models.exchange.checks` 给出每项判断及其依据。交接单的范围、合同及主体、所引单号、型号、退回清单、换入清单、实际交付记载、交接时点、双方签认和最终复验分别显示状态。单号和归属可确认时，图谱中的 `equipment_exchange_returned` 连接初验和交接页，`equipment_exchange_received` 连接交接和复验页。边的状态表示对应清单的核对结果，整笔换货结论见 `exchange.status`。
+
+全部检查成立时，`equipment_models.sequence.outcome` 为 `replacement_verified`。有金额差异以外的未决事项时，H04 继续依合同各期前提给出结论。验收不明时，H05 也会保留实付款日和未证实的履约前提。历史底稿沿用发行时的程序复算。
+
 ## 约定设备型号与实收型号
 
 规则 `2026.11.25.14` 使用 `printed-equipment-models-v2`。遇有复验时，H02 的 `equipment_models.sequence` 记录原验收、整改、复验资料按既有程序核对后的 `record_chain_state`，以及型号核对的 `outcome`。`records[].inspection_role` 按原单与缺陷关系区分 `original`、`final`，支持标题仍为「验收报告」的复验单。

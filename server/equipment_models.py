@@ -4,13 +4,14 @@ import hashlib
 import re
 from collections import defaultdict
 from reinspection import LINK_KEYS
-
-
+import equipment_exchanges
 
 LEGACY = "printed-equipment-models-v1"
-FORMAT = "printed-equipment-models-v2"
+RETEST_FORMAT = "printed-equipment-models-v2"
+FORMAT = "printed-equipment-models-v3"
 SINCE = "2026.11.25.13"
 RETEST_SINCE = "2026.11.25.14"
+EXCHANGE_SINCE = "2026.11.25.15"
 ORDERED = {"约定设备型号", "合同约定型号", "约定型号", "采购设备型号", "订购型号", "约定规格型号"}
 RECEIVED = {"实收设备型号", "实收型号", "实收规格型号", "实际交付型号", "实际验收型号", "本次验收型号", "复验实收型号"}
 MODEL = re.compile(r"型号|机型|换型|改型")
@@ -46,7 +47,7 @@ def sources(graph, read_text, version=FORMAT):
     for fact in graph["facts"]:
         facts_by_page[fact["doc"], fact["page"]].append(fact)
     gaps = {(g["doc"], g["page"]) for g in graph["gaps"] if g.get("quality") in ("partial", "unreadable")}
-    pages, lines = [], []
+    pages, lines, originals = [], [], []
     for node in graph["nodes"]:
         if node["type"] != "page":
             continue
@@ -66,6 +67,7 @@ def sources(graph, read_text, version=FORMAT):
             if kind or fact["field"] == "equipment_model":
                 page_lines.append({**place, "line": None, "kind": kind or "unassigned", "value": value,
                                    "quote": fact["quote"], "facts": [fact["id"]]})
+        raw = None
         if native:
             raw = read_text(doc, page)
             if not isinstance(raw, str) or hashlib.sha256(raw.encode()).hexdigest() != node.get("text_sha256"):
@@ -75,12 +77,18 @@ def sources(graph, read_text, version=FORMAT):
                 if kind:
                     page_lines.append({**place, "line": number, "kind": kind, "value": value,
                                        "quote": quote, "facts": anchored[number, quote]})
-        if page_lines or place["role"] in ("contract", "acceptance", "reinspection", "contract_addendum", "unknown"):
-            pages.append({**place, "native": native, "text_only": node.get("clause_text_only") is True,
-                          "incomplete": (doc, page) in gaps})
+        coverage = {**place, "native": native, "text_only": node.get("clause_text_only") is True, "incomplete": (doc,page) in gaps}
+        if version==FORMAT:
+            originals.append((coverage,raw,facts_by_page[doc,page],anchored))
+        if page_lines or place["role"] in ("contract", "acceptance", "reinspection", "contract_addendum", "unknown", equipment_exchanges.TITLE):
+            pages.append(coverage)
         lines.extend(page_lines)
     active = any(MODEL.search(r["quote"]) and r["role"] in ("contract", "acceptance", "reinspection", "contract_addendum", "unknown") for r in lines) or any(g.get("field") == "equipment_model" for g in graph["gaps"])
-    return {"format": version, "pages": pages if active else [], "lines": lines if active else []}
+    exchange = equipment_exchanges.sources(originals) if version==FORMAT else None
+    ledger = {"format": version, "pages": pages if active or exchange else [], "lines": lines if active or exchange else []}
+    if exchange:
+        ledger["exchange"] = exchange
+    return ledger
 
 
 def valid_code(value):
@@ -106,9 +114,15 @@ def assess(graph, contract, receipts, *, effective):
     if not pages:
         return None
     lines = ledger["lines"]
+    exchange = ledger.get("exchange", {})
+    forms = set(exchange.get("forms", []))
+    def physical_record(row):
+        return (row["unit"] in forms or exchange and row["role"] in ("acceptance","reinspection") and
+                equipment_exchanges.row_kind(row["quote"])[0]=="exchange_number")
     by_unit = defaultdict(list)
     for row in lines:
-        by_unit[row["unit"]].append(row)
+        if not physical_record(row):
+            by_unit[row["unit"]].append(row)
     scope = {contract.unit, *(r.unit for r in receipts)}
     ordered = exact_line(by_unit[contract.unit], "ordered")
     global_reasons = []
@@ -117,7 +131,7 @@ def assess(graph, contract, receipts, *, effective):
     if any(p["role"] in ("unknown", "contract_addendum") for p in pages):
         global_reasons.append("另有补充协议或未归属资料，需核实现行型号约定")
     if any(r["unit"] not in scope or r["unit"] == contract.unit and r["kind"] != "ordered"
-           or r["kind"] == "qualification" and len(receipts) > 1 for r in lines):
+           or r["kind"] == "qualification" and len(receipts) > 1 for r in lines if not physical_record(r)):
         global_reasons.append("另有型号、替代或换型记载，需核对其适用范围和批准依据")
     def unclear(unit):
         return any(not p["native"] or not p["text_only"] or p["incomplete"] for p in pages if p["unit"] == unit)
@@ -220,6 +234,8 @@ def edges(findings):
     result = []
     for finding in findings:
         comparison = finding.get("equipment_models")
+        if comparison:
+            result.extend(equipment_exchanges.edges(comparison))
         if not comparison or not comparison["ordered"]:
             continue
         left = comparison["ordered"]
@@ -243,10 +259,13 @@ def verify(report, read_text, *, signing=False):
         if signing and any(f["rule"] in ("H02", "H04", "H05") and f["status"] == "ok" for f in report["findings"]) and sources(graph, read_text)["pages"]:
             raise ValueError("旧版验收未逐项核对所列设备型号，请按现行程序重审后签收。")
         return
-    expected = FORMAT if policy.get("version", "") >= RETEST_SINCE else LEGACY
+    version = policy.get("version", "")
+    expected = FORMAT if version >= EXCHANGE_SINCE else RETEST_FORMAT if version >= RETEST_SINCE else LEGACY
     if (marker != expected or policy.get("version", "") < SINCE or graph.get("equipment_model_sources") != sources(graph, read_text, marker)
-            or [e for e in graph["edges"] if e["type"] == "equipment_model_comparison"] != edges(report["findings"])):
+            or [e for e in graph["edges"] if e["type"] in ("equipment_model_comparison","equipment_exchange_returned","equipment_exchange_received")] != edges(report["findings"])):
         raise ValueError("约定与实收型号的原行、单据或图谱关系与归档不符")
+    if signing and marker!=FORMAT and sources(graph,read_text).get("exchange"):
+        raise ValueError("旧版含设备换货交接或所据单号，请按现行退换与复验程序重审后签收。")
     if signing and marker == LEGACY and any(f.get("equipment_models") and f.get("reinspection") and
                                             any(r["comparison"] == "different" for r in f["equipment_models"]["records"])
                                             for f in report["findings"]):

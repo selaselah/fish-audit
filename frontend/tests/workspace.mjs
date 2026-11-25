@@ -282,6 +282,31 @@ try {
       assert.equal(await evaluate(panel+'.open'),equipment.status!=='ok');
       await keepEvidenceOpen(panel);
       await verifyRemarks(panel,modelLines);
+      if (equipment.exchange) {
+        const view='document.querySelector(".equipment-exchange")';
+        const source=report.graph.equipment_model_sources.exchange;
+        assert.equal(await evaluate(view+'.dataset.exchangeStatus'),equipment.exchange.status);
+        const pending=equipment.exchange.checks.filter(c=>c.status!=='ok');
+        assert.equal(await evaluate(view+'.querySelectorAll(".exchange-pending button").length'),pending.length);
+        if (pending.length) {
+          await evaluate(view+'.querySelector(".exchange-pending button").click()');
+          await wait('document.activeElement?.id==='+JSON.stringify('exchange-check-'+pending[0].key),'first outstanding exchange check');
+        }
+        const inspectedUnits=equipment.records.filter(r=>r.inspection_role).map(r=>r.unit);
+        const inventories=source.pages.filter(p=>p.form || inspectedUnits.includes(p.unit)).flatMap(p=>p.rows)
+          .filter(r=>['delivered_serials','exchange_old_serials','exchange_new_serials'].includes(r.kind));
+        await verifyRemarks(view,inventories);
+        for (const check of equipment.exchange.checks) {
+          const selector=['returned','received'].includes(check.key)?'data-exchange-list':'data-exchange-check';
+          const part=view+'.querySelector('+JSON.stringify('['+selector+'="'+check.key+'"]')+')';
+          if (selector==='data-exchange-check') await evaluate(part+'.open=true');
+          await wait(part+'?.textContent.includes('+JSON.stringify(check.detail)+')','individual exchange result');
+          assert.ok(await evaluate(part+'.querySelector(".tag").classList.contains('+JSON.stringify(check.status)+')'));
+          if (check.key==='signatures') await verifyRemarks(part,source.pages.filter(p=>p.form).flatMap(p=>p.rows)
+            .filter(row=>['buyer_signature','seller_signature'].includes(row.kind)));
+          if (selector==='data-exchange-check') await evaluate(part+'.open=false');
+        }
+      }
       if (equipment.sequence) {
         assert.equal(await evaluate(panel+'.querySelector("[data-model-sequence]").dataset.modelSequence'),equipment.sequence.outcome);
         await evaluate(panel+'.querySelector("[aria-controls=equipment-reinspection-trail]").click()');
@@ -833,6 +858,14 @@ try {
       await call('Emulation.setDeviceMetricsOverride',{width,height:880,deviceScaleFactor:1,mobile:false});
       if (equipment) {
         await evaluate('document.getElementById("equipment-models").open=true');
+        if (equipment.exchange) {
+          assert.ok(await evaluate('[...document.querySelectorAll(".equipment-exchange,.exchange-list")].every(e=>e.clientWidth && e.scrollWidth<=e.clientWidth+1)'));
+          if (process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
+            await evaluate('document.querySelector(".equipment-exchange").scrollIntoView({block:"start"})');
+            const capture=await call('Page.captureScreenshot',{format:'png'});
+            await writeFile(join(process.env.AUDIT_UI_SHOTS,'exchange-'+performanceCase+'-'+width+'.png'),Buffer.from(capture.data,'base64'));
+          }
+        }
         assert.ok(await evaluate('[...document.querySelectorAll(".equipment-originals,.equipment-original")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'equipment records fit at '+width);
         if (process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
           await evaluate('document.getElementById("equipment-models").scrollIntoView({block:"start"})');
@@ -949,6 +982,16 @@ try {
         report.graph.edges.filter(e=>e.type==='equipment_model_comparison').length);
     }
     const quantities=report.graph.quality_addenda?.quantities?.lines || [];
+    if (equipment?.exchange) {
+      const view='document.querySelector(".equipment-exchange-relations")';
+      await keepEvidenceOpen(view);
+      await wait(view+'.querySelector(".exchange-list")','exchange inventory evidence');
+      const links=report.graph.edges.filter(e=>e.type.startsWith('equipment_exchange_'));
+      assert.equal(await evaluate(view+'.querySelectorAll("[data-exchange-relation]").length'),links.length);
+      const printed=report.graph.equipment_model_sources.exchange.pages.flatMap(p=>p.rows).filter(
+        r=>['exchange_old_serials','exchange_new_serials'].includes(r.kind));
+      await verifyRemarks(view,printed);
+    }
     if (quantities.length) {
       const panel='document.querySelector(".quantity-relations")';
       await evaluate(panel+'.open=true');

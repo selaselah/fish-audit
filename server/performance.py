@@ -12,6 +12,7 @@ from acceptance_authority import LABELS as AUTHORITY_FIELDS, SIGN_LABELS, check 
 import delivery_batches
 import stage_payments
 import equipment_models
+import equipment_exchanges
 import contract_effect
 import warranty_terms
 import payment_windows
@@ -36,6 +37,7 @@ LABELS = {
     **DELEGATION_FIELDS,
     **ADDENDUM_FIELDS,
     **AUTHORITY_FIELDS,
+    **equipment_exchanges.LABELS,
     "equipment_model": tuple(sorted(equipment_models.ORDERED | equipment_models.RECEIVED)),
     **delivery_batches.LABELS,
     **warranty_terms.LABELS,
@@ -631,6 +633,8 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
     if version in DATE_FORMATS:
         add_date_checks(signed,period_checks(contract))
     classified = {u for group in kinds.values() for u in group}
+    exchange_ledger = graph.get("equipment_model_sources",{}).get("exchange",{})
+    classified.difference_update(equipment_exchanges.unscoped(exchange_ledger))
     extra_units = {d["id"] for d in graph.get("audit_documents",graph["documents"])} - classified
     changes = change_candidates(graph) if version in ADDENDUM_FORMATS else []
     repairs, retests = materials("remediation"), materials("reinspection")
@@ -785,10 +789,13 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
             if chain and pending_units:
                 chain = {**chain, "state": "open"}
             equipment_models.reconcile_reinspection(models, chain)
+            equipment_exchanges.reconcile(graph,contract,[*receipts,*retests],models,chain)
         accepted["equipment_models"] = models
         accepted["evidence"] = list(dict.fromkeys([*accepted["evidence"], *models["evidence"]]))
         accepted["scope"] = list(dict.fromkeys([*accepted["scope"], *(p["unit"] for p in graph["equipment_model_sources"]["pages"])]))
         equipment_models.apply(accepted, models)
+        if models.get("exchange",{}).get("status")=="ok":
+            accepted["detail"] += " "+models["exchange"]["detail"]
         if models["status"] != "ok":
             accepted_on = None
             if accepted.get("reinspection"):
@@ -852,6 +859,10 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
             status, detail = "missing","需核对本期付款的完整前提及其履行材料。"
         elif signed["status"] != "ok":
             status, detail = "missing","合同签署或约定生效条件尚待核实。"
+        elif kind=="batch" and models and models.get("exchange",{}).get("status")=="risk":
+            status,detail="risk","换货交接与本批交付的关系待核，请核对批次及设备编号。"
+            refs+=models["exchange"]["evidence"]
+            scope+=accepted["scope"]
         elif kind=="batch":
             if this_batch:
                 status="risk" if this_batch["status"]=="issue" else this_batch["status"]

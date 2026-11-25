@@ -18,6 +18,7 @@ from contract_changes import NUMBER_TYPES as ADDENDUM_NUMBERS, TITLES as ADDENDU
 import delivery_batches
 import receipt_packets
 import equipment_models
+import equipment_exchanges
 import stage_payments
 import contract_effect
 import warranty_terms
@@ -28,7 +29,8 @@ from acceptance_authority import CLAUSE as AUTHORITY_CLAUSE, SIGNER as ACCEPTANC
 
 KINDS = {"invoice": "发票", "contract": "合同", "acceptance": "验收单"}
 TITLE_FIELDS = {**KINDS, "claim": "报销", "bank_receipt":"回单", "warranty":"质保期满确认","contract_approval":"审批",
-                "remediation":"整改","reinspection":"复验","power_of_attorney":"委托书","contract_addendum":"补充协议"}
+                "remediation":"整改","reinspection":"复验","power_of_attorney":"委托书","contract_addendum":"补充协议",
+                equipment_exchanges.TITLE:"换货交接单"}
 PRINTED_TITLES = {label: field for field, labels in {
     "invoice": ("发票", "采购发票", "住宿服务发票", "增值税专用发票", "增值税普通发票", "增值税电子普通发票",
                 "电子发票(普通发票)", "电子发票(增值税专用发票)"),
@@ -38,6 +40,7 @@ PRINTED_TITLES = {label: field for field, labels in {
     "contract_approval": ("合同审批单","合同审批记录","董事会合同审批记录"),
     "power_of_attorney": MANDATE_TITLES,
     "contract_addendum": ADDENDUM_TITLES,
+    equipment_exchanges.TITLE: equipment_exchanges.TITLES,
     "remediation": ("整改记录单","缺陷整改记录","整改完成记录"),
     "reinspection": ("复验报告","整改复验单","最终复验报告","整改复验报告"),
     "bank_receipt": ("银行付款回单", "银行转账回单", "电子银行回单", "银行电子回单", "转账回单"),
@@ -101,6 +104,8 @@ def labelled(field, value, quote):
     if field=="transfer_ref_note":
         return value in quote and partial_line(quote)
     if field in TITLE_FIELDS:
+        if field==equipment_exchanges.TITLE:
+            return value==quote and quote in equipment_exchanges.TITLES
         if field=="power_of_attorney":
             return value==quote and quote in MANDATE_TITLES
         if field=="contract_addendum":
