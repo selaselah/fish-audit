@@ -37,6 +37,15 @@ def pdf_with_note(path,title,rows,font,note,*,spacing=34,note_y=125):
     page.save()
 
 
+def agreement_rows(code, base, revision, seller_day):
+    return [("补充协议编号","BC-"+code),("原合同编号",base["合同编号"]),("采购方",BUYER),("供应方",SELLER),
+               ("采购标的",base["采购标的"]),("变更范围","仅变更验收标准，其余条款不变"),("原验收标准",base["约定验收标准"]),
+               ("变更后验收标准",revision),("变更适用时点","仅适用于本协议生效后进行的验收"),
+               ("协议生效条款","本协议自双方盖章之日起生效"),("甲方盖章日期","2026年9月10日"),
+               ("乙方盖章日期",seller_day),
+               ("甲方签章",base["甲方签章"]),("乙方签章",base["乙方签章"])]
+
+
 def generate(seed, mode):
     code = hashlib.sha256((seed+"-"+mode).encode()).hexdigest()[:8].upper()
     folder = ROOT/"27-合同变更与终验"/code
@@ -44,12 +53,7 @@ def generate(seed, mode):
     records = documents(code,"complete")
     base = dict(records["采购合同"])
     revision = "柜温不高于8℃" if mode=="later" else "柜温不高于2℃"
-    changed = [("补充协议编号","BC-"+code),("原合同编号",base["合同编号"]),("采购方",BUYER),("供应方",SELLER),
-               ("采购标的",base["采购标的"]),("变更范围","仅变更验收标准，其余条款不变"),("原验收标准",base["约定验收标准"]),
-               ("变更后验收标准",revision),("变更适用时点","仅适用于本协议生效后进行的验收"),
-               ("协议生效条款","本协议自双方盖章之日起生效"),("甲方盖章日期","2026年9月10日"),
-               ("乙方盖章日期","2026年9月22日" if mode=="later" else "2026年9月12日"),
-               ("甲方签章",base["甲方签章"]),("乙方签章",base["乙方签章"])]
+    changed = agreement_rows(code,base,revision,"2026年9月22日" if mode=="later" else "2026年9月12日")
     if mode=="rider":
         changed.append(("备注","第二期付款前另须提交银行保函"))
     records[TITLE] = changed

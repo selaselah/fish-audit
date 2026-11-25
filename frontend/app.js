@@ -662,6 +662,21 @@ function evidenceJump(label, targetId) {
   return jump;
 }
 
+function showFindingPath(item, compare = false, pair = null) {
+  state.traceKey=state.detail.id+'@'+state.bundle.rev; state.traceId=item.id;
+  state.tab='graph'; renderCase();
+  if (compare) {
+    const button=$('.trace-modes:not([hidden]) [data-mode="compare"]');
+    if (button) {
+      button.click();
+      const shortcut=pair && $('.compare-presets [data-pair="'+CSS.escape(pair)+'"]');
+      if (shortcut) { shortcut.click(); shortcut.focus(); } else button.focus();
+      return;
+    }
+  }
+  $('#trace-select')?.focus();
+}
+
 function finding(item) {
   const heading = item.stage ? item.stage.name + (item.stage.share ? ' · ' + item.stage.share + '%' : '') +
     (item.rule === 'H05' ? ' 实付时点' : item.rule==='H06'?' 回单合计':' 付款条件') : item.title;
@@ -751,10 +766,8 @@ function finding(item) {
       signedInvoiceSource(row,item.invoice_lookup?.candidates.find(c=>c.id===row.id)?.comparison))));
   }
   if (item.evidence.length) node.append(lazyFold('查看本项全部引文（'+item.evidence.length+'）',()=>[box('chips',...item.evidence.map(citation))]));
-  if (graphIndex(state.bundle.report.graph).nodes.has('finding/'+item.id)) node.append(action('查看证据路径',()=>{
-    state.traceKey=state.detail.id+'@'+state.bundle.rev; state.traceId=item.id;
-    state.tab='graph'; renderCase(); $('#trace-select')?.focus();
-  },'text-button'));
+  if (graphIndex(state.bundle.report.graph).nodes.has('finding/'+item.id))
+    node.append(action('查看证据路径',()=>showFindingPath(item),'text-button'));
   const policy = state.bundle.report.policy;
   const refs = policy.rule_sources?.[item.rule] || [];
   if (refs.length) node.append(fold('核对制度出处与适用范围', ...refs.map(id => sourceEntry(policy.sources[id]))));
@@ -825,7 +838,15 @@ function reportPanel() {
   const review = box('', conclusion);
   if (report.supplement) review.append(returnComparison(report,state.bundle.rev));
   if (performance.length) {
-    const conditions = box('panel performance-panel',el('h2','合同履约审查'));
+    const heading=box('performance-heading',el('h2','合同履约审查'));
+    const acceptance=performance.find(f=>f.rule==='H02');
+    const index=graphIndex(report.graph);
+    if (acceptance && index.nodes.has('finding/'+acceptance.id) &&
+        traceReferences(report.graph,acceptance).filter(ref=>index.facts.has(ref)).length>=2) {
+      const compare=action('对照验收原件',()=>showFindingPath(acceptance,true),'compare-jump');
+      compare.prepend(glyph('layout-sidebar-inset-reverse')); heading.append(compare);
+    }
+    const conditions = box('panel performance-panel',heading);
     conditions.append(performanceOverview(performance,report.graph));
     review.append(conditions);
   }
@@ -1411,22 +1432,43 @@ $('#review-form').addEventListener('submit', async event => {
   finally { button.disabled = false; button.textContent=label; }
 });
 $('#new-case').addEventListener('click', () => openIntake());
-$('#supplement-fields').addEventListener('input',()=>{state.key=null;});
+$('#supplement-fields').addEventListener('input',()=>{state.key=null; renderIntakeLimits();});
 const fileInput = $('#upload-files');
 const canEditFileList = typeof DataTransfer === 'function';
-function replaceFiles(files) {
-  const selection = new DataTransfer();
-  for (const file of files) selection.items.add(file);
-  fileInput.files = selection.files;
-  fileInput.dispatchEvent(new Event('change',{bubbles:true}));
+let pendingFiles = [];
+function fileSize(bytes) {
+  if (!bytes) return '0 KiB';
+  if (bytes<1024**2) return Math.ceil(bytes/1024)+' KiB';
+  return (bytes/1024**2).toLocaleString('zh-CN',{maximumFractionDigits:2})+' MiB';
 }
-fileInput.addEventListener('change', () => {
-  state.key = null; $('#upload-error').textContent = '';
-  const files = [...fileInput.files];
+function fileProblem(file) {
+  if (!file.size) return '空文件';
+  if (file.size>16*1024**2) return '超过 16 MiB';
+  const extension=file.name.match(/\.[^.]+$/)?.[0].toLowerCase();
+  if (!fileInput.accept.split(',').includes(extension)) return '不支持此格式';
+  return '';
+}
+function renderIntakeLimits() {
+  const retained=[...$('#retain-files').querySelectorAll('input:checked')];
+  const count=pendingFiles.length+retained.length;
+  const bytes=pendingFiles.reduce((sum,f)=>sum+f.size,0)+retained.reduce((sum,f)=>sum+Number(f.dataset.bytes),0);
+  const error=count>12?'整案超过 12 份，请移除多余文件。':bytes>48*1024**2?'整案超过 48 MiB，请缩减资料。':
+    pendingFiles.some(fileProblem)?'请处理清单中标出的问题文件。':'';
+  const capacity=$('#intake-capacity');
+  capacity.hidden=!count; capacity.dataset.invalid=String(Boolean(error));
+  capacity.querySelector('progress').value=count;
+  $('#intake-count').textContent='已选 '+count+' / 12 份'+(retained.length?'，含沿用 '+retained.length+' 份':'');
+  $('#intake-size').textContent=fileSize(bytes)+' / 48 MiB';
+  $('#upload-error').textContent=error;
+  return error;
+}
+function drawIntakeFiles(files) {
+  pendingFiles=files;
   $('#chosen-files').replaceChildren(...files.map((file,index) => {
     const row = el('li');
-    const size = file.size >= 1024**2 ? (file.size/1024**2).toFixed(1)+' MiB' : Math.ceil(file.size/1024)+' KiB';
-    row.append(el('span',file.name),el('small',size));
+    const problem=fileProblem(file);
+    row.dataset.invalid=String(Boolean(problem));
+    row.append(glyph('file-earmark-text'),el('span',file.name),el('small',problem || fileSize(file.size)));
     if (canEditFileList) {
       const remove = action('移除',() => {
         if ($('#submit-files').disabled) return;
@@ -1439,6 +1481,18 @@ fileInput.addEventListener('change', () => {
     }
     return row;
   }));
+  renderIntakeLimits();
+}
+function replaceFiles(files) {
+  const selection = new DataTransfer();
+  for (const file of files) selection.items.add(file);
+  fileInput.files = selection.files;
+  state.key=null; drawIntakeFiles([...fileInput.files]);
+}
+fileInput.addEventListener('change', () => {
+  // A second trip through the native picker replaces FileList. Keep earlier attachments in the case.
+  if (canEditFileList) replaceFiles([...pendingFiles,...fileInput.files]);
+  else { state.key=null; drawIntakeFiles([...fileInput.files]); }
 });
 if (canEditFileList) {
   const zone = fileInput.closest('label');
@@ -1481,10 +1535,9 @@ $('#upload-form').addEventListener('submit', async event => {
   try {
     const parent = state.intakeParent;
     const retained = parent ? [...$('#retain-files').querySelectorAll('input:checked')] : [];
-    const bytes = retained.reduce((sum,input)=>sum+Number(input.dataset.bytes),0);
     if (!(files.length+retained.length)) throw new Error('请选择沿用原件或添加资料。');
-    if (files.length+retained.length > 12 || files.some(file => file.size > 16*1024**2) || bytes+files.reduce((sum,file) => sum + file.size, 0) > 48*1024**2)
-      throw new Error('所选资料超出文件数或大小限制。');
+    const problem = renderIntakeLimits();
+    if (problem) throw new Error(problem);
     for (const file of files) data.append('files', file);
     if (parent) {
       data.append('rev',String(parent.rev)); data.append('note',$('#supplement-note').value);

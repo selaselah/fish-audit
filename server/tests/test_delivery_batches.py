@@ -2,7 +2,7 @@ import copy
 import unittest
 
 from controls import VERSION, execute
-from delivery_batches import LEGACY, PRINTED_SIGNERS, evidence_edges, gaps, page_sources, verify_sources
+from delivery_batches import LEGACY, PRINTED_SIGNERS, REMARK_FORMAT, evidence_edges, gaps, page_sources, verify_sources
 from performance import BATCH_FORMAT, DATE_FORMAT, compute, verify_findings
 from test_performance import CONTRACT, RECEIPT, WARRANTY, BANK_DOC, material
 
@@ -53,6 +53,76 @@ def states(graph):
 
 
 class DeliveryBatchTests(unittest.TestCase):
+    def changed_batches(self,revised="柜温不高于8℃",sealed="2026-09-12",reading="柜温6℃",basis=None,outcome="合格",**kwargs):
+        from test_contract_changes import CHANGE
+        terms={"revised_criterion":revised,"seller_sealed_on":sealed}
+        actual={"measured_result":reading,"inspection_basis":basis or revised,"acceptance_result":outcome}
+        amendment=[(k,l,terms.get(k,v)) for k,l,v in CHANGE]
+        second=[(k,l,actual.get(k,v)) for k,l,v in receipt(2)]
+        return material([contract(),amendment,receipt(1),second,WARRANTY,BANK_DOC],**kwargs)
+
+    def test_quality_amendment_uses_the_date_of_each_independent_batch(self):
+        for args,states_expected,phases_expected in (
+                ({},("original","applied"),["ok"]*4),
+                ({"revised":"柜温不高于2℃","basis":"柜温不高于4℃","reading":"柜温3℃"},("original","applied"),["ok","ok","risk","risk"]),
+                ({"sealed":"2026-09-20"},("original","pending"),["ok","ok","missing","missing"]),
+                ({"sealed":"2026-09-21","basis":"柜温不高于4℃"},("original","original"),["ok","ok","risk","risk"])):
+            with self.subTest(args=args):
+                graph=self.changed_batches(**args)
+                h,phases,_=states(graph)
+                self.assertEqual(h["quality_change"]["state"],"by_batch")
+                records=h["batch_acceptance"]["records"]
+                self.assertEqual(tuple(r["standard"]["state"] for r in records),states_expected)
+                self.assertEqual([f["status"] for f in phases],phases_expected)
+                links=[e for e in evidence_edges([h,*phases]) if e["type"]=="batch_quality_comparison"]
+                for i,record in enumerate(records):
+                    s=record["standard"]
+                    self.assertTrue(set(s["evidence"]).issubset(phases[i+1]["evidence"]))
+                    self.assertIn("d02",phases[i+1]["scope"])
+                    self.assertNotIn(s["reading_ref"],phases[2-i]["evidence"])
+                    self.assertEqual([e["from"] for e in links if e["to"]==s["reading_ref"]],
+                                     [s["criterion_ref"]] if s["state"]!="pending" else [])
+
+    def test_unsettled_version_cannot_establish_a_numeric_failure(self):
+        for kwargs in ({"sealed":"2026-09-1 2"},{"omissions":[(2,"付款前提：全部期款另须提交保函")]},
+                       {"sealed":"2026-09-20"}):
+            h,phases,_=states(self.changed_batches(**kwargs))
+            self.assertEqual(h["status"],"missing",h["detail"])
+            self.assertEqual(h["batch_acceptance"]["records"][1]["standard"]["state"],"pending")
+            self.assertNotIn("实测值超出约定限值",h["detail"])
+            self.assertNotEqual(phases[2]["status"],"ok")
+        h,_,_=states(self.changed_batches(sealed="2026-09-20",outcome="不合格"))
+        self.assertEqual(h["status"],"issue")
+        self.assertIn("不合格",h["detail"])
+
+    def test_quality_comparison_rejects_tampering_and_preserves_v6_replay(self):
+        graph=self.changed_batches()
+        texts={d["id"]:"\n".join(f["quote"] for f in graph["facts"] if f["doc"]==d["id"]) for d in graph["documents"]}
+        read=lambda doc,page:texts[doc]
+        fs=execute(graph,graph["profile"])
+        graph["edges"].extend(evidence_edges(fs))
+        report={"policy":{**VERSION,"profile":graph["profile"]},"graph":graph,"findings":fs}
+        verify_sources(report,read)
+        forged=copy.deepcopy(report)
+        edge=next(e for e in forged["graph"]["edges"] if e["type"]=="batch_quality_comparison" and e["batch"]==2)
+        edge["from"]=next(e["from"] for e in graph["edges"] if e["type"]=="batch_quality_comparison" and e["batch"]==1)
+        with self.assertRaises(ValueError):
+            verify_sources(forged,read)
+        forged=copy.deepcopy(report)
+        next(f for f in forged["findings"] if f["rule"]=="H02")["batch_acceptance"]["records"][1]["standard"]["state"]="original"
+        with self.assertRaises(ValueError):
+            verify_findings(forged)
+        old=self.changed_batches()
+        old["delivery_batch_sources"]=page_sources(old,read,REMARK_FORMAT)
+        old_fs=execute(old,old["profile"])
+        old["edges"].extend(evidence_edges(old_fs))
+        legacy={"policy":{**VERSION,"profile":old["profile"],"version":"2026.11.25.18","delivery_batches":REMARK_FORMAT},
+                "findings":old_fs,"graph":old}
+        verify_sources(legacy,read)
+        self.assertEqual(next(f["status"] for f in old_fs if f["rule"]=="H02"),"issue")
+        with self.assertRaisesRegex(ValueError,"逐批"):
+            verify_sources(legacy,read,signing=True)
+
     def test_count_only_remark_keeps_the_independent_first_batch(self):
         for raw in (BATCH_NOTE, BATCH_NOTE.replace("本批","第二批")):
             g=sample(omissions=[(3,raw)])

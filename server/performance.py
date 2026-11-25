@@ -639,10 +639,11 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
     changes = change_candidates(graph) if version in ADDENDUM_FORMATS else []
     repairs, retests = materials("remediation"), materials("reinspection")
     change = None
-    if changes:
-        multiple = bool(repairs or retests or len(receipts)!=1 or any(r.fields[k] or k in r.uncertain
+    amendments = [Material(graph,u) for u in changes]
+    other_events = bool(repairs or retests or any(r.fields[k] or k in r.uncertain
                         for r in receipts for k in ("original_acceptance","repair_number","defect_closure")))
-        change = resolve_change(graph,contract,[Material(graph,u) for u in changes],receipts,multiple_events=multiple,
+    if changes:
+        change = resolve_change(graph,contract,amendments,receipts,multiple_events=other_events or len(receipts)!=1,
                                 contract_supported=signed["status"]=="ok",unclassified=extra_units)
         change["evidence"] = list(dict.fromkeys(change["evidence"]+signed["evidence"]))
     authority = None
@@ -669,10 +670,18 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
     batch = None
     models = equipment_models.assess(graph, contract, [*receipts, *retests], effective=signed["status"] == "ok") if version == FORMAT else None
     if version in BATCH_FORMATS:
+        terms_pending=bool(signed["status"]!="ok" or extra_units or pending_units or authority or other_events)
+        change_proof=None
+        source=graph.get("delivery_batch_sources",{})
+        if change and source.get("format")==delivery_batches.FORMAT and source.get("signals"):
+            change_proof=delivery_batches.change_basis(change,contract,amendments,receipts,
+                eligible=not (terms_pending or contract.fields["acceptance_signing_clause"] or "acceptance_signing_clause" in contract.uncertain))
+            if change_proof["effective_on"]:
+                change.update(state="by_batch",applied_criterion=None,accepted_on=None,
+                              detail="协议仅变更验收标准，双方于 "+change_proof["effective_on"]+" 完成盖章。逐批核对验收日期及当时适用的标准。")
         batch = delivery_batches.inspect(graph,contract,receipts,native_spacing=version in EFFECT_FORMATS,
-                    requirements=batch_signers.get("batches"),final_requirement=batch_signers.get("final"), model_checks=models,
-                    other_terms=bool(signed["status"]!="ok" or extra_units or pending_units or change or authority or repairs or retests or
-                                     any(r.fields[k] or k in r.uncertain for r in receipts for k in ("original_acceptance","repair_number","defect_closure"))))
+                    requirements=batch_signers.get("batches"),final_requirement=batch_signers.get("final"),model_checks=models,change=change_proof,
+                    other_terms=terms_pending or bool(change and change["state"]!="by_batch"))
     batch_rows = {r["index"]:r for r in batch["batches"]} if batch else {}
     if batch:
         for item,applicable in ((signed,[r for r in batch["riders"] if r["kind"]=="contract"]),(plan,batch["riders"])):

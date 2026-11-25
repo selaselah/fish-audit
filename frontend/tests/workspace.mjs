@@ -9,6 +9,7 @@ import {createHash} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {once} from 'node:events';
 import {checkProduct, checkReviewDesign} from './product.mjs';
+import {checkEvidenceCompare} from './evidence-compare.mjs';
 
 const scratch = await mkdtemp(join(tmpdir(), 'fish-ui-'));
 const socket = createServer().listen(0, '127.0.0.1');
@@ -44,11 +45,12 @@ const visibilityCase = caseArgument('--visibility-case');
 const accountReview = caseArgument('--account-review-case');
 const performanceCase = caseArgument('--performance-case');
 const designCase = caseArgument('--design-case');
+const compareCase = caseArgument('--compare-case');
 const qualityImageCase = caseArgument('--quality-image-case');
 const reinspectionGap = caseArgument('--reinspection-gap-case');
 const brokenPayment = caseArgument('--payment-source-case');
 const waitingCase = caseArgument('--waiting-case');
-const seeded = [product,designCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+const seeded = [product,designCase,compareCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
 const root = product ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
@@ -118,6 +120,11 @@ try {
     await checkProduct({root,call,evaluate,wait});
   } else if (designCase) {
     await checkReviewDesign({root,call,evaluate,wait},designCase);
+  } else if (compareCase) {
+    const arg=process.argv.indexOf('--compare-rev');
+    const rev=arg===-1 ? null : Number(process.argv[arg+1]);
+    assert.ok(rev===null || Number.isSafeInteger(rev) && rev>0);
+    await checkEvidenceCompare({root,call,evaluate,wait},compareCase,rev);
   } else if (reinspectionGap) {
     const api=root+'/api/cases/'+reinspectionGap;
     const task=await (await fetch(api)).json();
@@ -808,7 +815,7 @@ try {
       assert.equal(await evaluate(panel+'.dataset.qualityChange'),change.state);
       assert.equal(await evaluate(panel+'.querySelector(".quality-standard")?.textContent || null'),change.applied_criterion);
       assert.deepEqual(await evaluate('[...'+panel+'.querySelectorAll(".mandate-dates dd > span")].map(e=>e.textContent)'),
-        [change.buyer_sealed_on,change.seller_sealed_on,change.effective_on,change.accepted_on].map(d=>d || '待核'));
+        [change.buyer_sealed_on,change.seller_sealed_on,change.effective_on,...(change.state==='by_batch'?[]:[change.accepted_on])].map(d=>d || '待核'));
       if (change.quantity) {
         const quantity=change.quantity;
         const expected=quantity.difference===null?'数量差额待核':quantity.difference===0?'数量相符':

@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="/style.css">
   <script src="/team.js" defer></script>
   <script src="/desk.js" defer></script>
+  <script src="/evidence-compare.js" defer></script>
   <script src="/provenance.js" defer></script>
   <script src="/supplements.js" defer></script>
   <script src="/checkpoints.js" defer></script>
@@ -102,23 +103,23 @@
     <div class="preview-head"><span><i aria-hidden="true" class="ui-glyph ic-layout-sidebar-inset-reverse"></i> 任务速览</span><button type="button" data-close aria-label="关闭速览" class="icon-button"><i aria-hidden="true" class="ui-glyph ic-x-lg"></i></button></div>
     <h2 id="preview-title"></h2><div id="preview-body" aria-live="polite"></div><div id="preview-action"></div>
   </dialog>
-  <dialog id="upload-dialog">
+  <dialog id="upload-dialog" aria-labelledby="upload-heading">
     <form id="upload-form">
-      <div class="dialog-head"><h2 id="upload-heading">新建审计</h2><button class="plain" type="button" data-close>关闭</button></div>
-      <label>任务名称<input id="upload-title" required maxlength="100" placeholder="例如：档案柜采购 · 十月验收"></label>
-      <label>审计范围<select id="upload-profile"><option value="cn-procurement-full-settlement/v1">采购与付款 · 合同、发票及验收</option><option value="cn-contract-performance/v1">合同履约与分期</option><option value="cn-travel-reimbursement/v1">差旅报销 · 全凭票报销</option><option value="cn-bank-contract-payment/v1">付款回单核对 · 合同及银行回单</option></select></label>
+      <div class="dialog-head"><h2 id="upload-heading">新建审计</h2><button class="icon-button" type="button" data-close aria-label="关闭资料提交"><i aria-hidden="true" class="ui-glyph ic-x-lg"></i></button></div>
+      <div class="intake-fields"><label>任务名称<input id="upload-title" required maxlength="100" placeholder="例如 档案柜采购 · 十月验收"></label>
+      <label>审计范围<select id="upload-profile"><option value="cn-procurement-full-settlement/v1">采购与付款</option><option value="cn-contract-performance/v1">合同履约与分期</option><option value="cn-travel-reimbursement/v1">差旅报销</option><option value="cn-bank-contract-payment/v1">付款回单核对</option></select></label></div>
       <div id="supplement-fields" hidden>
         <blockquote id="return-reason"></blockquote>
         <fieldset id="retain-files"><legend>沿用前案原件</legend></fieldset>
         <p class="muted">如需替换某份资料，请取消勾选旧件，再添加新版。</p>
         <label>补件说明（选填）<textarea id="supplement-note" maxlength="2000" rows="2"></textarea></label>
       </div>
-      <label class="upload-zone"><span id="upload-file-label">待审资料</span><span id="drop-hint" class="small" hidden>拖入文件可追加到清单，也可重新选择文件。</span><input id="upload-files" type="file" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,.tif,.tiff,.heic,.heif" required></label>
-      <p class="muted">可一次选择多份 PDF、Word 或图片。单份 16 MiB，整案最多 12 份、48 MiB、60 页。</p>
+      <div class="intake-doc-heading"><strong id="upload-file-label">待审资料</strong><details class="intake-requirements"><summary>资料要求</summary><p id="profile-note">核对合同签署、交付验收与付款约定，并勾稽发票及全额结算资料。</p><p>单份不超过 16 MiB，整案最多 12 份、48 MiB、60 页。</p></details></div>
+      <label class="upload-zone"><i class="ui-glyph ic-paperclip" aria-hidden="true"></i><span><strong>选择文件</strong><span id="drop-hint" hidden>或拖入这里</span></span><small>PDF、Word 或图片</small><input id="upload-files" type="file" aria-labelledby="upload-file-label" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,.tif,.tiff,.heic,.heif" required></label>
+      <div class="intake-capacity" id="intake-capacity" hidden><output id="intake-count"></output><span id="intake-size"></span><progress max="12" value="0" aria-label="整案文件份数"></progress></div>
       <ul id="chosen-files" aria-label="已选资料" aria-live="polite"></ul>
-      <div class="note"><span id="profile-note">核对合同签署、交付验收与付款约定，并勾稽发票及全额结算资料。</span>提交后，系统将资料页图及证据内容发送至 OpenAI。</div>
       <p id="upload-error" role="alert"></p>
-      <div class="actions"><button class="primary" id="submit-files">提交并开始审计</button></div>
+      <div class="intake-footer"><span>提交后，资料页图及证据内容将发送至 OpenAI。</span><button class="primary" id="submit-files">提交并开始审计</button></div>
     </form>
   </dialog>
   <dialog id="page-dialog" class="wide-dialog" aria-labelledby="page-title">

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {writeFile} from 'node:fs/promises';
-import {join} from 'node:path';
+import {join,resolve} from 'node:path';
 
 // These are the three public, watermarked originals of the equipment-quality exercise, R7.
 const digests = {
@@ -115,6 +115,24 @@ export async function checkProduct({root,call,evaluate,wait}) {
     assert.deepEqual(await evaluate('[...document.querySelector("#upload-files").files].map(f=>f.name)'),['contract.pdf','receipt.pdf']);
     await evaluate(select('#chosen-files button')+'.click()');
     assert.deepEqual(await evaluate('[...document.querySelector("#upload-files").files].map(f=>f.name)'),['receipt.pdf']);
+    const {root:dom}=await call('DOM.getDocument');
+    const {nodeId}=await call('DOM.querySelector',{nodeId:dom.nodeId,selector:'#upload-files'});
+    for (const name of ['contract','acceptance']) await call('DOM.setFileInputFiles',{nodeId,files:[resolve('frontend/showcase/'+name+'.pdf')]});
+    assert.deepEqual(await evaluate('Array.from(document.querySelector("#upload-files").files,f=>f.name)'),['receipt.pdf','contract.pdf','acceptance.pdf']);
+    assert.ok(await evaluate('document.querySelector("#intake-count").textContent.includes("3 / 12")'));
+    assert.ok(await evaluate('document.querySelector(".intake-footer").innerText.includes("OpenAI") && !document.querySelector(".intake-requirements").open'));
+    for (const width of [1440,390,320]) {
+      await call('Emulation.setDeviceMetricsOverride',{width,height:width<600?844:900,deviceScaleFactor:1,mobile:width<600});
+      assert.ok(await evaluate('document.querySelector("#upload-dialog").scrollWidth<=document.querySelector("#upload-dialog").clientWidth+1'));
+      if (width!==320) {
+        const clip=await evaluate('(()=>{const r=document.querySelector("#upload-dialog").getBoundingClientRect(); return {x:r.left+scrollX,y:r.top+scrollY,width:r.width,height:r.height,scale:1}})()');
+        await capture(call,'intake-'+width,clip);
+      }
+    }
+    await evaluate('(()=>{const data=new DataTransfer(); for(let i=0;i<10;i++) data.items.add(new File(["演练"],"额外"+i+".pdf"));document.querySelector(".upload-zone").dispatchEvent(new DragEvent("drop",{dataTransfer:data,bubbles:true}));})()');
+    assert.ok(await evaluate('document.querySelector("#intake-count").textContent.includes("13 / 12") && document.querySelector("#upload-error").textContent.includes("超过 12")'));
+    await evaluate('document.querySelector("#chosen-files li:last-child button").click()');
+    assert.equal(await evaluate('document.querySelector("#upload-error").textContent'),'');
   }
   assert.equal(await evaluate('location.pathname'),'/app');
   await call('Page.navigate',{url:root+'/#rules'});

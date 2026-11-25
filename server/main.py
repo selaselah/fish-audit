@@ -285,7 +285,7 @@ def create_app(store, worker):
 
     @app.get("/<filename>")
     def asset(filename):
-        if filename not in {"app.js", "team.js", "desk.js", "provenance.js", "supplements.js", "checkpoints.js", "peer-review.js",
+        if filename not in {"app.js", "team.js", "desk.js", "evidence-compare.js", "provenance.js", "supplements.js", "checkpoints.js", "peer-review.js",
                             "style.css", "brand.css", "landing.css", "landing.js"}:
             raise CaseError("资源不存在。", 404)
         return send_file(FRONTEND / filename)

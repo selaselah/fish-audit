@@ -46,6 +46,8 @@
 
 本轮将页图缩放放在原件一侧，字段切换放在引文一侧。审阅者能放大原件，再按所见读数登记核图意见。[Dext 原件与行项目编辑器](https://help.dext.com/en/articles/760441-how-to-customise-the-line-item-editor-in-dext) · [本项目原件核验](../docs/interaction-design/README.md#从审计建议回到原件)
 
+在验收争议中，两份原件也需要同时阅读。Fish Audit 的「原件对照」把同一发现引用的合同条款、验收实测或签章日期放入左右两栏。两侧可以分别搜索和更换引文，点击页图可查看该版底稿所据整页。该设计借鉴了 Dext 同屏查看原件与明细的分栏操作。[Dext 分栏操作](https://help.dext.com/en/articles/760441-how-to-customise-the-line-item-editor-in-dext)
+
 ## MindBridge · 从异常列表追到单笔明细
 
 加拿大，查阅于 2026-11-25。官方帮助标注更新于 2025-10-03，适用总账分析 MAC v.2。观察开头的编号截图，并核对配置视图和下钻小节。[Data table dashboard: Overview for GL (MAC v.2)](https://support.mindbridge.ai/hc/en-us/articles/360058192493-Data-table-dashboard-Overview-for-GL-MAC-v-2)

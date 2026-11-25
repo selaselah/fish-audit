@@ -2,7 +2,6 @@ function resetIntake() {
   state.intakeParent = null;
   state.key = null;
   $('#upload-form').reset();
-  $('#chosen-files').replaceChildren();
   $('#retain-files').replaceChildren(el('legend','沿用前案原件'));
   $('#return-reason').textContent = '';
   $('#upload-error').textContent = '';
@@ -11,6 +10,8 @@ function resetIntake() {
   $('#supplement-fields').hidden = true;
   $('#upload-profile').disabled = false;
   $('#upload-files').required = true;
+  $('.intake-requirements').open=false;
+  drawIntakeFiles([]);
   profileChanged();
 }
 
@@ -35,7 +36,7 @@ function openIntake(parent=null) {
         const label = el('label','','check-label');
         label.append(check,el('span',doc.name)); $('#retain-files').append(label);
       }
-      profileChanged();
+      profileChanged(); renderIntakeLimits();
     }
   }
   $('#upload-dialog').showModal();

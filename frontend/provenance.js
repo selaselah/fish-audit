@@ -71,6 +71,9 @@ function performanceOverview(findings, graph) {
   const payments = findings.filter(f=>f.rule==='H05');
   const batches = findings.find(f => f.batch_acceptance)?.batch_acceptance;
   const index = graphIndex(graph);
+  const acceptance=findings.find(f=>f.rule==='H02');
+  const batchPairs=batches?.records.some(r=>r.standard) ? EvidenceCompare.presets(acceptance,
+    traceReferences(graph,acceptance).map(id=>index.facts.get(id)).filter(Boolean),graph) : [];
   const paymentLabel = f => {
     const document = f.evidence.map(ref=>index.facts.get(ref)).find(fact=>fact?.field==='bank_receipt');
     return document?.name || f.id;
@@ -94,6 +97,16 @@ function performanceOverview(findings, graph) {
     const sum=findings.find(f=>f.stage_payments && sameStage(f));
     if (sum) results.append(performanceJump(sum,'本期回单合计'));
     row.append(box('phase-contract',source,el('q',stage.clause)),results);
+    const batch=batches?.batches.find(b=>b.index===stage.batch_index);
+    const record=batch?.records.length===1 && batches.records.find(r=>r.unit===batch.records[0]);
+    if (record?.standard) {
+      const version={original:'按原合同',applied:'按补充协议',pending:'适用版本待核'}[record.standard.state];
+      const review=box('flow',el('strong',version),el('span',record.standard.criterion || record.date || '验收日期待核','small'));
+      const pair=batchPairs.find(p=>p.key==='batch-'+batch.index);
+      if (pair) review.append(action('对照本批原件',()=>showFindingPath(acceptance,true,pair.key),'compare-jump'));
+      else if (record.scope_ref) review.append(citation(record.scope_ref));
+      row.append(review);
+    }
     const remarks = phaseRemarks(phase, batches, graph);
     if (remarks) row.append(remarks);
     row.id = 'phase-record-'+phase.id;
@@ -913,8 +926,8 @@ function qualityChangePanel(change, graph) {
   const facts = change.evidence.map(id=>index.facts.get(id)).filter(Boolean);
   const units = new Set(change.units);
   const quantity = change.quantity;
-  const decision = {applied:'按补充协议',original:'按原合同',pending:'适用版本待核'}[change.state];
-  const panel = box('quality-change',box('flow',el('h4',quantity?'终验适用交付数量':'终验适用标准'),el('strong',decision,'quality-decision')));
+  const decision = {applied:'按补充协议',original:'按原合同',by_batch:'按各批验收日核对',pending:'适用版本待核'}[change.state];
+  const panel = box('quality-change',box('flow',el('h4',quantity?'终验适用交付数量':change.state==='by_batch'?'分批验收标准':'终验适用标准'),el('strong',decision,'quality-decision')));
   panel.dataset.qualityChange = change.state;
   if (change.applied_criterion) panel.append(el('p',change.applied_criterion,'quality-standard'));
   const docUnit = f => f.unit || f.doc;
@@ -982,6 +995,7 @@ function qualityChangePanel(change, graph) {
   }
   const dates = el('dl','','mandate-dates');
   for (const [key,title] of [['buyer_sealed_on','甲方盖章'],['seller_sealed_on','乙方盖章'],['effective_on','按约定生效'],['accepted_on','本次终验']]) {
+    if (key==='accepted_on' && change.state==='by_batch') continue;
     const value=el('dd');
     value.append(el('span',change[key] || '待核'));
     const fields=key==='effective_on'?['change_effect_clause']:[key];
@@ -1327,13 +1341,16 @@ function invoiceApproval(check, digest) {
   return panel;
 }
 
-function traceEvidence(report, finding, index) {
-  const supported = new Set(report.graph.edges.filter(e=>e.type==='supports_result' && e.to==='finding/'+finding.id).map(e=>e.from));
+function traceReferences(graph, finding) {
+  const supports=new Set(graph.edges.filter(e=>e.type==='supports_result' && e.to==='finding/'+finding.id).map(e=>e.from));
+  return finding.evidence.filter(ref=>supports.has(ref));
+}
+
+function traceEvidence(finding, index, references) {
   const groups = new Map();
   const archived = new Map();
   const other = [];
-  for (const ref of finding.evidence) {
-    if (!supported.has(ref)) continue;
+  for (const ref of references) {
     const fact = index.facts.get(ref);
     if (fact) {
       if (!groups.has(fact.doc)) groups.set(fact.doc,[]);
@@ -1383,19 +1400,42 @@ function provenancePanel(report) {
     if (f.id===state.traceId && state.traceKey===key) option.selected=true;
     select.add(option);
   }
-  const label = el('label','选择审计发现'); label.append(select);
+  const label = el('label','选择审计发现','trace-finding-picker'); label.append(select);
   const trail = box('trace-grid');
+  trail.id='trace-details';
+  const compare=box('trace-compare-host'); compare.id='trace-compare';
+  const modeButtons=box('trace-modes');
+  modeButtons.setAttribute('role','group'); modeButtons.setAttribute('aria-label','证据查看方式');
+  let preferred, buildComparison;
+  function show(mode) {
+    const paired = mode==='compare' && Boolean(buildComparison);
+    if (paired && !compare.firstElementChild) compare.append(buildComparison());
+    trail.hidden=paired; compare.hidden=!paired;
+    for (const button of modeButtons.children)
+      button.setAttribute('aria-pressed',String(button.dataset.mode===(paired?'compare':'details')));
+  }
+  for (const [id,title,icon] of [['compare','原件对照','layout-sidebar-inset-reverse'],['details','取证明细','journal-text']]) {
+    const button=action(title,()=>{ preferred=id; show(id); });
+    button.dataset.mode=id; button.setAttribute('aria-controls',id==='compare'?compare.id:trail.id);
+    button.prepend(glyph(icon)); modeButtons.append(button);
+  }
   function render() {
     const f = findings.find(item=>item.id===select.value);
     state.traceKey=key; state.traceId=f.id;
     const control=programs.get('finding/'+f.id);
     const rule=index.nodes.get(control);
+    const references=traceReferences(graph,f);
+    const facts=references.map(ref=>index.facts.get(ref)).filter(Boolean);
+    const pairs=EvidenceCompare.presets(f,facts,graph);
+    buildComparison=facts.length>=2 ? ()=>EvidenceCompare.panel(f,facts,pairs,index) : null;
+    modeButtons.hidden=!buildComparison;
+    compare.replaceChildren();
     const methods=graph.edges.filter(e=>e.type==='method_reference' && e.to===control).map(e=>index.nodes.get(e.from)).filter(Boolean);
     const program=box('trace-part',el('h3','执行程序'),el('strong',rule.label+' · '+f.title),el('p',rule.basis));
     if (methods.length) program.append(lazyFold('制度出处与适用范围',()=>methods.map(sourceEntry)));
     const result=box('trace-part trace-result',el('h3','本项结论'),tag(f.status),el('p',f.detail));
     if (f.calculations?.length) result.append(lazyFold('复算金额',()=>f.calculations.map(calculationPanel)));
-    trail.replaceChildren(program,traceEvidence(report,f,index),result);
+    trail.replaceChildren(program,traceEvidence(f,index,references),result);
     if (f.rule==='B03') {
       const comparison=accountComparison(f,graph);
       if (comparison) trail.append(comparison);
@@ -1404,7 +1444,10 @@ function provenancePanel(report) {
       const details=installmentDetails(graph.payment_history.installments);
       details.classList.add('trace-installments'); trail.append(details);
     }
+    show(preferred || (f.rule==='H02' && pairs.length?'compare':'details'));
   }
   select.addEventListener('change',render); render();
-  return box('panel trace-panel',el('h2','审计证据路径'),label,trail);
+  return box('panel trace-panel',
+    box('trace-heading',el('h2','审计证据路径'),el('span','R'+state.bundle.rev+' 底稿','trace-revision')),
+    box('trace-toolbar',label,modeButtons),compare,trail);
 }
