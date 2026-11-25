@@ -142,7 +142,7 @@ function performanceOverview(findings, graph) {
     if (acceptance?.reinspection) {
       const candidates=pairs.filter(p=>p.key.startsWith('retest-') && [p.left.id,p.right.id].every(ref=>phase.evidence.includes(ref)));
       const selected=candidates.find(p=>p.key==='retest-'+acceptance.reinspection.focus) || candidates[0];
-      const register=ReinspectionTrail.phaseLink(acceptance,phase,graph);
+      const register=ReinspectionTrail.phaseLink(acceptance,phase,graph) || ReinspectionTiming.phaseLink(acceptance,phase,graph);
       if (register) row.append(register);
       else if (selected) row.append(action('对照整改与复验',()=>showFindingPath(acceptance,true,selected.key),'compare-jump'));
     }

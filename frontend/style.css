@@ -295,9 +295,11 @@ dialog::backdrop { background: rgb(24 30 47 / 45%); }
 
 /* The desk pairs a bounded queue with the actual work list. */
 body { line-height:1.55; }
-.wrap { width:min(1440px,calc(100% - clamp(48px,8vw,120px))); padding-inline:0; }
+.wrap { width:min(1440px,calc(100% - clamp(48px,9vw,144px))); padding-inline:0; }
 .bar { background:#fff; border-bottom:1px solid var(--line); }
 .header-inner { min-height:70px; display:flex; align-items:center; justify-content:space-between; gap:clamp(18px,4vw,60px); padding-block:0; }
+.header-inner { position: relative; }
+.header-inner .skip { left: 0; }
 .brand.fish-wordmark { gap:8px; color:var(--ink); font:650 25px/1 var(--font-ui); letter-spacing:-.065em; }
 .primary-nav { display:flex; align-items:stretch; margin-right:auto; align-self:stretch; gap:8px; }
 .primary-nav a { display:flex; align-items:center; padding:0 14px; border:0; border-bottom:2px solid transparent; color:var(--secondary); font-size:.94rem; font-weight:520; }
@@ -397,7 +399,8 @@ input,select,textarea { border-color:var(--field-line); }
   .fish-wordmark img { width:30px; height:30px; }
   .rail-footer { margin-left:auto; gap:10px; }
   .primary-nav { order:3; width:100%; gap:5px; align-self:auto; }
-  .primary-nav a { min-height:40px; padding-inline:9px; font-size:.88rem; }
+  .primary-nav a { min-height:44px; padding-inline:9px; font-size:.88rem; }
+  .primary-nav a:first-child { padding-inline-start:0; }
   .account-link { min-height:36px; padding:5px 9px; max-width:46vw; }
   main.wrap { padding:18px 0 48px; }
   .heading { margin:5px 0 17px; }

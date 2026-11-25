@@ -268,7 +268,7 @@ def create_app(store, worker):
             args["finding"] = ref
         if "view" in request.args:
             view = request.args["view"]
-            if view not in ("replay", "reinspection") or set(args)!={"rev"}:
+            if view not in ("replay", "reinspection", "entities") or set(args)!={"rev"}:
                 raise CaseError("请选择有效的底稿视图及版本。",400)
             args["view"] = view
         route = ("w/"+wid+"/" if wid else "")+"case/"+case_id

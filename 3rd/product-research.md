@@ -1,5 +1,11 @@
 # 审计与会计软件的公开界面
 
+## 逐份翻阅一个业务对象的凭证
+
+DataSnipper 的复核操作可由工作表的引用回到证据文件中的对应页与位置。Fish Audit 在“按业务对象”中采用相同的取证动作。切换合同号或单位后，只展示所选单据的一处原文。点击“对照原行”可以核对实际印刷图像。所用原图均来自本地水印案例。[DataSnipper 官方复核说明](https://knowledge.datasnipper.com/en/articles/685955-how-to-document-your-audit-procedures-with-datasnipper)
+
+IBM Carbon 的内容切换器适用于在同一屏位置切换相关视图。Fish Audit 用它切换审计发现与业务对象，以及等待期核对中的合同、整改和复验依据。Ironclad 的合同义务工作台按状态、类型和到期日组织义务，本项目在具体付款期旁展示实际待核的等待条件和凭据。[IBM Carbon 内容切换器](https://www.carbondesignsystem.com/building-blocks/core/components/content-switcher/guidelines) · [Ironclad 合同义务工作台](https://support.ironcladapp.com/en-us/articles/18170710-obligations-dashboard)
+
 ## 整改复验与原件核对
 
 Procore Punch List 把整改执行、提交复核、待关闭和关闭列为不同状态。Fish Audit 在做合同履约审查时，保留原验收、整改、复验各自的记录。最终报告上的关闭文字仍须对应到具体缺陷与措施。[Procore 整改项工作流说明](https://support.procore.com/faq/how-does-the-punch-list-workflow-affect-my-existing-punch-list-items)

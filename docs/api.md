@@ -17,6 +17,8 @@ H02 的可选 `reinspection.timing` 含 `required_hours`、`term_ref`、`repair_
 
 签收旧版“复验已关闭”时会按原页核对遗漏的等待条件。有待处置事项返回 HTTP 409，历史版本仍可按当时规则离线复算。查看对应版本的交互使用 `/workpaper/<case_id>?rev=<rev>&view=reinspection`。
 
+同一固定版本支持 `view=entities` 打开“知识图谱 → 按业务对象”。企业底稿使用 `/w/<wid>/workpaper/<case_id>?rev=<rev>&view=entities`。与其他视图共用版本和租户权限校验，不能在同一链接混用 `fact`、`finding` 和 `view`。选择器仅消费该版图谱中可回查原件的关系，完整的档案仍从原有报告与证据包接口取得。
+
 ## 复验原件的逐行核对
 
 固定版本的底稿入口支持 `/workpaper/<case_id>?rev=<rev>&view=reinspection`。有权限查看该版底稿且存在整改复验记录时，页面直接定位到履约时间线。企业入口在相同路径前加 `/w/<wid>`。

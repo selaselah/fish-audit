@@ -209,7 +209,10 @@ function openPage(docId, pageNumber, highlight, lineHint, registerPair) {
   const repairRefs = repairPageReferences(state.bundle?.report.graph, docId, pageNumber, pageFacts);
   const paper=state.bundle?.report;
   const registerRefs=ReinspectionTrail.pageReferences(paper?.findings.find(f=>f.rule==='H02'),paper?.graph,docId,pageNumber);
-  const pageRefs = [...registerRefs, ...boardRefs, ...repairRefs, ...PhaseEvidence.pageReferences(paper?.graph,docId,pageNumber,pageFacts,lineHint)];
+  const timingRows=ReinspectionTiming.pageReferences(paper?.findings.find(f=>f.rule==='H02'),paper?.graph,docId,pageNumber);
+  const otherRefs = [...registerRefs, ...boardRefs, ...repairRefs, ...PhaseEvidence.pageReferences(paper?.graph,docId,pageNumber,pageFacts,lineHint)];
+  const timingRefs=timingRows.filter(s=>!otherRefs.some(r=>r.rawLine===s.rawLine));
+  const pageRefs = [...timingRefs, ...otherRefs];
   const comparedFact=registerPair && pageFacts.find(f=>f.id===registerPair.fact && f.field==='acceptance_result' && f.source_line?.rects?.length);
   const comparedNote=registerPair && registerRefs.find(s=>s.rawLine===registerPair.line && s.rawLine!==comparedFact?.source_line.number);
   const comparison=comparedFact && comparedNote ? box('trail-reader-pair') : null;
@@ -321,7 +324,7 @@ function openPage(docId, pageNumber, highlight, lineHint, registerPair) {
   if (pageFacts.length || rawLines.length) {
     fieldPicker=el('select'); fieldPicker.setAttribute('aria-label','定位本页引文');
     fieldPicker.add(new Option('全部引文 · '+(pageFacts.length + rawLines.length)+' 项',''));
-    for (const [label,refs] of [['审批决定与待核原文',boardRefs],['整改状态与原行',repairRefs],['复验附注',registerRefs]]) {
+    for (const [label,refs] of [['复验间隔原行',timingRefs],['审批决定与待核原文',boardRefs],['整改状态与原行',repairRefs],['复验附注',registerRefs]]) {
       if (!refs.length) continue;
       const group = el('optgroup');
       group.label = label;
@@ -524,7 +527,9 @@ function openPage(docId, pageNumber, highlight, lineHint, registerPair) {
   }
   for (const gap of gaps) {
     const label = {inspection_reference:'设备检验原行',contract_signing_reference:'合同签章原行',payment_release_reference:'放行依据原行',acceptance_opinion_reference:'付款意见原行',payment_amendment_reference:'付款变更所据原行',invoice_receipt_reference:'收票条件所据原行',repair_completion_reference:'整改记录原行',equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',approval_reference:'董事会审批记录原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
-    const section = box('evidence-row',el('h4',(gap.quality==='register_reference'?'复验附注':label)+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
+    const timingRow=timingRefs.find(r=>r.rawLine===gap.line);
+    const heading=timingRow?.label || (gap.quality==='register_reference'?'复验附注':label);
+    const section = box('evidence-row',el('h4',heading+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
     section.dataset.gapLine = String(gap.line);
     const raw = rawLines.find(source => source.rawLine === gap.line);
     if (raw) {
@@ -608,6 +613,11 @@ function citation(ref) {
     return Team.paperLink(label,prior.case_id,'button ref',new URLSearchParams({rev:String(prior.rev),fact:prior.fact}));
   }
   const source = index?.nodes.get(ref);
+  if (source?.type==='reinspection_time_line') {
+    const report=state.bundle.report;
+    const row=ReinspectionTiming.sources(report.graph,report.findings.find(f=>f.rule==='H02')).find(r=>r.id===ref);
+    return row ? action(row.quote,()=>ReinspectionTiming.open(row),'ref') : el('span','复验间隔原行待核','small');
+  }
   if (ref.startsWith('inspection-line/')) {
     const graph=state.bundle.report.graph;
     const row=InspectionCoverage.sources(graph).find(r=>r.id===ref);
@@ -760,7 +770,8 @@ function evidenceJump(label, targetId) {
 
 function showFindingPath(item, compare = false, pair = null) {
   state.traceKey=state.detail.id+'@'+state.bundle.rev; state.traceId=item.id;
-  state.tab='graph'; renderCase();
+  graphIndex(state.bundle.report.graph).graphBrowseMode='findings';
+  state.tab='graph'; renderCase(true);
   if (compare) {
     const button=$('.trace-modes:not([hidden]) [data-mode="compare"]');
     if (button) {
@@ -1010,14 +1021,17 @@ function reportPanel() {
   return box('grid workpaper-grid', review, side);
 }
 function graphPanel() {
-  const graph = state.bundle.report.graph;
+  return EntityBrowser.views(state.bundle.report, graphRelations);
+}
+function graphRelations(report) {
+  const graph = report.graph;
   const {nodes,facts} = graphIndex(graph);
   const docIds = new Set((graph.audit_documents || graph.documents).map(doc => doc.id));
   const relations = graph.edges.filter(edge => docIds.has(edge.from) && !['contains','section_page','acceptance_reservation','acceptance_payment_opinion','payment_release_basis','supplier_identity_basis','delivery_quantity_basis','stage_invoice_clause','payment_amendment_basis'].includes(edge.type));
   const panel = box('panel', el('h2', '本案证据关系'), el('p', graph.nodes.length + ' 个节点 · ' +
     graph.edges.length + ' 条关系 · ' + graph.facts.length + ' 条提取记录', 'muted'));
   const grouped = new Map();
-  const signing=SigningParties.relations(state.bundle.report.findings.find(f=>f.rule==='H01'),graph);
+  const signing=SigningParties.relations(report.findings.find(f=>f.rule==='H01'),graph);
   if (signing) panel.append(signing);
   const opinions=AcceptanceOpinion.rows(graph);
   const released=ReleaseEvidence.sources(graph).filter(s=>!['title','identity'].includes(s.role));
@@ -1068,7 +1082,7 @@ function graphPanel() {
     list.classList.add('equipment-model-relations');
     panel.append(list);
   }
-  const exchangeCheck=state.bundle.report.findings.find(f=>f.equipment_models?.exchange)?.equipment_models;
+  const exchangeCheck=report.findings.find(f=>f.equipment_models?.exchange)?.equipment_models;
   if (exchangeCheck) {
     const list=lazyFold('设备退回与换入的证据路径',()=>{
       const links=graph.edges.filter(e=>['equipment_exchange_returned','equipment_exchange_received'].includes(e.type));
@@ -1198,7 +1212,7 @@ function graphPanel() {
       ...(row.signoff_hash ? [el('small','人工签收 SHA-256 · '+row.signoff_hash,'small')] : [])))));
   if (graph.payment_history) {
     const history = graph.payment_history;
-    const comparison = (rule,kind,label) => state.bundle.report.findings.find(f=>f.rule===rule)?.status==='missing'
+    const comparison = (rule,kind,label) => report.findings.find(f=>f.rule===rule)?.status==='missing'
       ? label+'待补证' : label+'命中 '+history.counts[kind]+' 份';
     const matches = history.matches.map(match=>lazyFold(match.title+' · R'+match.rev,()=>[
       el('p',(match.kind==='same'?'相同付款户名与流水':'同合同的另一笔全额流水')+' · '+statusName(match.decision)+' · '+time(match.signed_at)+' 签收'),
@@ -1215,8 +1229,7 @@ function graphPanel() {
       el('blockquote', item.quote || item.detail || '请查看原件或补传清晰资料。'), citation(item.id)))));
   panel.append(lazyFold('资料、页与观察记录的溯源关系', ()=>graph.edges.filter(edge => ['contains','records'].includes(edge.type))
     .map(edge => box('line', el('code', edge.from + ' → ' + edge.to), box('chips', ...edge.evidence.map(citation))))));
-  const path = provenancePanel(state.bundle.report);
-  return path ? box('graph-stack',path,panel) : panel;
+  return panel;
 }
 function activityPanel() {
   const log = box('panel', el('h2', '处理进度记录'));
@@ -1387,17 +1400,21 @@ async function refresh() {
       if (requestedFinding && state.openedCitation!==location.hash && state.bundle?.report.findings.some(f=>f.id===requestedFinding)) {
         state.openedCitation=location.hash; state.traceKey=data.id+'@'+rev; state.traceId=requestedFinding;
         const traced = graphIndex(bundle.report.graph).nodes.has('finding/'+requestedFinding);
+        if (traced) graphIndex(bundle.report.graph).graphBrowseMode='findings';
         state.tab=traced?'graph':'report'; focusFinding=traced?'#trace-select':'[data-finding="'+requestedFinding+'"]';
       } else if (route.params.get('view')==='replay' && state.openedCitation!==location.hash && state.bundle) {
         state.openedCitation=location.hash; state.tab='activity'; focusFinding='.rule-replay button';
       } else if (route.params.get('view')==='reinspection' && state.openedCitation!==location.hash &&
                  bundle?.report.findings.some(f=>f.rule==='H02' && f.reinspection)) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#equipment-reinspection-trail';
+      } else if (route.params.get('view')==='entities' && state.openedCitation!==location.hash && state.bundle) {
+        state.openedCitation=location.hash; state.tab='graph';
+        graphIndex(bundle.report.graph).graphBrowseMode='entities'; focusFinding='#case-entity-browser';
       }
       renderCase(Boolean(focusFinding));
       if (focusFinding) {
         const target = $(focusFinding);
-        if (target?.dataset.finding || target?.id==='equipment-reinspection-trail') revealPaperTarget(target);
+        if (target?.dataset.finding || ['equipment-reinspection-trail','case-entity-browser'].includes(target?.id)) revealPaperTarget(target);
         else target?.focus();
       }
       const target = route.params.get('fact');

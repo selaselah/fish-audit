@@ -116,6 +116,7 @@ const ReinspectionTrail = (() => {
     const view=el('div','','trail-view');
     view.dataset.reinspectionRole=role.key;
     const check=finding.reinspection.register;
+    if (role.key==='final' && finding.reinspection.timing) view.append(ReinspectionTiming.panel(finding,graph));
     if (!steps.length) {
       view.append(el('strong','缺少可归属的'+role.title+'资料','trail-empty'));
       for (const gap of graph.gaps.filter(g=>g.quality==='uncovered_title' && g.title_hint===role.heading)) {
@@ -160,6 +161,10 @@ const ReinspectionTrail = (() => {
         compare.setAttribute('aria-label','页内对照，切换复验结论与附注');
         header.append(compare);
       }
+      if (role.key==='final' && finding.reinspection.timing && check?.status==='ok' && steps.length===1 && cards.length) {
+        view.append(fold('复验报告的签认和结论（'+cards.length+'）',box('trail-cards',...cards)));
+        continue;
+      }
       view.append(header);
       if (cards.length) {
         view.append(box('trail-cards',...cards.slice(0,2)));
@@ -186,8 +191,9 @@ const ReinspectionTrail = (() => {
     const supported=new Set(traceReferences(graph,finding));
     const closed=chain.state==='closed' && finding.status==='ok';
     let stateLabel=closed?(chain.register?'已关闭':'该版记为已关闭'):'终验待核';
-    if (chain.register && chain.steps.some(s=>s.role==='final' &&
-        verifiedRows(s,chain.register,graph,supported).some(entry=>!entry.bound))) {
+    if ((chain.register && chain.steps.some(s=>s.role==='final' &&
+        verifiedRows(s,chain.register,graph,supported).some(entry=>!entry.bound))) ||
+        (chain.timing && !ReinspectionTiming.linked(chain.timing,ReinspectionTiming.sources(graph,finding)))) {
       stateLabel='证据关系待核';
       trail.dataset.disposition='unverified';
     }

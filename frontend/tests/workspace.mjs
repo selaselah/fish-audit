@@ -20,6 +20,8 @@ import {checkNavigation,checkPrior} from './prior-installment.mjs';
 import {checkInspectionCoverage} from './inspection-coverage.mjs';
 import {checkSigningParties} from './signing-parties.mjs';
 import {checkReinspectionTrail} from './reinspection-trail.mjs';
+import {checkReinspectionTiming} from './reinspection-timing.mjs';
+import {checkEntityBrowser} from './entity-browser.mjs';
 
 const scratch = await mkdtemp(join(tmpdir(), 'fish-ui-'));
 const socket = createServer().listen(0, '127.0.0.1');
@@ -65,6 +67,8 @@ const inspectionCase = caseArgument('--inspection-case');
 const signingCase = caseArgument('--signing-party-case');
 const priorCase=caseArgument('--prior-installment-case');
 const trailCase=caseArgument('--reinspection-trail-case');
+const timingCase=caseArgument('--reinspection-time-case');
+const entityCase=caseArgument('--entity-case');
 const navCase=caseArgument('--navigation-case');
 const phaseEvidenceCase = caseArgument('--phase-evidence-case');
 const paymentChangeCase = caseArgument('--payment-change-case');
@@ -74,7 +78,7 @@ const qualityImageCase = caseArgument('--quality-image-case');
 const reinspectionGap = caseArgument('--reinspection-gap-case');
 const brokenPayment = caseArgument('--payment-source-case');
 const waitingCase = caseArgument('--waiting-case');
-const seeded = [priorCase,trailCase,navCase,product,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+const seeded = [priorCase,trailCase,timingCase,entityCase,navCase,product,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
 const root = product ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
@@ -142,6 +146,10 @@ try {
   await call('Page.navigate',{url:product ? root : root+'/app'});
   if (product) {
     await checkProduct({root,call,evaluate,wait});
+  } else if (entityCase) {
+    await checkEntityBrowser({root,call,evaluate,wait},entityCase);
+  } else if (timingCase) {
+    await checkReinspectionTiming({root,call,evaluate,wait},timingCase,Number(process.env.AUDIT_TIMING_REV));
   } else if (trailCase) {
     await checkReinspectionTrail({root,call,evaluate,wait},trailCase,Number(process.env.AUDIT_TRAIL_REV));
   } else if (priorCase) {
