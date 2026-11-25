@@ -24,6 +24,7 @@ import contract_effect
 import warranty_terms
 import payment_windows
 import acceptance_reservations
+import repair_completion
 from acceptance_authority import CLAUSE as AUTHORITY_CLAUSE, SIGNER as ACCEPTANCE_SIGNATURE, attach as record_signatories, witness_edges
 
 
@@ -41,7 +42,7 @@ PRINTED_TITLES = {label: field for field, labels in {
     "power_of_attorney": MANDATE_TITLES,
     "contract_addendum": ADDENDUM_TITLES,
     equipment_exchanges.TITLE: equipment_exchanges.TITLES,
-    "remediation": ("整改记录单","缺陷整改记录","整改完成记录"),
+    "remediation": repair_completion.TITLES,
     "reinspection": ("复验报告","整改复验单","最终复验报告","整改复验报告"),
     "bank_receipt": ("银行付款回单", "银行转账回单", "电子银行回单", "银行电子回单", "转账回单"),
     "claim": ("报销单", "差旅报销单", "差旅费报销单", "费用报销单"),
@@ -316,6 +317,9 @@ def build_graph(docs, pages, attestations, amendments=()):
     reservations = acceptance_reservations.sources(graph,lambda doc,number:texts[doc,number])
     graph["acceptance_reservation_sources"] = reservations
     graph["edges"].extend(acceptance_reservations.edges(reservations))
+    completion = repair_completion.sources(graph,lambda doc,number:texts[doc,number])
+    graph["repair_completion_sources"] = completion
+    graph["edges"].extend(repair_completion.edges(completion))
     graph["payment_window_sources"]=payment_windows.sources(graph,lambda doc,number:texts[doc,number])
     graph["contract_effect_sources"]=contract_effect.sources(graph,lambda doc,number:texts[doc,number])
     graph["warranty_sources"]=warranty_terms.sources(graph,lambda doc,number:texts[doc,number])

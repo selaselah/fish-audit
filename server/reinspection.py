@@ -64,13 +64,18 @@ def identifier(doc, field):
     return value if CODE.fullmatch(value) else ""
 
 
-def step(role, doc, date_field, fields):
-    date = doc.date(date_field)
+def step(role, doc, date_field, fields, read_date, repair_checks):
+    date = read_date(doc, date_field)
     sources = doc.evidence(*fields)
     sources.extend(f"{h['doc']}/p{h['page']}" for h in doc.quality_holds if h["field"] in fields and h["lines"])
     sources.extend(note["fact"] for h in doc.quality_holds if h["field"] in fields for note in h["observations"])
-    return {"role":role, "unit":doc.unit, "date":date.isoformat() if date else None,
-            "evidence":list(dict.fromkeys(sources))}
+    result = {"role":role, "unit":doc.unit, "date":date.isoformat() if date else None}
+    if role == "repair" and doc.unit in repair_checks:
+        check = repair_checks[doc.unit]
+        result.update(date=check["date"], completion=check)
+        sources.extend(check["evidence"])
+    result["evidence"] = list(dict.fromkeys(sources))
+    return result
 
 
 def closed_steps(findings):
@@ -81,7 +86,7 @@ def closed_steps(findings):
     return {}
 
 
-def assess(contract, receipts, repairs, retests, evaluate, *, signature_ok=None):
+def assess(contract, receipts, repairs, retests, evaluate, *, signature_ok=None, read_date=None, repair_checks=None):
     # A regular acceptance form may explicitly reference the record that it reinspects.
     originals, followups = [], list(retests)
     for doc in receipts:
@@ -100,7 +105,10 @@ def assess(contract, receipts, repairs, retests, evaluate, *, signature_ok=None)
         return first, originals[0].date("accepted_on") if first["status"]=="ok" else None
     groups = (("original",originals,"accepted_on",ORIGINAL),("repair",repairs,"repaired_on",REPAIR),
               ("final",followups,"accepted_on",FINAL))
-    steps = [step(role,doc,date_field,fields) for role,docs,date_field,fields in groups for doc in docs]
+    if read_date is None:
+        read_date = type(contract).date
+    repair_checks = repair_checks or {}
+    steps = [step(role,doc,date_field,fields,read_date,repair_checks) for role,docs,date_field,fields in groups for doc in docs]
     refs = [*first["evidence"],*(ref for s in steps for ref in s["evidence"])]
     for doc in [*repairs,*followups]:
         refs.extend(doc.evidence(*LINK_KEYS))
@@ -108,14 +116,16 @@ def assess(contract, receipts, repairs, retests, evaluate, *, signature_ok=None)
     initial = first["status"]
     open_status = initial if initial in ("issue","risk") else "missing"
 
-    def outcome(status, detail, date=None):
+    def outcome(status, detail, date=None, focus=None):
         result = {**first,"status":status,"detail":detail,"scope":scope,"evidence":list(dict.fromkeys(refs)),
                   "reinspection":{"state":"closed" if date else "open","steps":steps}}
+        if repair_checks and focus:
+            result["reinspection"]["focus"] = focus
         return result, date
 
-    def incomplete(reason):
+    def incomplete(reason, focus=None):
         prefix = first["detail"]+" " if initial in ("issue","risk") else ""
-        return outcome(open_status,prefix+reason)
+        return outcome(open_status,prefix+reason,focus=focus)
 
     if not all(len(docs)==1 for _,docs,_,_ in groups):
         return incomplete("整改复验需逐一对应原验收、整改记录和最终复验，目前资料有缺件或多个候选。")
@@ -134,7 +144,8 @@ def assess(contract, receipts, repairs, retests, evaluate, *, signature_ok=None)
             original_id==identifier(repair,"original_acceptance")==identifier(final,"original_acceptance")
             and repair_id==identifier(final,"repair_number")
             and defect==identifier(repair,"defect_number")==identifier(final,"defect_number")):
-        return incomplete("原验收号、整改记录号、缺陷号和独立复验号尚未逐项对应。")
+        issue = "defect" if defect and defect != identifier(final,"defect_number") else None
+        return incomplete("原验收号、整改记录号、缺陷号和独立复验号尚未逐项对应。",issue)
     description = original.body("acceptance_exception")
     if not description or description in ("无","无遗留事项","无整改事项","无异常") or not (
             description==repair.body("repair_subject")==final.body("repair_subject")):
@@ -143,11 +154,15 @@ def assess(contract, receipts, repairs, retests, evaluate, *, signature_ok=None)
     if not signed_original or initial not in ("issue","risk") or not (
             original.body("acceptance_result") in SIGNED_FAILURE or initial=="issue"):
         return incomplete("需确定原验收的具体不合格或附条件结论及验收人核图签认。")
+    completion = repair_checks.get(repair.unit)
+    if completion and completion["status"] != "ok":
+        return incomplete(completion["detail"],"dates" if not completion["date"] else "repair")
     action = repair.body("repair_action")
     if not action or re.search(r"计划|拟|待|尚未|未完成|仅部分|未实施",action) or (
             repair.body("repair_result") not in {"已完成","整改完成","已完成整改"} or not repair.signed("repair_signer")):
         return incomplete("整改记录需具备实际措施、明确的完成状态及负责人核图签认。")
-    signed, opened, fixed, closed = contract.date("signed_on"),original.date("accepted_on"),repair.date("repaired_on"),final.date("accepted_on")
+    signed, opened = read_date(contract,"signed_on"), read_date(original,"accepted_on")
+    fixed, closed = read_date(repair,"repaired_on"), read_date(final,"accepted_on")
     if not all((signed,opened,fixed,closed)) or not signed <= opened <= fixed <= closed:
         return incomplete("签约、原验收、整改完成和复验日期缺失或先后矛盾。")
     latest = evaluate(contract,[final])

@@ -38,6 +38,7 @@ from contract_effect import verify as verify_contract_effect
 from warranty_terms import verify as verify_warranty
 from payment_windows import verify as verify_payment_windows
 from acceptance_reservations import verify as verify_reservations
+from repair_completion import verify as verify_repair_completion
 from contract_changes import verify_sources as verify_addendum_sources
 from delegation import verify_sources as verify_delegation_sources
 from peer_review import different_reviewers, review_record, valid_findings, verify_review
@@ -847,6 +848,7 @@ class Store:
                     verify_warranty(paper,page_text,signing=True)
                     verify_payment_windows(paper,page_text,signing=True)
                     verify_reservations(paper,page_text,signing=True)
+                    verify_repair_completion(paper,page_text,signing=True)
                     inspected = [*paper["graph"].get("quality_addenda",{}).get("pages",[]),
                                  *paper["graph"].get("acceptance_authority_sources",{}).get("pages",[]),
                                  *paper["graph"].get("delivery_batch_sources",{}).get("pages",[]),
@@ -855,6 +857,7 @@ class Store:
                                  *paper["graph"].get("payment_window_sources",{}).get("pages",[]),
                                  *paper["graph"].get("acceptance_reservation_sources",{}).get("pages",[])]
                     inspected.extend(paper["graph"].get("stage_payment_sources",{}).get("pages",[]))
+                    inspected.extend(paper["graph"].get("repair_completion_sources",{}).get("pages",[]))
                     inspected.extend(paper["graph"].get("equipment_model_sources",{}).get("pages",[]))
                     inspected.extend(page for packet in paper["graph"].get("receipt_packet_sources",{}).get("packets",[]) for page in packet["pages"])
                     for page in inspected:
