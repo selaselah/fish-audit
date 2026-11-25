@@ -73,6 +73,9 @@ function performanceOverview(findings, graph) {
   const effect=findings.find(f=>f.rule==='H01');
   const parties=SigningParties.panel(effect,graph,phases);
   if (parties) overview.append(parties);
+  const acceptance=findings.find(f=>f.rule==='H02');
+  const inspection=InspectionCoverage.panel(acceptance,graph);
+  if (inspection) overview.append(inspection);
   let expandedMandate=false;
   for (const entry of effect?.delegations || []) {
     const calendar=MandateCalendar.panel(effect,entry,graph,!expandedMandate);
@@ -85,7 +88,6 @@ function performanceOverview(findings, graph) {
   const payments = findings.filter(f=>f.rule==='H05');
   const batches = findings.find(f => f.batch_acceptance)?.batch_acceptance;
   const index = graphIndex(graph);
-  const acceptance=findings.find(f=>f.rule==='H02');
   const signing=findings.find(f=>f.rule==='H01' && f.delegations?.some(d=>d.status!=='ok'));
   const authorityPairs=signing ? EvidenceCompare.presets(signing,
     traceReferences(graph,signing).map(id=>index.facts.get(id)).filter(Boolean),graph).filter(p=>p.authority && p.status) : [];

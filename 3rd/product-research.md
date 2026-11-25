@@ -1,5 +1,9 @@
 # 审计与会计软件的公开界面
 
+## 从单台设备读数查到凭证
+
+DataSnipper 的审阅界面允许从结果单元格直接打开相应来源。一项结果有多个片段时，审阅者可以逐条切换。Fish Audit 将这项操作用于验收单。选择设备编号后可以逐条打开读数，同一设备重复测温时保留两个原件入口。选中缺记录的设备则可核对验收清单和合同条款。中性的灰蓝承载正常数据，钴蓝表示选中，超限与缺项同时用颜色和文字提示。[DataSnipper 官方审阅说明](https://knowledge.datasnipper.com/en/articles/882479-how-to-review-a-task-s-output-in-alwin) · [Fish Audit 交互实拍](../docs/interaction-design/README.md#按设备检查验收记录)
+
 ## 扫描附件按原页核对
 
 Acrobat 使用页面缩略图导航长文档，可从小图直接进入对应物理页。本项目把页码、真实缩略图和文件名放在签章栏旁。甲乙方分别回传不同页时，切换签署方会显示该方的用印页。两页对照沿用固定版底稿中的两条引文。电子正文有可验证坐标时，可看原行。扫描件按整页展示。[Adobe Acrobat 页面缩略图](https://helpx.adobe.com/acrobat/using/page-thumbnails-bookmarks-pdfs.html) · [工作台实拍](../docs/interaction-design/README.md#扫描用印页)

@@ -1302,3 +1302,32 @@ button.mandate-day.signing-day[aria-pressed=true] { box-shadow:inset 0 0 0 1px c
   .scan-thumb img { max-block-size:88px; }
   .scan-zoom-link,.scan-field,.scan-page-picker { min-height:44px; }
 }
+
+.ledger-filter-head { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px; }
+.ledger-filter-head h2 { margin:0; }
+.finding-scope { display:inline-flex; gap:1px; border-radius:7px; padding:2px; background:var(--soft); }
+.finding-scope button { display:inline-flex; align-items:center; justify-content:center; gap:5px; min-height:40px; padding:4px 10px; font-size:.83rem; border:1px solid transparent; border-radius:5px; background:transparent; color:var(--secondary); }
+.finding-scope [aria-pressed=true] { background:var(--surface); color:var(--accent-hover); border-color:var(--line); box-shadow:0 1px 2px #192e5612; }
+.finding-scope strong, .finding-filters strong { font-variant-numeric:tabular-nums; }
+.finding-distribution { display:flex; gap:2px; height:6px; margin-top:13px; border-radius:4px; overflow:hidden; }
+.finding-distribution span { flex-basis:0; min-width:2px; }
+.finding-distribution [data-status=issue] { background:var(--issue-line); }
+.finding-distribution [data-status=risk] { background:var(--attention-line); }
+.finding-distribution [data-status=missing] { background:repeating-linear-gradient(120deg,#68788e 0 3px,#dce2eb 3px 6px); }
+.finding-distribution [data-status=ok] { background:var(--confirmed-line); }
+.finding-filters { margin:3px 0 4px; gap:0 8px; }
+.finding-filters button { min-height:44px; border-radius:5px; border-color:transparent; background:transparent; }
+@media (max-width:625px) {
+  .finding-scope button { min-height:44px; }
+  .finding-filters { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:2px; }
+  .finding-filters button { justify-content:space-between; }
+}
+.expert-group { margin:0; border-top:1px solid var(--line); }
+.expert-group[hidden] { display:none; }
+.expert-group > summary { display:flex; gap:9px; align-items:center; min-height:49px; padding:7px 3px; list-style:none; font-size:.93rem; cursor:pointer; }
+.expert-group > summary::-webkit-details-marker { display:none; }
+.expert-group > summary > i:first-child { color:var(--secondary); }
+.expert-count { color:var(--muted); font-size:.82rem; }
+.expert-group > summary > i:last-child { margin-left:auto; font-size:.8rem; }
+.expert-group[open] > summary > i:last-child { transform:rotate(180deg); }
+.expert-group .procedure-title { font-size:.88rem; overflow-wrap:anywhere; }

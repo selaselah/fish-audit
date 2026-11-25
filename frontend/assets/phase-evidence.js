@@ -42,6 +42,10 @@ const PhaseEvidence = (() => {
       if (hasFact ?? facts.some(f=>s.facts.includes(f.id) && f.quote===s.quote)) return;
       sources.set(s.line,{ref:prefix+s.line,rawLine:s.line,label,quote:s.quote,option:label+' · 第 '+s.line+' 行',quality,rects});
     }
+    for (const row of InspectionCoverage.sources(graph)) {
+      const fact=InspectionCoverage.observation(row,graph);
+      add(row,'设备检验原行','inspection_reference','inspection-line/',row.line!==lineHint && Boolean(fact),fact?.source_line?.rects);
+    }
     for (const s of SigningParties.sources(graph))
       add(s,'合同签章原行','contract_signing_reference','signing-line/',s.line!==lineHint && Boolean(SigningParties.observation(s,graph)),SigningParties.rectangles(s,graph));
     for (const s of graph?AcceptanceOpinion.rows(graph):[])

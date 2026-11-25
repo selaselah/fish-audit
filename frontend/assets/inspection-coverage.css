@@ -1,0 +1,59 @@
+.inspection-panel {
+  overflow: clip; margin: 14px 0; min-width: 0; padding: 0;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--ink);
+}
+.inspection-panel > summary {
+  display: flex; gap: 9px; align-items: center; padding: 8px 14px; min-height: 48px;
+  box-sizing: border-box; list-style: none; cursor: pointer; font-size: .94rem;
+}
+.inspection-panel > summary::-webkit-details-marker { display: none; }
+.inspection-panel > summary::after {
+  content: ''; width: 7px; height: 7px; margin-left: auto; flex: none;
+  border: solid var(--secondary); border-width: 0 1.5px 1.5px 0; transform: rotate(45deg);
+}
+.inspection-panel[open] > summary::after { transform: rotate(225deg); }
+.inspection-panel > summary > i {
+  color: var(--accent); background: var(--accent-soft); width: 29px; height: 29px; border-radius: 7px;
+}
+.inspection-state { color: var(--attention); font-size: .8rem; }
+.inspection-panel[data-inspection-state=covered] .inspection-state { color: var(--confirmed); }
+.inspection-panel[data-inspection-state=out_of_limit] .inspection-state { color: var(--issue); }
+.inspection-body { padding: 0 14px 12px; }
+.inspection-body:empty { display: none; }
+.inspection-metric { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; color: var(--secondary); font-size: .82rem; }
+.inspection-metric > strong { color: var(--ink); font: 600 2rem/1.15 var(--font-number); font-variant-numeric: tabular-nums; }
+.inspection-required { margin-left: 5px; padding-left: 10px; border-left: 1px solid var(--field-line); }
+.inspection-devices { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(5.7rem,100%),1fr)); gap: 6px; margin: 11px 0; }
+.inspection-devices button {
+  position: relative; display: grid; justify-items: start; align-content: center; gap: 4px; box-sizing: border-box;
+  padding: 8px 9px 8px 12px; min-height: 58px; min-width: 0; border: 1px solid var(--line); border-radius: 7px;
+  text-align: left; background: var(--surface); color: var(--ink); cursor: pointer;
+}
+.inspection-devices button strong { font: 600 .86rem/1.3 var(--font-number); overflow-wrap: anywhere; }
+.inspection-devices button span, .inspection-devices button small { color: var(--secondary); font-size: .77rem; line-height: 1.3; }
+.inspection-devices button[aria-selected=true] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--accent-soft); }
+.inspection-devices button[data-reading=empty] span, .inspection-devices button[data-reading=repeat] span { color: var(--attention); }
+.inspection-panel[data-inspection-mode=sample] .inspection-devices button[data-reading=empty] span { color: var(--muted); }
+.inspection-devices button[data-reading=over] span, .inspection-devices button[data-reading=over] small { color: var(--issue); }
+.inspection-devices button[data-reading=over] small { font-weight: 650; }
+.inspection-devices select { min-height: 44px; width: 100%; color: var(--ink); background: var(--surface); font: inherit; border: 1px solid var(--field-line); border-radius: 6px; }
+.inspection-selection { display: flex; align-items: center; justify-content: space-between; gap: 3px 12px; flex-wrap: wrap; border-top: 1px solid var(--line); padding-top: 4px; }
+.inspection-selection-label { font-size: .8rem; color: var(--secondary); overflow-wrap: anywhere; }
+.inspection-links { display: flex; flex-wrap: wrap; align-items: center; gap: 0 12px; }
+.inspection-panel .inspection-source {
+  display: inline-flex; align-items: center; gap: 5px; min-height: 44px; padding: 0 2px;
+  color: var(--accent-hover); border: 0; border-radius: 3px; background: transparent; font: 550 .82rem/1.35 var(--font-ui); text-decoration: none; cursor: pointer;
+}
+.inspection-metric .inspection-source { margin-inline-start: auto; }
+.inspection-source:hover { text-decoration: underline; text-underline-offset: 3px; }
+.inspection-source i { font-size: .75em; }
+.inspection-panel :focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.inspection-panel summary:focus-visible { outline-offset: -3px; }
+@media (max-width: 600px) {
+  .inspection-devices { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .inspection-devices:has(select) { grid-template-columns: 1fr; }
+  .inspection-selection-label { flex-basis: 100%; padding-top: 5px; }
+}
+@media (forced-colors: active) {
+  .inspection-devices [aria-selected=true] { outline: 2px solid SelectedItem; outline-offset: -3px; }
+}

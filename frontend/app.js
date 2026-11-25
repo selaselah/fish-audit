@@ -504,7 +504,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     if (source) gaps.push({...source,quality:['seller','delivery_note'].includes(source.kind)?'supplier_reference':'reservation_reference'});
   }
   for (const gap of gaps) {
-    const label = {contract_signing_reference:'合同签章原行',payment_release_reference:'放行依据原行',acceptance_opinion_reference:'付款意见原行',payment_amendment_reference:'付款变更所据原行',invoice_receipt_reference:'收票条件所据原行',repair_completion_reference:'整改记录原行',equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',approval_reference:'董事会审批记录原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
+    const label = {inspection_reference:'设备检验原行',contract_signing_reference:'合同签章原行',payment_release_reference:'放行依据原行',acceptance_opinion_reference:'付款意见原行',payment_amendment_reference:'付款变更所据原行',invoice_receipt_reference:'收票条件所据原行',repair_completion_reference:'整改记录原行',equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',approval_reference:'董事会审批记录原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
     const section = box('evidence-row',el('h4',label+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
     section.dataset.gapLine = String(gap.line);
     const raw = rawLines.find(source => source.rawLine === gap.line);
@@ -589,6 +589,11 @@ function citation(ref) {
     return Team.paperLink(label,prior.case_id,'button ref',new URLSearchParams({rev:String(prior.rev),fact:prior.fact}));
   }
   const source = index?.nodes.get(ref);
+  if (ref.startsWith('inspection-line/')) {
+    const graph=state.bundle.report.graph;
+    const row=InspectionCoverage.sources(graph).find(r=>r.id===ref);
+    return row ? action(row.quote,()=>InspectionCoverage.open(row,graph),'ref') : el('span','设备检验原行待核','small');
+  }
   if (source?.type==='contract_signing_line') {
     const graph=state.bundle.report.graph;
     const row=SigningParties.sources(graph).find(r=>r.id===ref);
@@ -867,28 +872,65 @@ function finding(item) {
   return row;
 }
 function findingsLedger(report) {
-  const panel = box('panel findings-ledger',el('h2','检查明细'));
+  const panel = box('panel findings-ledger');
   const filters = box('finding-filters');
   filters.setAttribute('role','group'); filters.setAttribute('aria-label','按检查结果筛选');
   const rows = report.findings.map(finding);
-  const keys = ['all','issue','risk','missing','ok'];
-  function select(key) {
-    filters.querySelectorAll('button').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.findingFilter===key)));
-    for (const row of rows) row.hidden = key!=='all' && row.dataset.findingStatus!==key;
+  const firstExpert=report.findings.findIndex(f=>f.rule==='X01');
+  const expertRows=firstExpert>=0 && report.findings.slice(firstExpert).every(f=>f.rule==='X01') ? rows.slice(firstExpert) : [];
+  const group=el('details','','expert-group'), groupCount=el('span','','expert-count');
+  if (expertRows.length>1) {
+    const header=el('summary');
+    header.append(glyph('clipboard-check'),el('strong','专家建议追加核对'),groupCount,glyph('chevron-down'));
+    group.append(header,...expertRows);
+    const index=graphIndex(report.graph);
+    for (const [i,row] of expertRows.entries()) {
+      const f=report.findings[firstExpert+i];
+      const observation=traceReferences(report.graph,f).map(ref=>index.facts.get(ref)).find(Boolean);
+      if (!observation) continue;
+      const label=row.querySelector('.procedure-title'), line=observation.source_line?.number;
+      label.textContent=observation.name+' · 第 '+observation.page+' 页'+(line?' · 第 '+line+' 行':'');
+      label.title=observation.quote;
+    }
   }
-  for (const key of keys) {
-    const count = key==='all' ? rows.length : rows.filter(row=>row.dataset.findingStatus===key).length;
-    const label = key==='all' ? '全部' : statusName(key);
+  const scopes=box('finding-scope');
+  scopes.setAttribute('role','group'); scopes.setAttribute('aria-label','检查范围');
+  const distribution=box('finding-distribution');
+  distribution.setAttribute('aria-hidden','true');
+  const countFor=key=>key==='all' ? rows.length : rows.filter(row=>matches(row,key)).length;
+  function matches(row,key) {
+    return key==='all' || (key==='pending' ? row.dataset.findingStatus!=='ok' : row.dataset.findingStatus===key);
+  }
+  function select(key) {
+    panel.querySelectorAll('[data-finding-filter]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.findingFilter===key)));
+    for (const row of rows) row.hidden = !matches(row,key);
+    if (expertRows.length>1) {
+      const count=expertRows.filter(row=>!row.hidden).length;
+      group.hidden=!count;
+      groupCount.textContent=count+' 项';
+    }
+  }
+  for (const key of ['pending','all','issue','risk','missing','ok']) {
+    const count = countFor(key);
+    const label = key==='all' ? '全部' : key==='pending' ? '待处理' : statusName(key);
     const button = action('',()=>select(key));
     button.dataset.findingFilter = key;
     button.append(el('span',label),el('strong',String(count)));
     button.setAttribute('aria-label',label+'，'+count+' 项检查');
     button.disabled = !count;
-    filters.append(button);
+    if (key==='all' || key==='pending') scopes.append(button);
+    else {
+      filters.append(button);
+      if (count) {
+        const segment=el('span');
+        segment.dataset.status=key; segment.style.flexGrow=String(count); distribution.append(segment);
+      }
+    }
   }
   panel.addEventListener('reveal-finding',()=>select('all'));
-  panel.append(filters,...rows);
-  select('all');
+  const entries=expertRows.length>1 ? [...rows.slice(0,firstExpert),group] : rows;
+  panel.append(box('ledger-filter-head',el('h2','检查明细'),scopes),distribution,filters,...entries);
+  select(countFor('pending')?'pending':'all');
   return panel;
 }
 function reportPanel() {

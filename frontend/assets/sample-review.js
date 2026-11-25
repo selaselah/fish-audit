@@ -88,15 +88,27 @@
     requested.src=sample.image;
   }
   new ResizeObserver(draw).observe(canvas.parentElement);
+  function present(doc,ref,trigger) {
+    opener=trigger;
+    trigger.focus({preventScroll:true});
+    load(doc); dialog.showModal();
+    select(rows.find(r=>r.dataset.ref===ref) || rows[2],'line');
+    row.focus({preventScroll:true});
+  }
+  document.addEventListener('inspect-sample-line',event=>{
+    const {doc,ref,opener}=event.detail;
+    if (!doc.lines.some(l=>l.ref===ref) || doc.lines.length!==rows.length) return;
+    event.preventDefault(); present(doc,ref,opener);
+  });
   for (const link of document.querySelectorAll('.open-sample-review')) {
     link.setAttribute('aria-haspopup','dialog'); link.setAttribute('aria-controls',dialog.id);
     link.addEventListener('click',event=>{
       if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
-      event.preventDefault(); opener=link;
-      load(samples[link.dataset.sample || 'acceptance']);
-      dialog.showModal();
-      select(rows.find(r=>r.dataset.ref===link.dataset.ref) || rows[2],'line'); row.focus({preventScroll:true});
+      event.preventDefault(); present(samples[link.dataset.sample || 'acceptance'],link.dataset.ref,link);
     });
   }
-  dialog.addEventListener('close',()=>opener?.focus({preventScroll:true}));
+  dialog.addEventListener('close',()=>{
+    if (!dialog.open && (document.activeElement===document.body || dialog.contains(document.activeElement)))
+      opener?.focus({preventScroll:true});
+  });
 })();

@@ -16,6 +16,8 @@
   <link rel="preload" href="/assets/noto-serif-sc.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/brand.css">
   <link rel="stylesheet" href="/landing.css">
+  <link rel="stylesheet" href="/assets/inspection-coverage.css">
+  <script src="/assets/inspection-coverage.js" defer></script>
   <script src="/landing.js" defer></script>
   <script src="/assets/sample-review.js" defer></script>
 </head>
@@ -118,6 +120,7 @@
           <div class="scene-tabs" role="tablist" aria-label="选择核图案例" hidden>
             <button type="button" id="scene-tab-acceptance" role="tab" aria-selected="true" aria-controls="scene-acceptance">验收读数</button>
             <button type="button" id="scene-tab-signing" role="tab" aria-selected="false" aria-controls="scene-signing" tabindex="-1">合同签章</button>
+            <button type="button" id="scene-tab-inspection" role="tab" aria-selected="false" aria-controls="scene-inspection" tabindex="-1">设备抽检</button>
           </div>
           <div id="scene-acceptance" role="tabpanel" aria-labelledby="scene-tab-acceptance">
             <a class="workflow-image open-sample-review" href="/showcase/acceptance.pdf" target="_blank" rel="noopener" aria-label="核对这张合成验收报告"><img src="/assets/review-sample.webp" width="1360" height="819" loading="lazy" alt="核图工作台在验收单上定位到实测柜温 8℃ 的原行"><span><i class="ui-glyph ic-eye" aria-hidden="true"></i>核对这张验收单</span></a>
@@ -131,6 +134,11 @@
               <a class="open-sample-review" data-sample="signing" data-ref="d02/p1/f18" data-line="19" data-rect="0.08403,0.74612,0.68261,0.76256" href="/showcase/signing-contract.pdf" target="_blank" rel="noopener"><span>甲方印章单位</span><strong>青禾演练设备有限公司<mark>杭州分公司</mark></strong><i aria-hidden="true" class="ui-glyph ic-arrows-angle-expand"></i></a>
             </div>
             <p><span class="finding-dot risk"></span>签章授权待核 · 三期付款条件待核</p>
+          </div>
+          <div id="scene-inspection" class="inspection-sample" role="tabpanel" aria-labelledby="scene-tab-inspection" hidden>
+            <div class="signing-sample-header"><span><i class="ui-glyph ic-clipboard-check" aria-hidden="true"></i> 采购验收</span><small>合成案例 · R11</small></div>
+            <h3>冷藏柜采购 · 第二期验收款</h3>
+            <div id="inspection-demo"><a href="/showcase/inspection-acceptance.pdf" target="_blank" rel="noopener">查看演练验收单</a></div>
           </div>
         </div>
         <ol class="process-list">
@@ -157,6 +165,11 @@
       </div>
     </div>
   </dialog>
-  <footer class="closing"><div class="wrap footer-row"><a class="fish-wordmark" href="#main"><img src="/assets/fish-mark.png" width="36" height="36" alt="">Fish Audit</a><a href="/app#rules">查看审计规则</a></div></footer>
+  <footer class="closing">
+    <div class="wrap footer-row">
+      <div><a class="fish-wordmark" href="#main"><img src="/assets/fish-mark.png" width="36" height="36" alt="">Fish Audit</a></div>
+      <nav aria-label="页脚导航"><a href="/app#rules">查看审计规则</a></nav>
+    </div>
+  </footer>
 </body>
 </html>

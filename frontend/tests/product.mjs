@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {writeFile} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
+import {checkPublicInspection} from './inspection-coverage.mjs';
 
 // These are the three public, watermarked originals of the equipment-quality exercise, R7.
 const digests = {
@@ -140,7 +141,8 @@ export async function checkProduct({root,call,evaluate,wait}) {
     ['.total strong','.total'],['.dial-share','.dial-share'],['.dial-label','.dial-label']
   ]) await checkTextContrast(evaluate,selector,surface);
   const dates=select('.ledger-switch [aria-controls=sample-dates]');
-  await evaluate(dates+'.focus()');
+  await evaluate(dates+'.focus();new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))');
+  assert.ok(await evaluate('document.activeElement==='+dates),'dismissing an original preserves subsequent keyboard navigation');
   await call('Input.dispatchKeyEvent',{type:'keyDown',key:'End',code:'End'});
   await call('Input.dispatchKeyEvent',{type:'keyUp',key:'End',code:'End'});
   assert.ok(await evaluate('!document.querySelector("#sample-dates").hidden && document.querySelector("#sample-installments").hidden'));
@@ -281,7 +283,8 @@ export async function checkProduct({root,call,evaluate,wait}) {
   await wait('location.pathname==="/app" && !document.querySelector("#rules").hidden','legacy rules bookmark');
   await evaluate(select('.fish-wordmark')+'.click()');
   await wait('location.pathname==="/" && !!document.querySelector("#hero-title")','return to product site');
-  console.log('PASS · acceptance and signing demos, four original PDFs, keyboard, six viewports, workspace entry and legacy bookmark ('+mode+')');
+  await checkPublicInspection({root,call,evaluate,wait});
+  console.log('PASS · acceptance, signing and unit inspection, six original PDFs, keyboard, six viewports, workspace entry and legacy bookmark ('+mode+')');
 }
 
 export async function checkReviewDesign({root,call,evaluate,wait}, caseId) {
