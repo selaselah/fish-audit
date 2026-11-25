@@ -423,3 +423,9 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 规则 `2026.11.25.28` 使用 `policy.warranty_checks=contract-warranty-release-v2`。当图谱有对应原页，`graph.warranty_as_of` 取自案件提交记录，按 UTC+8 转为自然日。H04 与匹配成功回单的 H05 共用 `warranty_check.at_submission`。其中 `as_of` 为该截止日，`future` 列出晚于截止日的 `accepted_on`、`calendar_end` 或 `confirmed_on`，`start_refs` 引用用于起算的终验或复验日期。`defects` 的 `listed_open`、`stated_clear`、`unverified` 分别表示原件列有未结问题、原件明确载明无未结、记录待核。
 
 H05 的 `warranty_payment` 保留本笔回单列示的 `paid_on`、日期字段引用 `date_refs` 以及 `after_submission`。只有该日严格晚于截止日时才记为 `true`，同日付款仍独立核对履约前提。旧版归档沿用当时的程序。离线验包从案件提交记录复核截止日，重放时使用该版底稿的程序和原件。
+
+### 质保维修工单与期满确认
+
+规则 `2026.11.25.29` 使用 `contract-warranty-release-v3` 与提示词 `2026.11.25.17`。图谱按原页收录 `warranty_ticket` 文种和工单的六类字段，即编号、报修日、报修事项、状态、关闭日和采购方关闭签认。相关原页在 `graph.warranty_sources.pages` 含 `ticket` 标记，`ticket_line` 行记录物理文件、页、印刷行、原文、候选字段及引用。不具备完整文字层的工单保留页级复核入口。
+
+出现工单时，相关 H04/H05 的 `warranty_check.tickets` 对每份原件保存 `unit`、`number`、`reported_on`、`closed_on`、`closed_by`、`printed_state`、`refs` 和 `evidence`。`state` 中 `closed` 表示所列具名关闭早于期满确认，`open` 表示原单列为待修，`late` 或 `same_day` 表示关闭晚于确认或同日。记录也可标记期间、编号、身份、整页范围、未来日期或关闭凭据待核。主体或标的不符时，`identity_conflicts` 引用双方原行。已逐项匹配且可核对状态的工单建立 `warranty_ticket_comparison` 边。只有整期条件相符时才建立 `warranty_release_basis` 边。

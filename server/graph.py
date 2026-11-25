@@ -22,6 +22,7 @@ import equipment_exchanges
 import stage_payments
 import contract_effect
 import warranty_terms
+import warranty_service
 import payment_windows
 import invoice_conditions
 import payment_amendments
@@ -34,13 +35,14 @@ from acceptance_authority import CLAUSE as AUTHORITY_CLAUSE, SIGNER as ACCEPTANC
 KINDS = {"invoice": "发票", "contract": "合同", "acceptance": "验收单"}
 TITLE_FIELDS = {**KINDS, "claim": "报销", "bank_receipt":"回单", "warranty":"质保期满确认","contract_approval":"审批",
                 "remediation":"整改","reinspection":"复验","power_of_attorney":"委托书","contract_addendum":"补充协议",
-                equipment_exchanges.TITLE:"换货交接单","payment_release":payment_releases.TITLE}
+                equipment_exchanges.TITLE:"换货交接单","payment_release":payment_releases.TITLE,warranty_service.TITLE:"质保维修工单"}
 PRINTED_TITLES = {label: field for field, labels in {
     "invoice": ("发票", "采购发票", "住宿服务发票", "增值税专用发票", "增值税普通发票", "增值税电子普通发票",
                 "电子发票(普通发票)", "电子发票(增值税专用发票)"),
     "contract": ("采购合同", "设备采购合同", "购销合同", "采购协议"),
     "acceptance": ("验收单", "到货验收单", "验收报告", "采购验收单", "设备验收单"),
     "warranty": ("质保期满确认单", "质保期满确认书"),
+    warranty_service.TITLE: warranty_service.TITLES,
     "contract_approval": ("合同审批单","合同审批记录","董事会合同审批记录"),
     "payment_release": (payment_releases.TITLE,),
     "power_of_attorney": MANDATE_TITLES,
@@ -109,6 +111,8 @@ def labelled(field, value, quote):
     if field=="transfer_ref_note":
         return value in quote and partial_line(quote)
     if field in TITLE_FIELDS:
+        if field==warranty_service.TITLE:
+            return value==quote and quote in warranty_service.TITLES
         if field==equipment_exchanges.TITLE:
             return value==quote and quote in equipment_exchanges.TITLES
         if field=="power_of_attorney":
@@ -303,7 +307,7 @@ def build_graph(docs, pages, attestations, amendments=()):
             if field in ADDENDUM_NUMBERS:
                 target, entity_label = number_target(field,value,quote,fact_id)
                 kind = ADDENDUM_NUMBERS[field]
-            if field in payment_amendments.LABELS or field in invoice_conditions.LABELS or field in (AUTHORITY_CLAUSE,ACCEPTANCE_SIGNATURE,payment_windows.FIELD) or field in delivery_batches.LABELS or field in warranty_terms.LABELS:
+            if field in payment_amendments.LABELS or field in invoice_conditions.LABELS or field in (AUTHORITY_CLAUSE,ACCEPTANCE_SIGNATURE,payment_windows.FIELD) or field in delivery_batches.LABELS or field in warranty_terms.LABELS or field in warranty_service.LABELS:
                 target = fact_id
             if target!=fact_id:
                 nodes[target] = {"id": target, "type": kind, "label": entity_label}

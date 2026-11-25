@@ -9,7 +9,7 @@ const WarrantyTimeline = (() => {
   }
   function panel(phase,payments,graph) {
     const entry=phase.warranty_check, snapshot=entry?.at_submission;
-    if (graph.warranty_sources?.format!=='contract-warranty-release-v2' || !snapshot ||
+    if (!['contract-warranty-release-v2','contract-warranty-release-v3'].includes(graph.warranty_sources?.format) || !snapshot ||
         snapshot.as_of!==graph.warranty_as_of || day(snapshot.as_of)===null) return null;
     const cutoff=day(snapshot.as_of);
     const index=graphIndex(graph), ledger=graph.warranty_sources;

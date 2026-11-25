@@ -15,6 +15,7 @@ import equipment_models
 import equipment_exchanges
 import contract_effect
 import warranty_terms
+import warranty_service
 import payment_windows
 import invoice_conditions
 import payment_amendments
@@ -46,6 +47,7 @@ LABELS = {
     "equipment_model": tuple(sorted(equipment_models.ORDERED | equipment_models.RECEIVED)),
     **delivery_batches.LABELS,
     **warranty_terms.LABELS,
+    **warranty_service.LABELS,
     **payment_windows.LABELS,
     **invoice_conditions.LABELS,
     "effect_clause": ("生效条款", "合同生效条件", "生效条件", "合同生效条款"),
@@ -664,6 +666,9 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
     cash=graph.get("payment_release_sources",{})
     classified.difference_update(kinds.get("payment_release",[]))
     classified.update(payment_releases.recognized(cash))
+    ticket_units,bounded_tickets=warranty_service.classified(graph.get("warranty_sources",{}))
+    classified.difference_update(ticket_units)
+    classified.update(bounded_tickets)
     exchange_ledger = graph.get("equipment_model_sources",{}).get("exchange",{})
     classified.difference_update(equipment_exchanges.unscoped(exchange_ledger))
     extra_units = {d["id"] for d in graph.get("audit_documents",graph["documents"])} - classified
@@ -913,6 +918,8 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         if kind == "warranty":
             refs += warranty_refs
             scope += [r.unit for r in releases]
+            if release_check:
+                scope += [r["unit"] for r in release_check.get("tickets",[])]
         if plan["status"] != "ok":
             refs += plan["evidence"]
             if batch:
@@ -1036,6 +1043,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         payment = result("H05",status,detail,refs,scope,check["stage"])
         if row["kind"]=="warranty" and release_check:
             payment["warranty_check"]=release_check
+            timing.extend(warranty_service.payment_checks(release_check.get("tickets",[]),bank,paid.isoformat()))
             snapshot=release_check.get("at_submission")
             if snapshot:
                 dates_on_receipt=bank.evidence("paid_on")

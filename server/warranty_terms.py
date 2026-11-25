@@ -13,10 +13,13 @@ from delegation import complete_id, covered_rows
 from delivery_batches import one, ordinal, raw_body
 from performance_versions import WARRANTY_FORMAT, WARRANTY_FORMATS
 from reinspection import LINK_KEYS, linked
+import warranty_service
 
 
 LEGACY_FORMAT = "contract-warranty-release-v1"
-FORMAT = "contract-warranty-release-v2"
+SUBMISSION_FORMAT = "contract-warranty-release-v2"
+FORMAT = "contract-warranty-release-v3"
+CUTOFF_FORMATS = {SUBMISSION_FORMAT,FORMAT}
 LABELS = {
     "warranty_period": ("质保期限","质保期","保修期限","保修期","质保截止日"),
     "warranty_condition": ("质保金返还条件","质保金释放条件","质保金支付条件","质保金返还前提"),
@@ -153,6 +156,10 @@ def sources(graph,read_text,version=FORMAT):
                 kind="unresolved" if MENTION.search(normalized(raw)) else None
             if kind:
                 lines.append({**place,"line":index,"kind":kind,"quote":raw,"facts":matches[index,raw]})
+    if version==FORMAT:
+        ticket_pages,ticket_lines=warranty_service.pages_and_lines(graph,read_text)
+        pages.extend(ticket_pages)
+        lines.extend(ticket_lines)
     return {"format":version,"pages":pages,"lines":lines}
 
 
@@ -299,7 +306,7 @@ def assess(graph,contract,releases,receipts,accepted,accepted_on,stage_refs):
     if term and not term["unadjusted"]:
         finding("missing","合同未明确休假日顺延口径，请核对实际届满日。")
     snapshot={}
-    if ledger.get("format")==FORMAT:
+    if ledger.get("format") in CUTOFF_FORMATS:
         cutoff=day(graph.get("warranty_as_of") or "")
         future=[]
         if cutoff:
@@ -316,6 +323,17 @@ def assess(graph,contract,releases,receipts,accepted,accepted_on,stage_refs):
                     for ref in record.evidence("accepted_on") if ref in accepted["evidence"]]
         snapshot["at_submission"]={"as_of":cutoff.isoformat() if cutoff else None,"future":future,
                                    "start_refs":list(dict.fromkeys(start_refs)),"defects":defect_state}
+    tickets=[]
+    if ledger.get("format")==FORMAT:
+        iso=lambda d:d.isoformat() if d else None
+        covered_end=end if term and term["unadjusted"] else None
+        tickets=warranty_service.assess(graph,contract,iso(start),iso(covered_end),iso(confirmed),iso(cutoff),needs_clear)
+        if tickets:
+            snapshot["tickets"]=tickets
+        for record in tickets:
+            refs.extend(record["evidence"])
+            if record["status"]!="ok":
+                finding(record["status"],(record["number"] or "质保工单")+" · "+record["detail"])
     status=next((s for s in ("risk","missing") if any(p["status"]==s for p in problems)),"ok")
     detail=" ".join(p["detail"] for p in problems)
     if status=="ok":
@@ -327,12 +345,24 @@ def assess(graph,contract,releases,receipts,accepted,accepted_on,stage_refs):
             "period":term,"requires_defect_clearance":needs_clear,"defect_open":defect_open,"term_ref":term_fact["id"] if term_fact else None,
             "condition_ref":condition["id"] if condition else None,"confirmation_ref":confirmation["id"] if confirmation else None,
             "defect_ref":defect["id"] if defect else None,"identity_conflicts":pairs,"problems":problems,**snapshot,
-            "evidence":list(dict.fromkeys(refs)),"scope":list(dict.fromkeys([contract.unit,*accepted["scope"],*(d.unit for d in releases)]))}
+            "evidence":list(dict.fromkeys(refs)),"scope":list(dict.fromkeys([contract.unit,*accepted["scope"],*(d.unit for d in releases),*(r["unit"] for r in tickets)]))}
 
 
 def edges(findings):
-    return [{"type":"warranty_release_basis","from":f["stage"]["clause_ref"],"to":w["confirmation_ref"],"evidence":f["evidence"]}
+    result=[{"type":"warranty_release_basis","from":f["stage"]["clause_ref"],"to":w["confirmation_ref"],"evidence":f["evidence"]}
             for f in findings if f["rule"]=="H04" and f["status"]=="ok" and (w:=f.get("warranty_check")) and w["status"]=="ok"]
+    for f in findings:
+        w=f.get("warranty_check",{})
+        for r in w.get("tickets",[]):
+            ref=r["refs"].get("warranty_ticket_state")
+            if f["rule"]=="H04" and r["linked"] and r["state"] in ("open","late","same_day","closed") and ref:
+                evidence=[f["stage"]["clause_ref"],w["term_ref"],w["condition_ref"],w["confirmation_ref"],
+                          *w["at_submission"]["start_refs"],*r["evidence"]]
+                if w["defect_ref"]:
+                    evidence.append(w["defect_ref"])
+                result.append({"type":"warranty_ticket_comparison","from":f["stage"]["clause_ref"],"to":ref,
+                               "evidence":list(dict.fromkeys(evidence))})
+    return result
 
 
 def verify(report,read_text,*,signing=False,submitted=None,signed=None):
@@ -340,11 +370,14 @@ def verify(report,read_text,*,signing=False,submitted=None,signed=None):
     from payment_releases import submission_day
     marker=policy.get("warranty_checks")
     version=policy.get("version","0").split(".")
-    if all(n.isdecimal() for n in version) and tuple(map(int,version))>=(2026,11,25,28) and marker!=FORMAT:
+    number=tuple(map(int,version)) if all(n.isdecimal() for n in version) else ()
+    if number>=(2026,11,25,29) and marker!=FORMAT:
+        raise ValueError("缺少质保金提交时点与维修工单核对程序")
+    if number>=(2026,11,25,28) and marker not in CUTOFF_FORMATS:
         raise ValueError("缺少质保金提交时点核对程序")
-    if marker!=FORMAT and "warranty_as_of" in graph:
+    if marker not in CUTOFF_FORMATS and "warranty_as_of" in graph:
         raise ValueError("质保审查截止日与底稿程序版本不符")
-    if marker==FORMAT and ("warranty_as_of" in graph or any(f.get("warranty_check") for f in report["findings"])):
+    if marker in CUTOFF_FORMATS and ("warranty_as_of" in graph or any(f.get("warranty_check") for f in report["findings"])):
         cutoff=graph.get("warranty_as_of")
         if (not isinstance(cutoff,str) or date.fromisoformat(cutoff).isoformat()!=cutoff or
                 submitted and cutoff!=submission_day(submitted) or signed and cutoff>submission_day(signed)):
@@ -365,12 +398,13 @@ def verify(report,read_text,*,signing=False,submitted=None,signed=None):
                     raise ValueError("旧版质保金的提交时点、确认或支付依据尚待复核，请重新审计后签收。")
     if not marker:
         return
-    if marker not in (LEGACY_FORMAT,FORMAT) or policy.get("performance_checks") not in WARRANTY_FORMATS or graph.get("warranty_sources")!=sources(graph,read_text,marker):
+    if marker not in {LEGACY_FORMAT,*CUTOFF_FORMATS} or policy.get("performance_checks") not in WARRANTY_FORMATS or graph.get("warranty_sources")!=sources(graph,read_text,marker):
         raise ValueError("质保条款、确认记录或原页版式与归档不符")
-    if [e for e in graph["edges"] if e["type"]=="warranty_release_basis"]!=edges(report["findings"]):
+    if [e for e in graph["edges"] if e["type"] in ("warranty_release_basis","warranty_ticket_comparison")]!=edges(report["findings"]):
         raise ValueError("质保金期次所据的期满确认关系与归档不符")
+    fields=set(LABELS) | (set(warranty_service.LABELS) if marker==FORMAT else set())
     expected=sorted((f.get("unit",f["doc"]),f["id"],f["field"],(f["id"],)) for f in graph["facts"]
-                    if f["field"] in LABELS and f["status"] in ("anchored","confirmed"))
-    actual=sorted((e["from"],e["to"],e["type"],tuple(e["evidence"])) for e in graph["edges"] if e["type"] in LABELS)
+                    if f["field"] in fields and f["status"] in ("anchored","confirmed"))
+    actual=sorted((e["from"],e["to"],e["type"],tuple(e["evidence"])) for e in graph["edges"] if e["type"] in fields)
     if actual!=expected:
         raise ValueError("质保约定或缺陷记录与其原件证据关系不符")

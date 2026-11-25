@@ -18,6 +18,7 @@ from protocol import canonical, response_request
 FIELDS = {
     **PERFORMANCE_FIELDS, "contract_addendum":"合同补充协议标题", "warranty":"质保期满确认单标题", "contract_approval":"合同审批单标题",
     "remediation":"整改记录单标题","reinspection":"整改复验报告标题","power_of_attorney":"授权委托书标题","payment_release":"付款放行单标题",
+    "warranty_ticket":"质保维修或报修工单标题",
     "invoice": "发票标题", "contract": "合同标题", "acceptance": "验收单标题",
     "contract_id": "合同编号", "invoice_id": "发票号码", "invoice_code":"发票代码", "buyer": "采购方",
     "seller": "供应方", "total": "含税总额", "net": "不含税合计", "tax": "税额合计",
@@ -92,6 +93,7 @@ unit 单独抄明示的金额单位（如“金额单位：元”），value 抄
 补充协议逐行抄录原付款条款 previous_payment_stage 与变更后付款条款 revised_payment_stage。保留值中完整的期次、比例、前提和原文标点，quote 从字段标签起抄整行。适用时点单独用 change_timing。
 合同单列的先票后款或各期收票前提整行用 invoice_receipt_clause。与期次及占比同一行时整行用 payment_stage。验收材料另列的签收发票号码、收票日期、收票方签章分别用 received_invoice_id、invoice_received_on、invoice_received_seal。签收号码与发票票面的发票号码、开票日期分别按各页原文抄录。
 验收资料除日期、结论外逐行抄验收范围(acceptance_scope)、验收人签认(acceptance_signer)、遗留/整改/保留事项(acceptance_exception)，保留“初验”“仅本批次”“有条件”等限定。质保期满确认单标题用 warranty，其已发生的质保期满记录用 warranty_release。合同约定的质保起点、期限、单位、固定截止日和顺延口径逐行抄入 warranty_period；单列的质保金返还前提用 warranty_condition；若条件与期次金额同一行，整行只用 payment_stage。确认单上遗留缺陷或明确无未结事项用 warranty_defects。区分约定、已发生的确认和缺陷记录，不自行推算日期或推断缺陷已关闭。
+独立抬头“质保维修工单”或“质保报修工单”用 warranty_ticket。工单上的合同编号、采购方、供应方及标的沿用对应字段。质保工单编号、报修日期、报修事项、工单状态各自整行抄入 warranty_ticket_id、warranty_reported_on、warranty_fault、warranty_ticket_state。若列有关闭日期和采购方关闭签认，分别用 warranty_closed_on、warranty_closed_by。保留处理中、待复修等限定和附注，只抄该页记载。
 明列的合同有效截止日用 valid_until。合同约定交付数量和验收标准分别用 quantity_agreed 和 acceptance_criteria，验收材料上的实际验收数量、实测标准分别用 quantity_accepted 和 inspection_basis。数量连同单位完整抄录。
 验收报告的实测结果用 measured_result，逐字抄录指标、数值、正负号及单位，与检验依据分别记录。
 合同审批单或董事会合同审批记录的抬头用 contract_approval；审批记录与被审批的合同是两种资料。审批机构、签认、决定及决定日期分别用 approval_authority、approval_signer、approval_result、approved_on。保留决定中的否定、暂缓及其他条件。

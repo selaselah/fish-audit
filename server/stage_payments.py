@@ -81,6 +81,9 @@ def sources(graph,read_text):
     ledger["banks"] = [u["id"] for u in units if u["id"] in banks]
     ledger["ambiguous_units"]=[u for u in ledger["banks"] if counts[u]>1 or u in repeated]
     known={u for k,group in kinds.items() if k!="contract_addendum" for u in group}
+    from warranty_service import classified
+    ticket_units,bounded_tickets=classified(graph.get("warranty_sources",{}))
+    known=(known-ticket_units)|bounded_tickets
     ledger["unknown_units"]=[u["id"] for u in units if u["id"] not in known]
     coverage=covered_rows(graph,read_text,set(kinds.get("contract",[])),CONTRACT,is_printed,"分期合同")
     coverage+=covered_rows(graph,read_text,banks,BANK,is_printed,"分笔付款回单")

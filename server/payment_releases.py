@@ -179,6 +179,9 @@ def assess(graph,contract,record,opinion,row):
         return check
     documents=graph.get("audit_documents",graph["documents"])
     permitted=set().union(*(set(graph["documents_by_kind"].get(k,[])) for k in ("contract","acceptance","warranty","invoice","bank_receipt")))
+    from warranty_service import classified
+    ticket_units,bounded_tickets=classified(graph.get("warranty_sources",{}))
+    permitted=(permitted-ticket_units)|bounded_tickets
     if (len(units)!=1 or set(units)!=recognized(ledger) or set(graph["documents_by_kind"].get("acceptance",[]))!={record.unit}
             or any(d["id"] not in permitted|set(units) for d in documents)
             or any(not p["native"] or not p["text_only"] or not p["identity_clear"] for p in pages)

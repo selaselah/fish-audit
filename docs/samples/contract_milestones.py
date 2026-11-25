@@ -65,7 +65,7 @@ def confirm_printed_records(cid, folder, records, *, layout=None):
     assert {d["name"]:d["sha256"] for d in detail["documents"]} == {
         title+".pdf":hashlib.sha256((folder/(title+".pdf")).read_bytes()).hexdigest() for title in (layout or records)}
     expected = {"甲方签章":"buyer_signature","乙方签章":"seller_signature","验收签认":"acceptance_signer","复验签认":"acceptance_signer",
-                "收票方签章":"invoice_received_seal","审批签认":"approval_signer","整改签认":"repair_signer","甲方代理人签字":"buyer_agent_signature",
+                "采购方关闭签认":"warranty_closed_by","收票方签章":"invoice_received_seal","审批签认":"approval_signer","整改签认":"repair_signer","甲方代理人签字":"buyer_agent_signature",
                 "乙方代理人签字":"seller_agent_signature","委托单位签章":"grant_signature"}
     report = wait(cid)
     selected = []
