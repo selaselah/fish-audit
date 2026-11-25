@@ -164,6 +164,7 @@ function performanceOverview(findings, graph) {
         list.children[i].hidden = i!==position;
       });
       list.children[position].querySelector('.proof-opinion:not([hidden])')?.dispatchEvent(new Event('show-opinion'));
+      list.children[position].querySelector('.warranty-timeline:not([hidden])')?.dispatchEvent(new Event('show-warranty'));
     }
     buttons.forEach((button,i)=>{
       button.addEventListener('click',()=>select(i));
@@ -923,7 +924,7 @@ function warrantyPanel(finding,graph) {
   addDate('期满确认日',entry.confirmed_on);
   const cited=finding.evidence.map(ref=>facts.get(ref)).filter(Boolean);
   const transfers=cited.filter(f=>f.field==='paid_on');
-  if (finding.rule==='H05') addDate('实际付款日',transfers[0]?.source_line?.text.split(/[:：]/u).slice(1).join('：').trim());
+  if (finding.rule==='H05') addDate(finding.warranty_payment?'回单列示付款日':'实际付款日',transfers[0]?.source_line?.text.split(/[:：]/u).slice(1).join('：').trim());
   panel.append(dates);
   if (!entry.period && !lines.some(s=>s.kind==='warranty_period') && entry.confirmed_on)
     panel.append(el('p','本案确认日取自签认记录，未取得可独立复算的期限条款。','small'));
@@ -934,7 +935,7 @@ function warrantyPanel(finding,graph) {
     panel.append(proof);
   }
   const originals=fold('核对质保条款与履约原文');
-  originals.open=finding.rule==='H04';
+  originals.open=finding.rule==='H04' && !entry.at_submission;
   const unitOrder=['contract','acceptance','reinspection','warranty','bank_receipt'].flatMap(k=>graph.documents_by_kind[k] || []);
   const rows=[];
   function record(unit,page,line,row) {

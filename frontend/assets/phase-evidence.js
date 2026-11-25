@@ -7,7 +7,13 @@ const PhaseEvidence = (() => {
   function dateOn(fact) {
     const line=fact?.source_line;
     if (!line?.rects?.length || !['anchored','confirmed'].includes(fact.status)) return '';
-    const match=line.text.normalize('NFKC').match(/:\s*(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})日?\s*$/u);
+    let text=line.text.normalize('NFKC').trim();
+    if (fact.field==='warranty_release') {
+      const confirm=/(?:双方确认)?质保期(?:已届满|届满|已满)$/u;
+      if (!confirm.test(text)) return '';
+      text=text.replace(confirm,'');
+    }
+    const match=text.match(/:\s*(\d{4})[-/.年](\d{1,2})[-/.月](\d{1,2})日?\s*$/u);
     if (!match) return '';
     const iso=match[1]+'-'+match[2].padStart(2,'0')+'-'+match[3].padStart(2,'0');
     const value=Date.parse(iso+'T00:00:00Z');
@@ -53,6 +59,7 @@ const PhaseEvidence = (() => {
     index.phaseViews ??= new Map();
     const inPhase=new Set(phase.evidence);
     const checkpoints=[],events=[];
+    const warranty=WarrantyTimeline.panel(phase,payments,graph);
     function unique(item,field) {
       const matches=(item?.evidence || []).map(id=>facts.get(id)).filter(f=>f?.field===field && inPhase.has(f.id));
       return matches.length===1 ? matches[0] : null;
@@ -83,7 +90,7 @@ const PhaseEvidence = (() => {
     }
     if (phase.warranty_check) {
       const w=phase.warranty_check, fact=unique(phase,'warranty_release');
-      point('warranty','质保期满','shield-check',w.status,fact,inspect(phase));
+      point('warranty','质保期满','shield-check',w.status,warranty?null:fact,warranty?()=>select('warranty'):inspect(phase));
       event('warranty','期满确认',w.confirmed_on,fact,w.status);
     }
     if (change) {
@@ -111,7 +118,7 @@ const PhaseEvidence = (() => {
     }
     for (const payment of payments) {
       const dates=payment.evidence.map(id=>facts.get(id)).filter(f=>f?.field==='paid_on');
-      if (dates.length===1) event('paid','实际付款',dateOn(dates[0]),dates[0],payment.status,payment);
+      if (dates.length===1) event('paid',payment.warranty_payment?'回单落款':'实际付款',dateOn(dates[0]),dates[0],payment.status,payment);
     }
     const notes=AcceptanceOpinion.rows(graph,phase);
     const opinion=notes.length?AcceptanceOpinion.panel(phase,accepted,notes,graph):null;
@@ -165,6 +172,7 @@ const PhaseEvidence = (() => {
     }
     root.append(checks,rail,tools);
     if (opinion) root.insertBefore(opinion,tools);
+    if (warranty) root.insertBefore(warranty,tools);
 
     for (const step of checkpoints) {
       const tile=step.open?action('',step.open,'proof-check'):el('div','','proof-check');
@@ -271,7 +279,7 @@ const PhaseEvidence = (() => {
       for (const payment of payments) linked(payment,'receipt-payment-date',payments.length===1?'对照收付日期':'对照收付日期 · '+payment.id,more);
     }
     if (more!==tools && !more.children.length) more.parentElement.remove();
-    const modes=[['checks','条件核对',checks],['timeline','时间线',rail],['opinion','付款意见',opinion]].filter(([, ,view])=>view?.children.length);
+    const modes=[['checks','条件核对',checks],['timeline','时间线',rail],['warranty','质保时点',warranty],['opinion','付款意见',opinion]].filter(([, ,view])=>view?.children.length);
     function select(key) {
       index.phaseViews.set(phase.id,key);
       root.dataset.mode=key;
@@ -280,19 +288,21 @@ const PhaseEvidence = (() => {
         view.hidden=!active;
         controls.querySelector('[data-mode="'+mode+'"]').setAttribute('aria-pressed',String(active));
       }
-      count.textContent=key==='opinion'?(release?ReleaseEvidence.caption(release,ReleaseEvidence.sources(graph,phase)):AcceptanceOpinion.caption(phase.payment_opinion)):key==='checks'?checkpoints.filter(s=>s.status==='ok').length+' / '+checkpoints.length+' 项相符':
+      count.textContent=key==='warranty'?'':key==='opinion'?(release?ReleaseEvidence.caption(release,ReleaseEvidence.sources(graph,phase)):AcceptanceOpinion.caption(phase.payment_opinion)):key==='checks'?checkpoints.filter(s=>s.status==='ok').length+' / '+checkpoints.length+' 项相符':
         timing || events.length+' 项日期记录';
       count.classList.toggle('timing-alert',Boolean(timing && key==='timeline' || key==='opinion' && phase.payment_opinion.state!=='assent' && release?.state!=='matched'));
       if (key==='opinion') opinion.dispatchEvent(new Event('show-opinion'));
+      if (key==='warranty') warranty.dispatchEvent(new Event('show-warranty'));
     }
     for (const [key,label] of modes) {
       const btn=action(label,()=>select(key),'proof-mode'); btn.dataset.mode=key; controls.append(btn);
     }
     let initial=modes[0][0];
+    if (warranty) initial='warranty';
     if (opinion && phase.payment_opinion.state!=='assent') initial='opinion';
     if (timing || change && events.some(e=>e.payment)) initial='timeline';
     select(index.phaseViews.get(phase.id) || initial);
     return root;
   }
-  return {combined,panel,pageReferences,amendmentLines,amendmentFact};
+  return {combined,panel,pageReferences,amendmentLines,amendmentFact,dateOn};
 })();

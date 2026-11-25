@@ -1117,3 +1117,93 @@ button.mandate-day.signing-day[aria-pressed=true] { box-shadow:inset 0 0 0 1px c
   .mandate-date-caption { grid-column:1; justify-self:start; margin:0; }
   .mandate-calendar > summary > .ui-glyph:last-child { grid-column:2; grid-row:1/3; }
 }
+
+.warranty-timeline {
+  --event-label:6.9rem; --date-label:6.2rem; --gap:12px;
+  margin-block-start:12px; min-width:0; color:var(--ink); font-variant-numeric:tabular-nums;
+}
+.warranty-heading,.warranty-cutoff,.warranty-defects,.warranty-formula,.warranty-zoom {
+  display:flex; align-items:center; min-width:0;
+}
+.warranty-heading { justify-content:space-between; flex-wrap:wrap; gap:5px 12px; margin:0 0 12px; }
+.warranty-heading h4 { margin:0; font-size:clamp(.98rem,3.8cqw,1.28rem); font-weight:650; letter-spacing:-.025em; }
+.warranty-cutoff { gap:5px; color:var(--secondary); font-size:.76rem; }
+.warranty-cutoff i { height:13px; border-inline-start:2px dashed var(--accent); }
+.warranty-cutoff time { font-family:var(--font-number); font-weight:600; }
+.warranty-plot { border-block:1px solid var(--line); padding:4px 0 0; }
+.warranty-event,.warranty-axis-row {
+  display:grid; grid-template-columns:var(--event-label) minmax(0,1fr) var(--date-label); column-gap:var(--gap);
+  width:100%; align-items:center; padding:0 8px; box-sizing:border-box;
+}
+.warranty-event { min-height:44px; border:1px solid transparent; border-radius:4px; background:transparent; text-align:start; color:var(--secondary); }
+.warranty-event:hover { background:var(--canvas); }
+.warranty-event[aria-checked=true] { border-color:var(--accent-line); background:var(--accent-soft); color:var(--accent-hover); }
+.warranty-event:focus-visible,.warranty-zoom button:focus-visible,.warranty-cite:focus-visible { outline:2px solid var(--focus); outline-offset:-2px; }
+.warranty-event-name { font-size:.83rem; font-weight:590; }
+.warranty-event-date { display:grid; justify-items:end; gap:1px; }
+.warranty-value { font-size:.82rem; font-family:var(--font-number),var(--font-ui); }
+.warranty-offset { font-size:.66rem; color:var(--attention); line-height:1.2; }
+.warranty-event[data-future=true] .warranty-value { color:var(--attention); font-weight:650; }
+.warranty-track {
+  position:relative; align-self:stretch; min-width:0;
+  background:linear-gradient(to right,transparent var(--cut-at),#fff4dc97 var(--cut-at));
+}
+.warranty-track::before { content:""; position:absolute; inset:50% 0 auto; border-top:1px solid var(--line); }
+.warranty-track::after { content:""; position:absolute; inset:0 auto 0 var(--cut-at); border-inline-start:1px dashed var(--accent); }
+.warranty-track i {
+  position:absolute; z-index:1; top:50%; left:var(--mark-at); width:10px; height:10px; box-sizing:border-box;
+  border:2px solid var(--accent); border-radius:50%; background:var(--surface); transform:translate(-50%,-50%);
+}
+.warranty-event[data-event=end] .warranty-track i { border-radius:1px; transform:translate(-50%,-50%) rotate(45deg); }
+.warranty-event[aria-checked=true] .warranty-track i { background:var(--accent); }
+.warranty-event[data-future=true] .warranty-track i { border-color:var(--attention); }
+.warranty-event[data-future=true][aria-checked=true] .warranty-track i { background:var(--attention); }
+.warranty-event:is([data-range=before],[data-range=after]) .warranty-track i {
+  width:7px; height:7px; border-width:0 0 2px 2px; border-radius:0; background:none; transform:translate(-50%,-50%) rotate(45deg);
+}
+.warranty-event[data-range=after] .warranty-track i { transform:translate(-50%,-50%) rotate(225deg); }
+.warranty-event[data-range=unknown] .warranty-track i { display:none; }
+.warranty-axis-row { min-height:36px; border-inline:1px solid transparent; }
+.warranty-axis-dates { display:flex; justify-content:space-between; color:var(--muted); font:500 .68rem var(--font-number); }
+.warranty-zoom { justify-self:end; gap:2px; }
+.warranty-zoom button { flex:none; min-height:28px; padding:1px 4px; white-space:nowrap; border:1px solid transparent; border-radius:4px; background:transparent; font-size:.7rem; color:var(--muted); }
+.warranty-zoom button[aria-pressed=true] { color:var(--accent-hover); background:var(--accent-soft); border-color:var(--accent-line); }
+.warranty-selected { display:grid; gap:2px; margin-block:8px; }
+.warranty-formula { gap:7px; flex-wrap:wrap; margin:3px 6px 4px; color:var(--secondary); font-size:.79rem; }
+.warranty-formula .ui-glyph { color:var(--accent); }
+.warranty-selected .small { padding:5px; }
+.warranty-cite {
+  display:grid; grid-template-columns:auto minmax(0,1fr) auto auto; align-items:center; gap:8px;
+  min-height:34px; padding:4px 7px; border:0; border-radius:4px; background:var(--canvas); text-align:start; color:var(--ink);
+}
+.warranty-cite:hover { background:var(--accent-soft); }
+.warranty-cite span,.warranty-cite small { font-size:.72rem; color:var(--muted); }
+.warranty-cite q { font-size:.82rem; color:var(--ink); overflow-wrap:anywhere; }
+.warranty-ink { position:relative; min-width:0; }
+.warranty-ink canvas { display:none; }
+@container (min-width:481px) {
+  .warranty-ink canvas { display:block; max-width:100%; max-height:32px; mix-blend-mode:multiply; }
+  .warranty-ink[data-preview=image] q { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+}
+.warranty-cite q::before,.warranty-cite q::after { content:none; }
+.warranty-cite .ui-glyph,.warranty-defects > .ui-glyph { color:var(--accent); font-size:.85rem; }
+.warranty-defects { flex-wrap:wrap; gap:4px 8px; padding-top:6px; border-top:1px solid var(--line); font-size:.76rem; color:var(--muted); }
+.warranty-defects strong { color:var(--attention); }
+.warranty-defects button { min-height:30px; border:0; padding:2px 4px; background:transparent; color:var(--accent-hover); font-size:.78rem; }
+.warranty-defect-source { display:inline-flex; align-items:center; gap:5px; }
+.warranty-defects[data-record=listed_open] .warranty-defect-source { color:var(--attention); font-weight:650; }
+.warranty-condition { margin-inline-start:auto; }
+@container (max-width:480px) {
+  .warranty-timeline { --event-label:5rem; --date-label:5.4rem; --gap:6px; }
+  .warranty-axis-row,.warranty-event { padding-inline:4px; }
+  .warranty-value,.warranty-event-name { font-size:.77rem; }
+  .warranty-cite { grid-template-columns:auto minmax(0,1fr) auto; gap:6px; }
+  .warranty-cite small { display:none; }
+  .warranty-formula { font-size:.75rem; }
+}
+@container (max-width:330px) {
+  .warranty-timeline { --event-label:4.4rem; --date-label:4.65rem; --gap:3px; }
+  .warranty-event-name,.warranty-value { font-size:.72rem; }
+  .warranty-zoom button { padding-inline:3px; }
+  .proof-switch { flex-wrap:wrap; }
+}

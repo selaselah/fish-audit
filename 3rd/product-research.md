@@ -1,5 +1,11 @@
 # 审计与会计软件的公开界面
 
+## 合同义务与质保时点
+
+Ironclad 的 Obligations Dashboard 可按义务状态、类型和截止日查看合同义务，也能筛出待核验事项。Fish Audit 把这两个问题放在一期质保金里分别回答。合同条件是否具备看 H04，成功回单在提交时能否支持实付看 H05。[Ironclad 义务工作台](https://support.ironcladapp.com/en-us/articles/18170710-obligations-dashboard)
+
+Asana Timeline 在日期标尺上用菱形表示里程碑。本项目用菱形表示根据合同推算的质保末日，圆点表示凭证所列日期。审计员可切换全程和提交日前后七天，选择日期后直接核对当版原件。深蓝与琥珀色沿用工作台的证据和风险配色，形状、日期差和文字提供同样的信息。[Asana 官方时间线说明](https://help.asana.com/s/article/plan-and-execute-projects-with-timeline) · [Fish Audit 交互设计](../docs/interaction-design/README.md#质保金时点)
+
 每项记录给出厂商原页、查看位置和查阅日。「画面」来自公开截图或动图，「操作说明」来自对应的帮助正文。「本地用法」说明国内中小企业的采购员、会计或复核人可以如何处理一笔业务。观察范围限于这些公开资料。
 
 ## 合同关键日期与授权期间
