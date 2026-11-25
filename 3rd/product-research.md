@@ -1,5 +1,11 @@
 # 审计与会计软件的公开界面
 
+## 选择审计范围和核对运行时段
+
+Caseware Cloud 的立项入口先选业务应用，再填写项目资料。IBM Carbon 的单选卡片允许整块选择，并保留单选标识。Fish Audit 把四种范围直接放在「新建审计」中，每块仅显示业务名称和所核凭证。产品首页的合同案例入口预选履约审计，资料要求可按需展开。[Caseware 项目创建流程](https://www.caseware.com/docs/en/cloud/caseware-cloud/engagement-management/planning/create-and-set-up-an-engagement-file) · [IBM Carbon 单选卡片](https://www.carbondesignsystem.com/building-blocks/core/components/tile/guidelines)
+
+Grafana 的状态时间线用区间描述对象状态，并保留缺数的空档。Fish Audit 参考这一呈现方式，按签认运行记录的实际起止绘制时段。蓝色对应原件所载无异常，断档和故障分别使用不同纹理、标记与文字。断档可直接核对前一行的截止和后一行的起始。连续时长、付款判断和原件定位由本项目实现。[Grafana 状态时间线](https://grafana.com/docs/grafana/latest/visualizations/panels-visualizations/visualizations/state-timeline/)
+
 ## 逐份翻阅一个业务对象的凭证
 
 DataSnipper 的复核操作可由工作表的引用回到证据文件中的对应页与位置。Fish Audit 在“按业务对象”中采用相同的取证动作。切换合同号或单位后，只展示所选单据的一处原文。点击“对照原行”可以核对实际印刷图像。所用原图均来自本地水印案例。[DataSnipper 官方复核说明](https://knowledge.datasnipper.com/en/articles/685955-how-to-document-your-audit-procedures-with-datasnipper)

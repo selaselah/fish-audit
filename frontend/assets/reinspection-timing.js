@@ -1,9 +1,11 @@
 const ReinspectionTiming = (() => {
   const labels = {
+    ...TrialLog.labels,
     minimum:'等待条款', operation:'连续试运行条款', term_unclear:'复验条件', qualification:'合同附注',
     fixed_day:'整改完成日期', fixed_time:'整改完成时刻', started:'实际复验开始', report_day:'复验单日期',
   };
   const states = {
+    ...TrialLog.states,
     met:'满足等待期', early:'开验过早', report_early:'复验单日期过早', boundary:'时点精度待核',
     start_missing:'缺开验记录', operation_pending:'缺试运行记录', conflict:'日期冲突',
     terms_pending:'条款范围待核', events_pending:'起止记录待核', chain_pending:'整改归属或签认待核',
@@ -14,15 +16,16 @@ const ReinspectionTiming = (() => {
     if (!check) return [];
     const supported=new Set(traceReferences(graph,finding)), index=graphIndex(graph);
     const ledger=graph.reinspection_wait_sources;
-    if (ledger?.format!=='contract-reinspection-wait-v1') return [];
+    if (!['contract-reinspection-wait-v1','contract-reinspection-wait-v2'].includes(ledger?.format)) return [];
     return ledger.lines.filter(row=>{
       const ref=row.doc+'/p'+row.page, sheet=index.nodes.get(ref), node=index.nodes.get(row.id);
       if (!check.sources.includes(row.id) || !supported.has(row.id) || !supported.has(ref) ||
           sheet?.type!=='page' || sheet.sha256!==row.page_sha256 || index.documents.get(row.doc)?.sha256!==row.source_sha256 ||
+          row.supported && (!row.line || sheet.layer!=='text' || sheet.clause_text_only!==true) ||
           node?.type!=='reinspection_time_line' || node.label!==row.quote || node.doc!==row.doc || node.page!==row.page || node.line!==row.line) return false;
       return row.facts.every(id=>{
         const f=index.facts.get(id);
-        return supported.has(id) && f?.doc===row.doc && f.page===row.page && (f.unit || f.doc)===row.unit &&
+        return supported.has(id) && f?.doc===row.doc && f.page===row.page && (f.unit || f.doc)===row.unit && (!row.supported || f.status!=='disputed') &&
           f.page_sha256===sheet.sha256 && f.source_sha256===row.source_sha256;
       }) && graph.edges.some(e=>e.type==='reinspection_time_basis' && e.from===ref && e.to===row.id &&
         e.evidence.length===1+row.facts.length && e.evidence[0]===ref && row.facts.every((id,i)=>e.evidence[i+1]===id));
@@ -47,7 +50,7 @@ const ReinspectionTiming = (() => {
     return (seconds<0?'−':'')+(parts.join('') || '0小时');
   }
 
-  function linked(check, rows) {
+  function linked(check, rows, chain, graph) {
     if (!states[check.state] || rows.length!==check.sources.length) return false;
     const find=id=>rows.find(r=>r.id===id);
     for (const id of [check.term_ref,check.repair_ref,check.start_ref,check.report_ref].filter(Boolean)) {
@@ -60,6 +63,7 @@ const ReinspectionTiming = (() => {
         seconds(check.start_ref || check.report_ref,'before')-seconds(check.repair_ref,'from')!==check.below_seconds)) return false;
     if (check.above_seconds!==null && (!check.start_ref ||
         seconds(check.start_ref,'from')-seconds(check.repair_ref,'before')!==check.above_seconds)) return false;
+    if (check.operation || check.state.startsWith('run_')) return TrialLog.checkSources(check,rows,chain,graph);
     return check.state!=='met' || (check.status==='ok' && find(check.term_ref)?.kind==='minimum' &&
       Number.isSafeInteger(check.above_seconds) && Number.isSafeInteger(check.below_seconds) &&
       check.above_seconds>=check.required_hours*3600 && check.below_seconds>check.above_seconds);
@@ -82,14 +86,16 @@ const ReinspectionTiming = (() => {
   function panel(finding,graph) {
     const check=finding.reinspection.timing;
     if (!check) return null;
-    const rows=sources(graph,finding), verified=linked(check,rows);
+    const rows=sources(graph,finding), verified=linked(check,rows,finding.reinspection,graph);
     const card=el('section','','retest-wait');
     card.id='reinspection-wait'; card.tabIndex=-1;
-    card.setAttribute('aria-label','合同复验等待期');
+    const title=check.operation?'设备试运行':'复验等待期';
+    card.setAttribute('aria-label',title);
     card.dataset.timingState=verified?check.state:'unverified';
     card.dataset.tone=verified?check.status:'missing';
-    card.append(box('wait-head',el('h4','复验等待期'),el('span',verified?states[check.state]:'证据关系待核','wait-state')));
-    if (verified) card.append(metrics(check,rows.find(r=>r.id===check.term_ref)));
+    card.append(box('wait-head',el('h3',title),el('span',verified?states[check.state]:'证据关系待核','wait-state')));
+    if (verified && check.operation) card.append(TrialLog.panel(check,rows));
+    else if (verified) card.append(metrics(check,rows.find(r=>r.id===check.term_ref)));
     const hasStart=rows.some(r=>r.kind==='started');
     const groups=[
       {label:'合同约定', roles:['contract','contract_addendum'], kinds:['minimum','operation','term_unclear','qualification'], preferred:check.term_ref},
@@ -140,7 +146,16 @@ const ReinspectionTiming = (() => {
       });
       buttons.push(button); switcher.append(button);
     }
-    card.append(switcher,body);
+    if (check.operation) {
+      const evidence=box('run-basis',switcher,body);
+      const additional=rows.filter(r=>['run_clock','run_attestation','run_signer'].includes(r.kind) && r.line && r.supported);
+      if (additional.length) {
+        const fields=box('run-fields');
+        for (const row of additional) fields.append(action(labels[row.kind]+' · '+row.line+' 行',()=>open(row),'ref'));
+        evidence.append(fields);
+      }
+      card.append(fold('合同与起止依据',evidence));
+    } else card.append(switcher,body);
     render(0);
     return card;
   }
@@ -150,7 +165,7 @@ const ReinspectionTiming = (() => {
     if (!check || check.status==='ok' || phase.status==='ok') return null;
     const proof=new Set(traceReferences(graph,phase));
     if (!sources(graph,finding).some(s=>['minimum','operation','term_unclear'].includes(s.kind) && proof.has(s.id))) return null;
-    const jump=action('核对复验等待期',()=>{
+    const jump=action(check.operation?'核对设备试运行':'核对复验等待期',()=>{
       document.getElementById('trail-tab-final')?.click();
       revealPaperTarget(document.getElementById('reinspection-wait'));
     },'compare-jump');

@@ -21,6 +21,7 @@ import {checkInspectionCoverage} from './inspection-coverage.mjs';
 import {checkSigningParties} from './signing-parties.mjs';
 import {checkReinspectionTrail} from './reinspection-trail.mjs';
 import {checkReinspectionTiming} from './reinspection-timing.mjs';
+import {checkTrialLog,checkIntakeScopes} from './trial-log.mjs';
 import {checkEntityBrowser} from './entity-browser.mjs';
 
 const scratch = await mkdtemp(join(tmpdir(), 'fish-ui-'));
@@ -68,6 +69,8 @@ const signingCase = caseArgument('--signing-party-case');
 const priorCase=caseArgument('--prior-installment-case');
 const trailCase=caseArgument('--reinspection-trail-case');
 const timingCase=caseArgument('--reinspection-time-case');
+const trialCase=caseArgument('--trial-case');
+const intakeScopes=process.argv.includes('--intake-scopes');
 const entityCase=caseArgument('--entity-case');
 const navCase=caseArgument('--navigation-case');
 const phaseEvidenceCase = caseArgument('--phase-evidence-case');
@@ -78,7 +81,7 @@ const qualityImageCase = caseArgument('--quality-image-case');
 const reinspectionGap = caseArgument('--reinspection-gap-case');
 const brokenPayment = caseArgument('--payment-source-case');
 const waitingCase = caseArgument('--waiting-case');
-const seeded = [priorCase,trailCase,timingCase,entityCase,navCase,product,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+const seeded = [priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,product,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
 const root = product ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
@@ -146,6 +149,10 @@ try {
   await call('Page.navigate',{url:product ? root : root+'/app'});
   if (product) {
     await checkProduct({root,call,evaluate,wait});
+  } else if (intakeScopes) {
+    await checkIntakeScopes({root,call,evaluate,wait});
+  } else if (trialCase) {
+    await checkTrialLog({root,call,evaluate,wait},trialCase,Number(process.env.AUDIT_TRIAL_REV));
   } else if (entityCase) {
     await checkEntityBrowser({root,call,evaluate,wait},entityCase);
   } else if (timingCase) {
@@ -1943,6 +1950,8 @@ try {
     else await wait('document.activeElement?.dataset.finding==='+JSON.stringify(previousId),'legacy finding focused on original workpaper');
     await click('提交补件','document.querySelector("#supplement-family")');
     await wait('document.querySelector("#upload-dialog")?.open && document.querySelector("#upload-profile").disabled','returned intake');
+    assert.deepEqual(await evaluate('[...document.querySelectorAll("#intake-scopes input")].filter(r=>r.closest("label").offsetWidth>0).map(r=>[r.value,r.checked,r.matches(":disabled")])'),
+      [[parent.profile,true,true]]);
     assert.equal(await evaluate('document.querySelectorAll("#retain-files input:checked").length'),parent.documents.length);
     await evaluate('document.querySelectorAll("#retain-files input:checked").forEach(c=>c.click());document.querySelector("#upload-form").requestSubmit()');
     await wait('document.querySelector("#upload-error").textContent.includes("请选择")','empty supplement validation');
@@ -2028,10 +2037,17 @@ try {
     await wait('document.querySelector("#page-dialog")?.open && !!document.querySelector(".located")','permanent revision and fact URL');
     console.log('PASS · Six viewports, inbox search, finding-to-account provenance and permanent revision/source links');
   } else {
+    await call('Page.navigate',{url:root+'/?scene=inspection#workflow'});
+    await wait('!!document.querySelector(\'#workflow a[href="/app?new=contract"]\')','product intake');
+    await evaluate('document.querySelector(\'#workflow a[href="/app?new=contract"]\').click()');
     await wait('document.querySelector("#account input[name=password]") !== null', 'login');
+    assert.ok(await evaluate('!document.querySelector("#upload-dialog").open && new URL(location.href).searchParams.get("new")==="contract"'));
     await click('创建企业账号');
     const password = 'synthetic-ui-only-123';
     await entry({workspace:'合成演练 · 青岚商贸', name:'林审计', login:'ui.owner',password});
+    await wait('document.querySelector("#upload-dialog")?.open && !location.search','contract intake after joining workspace');
+    assert.equal(await evaluate('document.querySelector("#intake-scopes input:checked").value'),'cn-contract-performance/v1');
+    await evaluate('document.querySelector("#upload-dialog [data-close]").click()');
     await wait('!!document.querySelector("#nav-team")?.getClientRects().length && location.hash.endsWith("/desk")','admin workspace');
     const first = await evaluate('location.hash');
     await click('企业成员');

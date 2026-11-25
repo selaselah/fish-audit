@@ -1404,7 +1404,7 @@ async function refresh() {
         state.tab=traced?'graph':'report'; focusFinding=traced?'#trace-select':'[data-finding="'+requestedFinding+'"]';
       } else if (route.params.get('view')==='replay' && state.openedCitation!==location.hash && state.bundle) {
         state.openedCitation=location.hash; state.tab='activity'; focusFinding='.rule-replay button';
-      } else if (route.params.get('view')==='reinspection' && state.openedCitation!==location.hash &&
+      } else if (['reinspection','trial'].includes(route.params.get('view')) && state.openedCitation!==location.hash &&
                  bundle?.report.findings.some(f=>f.rule==='H02' && f.reinspection)) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#equipment-reinspection-trail';
       } else if (route.params.get('view')==='entities' && state.openedCitation!==location.hash && state.bundle) {
@@ -1414,7 +1414,12 @@ async function refresh() {
       renderCase(Boolean(focusFinding));
       if (focusFinding) {
         const target = $(focusFinding);
-        if (target?.dataset.finding || ['equipment-reinspection-trail','case-entity-browser'].includes(target?.id)) revealPaperTarget(target);
+        if (target?.id==='equipment-reinspection-trail' && route.params.get('view')==='trial' &&
+            bundle.report.findings.some(f=>f.reinspection?.timing?.operation)) {
+          target.open=true;
+          $('#trail-tab-final')?.click();
+          revealPaperTarget($('#reinspection-wait'));
+        } else if (target?.dataset.finding || ['equipment-reinspection-trail','case-entity-browser'].includes(target?.id)) revealPaperTarget(target);
         else target?.focus();
       }
       const target = route.params.get('fact');
@@ -1428,6 +1433,14 @@ async function refresh() {
       const data = await api('/api/controls'); if (epoch !== state.epoch) return; renderCatalog(data);
     } else {
       await Desk.load(epoch); if (epoch !== state.epoch) return; interval = 5000;
+      const entry=new URL(location.href);
+      if (entry.searchParams.get('new')==='contract') {
+        entry.searchParams.delete('new');
+        history.replaceState(history.state,'',entry);
+        openIntake();
+        scopeSelect.value=performanceProfile;
+        profileChanged();
+      }
     }
     $('#network-error').hidden = true;
     if ($('#connection').textContent === '连接中断') checkConnection();
@@ -1705,8 +1718,27 @@ if (canEditFileList) {
   });
 }
 $('#upload-title').addEventListener('input', () => { state.key = null; });
+const scopeSelect=$('#upload-profile'), scopeGroup=$('#intake-scopes');
+for (const option of scopeSelect.options) {
+  const label=el('label','','intake-scope'), radio=el('input');
+  radio.type='radio'; radio.name='intake-scope'; radio.value=option.value;
+  radio.defaultChecked=option.defaultSelected || option.index===0;
+  radio.addEventListener('change',()=>{
+    if (radio.checked && !scopeSelect.disabled) {
+      scopeSelect.value=radio.value;
+      scopeSelect.dispatchEvent(new Event('change'));
+    }
+  });
+  label.append(glyph(option.dataset.icon),box('scope-text',el('strong',option.text),el('small',option.dataset.scope)),radio);
+  scopeGroup.append(label);
+}
+scopeSelect.parentElement.hidden=true;
+scopeGroup.closest('fieldset').hidden=false;
+scopeSelect.closest('.intake-fields').classList.add('with-scopes');
 function profileChanged() {
   state.key = null;
+  scopeGroup.closest('fieldset').disabled=scopeSelect.disabled;
+  for (const radio of scopeGroup.querySelectorAll('input')) radio.checked=radio.value===scopeSelect.value;
   if ($('#upload-profile').value === performanceProfile) {
     $('#profile-note').textContent = '上传合同、验收单及注明期次的付款回单。分批交付时请附各批验收单。涉及代理、审批、整改或质保时，可附授权委托书、审批记录、复验报告及质保期满确认单。';
     return;

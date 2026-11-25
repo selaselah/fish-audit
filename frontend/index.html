@@ -28,6 +28,7 @@
   <script src="/assets/signing-parties.js" defer></script>
   <script src="/assets/inspection-coverage.js" defer></script>
   <script src="/assets/entity-browser.js" defer></script>
+  <script src="/assets/trial-log.js" defer></script>
   <script src="/assets/reinspection-timing.js" defer></script>
   <script src="/assets/reinspection-trail.js" defer></script>
   <link rel="stylesheet" href="/assets/prior-installment.css">
@@ -142,7 +143,13 @@
     <form id="upload-form">
       <div class="dialog-head"><h2 id="upload-heading">新建审计</h2><button class="icon-button" type="button" data-close aria-label="关闭资料提交"><i aria-hidden="true" class="ui-glyph ic-x-lg"></i></button></div>
       <div class="intake-fields"><label>任务名称<input id="upload-title" required maxlength="100" placeholder="例如 档案柜采购 · 十月验收"></label>
-      <label>审计范围<select id="upload-profile"><option value="cn-procurement-full-settlement/v1">采购与付款</option><option value="cn-contract-performance/v1">合同履约与分期</option><option value="cn-travel-reimbursement/v1">差旅报销</option><option value="cn-bank-contract-payment/v1">付款回单核对</option></select></label></div>
+      <label>审计范围<select id="upload-profile">
+        <option value="cn-procurement-full-settlement/v1" data-icon="inboxes" data-scope="发票与全额结算">采购与付款</option>
+        <option value="cn-contract-performance/v1" data-icon="journal-text" data-scope="签章、验收与质保">合同履约与分期</option>
+        <option value="cn-travel-reimbursement/v1" data-icon="receipt" data-scope="报销单与具名发票">差旅报销</option>
+        <option value="cn-bank-contract-payment/v1" data-icon="card-checklist" data-scope="账户与银行流水">付款回单核对</option>
+      </select></label></div>
+      <fieldset class="intake-scopes" hidden><legend>审计范围</legend><div id="intake-scopes"></div></fieldset>
       <div id="supplement-fields" hidden>
         <blockquote id="return-reason"></blockquote>
         <fieldset id="retain-files"><legend>沿用前案原件</legend></fieldset>

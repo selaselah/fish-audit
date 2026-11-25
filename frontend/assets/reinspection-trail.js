@@ -193,7 +193,7 @@ const ReinspectionTrail = (() => {
     let stateLabel=closed?(chain.register?'已关闭':'该版记为已关闭'):'终验待核';
     if ((chain.register && chain.steps.some(s=>s.role==='final' &&
         verifiedRows(s,chain.register,graph,supported).some(entry=>!entry.bound))) ||
-        (chain.timing && !ReinspectionTiming.linked(chain.timing,ReinspectionTiming.sources(graph,finding)))) {
+        (chain.timing && !ReinspectionTiming.linked(chain.timing,ReinspectionTiming.sources(graph,finding),chain,graph))) {
       stateLabel='证据关系待核';
       trail.dataset.disposition='unverified';
     }
