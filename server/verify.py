@@ -38,6 +38,7 @@ from prior_installment import verify as verify_prior_installment
 from payment_releases import verify as verify_payment_releases
 from invoice_conditions import verify as verify_invoice_conditions
 from repair_completion import verify as verify_repair_completion
+from reinspection_wait import verify as verify_reinspection_wait
 from contract_changes import verify_sources as verify_addendum_sources
 from delegation import verify_sources as verify_delegation_sources
 from protocol import canonical, response_request
@@ -260,6 +261,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
     verify_prior_installment(report,page_text,submitted=submitted,signed=signed)
     verify_payment_releases(report,page_text,submitted=submitted,signed=signed)
     verify_repair_completion(report,page_text)
+    verify_reinspection_wait(report,page_text)
     verify_invoice_conditions(report,page_text)
     if "conclusions.py" in report["policy"].get("code_sha256",{}):
         verify_result(report)
@@ -276,6 +278,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
         inspected.extend(graph.get("stage_payment_sources",{}).get("pages",[]))
         inspected.extend(graph.get("payment_release_sources",{}).get("pages",[]))
         inspected.extend(graph.get("repair_completion_sources",{}).get("pages",[]))
+        inspected.extend(graph.get("reinspection_wait_sources",{}).get("pages",[]))
         inspected.extend(graph.get("invoice_receipt_sources",{}).get("pages",[]))
         inspected.extend(graph.get("quality_addenda",{}).get("payments",{}).get("pages",[]))
         inspected.extend(graph.get("prior_installment_sources",{}).get("pages",[]))
@@ -415,6 +418,7 @@ def render_addendum_sources(bundle, report, nodes):
     selected.update(p["doc"] for p in graph.get("acceptance_authority_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("stage_payment_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("prior_installment_sources",{}).get("pages",[]))
+    selected.update(p["doc"] for p in graph.get("reinspection_wait_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("inspection_coverage_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("equipment_model_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("receipt_packet_sources",{}).get("packets",[]))

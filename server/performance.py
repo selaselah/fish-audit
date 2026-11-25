@@ -27,6 +27,7 @@ import inspection_register
 import acceptance_payments
 import payment_releases
 import repair_completion
+import reinspection_wait
 from performance_versions import (FIRST_FORMAT, BOARD_FORMAT, REINSPECTION_FORMAT, DELEGATION_FORMAT, IDENTITY_FORMAT,
                                   NATIVE_FORMAT, ADDENDUM_FORMAT, SIGNATORY_FORMAT, DATE_FORMAT, BATCH_FORMAT, FORMAT,
                                   PAYMENT_WINDOW_FORMATS, WARRANTY_FORMATS, EFFECT_FORMATS, BATCH_FORMATS, DATE_FORMATS, SIGNATORY_FORMATS, ADDENDUM_FORMATS,
@@ -719,7 +720,9 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         return acceptance(contract,selected,criterion=criterion,quantity_change=quantity,signature_ok=signatory if authority else None)
     if version in (REINSPECTION_FORMAT, *MANDATE_FORMATS):
         ledger = graph.get("repair_completion_sources") if version == FORMAT else None
-        checks = {r.unit:repair_completion.check(ledger,r,printed_day(r,"repaired_on")) for r in repairs} if ledger else {}
+        waiting = graph.get("reinspection_wait_sources", {})
+        checks = {r.unit: repair_completion.check(ledger, r, printed_day(r, "repaired_on"),
+                  timing_lines=reinspection_wait.event_lines(waiting, r.unit, "fixed_time")) for r in repairs} if ledger else {}
         accepted, accepted_on = assess_reinspection(contract,receipts,repairs,retests,evaluate,signature_ok=signatory if authority else None,
             read_date=printed_day if ledger else None,repair_checks=checks)
     else:
@@ -897,6 +900,10 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
     register = graph.get("acceptance_reservation_sources", {}).get("final_register")
     if version == FORMAT and register is not None and inspection_register.apply(accepted, register, graph):
         accepted_on = None
+    if version == FORMAT and graph.get("reinspection_wait_sources"):
+        timing = reinspection_wait.assess(graph["reinspection_wait_sources"], accepted, contract.unit)
+        if timing and reinspection_wait.apply(accepted, timing):
+            accepted_on = None
     if payment_change and not scoped_change:
         payment_amendments.attach(plan,payment_change)
     output = [signed, accepted, plan]

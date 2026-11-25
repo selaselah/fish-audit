@@ -1,5 +1,22 @@
 # 本机审计接口
 
+## 合同复验间隔
+
+规则 `2026.11.26.08` 以 `policy.reinspection_wait=contract-reinspection-wait-v1` 标记本项程序。`graph.reinspection_wait_sources` 记录合同、变更、整改、复验的审查页和引文，包括文件及页图摘要、物理行号、事实引用和记时精度。页节点通过 `reinspection_time_basis` 连接到 `reinspection_time_line`。模型漏录的印刷行也能生成可定位的引文。未触发本项核对时，页和引文集合为空。
+
+H02 的可选 `reinspection.timing` 含 `required_hours`、`term_ref`、`repair_ref`、`start_ref` 和 `report_ref`。`above_seconds` 和 `below_seconds` 是可能间隔的严格下、上界，单位为秒。仅有报告日期时下界为 null，`start_ref` 也为 null。不可证的约定时长或边界各自为 null。
+
+| `state` | 审计含义 |
+| --- | --- |
+| `met` | 明确的实际开验与整改时点支持该项最短间隔 |
+| `early` / `report_early` | 实际开始过早，或签认单上的日期已早于等待期届满 |
+| `boundary` / `start_missing` | 精度跨过门槛，或缺开始时点 |
+| `operation_pending` | 连续试运行及无异常记录待核 |
+| `terms_pending` / `events_pending` / `chain_pending` | 合同范围、原件时点或整改归属与签认待核 |
+| `conflict` | 明载时刻与其日期或复验单日期冲突 |
+
+签收旧版“复验已关闭”时会按原页核对遗漏的等待条件。有待处置事项返回 HTTP 409，历史版本仍可按当时规则离线复算。查看对应版本的交互使用 `/workpaper/<case_id>?rev=<rev>&view=reinspection`。
+
 ## 复验原件的逐行核对
 
 固定版本的底稿入口支持 `/workpaper/<case_id>?rev=<rev>&view=reinspection`。有权限查看该版底稿且存在整改复验记录时，页面直接定位到履约时间线。企业入口在相同路径前加 `/w/<wid>`。

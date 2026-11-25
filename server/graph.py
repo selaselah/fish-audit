@@ -32,6 +32,7 @@ import payment_amendments
 import acceptance_reservations
 import payment_releases
 import repair_completion
+import reinspection_wait
 from acceptance_authority import CLAUSE as AUTHORITY_CLAUSE, SIGNER as ACCEPTANCE_SIGNATURE, attach as record_signatories, witness_edges
 
 
@@ -342,6 +343,11 @@ def build_graph(docs, pages, attestations, amendments=()):
     completion = repair_completion.sources(graph,lambda doc,number:texts[doc,number])
     graph["repair_completion_sources"] = completion
     graph["edges"].extend(repair_completion.edges(completion))
+    waiting = reinspection_wait.sources(graph, lambda doc, number: texts[doc, number])
+    graph["reinspection_wait_sources"] = waiting
+    nodes, edges = reinspection_wait.source_graph(waiting)
+    graph["nodes"].extend(nodes)
+    graph["edges"].extend(edges)
     graph["payment_window_sources"]=payment_windows.sources(graph,lambda doc,number:texts[doc,number])
     graph["contract_effect_sources"]=contract_effect.sources(graph,lambda doc,number:texts[doc,number])
     signing_nodes,signing_edges=signing_parties.source_graph(graph["contract_effect_sources"])

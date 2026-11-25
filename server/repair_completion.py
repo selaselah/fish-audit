@@ -82,9 +82,10 @@ def edges(ledger):
             for s in ledger["lines"]]
 
 
-def check(ledger, material, printed_date):
+def check(ledger, material, printed_date, *, timing_lines=()):
     pages = [p for p in ledger["pages"] if p["unit"] == material.unit]
-    lines = [s for s in ledger["lines"] if s["unit"] == material.unit]
+    lines = [s for s in ledger["lines"] if s["unit"] == material.unit and
+             not (s["kind"] == "unreviewed" and (s["doc"], s["page"], s["line"], s["quote"]) in timing_lines)]
     dates = [s for s in lines if s["kind"] == "date"]
     anchored = material.fields["repaired_on"]
     dated = (len(dates) == 1 and dates[0]["line"] and len(anchored) == 1

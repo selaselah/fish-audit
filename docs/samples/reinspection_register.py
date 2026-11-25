@@ -41,9 +41,9 @@ def materials(seed, mode):
     return folder, records
 
 
-def review(cid, mode, folder, records):
+def review_printed(cid, folder, records, case_title, extra_fields):
     case = get("/api/cases/" + cid)
-    assert case["title"] == "合成演练 · " + CASES[mode] and not case["decisions"]
+    assert case["title"] == "合成演练 · " + case_title and not case["decisions"]
     report = wait(cid)
     nodes = {n["id"]: n for n in report["graph"]["nodes"] if n["type"] == "page"}
     for doc in case["documents"]:
@@ -52,9 +52,12 @@ def review(cid, mode, folder, records):
         page, = prepare(source, 1, save_images=False)
         assert nodes[doc["id"] + "/p1"]["sha256"] == page["sha256"] and normalize(WATERMARK) in normalize(page["text"])
     # Preserve the distinct additional rows as printed observations. The procedure reads the whole page independently.
-    reconcile_training_pages(cid, folder, records, case_titles=CASES.values(), row_spacing=25,
-                             field_labels={label: "other" for label, _ in ROWS[mode]})
+    reconcile_training_pages(cid, folder, records, case_titles=[case_title], row_spacing=25, field_labels=extra_fields)
     return check_training_watermark(cid, folder, records, confirm_printed_records(cid, folder, records))
+
+
+def review(cid, mode, folder, records):
+    return review_printed(cid, folder, records, CASES[mode], {label: "other" for label, _ in ROWS[mode]})
 
 
 def verify_sample(report, mode):
