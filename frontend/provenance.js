@@ -165,6 +165,7 @@ function performanceOverview(findings, graph) {
       });
       list.children[position].querySelector('.proof-opinion:not([hidden])')?.dispatchEvent(new Event('show-opinion'));
       list.children[position].querySelector('.warranty-timeline:not([hidden])')?.dispatchEvent(new Event('show-warranty'));
+      list.children[position].querySelector('.ticket-review:not([hidden])')?.dispatchEvent(new Event('show-tickets'));
     }
     buttons.forEach((button,i)=>{
       button.addEventListener('click',()=>select(i));
@@ -936,7 +937,7 @@ function warrantyPanel(finding,graph) {
   }
   const originals=fold('核对质保条款与履约原文');
   originals.open=finding.rule==='H04' && !entry.at_submission;
-  const unitOrder=['contract','acceptance','reinspection','warranty','bank_receipt'].flatMap(k=>graph.documents_by_kind[k] || []);
+  const unitOrder=['contract','acceptance','reinspection','warranty','warranty_ticket','bank_receipt'].flatMap(k=>graph.documents_by_kind[k] || []);
   const rows=[];
   function record(unit,page,line,row) {
     const position=unitOrder.indexOf(unit);
@@ -960,7 +961,7 @@ function warrantyPanel(finding,graph) {
     const ref=action(title,()=>openPage(item.doc,item.page,fact?.id,fact?null:item.line),'ref');
     const row=box('batch-source',el('q',item.quote),ref);
     row.dataset.warrantySource=fact?.id || page+'/l'+item.line;
-    if (item.kind==='unresolved' || item.kind==='observation') row.append(el('small','需核对原件','small'));
+    if (item.kind==='unresolved' || item.kind==='observation' || item.kind==='ticket_line' && item.field==='qualification') row.append(el('small','需核对原件','small'));
     record(item.unit,item.page,item.line,row);
   }
   for (const page of graph.warranty_sources.pages.filter(p=>units.has(p.unit) && (!p.native || !p.text_only))) {

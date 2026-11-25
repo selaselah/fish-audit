@@ -60,6 +60,7 @@ const PhaseEvidence = (() => {
     const inPhase=new Set(phase.evidence);
     const checkpoints=[],events=[];
     const warranty=WarrantyTimeline.panel(phase,payments,graph);
+    const tickets=WarrantyTickets.panel(phase,payments,graph);
     function unique(item,field) {
       const matches=(item?.evidence || []).map(id=>facts.get(id)).filter(f=>f?.field===field && inPhase.has(f.id));
       return matches.length===1 ? matches[0] : null;
@@ -173,6 +174,7 @@ const PhaseEvidence = (() => {
     root.append(checks,rail,tools);
     if (opinion) root.insertBefore(opinion,tools);
     if (warranty) root.insertBefore(warranty,tools);
+    if (tickets) root.insertBefore(tickets,tools);
 
     for (const step of checkpoints) {
       const tile=step.open?action('',step.open,'proof-check'):el('div','','proof-check');
@@ -279,7 +281,7 @@ const PhaseEvidence = (() => {
       for (const payment of payments) linked(payment,'receipt-payment-date',payments.length===1?'对照收付日期':'对照收付日期 · '+payment.id,more);
     }
     if (more!==tools && !more.children.length) more.parentElement.remove();
-    const modes=[['checks','条件核对',checks],['timeline','时间线',rail],['warranty','质保时点',warranty],['opinion','付款意见',opinion]].filter(([, ,view])=>view?.children.length);
+    const modes=[['checks','条件核对',checks],['timeline','时间线',rail],['warranty','质保时点',warranty],['tickets','维修工单',tickets],['opinion','付款意见',opinion]].filter(([, ,view])=>view?.children.length);
     function select(key) {
       index.phaseViews.set(phase.id,key);
       root.dataset.mode=key;
@@ -288,17 +290,19 @@ const PhaseEvidence = (() => {
         view.hidden=!active;
         controls.querySelector('[data-mode="'+mode+'"]').setAttribute('aria-pressed',String(active));
       }
-      count.textContent=key==='warranty'?'':key==='opinion'?(release?ReleaseEvidence.caption(release,ReleaseEvidence.sources(graph,phase)):AcceptanceOpinion.caption(phase.payment_opinion)):key==='checks'?checkpoints.filter(s=>s.status==='ok').length+' / '+checkpoints.length+' 项相符':
+      count.textContent=key==='tickets' || key==='warranty'?'':key==='opinion'?(release?ReleaseEvidence.caption(release,ReleaseEvidence.sources(graph,phase)):AcceptanceOpinion.caption(phase.payment_opinion)):key==='checks'?checkpoints.filter(s=>s.status==='ok').length+' / '+checkpoints.length+' 项相符':
         timing || events.length+' 项日期记录';
       count.classList.toggle('timing-alert',Boolean(timing && key==='timeline' || key==='opinion' && phase.payment_opinion.state!=='assent' && release?.state!=='matched'));
       if (key==='opinion') opinion.dispatchEvent(new Event('show-opinion'));
       if (key==='warranty') warranty.dispatchEvent(new Event('show-warranty'));
+      if (key==='tickets') tickets.dispatchEvent(new Event('show-tickets'));
     }
     for (const [key,label] of modes) {
       const btn=action(label,()=>select(key),'proof-mode'); btn.dataset.mode=key; controls.append(btn);
     }
     let initial=modes[0][0];
     if (warranty) initial='warranty';
+    if (tickets) initial='tickets';
     if (opinion && phase.payment_opinion.state!=='assent') initial='opinion';
     if (timing || change && events.some(e=>e.payment)) initial='timeline';
     select(index.phaseViews.get(phase.id) || initial);

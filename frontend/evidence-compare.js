@@ -1,7 +1,7 @@
 // Display only observations connected to the selected finding in its issued graph.
 const EvidenceCompare = (() => {
   function presets(finding, facts, graph) {
-    const result = [];
+    const result = WarrantyTickets.pairs(finding,graph).filter(p=>facts.some(f=>f.id===p.left.id) && facts.some(f=>f.id===p.right.id));
     const unit = fact => fact.unit || fact.doc;
     function unique(field, units) {
       const matches = facts.filter(f => f.field === field && units?.includes(unit(f)));

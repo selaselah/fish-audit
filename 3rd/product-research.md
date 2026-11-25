@@ -1,5 +1,13 @@
 # 审计与会计软件的公开界面
 
+## 维修工单与两份原件的核对
+
+Zendesk 将报修受理、等待处理、已解决和已关闭分别记录。Fish Audit 从上传工单上读取状态原文，在合同要求清结缺陷时，把「待维修」与期满确认单上的「无未关闭缺陷」同时摆到审计员面前。多单同案时优先展示有风险的工单，可以按工单号切换。[Zendesk 工单生命周期](https://support.zendesk.com/hc/en-us/articles/8263915942938-About-the-ticket-lifecycle-and-ticket-statuses)
+
+Acrobat Pro 的比对视图并排显示两个版本，在对应位置高亮差异。本项目将这种原件对照用于不同种类的业务凭证。回单早于工单关闭时，两个窗口分别打开回单付款日和工单关闭日，保留页码、印刷行和底稿版本。[Adobe Acrobat 文件对照](https://helpx.adobe.com/acrobat/using/compare-documents.html) · [本项目的工单交互](../docs/interaction-design/README.md#维修工单)
+
+财政部对采购业务内部控制的解读说明了采购验收和付款审核的联系。演练中「缺陷清结后返还质保金」取自虚构合同，核对时同时追溯该案的原始条款、确认单、维修工单和回单。[财政部会计司《企业内部控制应用指引第7号——采购业务》解读](https://kjs.mof.gov.cn/zhengcejiedu/201006/t20100611_322435.htm)
+
 ## 合同义务与质保时点
 
 Ironclad 的 Obligations Dashboard 可按义务状态、类型和截止日查看合同义务，也能筛出待核验事项。Fish Audit 把这两个问题放在一期质保金里分别回答。合同条件是否具备看 H04，成功回单在提交时能否支持实付看 H05。[Ironclad 义务工作台](https://support.ironcladapp.com/en-us/articles/18170710-obligations-dashboard)

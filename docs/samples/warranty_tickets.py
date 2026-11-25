@@ -4,8 +4,8 @@ import argparse
 import hashlib
 from datetime import datetime, timedelta, timezone
 
-from contract_milestones import PROFILE, confirm_printed_records, documents
-from generate import ROOT, embedded_font, pdf
+from contract_milestones import PROFILE, confirm_printed_records, documents, normalize
+from generate import ROOT, WATERMARK, embedded_font, pdf
 from quality_reinspection import reconcile_training_pages
 from run import BASE, get, submit
 from warranty_release import CONDITION, FIELDS as WARRANTY_FIELDS, check_training_watermark
@@ -66,8 +66,14 @@ def validate(report,mode):
     assert sorted(o["state"] for o in orders)==sorted(expected_states),orders
     assert all(set(o["evidence"])<=set(phase["evidence"]) for o in orders)
     assert len([e for e in report["graph"]["edges"] if e["type"]=="warranty_release_basis"])==int(mode=="closed")
-    if mode!="closed":
-        assert report["result"]["verdict"]=="review"
+    verdict="review"
+    if mode=="closed":
+        remaining=[f for f in checks if f["status"]!="ok"]
+        marks={f["id"] for f in report["graph"]["facts"] if f["field"]=="other" and
+               normalize(f["quote"])==normalize(WATERMARK) and normalize(f["value"])==normalize(WATERMARK)}
+        assert all(f["rule"]=="X01" and f["evidence"] and set(f["evidence"])<=marks for f in remaining),remaining
+        verdict="review" if remaining else "pass"
+    assert report["result"]["verdict"]==verdict
 
 
 if __name__=="__main__":

@@ -97,6 +97,26 @@ class WarrantyTicketTests(unittest.TestCase):
         self.assertEqual(p[-1]["warranty_check"]["tickets"][0]["state"],"period")
         self.assertNotEqual(b["status"],"ok")
 
+    def test_legacy_approval_rechecks_ticket_printed_on_an_invoice_page(self):
+        page=[("invoice","","采购发票")]+[("other",label,value) for _,label,value in ticket("待维修",None,None)]
+        graph=audit(page)
+        # The historic workpaper classified this page as an invoice and stored the work order as ordinary text.
+        invoice_page=next(d["id"] for d in graph["audit_documents"] if d.get("source")=="d05")
+        graph["documents_by_kind"]["invoice"]=[invoice_page]
+        originals=texts(graph)
+        def read(doc,page):
+            return originals[doc]
+        graph["warranty_sources"]=sources(graph,read,SUBMISSION_FORMAT)
+        findings=compute(graph)
+        self.assertEqual([f["status"] for f in findings if f["rule"] in ("H04","H05")],["ok"]*4)
+        graph["edges"].extend(edges(findings))
+        historic={"graph":graph,"findings":findings,
+                  "policy":{**VERSION,"version":"2026.11.25.28","warranty_checks":SUBMISSION_FORMAT}}
+        submitted="2026-11-25T08:00:00+00:00"
+        verify(historic,read,submitted=submitted)
+        with self.assertRaisesRegex(ValueError,"重新审计后签收"):
+            verify(historic,read,submitted=submitted,signing=True)
+
     def test_replay_binds_ticket_lines_scope_and_individual_state_edges(self):
         g=audit(ticket()); read=lambda doc,page:texts(g)[doc]
         report={"policy":{**VERSION,"profile":g["profile"]},"graph":g,"findings":execute(g,g["profile"])}
