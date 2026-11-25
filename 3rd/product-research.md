@@ -2,6 +2,12 @@
 
 每项记录给出厂商原页、查看位置和查阅日。「画面」来自公开截图或动图，「操作说明」来自对应的帮助正文。「本地用法」说明国内中小企业的采购员、会计或复核人可以如何处理一笔业务。观察范围限于这些公开资料。
 
+## 合同关键日期与授权期间
+
+2026-11-25 查阅 Docusign Agreement Manager 的属性说明。生效、到期和续约通知各有独立定义。Fish Audit 将合同签约、委托书出具和授权起止列为四个来源，签发与签约即便同日也各有自己的原件入口。[Docusign 的协议数据定义](https://support.docusign.com/s/document-item?bundleId=pqz1702943441912&language=en_US&topicId=uwk1702945852405.html)
+
+Adobe React Spectrum 的 RangeCalendar 以月网格展示连续日期区间。Fish Audit 采用月视图显示能从本案原件核实的授权期间，点击有凭证的日期便可阅读对应印刷行。日期和区间取自固定版底稿。[Adobe RangeCalendar](https://react-spectrum.adobe.com/RangeCalendar) · [本地月历实拍](../docs/interaction-design/mandate-calendar-issuance.webp)
+
 ## 付款条款与原件定位
 
 ApprovalMax 的 NetSuite 审批报告按时间记录经办审批的人及相应时间戳。Fish Audit 用相同的提问审查采购原件。选中一期可核对合同指定人和实际签认人，再沿时间线查放行与实付。企业上传的两张凭证如只记同一日期，两项共用一个日期位置，界面提示补核时分。[ApprovalMax 官方报告说明](https://support.approvalmax.com/en/articles/457333-how-audit-reports-work-in-approvalmax-for-netsuite) · [本项目时间线](../docs/interaction-design/payment-release-dates.webp)

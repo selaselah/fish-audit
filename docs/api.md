@@ -37,6 +37,10 @@ H04 和已归期 H05 在 `payment_opinion.release` 单列放行审查。原暂�
 
 ## 签约权限与合同原文
 
+自规则 `2026.11.25.27` 起，固定版底稿的 `policy.delegation_checks` 为 `written-contract-mandate-v5`。H01 的 `delegations[]` 在所交委托书已归属且两项日期有据时含有 `issuance_order`。其中 `state` 表示合同签约相对于委托书出具的次序，取 `before`、`same_day` 或 `after`。`signed_refs` 引用合同签约日期观察，`issued_refs` 引用委托书出具日期观察，两者均须位于该代理审查及本项发现的证据中。资料缺失或归属不清时可无此对象。
+
+定版的 `signed_on`、`issued_on`、`valid_from`、`valid_until` 可分别复查。委托书在签约后出具属于待核风险，只有同一日期时不能证明当日先后。旧版可按原规则离线复算，对旧版同日且已判授权相符的结果发起通过签收，会返回 409 并提示重新审计。[相同原件的 R4 与 R5](acceptance.md#委托书出具与代理签约的先后)
+
 从规则版 `2026.11.25.22` 起，`policy.delegation_checks` 为 `written-contract-mandate-v4`。H01 的 `delegations[].limits` 记录逐条限制的 `field_ref`、`kind`、`status` 和可核对的 `comparison_ref`。比较两端均位于本条发现的取证范围内。委托书文字原页的 `text_only` 标记用于识别可能另含影像附注的页面。
 
 禁止预付且分期原文明确仅以合同生效为支付条件时提示签约风险。比对签约上限须有同一合同的含税总价、明确的人民币元及可定位的完整原行。超过上限提示风险，多个额度冲突、要求另行批准、金额口径不明或授权日期断字均留给审计人员核实。底稿保留已有的交付和实测结论。旧版仍可复算，旧版曾认可的含限制授权须经现行程序核对后才能据以签收。[水印案例与验证结果](acceptance.md#2026-11-25--合同签约权限的四笔演练)

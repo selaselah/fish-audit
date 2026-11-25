@@ -37,8 +37,10 @@ const EvidenceCompare = (() => {
         if (distinct.length>=2) mandate('clauses','两条授权限制',distinct[0],distinct[1],{status:'missing'});
         for (const [key,prop,text] of [['grant_until','valid_until','签约与截止日'],['grant_from','valid_from','签约与起始日'],['granted_on','issued_on','签约与出具日']]) {
           const outside=entry.signed_on && entry[prop] && (key==='grant_until'?entry.signed_on>entry[prop]:entry.signed_on<entry[prop]);
-          if (key==='grant_until' || outside || !entry[prop]) mandate(key,text,field('signed_on',contract),field(key,entry.units),
-            {status:outside?'risk':(!entry[prop] || !entry.signed_on?'missing':null)});
+          const same=Boolean(entry.signed_on && entry.signed_on===entry[prop]);
+          const needsTime=key==='granted_on' && same && entry.issuance_order?.state==='same_day';
+          if (key==='grant_until' || outside || same || !entry[prop]) mandate(key,text,field('signed_on',contract),field(key,entry.units),
+            {status:outside?'risk':(!entry[prop] || !entry.signed_on || needsTime?'missing':null)});
         }
         mandate('signer','签字与受托人',field(entry.signature_field,contract),field('grant_agent',entry.units));
       }

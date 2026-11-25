@@ -70,6 +70,12 @@ function performanceOverview(findings, graph) {
   }
   overview.setAttribute('aria-label','履约结论与期次');
   overview.append(summary);
+  const effect=findings.find(f=>f.rule==='H01');
+  let expandedMandate=false;
+  for (const entry of effect?.delegations || []) {
+    const calendar=MandateCalendar.panel(effect,entry,graph,!expandedMandate);
+    if (calendar) {overview.append(calendar); expandedMandate ||= calendar.open;}
+  }
   const list = el('ol','','phase-summary');
   list.setAttribute('role','presentation');
   const choices = box('phase-choices');
