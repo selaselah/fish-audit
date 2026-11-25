@@ -788,7 +788,7 @@ button.icon-button:hover,button.icon-button:focus-visible { color:var(--accent);
 }
 .compare-original { display:block; width:100%; min-width:0; padding:0; overflow:hidden; border-color:var(--line); color:var(--ink); }
 .compare-original:hover,.compare-original:focus-visible { border-color:var(--accent); }
-.compare-scan { display:grid; place-items:center; height:clamp(102px,9.6vw,152px); padding:10px; background:var(--soft); color:var(--muted); font-size:.85rem; }
+.compare-scan { display:grid; grid-template:minmax(0,1fr) / minmax(0,1fr); place-items:center; height:clamp(102px,9.6vw,152px); padding:10px; background:var(--soft); color:var(--muted); font-size:.85rem; }
 .compare-scan canvas { display:block; object-fit:contain; max-width:100%; max-height:100%; width:auto; height:auto; background:white; box-shadow:0 1px 5px rgb(32 36 49 / 16%); }
 .compare-source-foot { justify-content:space-between; flex-wrap:wrap; gap:2px 9px; padding:8px 10px; border-top:1px solid var(--line); background:var(--surface); color:var(--muted); font-size:.79rem; font-weight:500; }
 .compare-open-label { gap:5px; color:var(--accent); }

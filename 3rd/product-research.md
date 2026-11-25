@@ -1,5 +1,9 @@
 # 审计与会计软件的公开界面
 
+## 扫描附件按原页核对
+
+Acrobat 使用页面缩略图导航长文档，可从小图直接进入对应物理页。本项目把页码、真实缩略图和文件名放在签章栏旁。甲乙方分别回传不同页时，切换签署方会显示该方的用印页。两页对照沿用固定版底稿中的两条引文。电子正文有可验证坐标时，可看原行。扫描件按整页展示。[Adobe Acrobat 页面缩略图](https://helpx.adobe.com/acrobat/using/page-thumbnails-bookmarks-pdfs.html) · [工作台实拍](../docs/interaction-design/README.md#扫描用印页)
+
 ## 从名称差异回到合同原行
 
 Ramp 的采购订单匹配把核对摘要放在账单行上方，实际匹配仍落实到具体的采购行。Acrobat 的文档比较以高亮标出差异，读者可选择单个差异查看它所处的原文。Fish Audit 借用了这两个操作习惯。审计员先选择甲方或乙方，纵向对齐同一方的几个单位名称，仅给有差异的字加琥珀色底和下划线。点击该行即可核查对应原件。首页使用独立的水印合同演示这次操作。[Ramp 采购订单与账单行匹配](https://support.ramp.com/importing-and-matching-purchase-orders-pos-on-ramp-bill-pay/) · [Acrobat 文档比较](https://helpx.adobe.com/acrobat/using/compare-documents.html) · [本地界面与实拍](../docs/interaction-design/README.md#签章主体对照)

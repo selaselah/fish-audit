@@ -76,6 +76,52 @@ button.seal-payments {
 .seal-pair { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding: 8px 0; }
 .seal-pair > strong { font-size: .84rem; color: var(--secondary); }
 .seal-pair .ref { min-height: 44px; overflow-wrap: anywhere; }
+.seal-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 14px; }
+.seal-compare { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 4px 10px; color: var(--accent-hover); font-size: .82rem; }
+.compare-quote blockquote.seal-quote mark { color: var(--attention); background: var(--attention-soft); text-decoration-color: var(--attention-line); }
+.seal-inspector { container: seal / inline-size; }
+.seal-review-grid { display: grid; gap: 8px; min-width: 0; padding-bottom: 10px; }
+.seal-fields { min-width: 0; }
+.seal-review-grid .seal-row { grid-template-columns: minmax(78px, 6.65em) minmax(0, 1fr) 16px; align-items: center; }
+.seal-review-grid .seal-body { margin-bottom: 0; }
+.seal-origin { display: block; width: max-content; max-width: 100%; margin-top: 2px; color: var(--muted); font-size: .7rem; font-weight: 450; line-height: 1.5; }
+.seal-origin[data-kind=image][data-usable=true], .seal-origin[data-kind=mixed][data-usable=true] { color: var(--accent-hover); }
+.seal-origin[data-usable=false] { color: var(--attention); }
+.seal-pages {
+  min-width: 0; margin: 0 12px; padding: 10px 12px;
+  background: var(--soft); border: 1px solid var(--line); border-radius: 8px;
+}
+.seal-page-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.seal-filename { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8rem; }
+.seal-page-number, .seal-page-picker { font-size: .76rem; color: var(--secondary); white-space: nowrap; }
+.seal-page-picker { max-width: 65%; min-height: 44px; width: auto; border-color: var(--field-line); background: var(--surface); padding: 4px 6px; }
+.seal-preview-link {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 6px; padding: 0;
+  background: transparent; color: var(--accent-hover); border: 0; border-radius: 4px; text-align: start;
+}
+.seal-preview-link:hover { background: var(--accent-soft); }
+.seal-thumb { display: flex; align-items: center; justify-content: center; width: 54px; height: 58px; flex-shrink: 0; }
+.seal-thumb img { display: block; max-width: 100%; height: 100%; width: auto; object-fit: contain; border: 1px solid var(--field-line); box-shadow: 0 2px 4px #17254115; }
+.seal-preview-state { font-size: .72rem; color: var(--secondary); text-align: center; }
+.seal-open-label { display: inline-flex; align-items: center; justify-content: center; gap: 5px; font-size: .8rem; font-weight: 600; }
+.seal-retry { min-height: 44px; padding: 4px 8px; font-size: .8rem; }
+.seal-page-only .seal-pages { margin-bottom: 12px; }
+@container seal (max-width: 609px) {
+  .seal-pages { position: relative; display: grid; grid-template-columns: minmax(0,1fr) auto; align-items: center; gap: 6px; min-height: 70px; padding: 7px 10px 7px 62px; }
+  .seal-page-head { min-width: 0; flex-direction: column; align-items: start; gap: 2px; }
+  .seal-filename, .seal-page-picker { max-width: 100%; }
+  .seal-preview-link { min-height: 44px; margin: 0; }
+  .seal-preview-link:active { transform: none; }
+  .seal-thumb { position: absolute; top: 50%; left: 9px; width: 42px; height: 50px; transform: translateY(-50%); }
+}
+@container seal (min-width: 610px) {
+  .seal-review-grid { grid-template-columns: minmax(0, 1fr) clamp(165px,24%,225px); gap: 0; }
+  .seal-review-grid .seal-pages { margin-left: 0; align-self: start; }
+  .seal-review-grid .seal-preview-link { flex-direction: column; justify-content: center; gap: 6px; }
+  .seal-review-grid .seal-thumb { width: 100%; height: 125px; }
+  .seal-review-grid .seal-preview-content { padding: 4px 0; }
+  .seal-page-only .seal-pages { max-width: 360px; }
+}
 @media (max-width: 520px) {
   .seal-body { margin-inline: 10px; }
   .seal-row { grid-template-columns: 4.4em minmax(0,1fr) 13px; gap: 5px; }

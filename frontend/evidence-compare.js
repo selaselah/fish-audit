@@ -13,6 +13,8 @@ const EvidenceCompare = (() => {
     const kinds = graph.documents_by_kind || {};
     const contract = kinds.contract;
     if (finding.rule === 'H01') {
+      for (const pair of SigningParties.pagePairs(finding,graph))
+        if ([pair.left,pair.right].every(endpoint=>facts.some(f=>f.id===endpoint.id))) result.push(pair);
       for (const entry of finding.delegations || []) {
         if (!entry.signature_field || entry.units.length!==1) continue;
         const observed=id=>facts.find(f=>f.id===id && entry.evidence.includes(id));
@@ -383,6 +385,12 @@ const EvidenceCompare = (() => {
       const [left,right] = selection;
       const selected = pairs.find(p => p.left.id === left?.id && p.right.id === right?.id);
       for (const button of shortcuts.children) button.setAttribute('aria-pressed',String(button.dataset.pair === selected?.key));
+      if (selected?.signing?.different) SigningParties.markQuotes(selected,sides.map(s=>s.sheet.querySelector('blockquote')));
+      else {
+        for (const quote of root.querySelectorAll('blockquote.seal-quote')) {
+          quote.textContent=quote.textContent; quote.classList.remove('seal-quote');
+        }
+      }
       if (added) {
         highlight.hidden=selected?.key!=='amendment-terms';
         const quote=sides[1].sheet.querySelector('blockquote');

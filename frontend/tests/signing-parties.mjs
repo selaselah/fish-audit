@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
+import {checkSigningImages} from './signing-images.mjs';
 
 export async function checkSigningParties({root,call,evaluate,wait}, cid, fixed) {
   const base = root+'/api/cases/'+cid;
@@ -15,14 +16,15 @@ export async function checkSigningParties({root,call,evaluate,wait}, cid, fixed)
   const key = k=>call('Input.dispatchKeyEvent',{type:'keyDown',key:k,code:k});
   await call('Page.navigate',{url:root+'/workpaper/'+cid+'?rev='+rev});
   await wait(q('.performance-overview')+' && state.bundle.rev==='+rev,'fixed contract workpaper');
+  const images=await checkSigningImages({call,evaluate,wait,q},report,rev);
   const entries = signed?.effect_review?.party_seals;
   if (!entries?.length) {
-    assert.equal(await evaluate(panel),null);
-    console.log('PASS · R'+rev+' · no signing comparison issued'); return;
+    assert.equal(await evaluate(panel+'!==null'),Boolean(images));
+    console.log('PASS · R'+rev+' · no signing comparison issued · '+images+' review pages'); return;
   }
   const primary=entries.find(r=>r.status==='risk') || entries.find(r=>r.status!=='ok') || entries[0];
   assert.equal(await evaluate(panel+'.dataset.side'),primary.side);
-  assert.equal(await evaluate(panel+'.open'),entries.some(r=>r.status!=='ok'));
+  assert.equal(await evaluate(panel+'.open'),Boolean(images) || entries.some(r=>r.status!=='ok'));
   await evaluate(panel+'.open=true');
   const sections=report.graph.contract_effect_sources.signing_rows;
   const facts=new Map(report.graph.facts.map(f=>[f.id,f]));
@@ -35,25 +37,40 @@ export async function checkSigningParties({root,call,evaluate,wait}, cid, fixed)
       const row=sections.find(r=>r.id===id);
       const button=q('[data-signing-row="'+id+'"]');
       assert.equal(await evaluate(button+'.title'),row.quote);
+      const origin=record.field_sources?.find(s=>s.row===id);
+      if (origin && (images || origin.kind!=='text')) {
+        const badge=button+'.querySelector(".seal-origin")';
+        assert.equal(await evaluate(badge+'.dataset.kind'),origin.kind);
+        if (['image','mixed'].includes(origin.kind)) {
+          assert.equal(await evaluate(badge+'.dataset.usable'),String(Boolean(origin.receipt_rev) && !origin.disputed));
+          assert.ok(await evaluate(badge+'.innerText.endsWith("P'+row.page+'")'));
+        }
+      }
       await evaluate(button+'.click()');
       const observed=row.facts.map(id=>facts.get(id)).filter(f=>f.field===row.field && f.quote===row.quote &&
         (row.line==null || f.source_line?.number===row.line && f.source_line.text===row.quote && f.source_line.rects.length));
       const fact=observed.length===1 ? observed[0] : null;
       const selected=q('#page-dialog .located');
-      await wait(dialog+'.open && '+q('#page-dialog .page-image')+'?.naturalWidth>0 && '+selected,'archived page and source');
-      assert.ok(await evaluate(selected+'.textContent.includes('+JSON.stringify(row.quote)+')'));
+      await wait(dialog+'.open && '+q('#page-dialog .page-image')+'?.naturalWidth>0','archived contract page');
+      if (fact || row.line) {
+        await wait(selected,'cited field or printed line');
+        assert.ok(await evaluate(selected+'.textContent.includes('+JSON.stringify(row.quote)+')'));
+      }
       const src=await evaluate(q('#page-dialog .source-tools a')+'.href');
       assert.equal(new URL(src).searchParams.get('rev'),String(rev));
       assert.match(new URL(src).pathname,new RegExp('/documents/'+row.doc+'/pages/'+row.page+'$'));
       const pageHash=createHash('sha256').update(Buffer.from(await (await fetch(src)).arrayBuffer())).digest('hex');
       assert.equal(pageHash,report.graph.nodes.find(n=>n.id===row.doc+'/p'+row.page).sha256);
-      if (fact) assert.equal(await evaluate(selected+'.dataset.fact'),fact.id);
-      else {
+      if (fact) {
+        assert.equal(await evaluate(selected+'.dataset.fact'),fact.id);
+        if (origin?.kind==='image') assert.equal(await evaluate('document.querySelectorAll("#page-dialog svg rect").length'),0);
+      }
+      else if (row.line) {
         assert.equal(await evaluate(selected+'.dataset.gapLine'),String(row.line));
         const expected=facts.get(row.facts[0])?.source_line;
         const rects=expected?.text===row.quote && expected.number===row.line ? expected.rects : [];
         assert.equal(await evaluate('document.querySelectorAll("#page-dialog svg rect").length'),rects.length);
-      }
+      } else assert.equal(await evaluate('document.querySelectorAll("#page-dialog svg rect").length'),0);
       await evaluate(dialog+'.close()');
     }
   }
