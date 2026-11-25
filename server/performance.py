@@ -17,6 +17,7 @@ import contract_effect
 import warranty_terms
 import payment_windows
 import invoice_conditions
+import payment_amendments
 import acceptance_reservations
 import repair_completion
 from performance_versions import (FIRST_FORMAT, BOARD_FORMAT, REINSPECTION_FORMAT, DELEGATION_FORMAT, IDENTITY_FORMAT,
@@ -662,7 +663,9 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
     amendments = [Material(graph,u) for u in changes]
     other_events = bool(repairs or retests or any(r.fields[k] or k in r.uncertain
                         for r in receipts for k in ("original_acceptance","repair_number","defect_closure")))
-    if changes:
+    payment_change = payment_amendments.resolve(graph,contract,amendments,base_decision=signed,unassigned=extra_units) if version==FORMAT else None
+    scoped_change = payment_change if payment_change and payment_change["scope_clear"] else None
+    if changes and not scoped_change:
         change = resolve_change(graph,contract,amendments,receipts,multiple_events=other_events or len(receipts)!=1,
                                 contract_supported=signed["status"]=="ok",unclassified=extra_units)
         change["evidence"] = list(dict.fromkeys(change["evidence"]+signed["evidence"]))
@@ -845,6 +848,8 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
         accepted_on = None
         if accepted.get("reinspection"):
             accepted["reinspection"]["state"]="open"
+    if payment_change and not scoped_change:
+        payment_amendments.attach(plan,payment_change)
     output = [signed, accepted, plan]
     if not rows:
         output.append(result("H04","missing","缺少可逐期核对的付款约定。",plan["evidence"],plan["scope"]))
@@ -866,6 +871,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
     holds = (batch or {}).get("payment_holds",[])
     hold_refs = [ref for note in holds for ref in (f"{note['doc']}/p{note['page']}",*note["facts"])]
     stages = []
+    prior_checks = {}
     for idx, row in enumerate(rows, 1):
         kind = row["kind"]
         fallback_label = f"第{idx}期" if version == FIRST_FORMAT else f"条款 {idx}"
@@ -927,9 +933,13 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
         if version in PAYMENT_WINDOW_FORMATS:
             window=payment_windows.stage_window(graph,contract,rows,idx-1,[*receipts,*retests],signed,accepted,accepted_on,check)
             payment_windows.attach_stage(check,window)
+        if scoped_change and scoped_change["original_ref"]==row["ref"]:
+            prior_checks[row["ref"]] = dict(check)
         if invoice_terms:
-            entry = invoice_conditions.condition(ledger, contract, materials("invoice"), receipts, rows, idx-1)
+            entry = invoice_conditions.condition(ledger, contract, materials("invoice"), receipts, rows, idx-1, amendment=scoped_change)
             invoice_conditions.attach(check, entry)
+        if row["ref"] in prior_checks:
+            payment_amendments.attach(check,scoped_change)
         output.append(check)
         stages.append((row,check))
 
@@ -953,6 +963,11 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
             output.append(payment)
             continue
         row, check = matching[0]
+        transfer_change = None
+        if check.get("payment_change"):
+            transfer_change = payment_amendments.at_payment(check["payment_change"],graph,contract,bank,paid)
+            if transfer_change["applies"]=="original":
+                check = prior_checks[row["ref"]]
         refs += check["evidence"] + contract.evidence("effect_on")
         scope += check["scope"]
         effective = printed_day(contract,"effect_on") if version in DATE_FORMATS else day(contract.body("effect_on"))
@@ -995,7 +1010,10 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
         add_date_checks(payment,timing)
         if version in PAYMENT_WINDOW_FORMATS:
             payment_windows.compare_transfer(payment,check,graph,contract,bank,row)
-        invoice_conditions.reconcile_payment(payment, check, graph, contract, bank, paid)
+        if not transfer_change or transfer_change["applies"]=="amended":
+            invoice_conditions.reconcile_payment(payment, check, graph, contract, bank, paid)
+        if transfer_change:
+            payment_amendments.attach(payment,transfer_change)
         sealed=signed.get("effect_review",{}).get("seals",{}).get("completed_on")
         if sealed and paid and paid.isoformat()<sealed and warranty_terms.bank_identity(contract,bank):
             bank_sources=graph.get("payment_window_sources",{})
@@ -1038,6 +1056,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("warranty_check") != entry.get("warranty_check")
                 or saved.get("equipment_models") != entry.get("equipment_models")
                 or saved.get("stage_payments") != entry.get("stage_payments")
+                or saved.get("payment_change") != entry.get("payment_change")
                 or saved.get("invoice_receipt") != entry.get("invoice_receipt")
                 or saved.get("payment_window") != entry.get("payment_window")
                 or saved.get("acceptance_reservations") != entry.get("acceptance_reservations")

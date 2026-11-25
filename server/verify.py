@@ -270,6 +270,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
         inspected.extend(graph.get("stage_payment_sources",{}).get("pages",[]))
         inspected.extend(graph.get("repair_completion_sources",{}).get("pages",[]))
         inspected.extend(graph.get("invoice_receipt_sources",{}).get("pages",[]))
+        inspected.extend(graph.get("quality_addenda",{}).get("payments",{}).get("pages",[]))
         inspected.extend(graph.get("equipment_model_sources",{}).get("pages",[]))
         inspected.extend(p for packet in graph.get("receipt_packet_sources",{}).get("packets",[]) for p in packet["pages"])
         if report["policy"].get("quality_addenda") and ("clause_text_only" in trace or

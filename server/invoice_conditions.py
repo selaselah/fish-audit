@@ -118,9 +118,12 @@ def applicable(s, rows, index):
     return not exact or index in exact
 
 
-def condition(ledger, contract, invoices, receipts, rows, index):
+def condition(ledger, contract, invoices, receipts, rows, index, *, amendment=None):
     from performance import day, printed_day
     clauses = [s for s in ledger["lines"] if s["role"]=="clause" and applicable(s, rows, index)]
+    if amendment:
+        clauses = [s for s in clauses if s["unit"]!=amendment["unit"] or
+                   (rows[index]["ref"]==amendment["original_ref"] and amendment["revised_ref"] in s["facts"])]
     if not clauses:
         return None
     involved = [contract, *invoices, *receipts]
@@ -146,6 +149,9 @@ def condition(ledger, contract, invoices, receipts, rows, index):
     base = identity(contract)
     linked = all(base) and complete_id(base[0]) and base[1]!=base[2]
     supported = clean(contract.unit) and not reasons(contract) and all(s["supported"] and s["unit"]==contract.unit and len(targets(s, rows))==1 for s in clauses)
+    if amendment and rows[index]["ref"]==amendment["original_ref"]:
+        supported = (amendment["applies"]=="amended" and len(clauses)==1 and
+                     clauses[0]["unit"]==amendment["unit"] and amendment["revised_ref"] in clauses[0]["facts"])
     invoice = {"status":"missing", "number":None, "issued_on":None, "number_ref":None, "date_ref":None}
     receipt = {"status":"missing", "number":None, "received_on":None, "number_ref":None, "date_ref":None, "seal_ref":None}
     issue_day = None

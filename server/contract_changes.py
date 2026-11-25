@@ -11,15 +11,21 @@ from performance_versions import ADDENDUM_FORMATS
 from quality_references import incomplete_number
 
 
+import payment_amendments
+
+
 LEGACY = "acceptance-addendum-v1"
 QUANTITY_FORMAT = "acceptance-addendum-v2"
-FORMAT = "acceptance-addendum-v3"
-QUANTITY_FORMATS = (QUANTITY_FORMAT,FORMAT)
+PRINTED_DATES = "acceptance-addendum-v3"
+FORMAT = "contract-addendum-v4"
+DATED_FORMATS = (PRINTED_DATES, FORMAT)
+QUANTITY_FORMATS = (QUANTITY_FORMAT, *DATED_FORMATS)
 QUANTITY_FIELDS = {"previous_quantity": ("原交付数量", "变更前交付数量"),
                    "revised_quantity": ("变更后交付数量", "调整后交付数量")}
 TITLES = ("补充协议", "合同补充协议", "采购合同补充协议", "验收标准变更协议", "采购合同变更协议")
 LABELS = {
     **QUANTITY_FIELDS,
+    **payment_amendments.LABELS,
     "addendum_number": ("补充协议编号", "变更协议编号"),
     "base_contract_ref": ("原合同编号", "原采购合同编号"),
     "change_scope": ("变更范围", "协议变更范围"),
@@ -163,12 +169,17 @@ def observed_units(graph):
 def ledger(graph, read_text, version=FORMAT):
     units = set(graph["documents_by_kind"].get("contract_addendum",[]))
     nodes = {n["id"]:n for n in graph["nodes"] if n["type"]=="page"}
-    fields = FIELDS if version in QUANTITY_FORMATS else [f for f in FIELDS if f not in QUANTITY_FIELDS]
+    fields = [f for f in FIELDS if (version==FORMAT or f not in payment_amendments.LABELS)
+              and (version in QUANTITY_FORMATS or f not in QUANTITY_FIELDS)]
     pages = covered_rows(graph,read_text,units,fields,printed_value,"补充协议")
     for p in pages:
         p["text_only"] = nodes[f"{p['doc']}/p{p['page']}"].get("clause_text_only") is True
     signals, limited, quantity = page_signals(graph,read_text,version)
     result = {"format":version, "signals":signals,"limited_numbers":limited,"pages":pages}
+    if version==FORMAT:
+        payments = payment_amendments.sources(graph,read_text)
+        if payments:
+            result["payments"] = payments
     if quantity:
         result["quantities"] = quantity
     return result
@@ -189,6 +200,7 @@ def attach(graph, read_text):
     coverage = ledger(graph,read_text)
     graph["quality_addenda"] = coverage
     graph["edges"].extend(quantity_edges(coverage))
+    graph["edges"].extend(payment_amendments.edges(coverage.get("payments")))
     graph["gaps"].extend(gaps(coverage))
     allowed = fully_read_units(coverage)
     removed = set()
@@ -224,7 +236,8 @@ def verify_sources(report, read_text, *, signing=False):
     current = ledger(graph,read_text,marker)
     version=policy.get("version","")
     if (marker not in (LEGACY,*QUANTITY_FORMATS) or "2026.11.25.06"<=version<"2026.11.25.20" and marker!=QUANTITY_FORMAT
-            or version>="2026.11.25.20" and marker!=FORMAT
+            or "2026.11.25.20"<=version<payment_amendments.SINCE and marker!=PRINTED_DATES
+            or (version>=payment_amendments.SINCE or "payment_amendments.py" in policy.get("code_sha256",{})) and marker!=FORMAT
             or policy.get("performance_checks") not in ADDENDUM_FORMATS
             or graph.get("quality_addenda")!=current or gaps(current)!=[g for g in graph["gaps"] if g["quality"]=="addendum_clause"]):
         raise ValueError("补充协议的原页、变更条款或未覆盖的约定与底稿不符")
@@ -233,7 +246,9 @@ def verify_sources(report, read_text, *, signing=False):
     if signing and marker == LEGACY and any(f["rule"]=="H02" and f["status"]=="ok" for f in report["findings"]):
         if page_signals(graph,read_text)[2]:
             raise ValueError("旧版终验有交付数量变更线索，请按现行程序重审后签收。")
-    if signing and marker!=FORMAT:
+    if [e for e in graph["edges"] if e["type"]=="payment_amendment_basis"] != payment_amendments.edges(current.get("payments")):
+        raise ValueError("补充协议与原付款条款、所据原行的图谱关系不符")
+    if signing and marker not in DATED_FORMATS:
         from performance import Material, printed_day
         for finding in report["findings"]:
             change=finding.get("quality_change")
@@ -332,7 +347,7 @@ def resolve(graph, contract, changes, receipts, *, multiple_events, contract_sup
     def dated(material,field):
         if quantity_sources:
             return exact_date(material,field,quantity_sources["identities"])
-        if ledger.get("format")==FORMAT:
+        if ledger.get("format") in DATED_FORMATS:
             from performance import printed_day
             return printed_day(material,field)
         return material.date(field)
@@ -351,6 +366,8 @@ def resolve(graph, contract, changes, receipts, *, multiple_events, contract_sup
     def decision(detail, state="pending", criterion=None):
         return {**entry, **dates, "state":state, "detail":detail, "applied_criterion":criterion}
 
+    if ledger.get("payments"):
+        return decision("补充协议涉及付款前提，须核对其范围、适用期次及双方签署的完整约定。")
     if len(changes)!=1 or changes[0].unit not in graph["documents_by_kind"].get("contract_addendum",[]):
         return decision("存在其他变更线索或多个版本，请核对补充协议全文、原合同和各次签署的对应关系。")
     change, = changes
@@ -409,7 +426,7 @@ def resolve(graph, contract, changes, receipts, *, multiple_events, contract_sup
     effective = max(buyer_day,seller_day)
     signed, base_effect, expiry = (dated(contract,k) for k in ("signed_on","effect_on","valid_until"))
     expiry_printed = (quantity and any(r["unit"]==contract.unit and r["field"]=="valid_until" for r in identities)
-                      or ledger.get("format")==FORMAT and (contract.fields["valid_until"] or "valid_until" in contract.uncertain))
+                      or ledger.get("format") in DATED_FORMATS and (contract.fields["valid_until"] or "valid_until" in contract.uncertain))
     if expiry_printed and not expiry:
         return decision("原合同列有待辨的有效截止日，须核对协议生效时的合同期间。")
     if not signed or not base_effect or min(buyer_day,seller_day)<max(signed,base_effect) or expiry and effective>expiry:

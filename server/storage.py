@@ -730,7 +730,7 @@ class Store:
             paper = json.loads(row["content"])
             graph = paper["graph"]
             if row["profile"]!=BANK:
-                checks = [f for f in paper["findings"] if f.get("delegations") or f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("stage_payments") or f.get("invoice_receipt") or f.get("equipment_models")]
+                checks = [f for f in paper["findings"] if f.get("delegations") or f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("stage_payments") or f.get("invoice_receipt") or f.get("payment_change") or f.get("equipment_models")]
                 packets = graph.get("receipt_packet_sources",{}).get("packets",[])
                 if packets:
                     checks.extend(f for f in paper["findings"] if f["rule"]=="H02" and f not in checks)
@@ -742,7 +742,7 @@ class Store:
                 units = {d["id"]:d.get("source", d["id"]) for d in graph.get("audit_documents", graph["documents"])}
                 originals = {units[unit] for finding in checks for unit in finding["scope"]}
                 originals.update(p["doc"] for p in packets)
-                full_pages = bool(packets) or any(f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("stage_payments") or f.get("invoice_receipt") or f.get("equipment_models") for f in checks)
+                full_pages = bool(packets) or any(f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("stage_payments") or f.get("invoice_receipt") or f.get("payment_change") or f.get("equipment_models") for f in checks)
                 fields = [f["id"] for f in graph["facts"] if f["id"] in named or full_pages and f["doc"] in originals]
                 pages = {(p["doc"],p["page"]) for p in paper["calls"]["pages"] if p["doc"] in originals}
                 registered = {(r["doc"],r["number"]) for r in db.execute("SELECT doc,number FROM pages WHERE case_id=?",(case_id,))
@@ -861,6 +861,7 @@ class Store:
                     inspected.extend(paper["graph"].get("stage_payment_sources",{}).get("pages",[]))
                     inspected.extend(paper["graph"].get("repair_completion_sources",{}).get("pages",[]))
                     inspected.extend(paper["graph"].get("invoice_receipt_sources",{}).get("pages",[]))
+                    inspected.extend(paper["graph"].get("quality_addenda",{}).get("payments",{}).get("pages",[]))
                     inspected.extend(paper["graph"].get("equipment_model_sources",{}).get("pages",[]))
                     inspected.extend(page for packet in paper["graph"].get("receipt_packet_sources",{}).get("packets",[]) for page in packet["pages"])
                     for page in inspected:
@@ -873,7 +874,7 @@ class Store:
             except (KeyError,TypeError,ValueError) as error:
                 raise CaseError("本版审计建议与逐项发现不一致，请核对所据底稿。",409) from error
         graph = paper["graph"]
-        changed = any(f.get("quality_change") for f in paper["findings"])
+        changed = any(f.get("quality_change") or f.get("payment_change") for f in paper["findings"])
         named_acceptance = any(f.get("acceptance_authority") for f in paper["findings"])
         batches = any(f.get("batch_acceptance") for f in paper["findings"])
         reservations_checked = any(f.get("acceptance_reservations") for f in paper["findings"])
