@@ -34,6 +34,49 @@ async function checkTextContrast(evaluate, textSelector, surfaceSelector = textS
   return {ink,surface};
 }
 
+async function checkSampleReader({root,call,evaluate,wait}) {
+  const dialog='document.querySelector("#sample-review")';
+  const inside=s=>dialog+'.querySelector('+JSON.stringify(s)+')';
+  const imagePath='/assets/showcase-acceptance-page.png';
+  const image=await fetch(root+imagePath);
+  assert.equal(image.status,200);
+  assert.equal(createHash('sha256').update(Buffer.from(await image.arrayBuffer())).digest('hex'),
+    'fb4799101ab7c9ee46baa4705ed0712abeede3e50e22d8f0b8aebfb5a9ef27bd');
+  assert.equal(await evaluate('performance.getEntriesByType("resource").some(r=>new URL(r.name).pathname==='+JSON.stringify(imagePath)+')'),false);
+  const records=[['d04/p1/f8','9','合格'],['d04/p1/f10','11','柜温不高于4℃'],['d04/p1/f11','12','柜温8℃']];
+  for (const width of [1440,1024,820,768,390,320]) {
+    await call('Emulation.setDeviceMetricsOverride',{width,height:width<600?844:900,deviceScaleFactor:1,mobile:width<600});
+    const opener=width<600?'.workflow-image':'.evidence-note .open-sample-review';
+    await evaluate('document.querySelector('+JSON.stringify(opener)+').click()');
+    const canvas=inside('canvas');
+    await wait(dialog+'.open && '+canvas+'.dataset.fact==="d04/p1/f11"','public archived page ready');
+    assert.ok(await evaluate(dialog+'.scrollWidth<='+dialog+'.clientWidth+1'),'public reader fits '+width);
+    await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Home',code:'Home'});
+    for (const [i,[id,line,value]] of records.entries()) {
+      if (i) await call('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowDown',code:'ArrowDown'});
+      assert.equal(await evaluate('document.activeElement.dataset.ref'),id);
+      assert.equal(await evaluate(canvas+'.dataset.fact'),id);
+      assert.equal(await evaluate(inside('output')+'.textContent'),'第 1 页 · 第 '+line+' 行');
+      assert.ok(await evaluate(canvas+'.getAttribute("aria-label").includes('+JSON.stringify(value)+')'));
+    }
+    const excerpt=await evaluate(canvas+'.toDataURL()');
+    await evaluate(inside('[data-scale=page]')+'.click()');
+    assert.equal(await evaluate(inside('[data-scale=page]')+'.getAttribute("aria-pressed")'),'true');
+    assert.notEqual(await evaluate(canvas+'.toDataURL()'),excerpt);
+    await evaluate(inside('[data-scale=line]')+'.click()');
+    if (process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
+      await evaluate('document.activeElement.blur()');
+      const clip=await evaluate('(()=>{const r='+dialog+'.getBoundingClientRect();return {x:r.x+scrollX,y:r.y+scrollY,width:r.width,height:r.height,scale:1}})()');
+      await capture(call,'landing-reader-'+width,clip);
+    }
+    assert.equal(await evaluate(inside('a')+'.pathname'),'/showcase/acceptance.pdf');
+    await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+    await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+    await wait('!'+dialog+'.open && document.activeElement.matches('+JSON.stringify(opener)+')','focus returns to reader opener');
+  }
+  assert.equal(await evaluate('performance.getEntriesByType("resource").some(r=>new URL(r.name).pathname.startsWith("/api/"))'),false);
+}
+
 export async function checkProduct({root,call,evaluate,wait}) {
   const select = selector => 'document.querySelector('+JSON.stringify(selector)+')';
   const mode = (await (await fetch(root+'/api/ready')).json()).mode;
@@ -42,6 +85,8 @@ export async function checkProduct({root,call,evaluate,wait}) {
   await evaluate('Promise.all(document.getAnimations().filter(a=>a.effect.getTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{}))).then(()=>true)');
   assert.equal(await evaluate('performance.getEntriesByType("resource").some(r=>new URL(r.name).pathname.startsWith("/api/"))'),false);
   assert.equal((await fetch(root+'/showcase/other.pdf')).status,404);
+  await checkSampleReader({root,call,evaluate,wait});
+  await call('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   const primary = await checkTextContrast(evaluate,'.hero-actions .button');
   for (const [selector,surface] of [
     ['#temperature-readings dl > :first-child small','#sheet-acceptance'],

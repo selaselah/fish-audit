@@ -15,10 +15,16 @@ function graphIndex(graph) {
         prior.set(fact.id,{...fact,case_id:match.case_id,rev:match.rev,title:match.title,decision:match.decision});
       }
     }
+    const supports=new Map();
+    for (const edge of graph.edges || []) {
+      if (edge.type!=='supports_result') continue;
+      if (!supports.has(edge.to)) supports.set(edge.to,new Set());
+      supports.get(edge.to).add(edge.from);
+    }
     index = {
       facts:new Map(graph.facts.map(f=>[f.id,f])),
       documents:new Map(graph.documents.map(d=>[d.id,d])),
-      prior,
+      prior,supports,
       nodes:new Map(graph.nodes.map(n=>[n.id,n])),
     };
     graphIndexes.set(graph,index);
@@ -86,10 +92,12 @@ function performanceOverview(findings, graph) {
     const row = el('li');
     row.dataset.phaseFinding = phase.id;
     const heading = stage.name+(stage.share ? ' · '+stage.share+'%' : '');
-    const fact = index.facts.get(stage.clause_ref);
+    const edition=phase.payment_change;
+    const revised=edition?.applies==='amended' && PhaseEvidence.amendmentFact(graph,phase,edition.revised_ref);
+    const fact = revised || index.facts.get(stage.clause_ref);
     const source = fact ? action(heading,()=>openPage(fact.doc,fact.page,fact.id),'phase-source') : el('strong',heading);
-    if (fact) source.setAttribute('aria-label',heading+'，查看合同原文');
-    const results = box('phase-results',performanceJump(phase,'付款条件'));
+    if (fact) source.setAttribute('aria-label',heading+(revised?'，查看变更后付款条款':'，查看合同原文'));
+    const results = box('phase-results',performanceJump(phase,edition?.applies==='amended'?'现行付款条件':'付款条件'));
     const sameStage = f=>f.stage && ['name','clause_ref','clause','share'].every(k=>f.stage[k]===stage[k]);
     const matched = payments.filter(sameStage);
     if (matched.length) {
@@ -99,7 +107,7 @@ function performanceOverview(findings, graph) {
     }
     const sum=findings.find(f=>f.stage_payments && sameStage(f));
     if (sum) results.append(performanceJump(sum,'本期回单合计'));
-    row.append(box('phase-contract',source,el('q',stage.clause)),results);
+    row.append(box('phase-contract',source,el('q',revised?revised.quote:stage.clause)),results);
     const evidence=PhaseEvidence.panel(phase,matched,findings,graph);
     if (evidence) row.append(evidence);
     const authority=authorityPairs.find(p=>(!p.stageRef || p.stageRef===stage.clause_ref)
@@ -1381,8 +1389,8 @@ function invoiceApproval(check, digest) {
 }
 
 function traceReferences(graph, finding) {
-  const supports=new Set(graph.edges.filter(e=>e.type==='supports_result' && e.to==='finding/'+finding.id).map(e=>e.from));
-  return finding.evidence.filter(ref=>supports.has(ref));
+  const supports=graphIndex(graph).supports.get('finding/'+finding.id);
+  return finding.evidence.filter(ref=>supports?.has(ref));
 }
 
 function traceEvidence(finding, index, references) {

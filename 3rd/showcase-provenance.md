@@ -17,6 +17,8 @@
 
 ## 展示原件
 
+首页核图窗口只在打开时载入水印验收报告的固定 R7 页图。仓库 PNG 与归档页图逐字节一致，宽 1547、高 2190 像素，SHA-256 为 `fb4799101ab7c9ee46baa4705ed0712abeede3e50e22d8f0b8aebfb5a9ef27bd`。三处高亮分别取自第 9、11、12 行的 `source_line.rects`，切换整页和原行使用相同坐标。[归档页图副本](../frontend/assets/showcase-acceptance-page.png) · [验收报告 PDF](../frontend/showcase/acceptance.pdf)
+
 首页「看原行」显示 R7 两张已归档页图的像素裁片。以下裁切坐标按左、上、右、下排列，单位为原始像素。可从对应 PDF 阅读完整上下文。
 
 | 裁片 | 引文及行号 | 原页 SHA-256 | 裁切框 |

@@ -415,8 +415,10 @@ function openPage(docId, pageNumber, highlight, lineHint) {
   const addenda = state.bundle?.report.graph.quality_addenda;
   if (addenda && lineHint && !gaps.some(g=>g.line===lineHint)) {
     const count = addenda.quantities?.lines.find(s=>s.doc===docId && s.page===pageNumber && s.line===lineHint);
-    const note = count || [...addenda.signals,...addenda.limited_numbers].find(s=>s.doc===docId && s.page===pageNumber && s.line===lineHint);
-    if (note) gaps.push({...note,field:note.field==='quantity_note'?'other':note.field,quality:count?'quantity_reference':'addendum_reference'});
+    const payment=PhaseEvidence.amendmentLines(state.bundle.report.graph).find(s=>s.doc===docId && s.page===pageNumber && s.line===lineHint);
+    const note = count || payment || [...addenda.signals,...addenda.limited_numbers].find(s=>s.doc===docId && s.page===pageNumber && s.line===lineHint);
+    if (note) gaps.push({...note,field:note.field==='quantity_note'?'other':note.field,
+      quality:count?'quantity_reference':payment?'payment_amendment_reference':'addendum_reference'});
   }
   const signers = state.bundle?.report.graph.acceptance_authority_sources;
   if (signers && lineHint && !gaps.some(g=>g.line===lineHint)) {
@@ -473,7 +475,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     if (source) gaps.push({...source,quality:['seller','delivery_note'].includes(source.kind)?'supplier_reference':'reservation_reference'});
   }
   for (const gap of gaps) {
-    const label = {invoice_receipt_reference:'收票条件所据原行',repair_completion_reference:'整改记录原行',equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',approval_reference:'董事会审批记录原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
+    const label = {payment_amendment_reference:'付款变更所据原行',invoice_receipt_reference:'收票条件所据原行',repair_completion_reference:'整改记录原行',equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',approval_reference:'董事会审批记录原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
     const section = box('evidence-row',el('h4',label+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
     section.dataset.gapLine = String(gap.line);
     const raw = rawLines.find(source => source.rawLine === gap.line);
@@ -696,7 +698,18 @@ function finding(item) {
   const heading = item.stage ? item.stage.name + (item.stage.share ? ' · ' + item.stage.share + '%' : '') +
     (item.rule === 'H05' ? ' 实付时点' : item.rule==='H06'?' 回单合计':' 付款条件') : item.title;
   const node = box('finding-body',el('p', item.detail, 'finding-detail'),el('p', '执行依据 · ' + item.basis, 'muted'));
-  if (item.stage) node.prepend(box('clause-source',el('q',item.stage.clause), citation(item.stage.clause_ref)));
+  if (item.stage) {
+    const change=item.payment_change;
+    const revised=change?.applies==='amended' && PhaseEvidence.amendmentFact(state.bundle.report.graph,item,change.revised_ref);
+    const clause=box('clause-source',el('q',revised?revised.quote:item.stage.clause),citation(revised?revised.id:item.stage.clause_ref));
+    if (change && !revised) clause.prepend(el('small','原合同'));
+    node.prepend(clause);
+  }
+  if (item.rule==='H03' && item.payment_change && !item.payment_change.scope_clear) {
+    const graph=state.bundle.report.graph;
+    const lines=PhaseEvidence.amendmentLines(graph);
+    if (lines.length) node.append(lazyFold('核对付款变更原行',()=>lines.map(l=>reservationSource(l,graph))));
+  }
   if (item.date_checks) {
     const dates = dateEvidencePanel(item,state.bundle.report.graph);
     if (dates) node.append(dates);
@@ -876,10 +889,15 @@ function graphPanel() {
   const graph = state.bundle.report.graph;
   const {nodes,facts} = graphIndex(graph);
   const docIds = new Set((graph.audit_documents || graph.documents).map(doc => doc.id));
-  const relations = graph.edges.filter(edge => docIds.has(edge.from) && !['contains','section_page','acceptance_reservation','supplier_identity_basis','delivery_quantity_basis','stage_invoice_clause'].includes(edge.type));
+  const relations = graph.edges.filter(edge => docIds.has(edge.from) && !['contains','section_page','acceptance_reservation','supplier_identity_basis','delivery_quantity_basis','stage_invoice_clause','payment_amendment_basis'].includes(edge.type));
   const panel = box('panel', el('h2', '本案证据关系'), el('p', graph.nodes.length + ' 个节点 · ' +
     graph.edges.length + ' 条关系 · ' + graph.facts.length + ' 条提取记录', 'muted'));
   const grouped = new Map();
+  const changeTerms=PhaseEvidence.amendmentLines(graph);
+  if (changeTerms.length) {
+    const list=lazyFold('付款条款变更所据原行（'+changeTerms.length+'）',()=>changeTerms.map(row=>reservationSource(row,graph)));
+    list.classList.add('payment-amendment-relations'); panel.append(list);
+  }
   const receiptTerms=graph.invoice_receipt_sources?.lines.filter(row=>row.role==='clause');
   if (receiptTerms?.length) {
     const list=lazyFold('合同收票条款（'+receiptTerms.length+'）',()=>receiptTerms.map(row=>reservationSource(row,graph)));

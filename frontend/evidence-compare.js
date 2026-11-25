@@ -45,14 +45,24 @@ const EvidenceCompare = (() => {
       result.sort((a,b)=>({risk:0,missing:1}[a.status]??2)-({risk:0,missing:1}[b.status]??2));
       add('signatures', '双方签署', unique('buyer_signature', contract), unique('seller_signature', contract));
     }
+    const byRef=ref=>facts.find(f=>f.id===ref && finding.evidence.includes(ref));
+    const edition=finding.payment_change;
+    if (edition) {
+      const observed=ref=>edition.evidence.includes(ref)?byRef(ref):null;
+      add('amendment-terms','原合同与变更条款',observed(edition.original_ref),observed(edition.revised_ref));
+      add('amendment-seals','协议双方盖章日期',observed(edition.buyer_date_ref),observed(edition.seller_date_ref));
+      if (edition.effective_on && finding.rule==='H05') {
+        const seal=edition.effective_on===edition.seller_on?edition.seller_date_ref:edition.buyer_date_ref;
+        add('amendment-payment-date','协议生效与实付日期',observed(seal),observed(edition.paid_ref));
+      }
+    }
     const gate=finding.invoice_receipt;
     if (gate) {
-      const byRef=ref=>facts.find(f=>f.id===ref && finding.evidence.includes(ref));
       add('receipt-number','发票与签收登记票号',byRef(gate.invoice.number_ref),byRef(gate.receipt.number_ref));
       if (finding.rule==='H05') add('receipt-payment-date','收票与实付日期',byRef(gate.receipt.date_ref),unique('paid_on',kinds.bank_receipt));
     }
-    if (finding.rule === 'H05' && finding.stage) {
-      const clause = facts.find(f => f.id === finding.stage.clause_ref);
+    if (finding.rule === 'H05' && finding.stage && (!edition || ['original','amended'].includes(edition.applies))) {
+      const clause = byRef(edition?.applies==='amended'?edition.revised_ref:finding.stage.clause_ref);
       add('payment', '付款条款与回单', clause, unique('paid_on', kinds.bank_receipt));
     }
     if (finding.rule !== 'H02') return result;
@@ -244,6 +254,20 @@ const EvidenceCompare = (() => {
     }};
   }
 
+  function addedWording(pair) {
+    const before=pair?.left.source_line, after=pair?.right.source_line;
+    if (!before?.rects?.length || !after?.rects?.length) return null;
+    const label=after.text.match(/^(?:变更后付款条款|新付款条款)\s*[：:]\s*/u);
+    if (!label) return null;
+    const old=before.text, revised=after.text.slice(label[0].length), length=revised.length-old.length;
+    if (!old || length<=0) return null;
+    let start=0;
+    while (start<old.length && old[start]===revised[start]) start++;
+    if (old.slice(start)!==revised.slice(start+length)) return null;
+    const offset=label[0].length+start;
+    return [after.text.slice(0,offset),after.text.slice(offset,offset+length),after.text.slice(offset+length)];
+  }
+
   function panel(finding, facts, pairs, index) {
     // The image cache belongs to this finding and revision. A failed fetch can be retried.
     const pages = new Map();
@@ -265,6 +289,12 @@ const EvidenceCompare = (() => {
     const versionNote=box('compare-version');
     const shortcuts = box('compare-presets');
     shortcuts.setAttribute('role','group'); shortcuts.setAttribute('aria-label','选择对照内容');
+    const terms=pairs.find(p=>p.key==='amendment-terms');
+    const added=finding.payment_change?.scope_clear && addedWording(terms);
+    const highlight=el('label','','compare-highlight');
+    const toggle=el('input'); toggle.type='checkbox'; toggle.checked=true;
+    highlight.append(toggle,el('span','标出新增文字'));
+    toggle.addEventListener('change',sync);
     const announcement = el('output','','visually-hidden');
     const selection = [null,null];
     const finder = citationFinder(facts,index,(i,fact) => {
@@ -320,6 +350,12 @@ const EvidenceCompare = (() => {
       const [left,right] = selection;
       const selected = pairs.find(p => p.left.id === left?.id && p.right.id === right?.id);
       for (const button of shortcuts.children) button.setAttribute('aria-pressed',String(button.dataset.pair === selected?.key));
+      if (added) {
+        highlight.hidden=selected?.key!=='amendment-terms';
+        const quote=sides[1].sheet.querySelector('blockquote');
+        if (!highlight.hidden && toggle.checked) quote.replaceChildren(added[0],el('mark',added[1]),added[2]);
+        else if (quote?.querySelector('mark')) quote.textContent=right.source_line.text;
+      }
       if (finding.delegations) {
         versionNote.hidden=!selected?.status;
         if (selected?.status) versionNote.replaceChildren(tag(selected.status));
@@ -344,6 +380,7 @@ const EvidenceCompare = (() => {
     }
     const bar = box('compare-bar');
     if (pairs.length) bar.append(shortcuts);
+    if (added) bar.append(highlight);
     if (finding.quality_change || finding.delegations) bar.append(versionNote);
     if (finding.reinspection) {
       const closed = finding.reinspection.state === 'closed';

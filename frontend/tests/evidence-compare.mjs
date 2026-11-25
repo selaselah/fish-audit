@@ -346,3 +346,120 @@ export async function checkPhaseEvidence({root,call,evaluate,wait},cid) {
   }
   console.log('PASS · R'+task.rev+' · '+phase.status+'/'+payment.status+' · receipt checklist, chronological dates, original rows and paired pages at six widths');
 }
+
+export async function checkPaymentChange({root,call,evaluate,wait},cid,revision) {
+  const api=root+'/api/cases/'+cid, task=await (await fetch(api)).json();
+  assert.ok(task.title.startsWith('合成演练 · '));
+  const rev=Number(revision || task.rev); assert.ok(Number.isSafeInteger(rev) && rev>0);
+  const {report}=await (await fetch(api+'/reports/'+rev)).json();
+  const node=s=>'document.querySelector('+JSON.stringify(s)+')';
+  await call('Page.navigate',{url:root+'/workpaper/'+cid+'?rev='+rev});
+  await wait(node('.performance-panel .phase-choice')+'!==null','issued workpaper');
+  const phase=report.findings.find(f=>f.rule==='H04' && f.payment_change?.scope_clear);
+  if (!phase) {
+    assert.ok(!report.graph.quality_addenda?.payments);
+    assert.equal(await evaluate(node('[data-payment-edition]')),null);
+    console.log('PASS · R'+rev+' · historical payment presentation'); return;
+  }
+  const payment=report.findings.find(f=>f.rule==='H05' && f.payment_change);
+  const edit=payment.payment_change, facts=new Map(report.graph.facts.map(f=>[f.id,f]));
+  const section='[data-phase-finding="'+phase.id+'"] .phase-evidence';
+  const within=s=>node(section+' '+s);
+  const witnesses=new Set(report.graph.edges.filter(e=>e.type==='supports_result' && e.to==='finding/'+payment.id).map(e=>e.from));
+  const selectPhase=()=>evaluate(node('[data-phase-choice="'+phase.id+'"]')+'.click()');
+  await selectPhase();
+  assert.equal(await evaluate(node(section)+'.dataset.mode'),'timeline');
+  const strip=within('[data-payment-edition]'), button=within('.edition-source');
+  assert.equal(await evaluate(strip+'.dataset.paymentEdition'),edit.applies);
+  assert.equal(await evaluate(strip+'.querySelector("time")?.dateTime'),edit.paid_on);
+  const label={original:'原合同',amended:'补充协议',same_day:'同日待核',pending:'生效待核'}[edit.applies];
+  assert.equal(await evaluate(button+'.textContent'),label);
+  const status=await evaluate(within('.proof-count')+'.textContent');
+  if (edit.applies==='amended') assert.equal(status,'付款早于收票 1 天');
+  else if (edit.applies==='same_day') assert.equal(status,'生效与实付同日 · 时分待核');
+  else assert.ok(!status.includes('付款早于收票'));
+  assert.equal(await evaluate(within('[data-event=amendment]')+'?.closest("[data-day]")?.dataset.day ?? null'),edit.effective_on);
+  if (edit.applies==='same_day') {
+    assert.ok(await evaluate(within('[data-event=amendment]')+'.closest("[role=group][data-day]")==='+within('[data-event=paid]')+'.closest("[role=group][data-day]")'));
+    assert.equal(await evaluate(within('[data-event=paid]')+'.closest("[data-day]").querySelectorAll("time").length'),1);
+  }
+  const inspectRef={original:edit.original_ref,amended:edit.revised_ref,same_day:edit.timing_ref,pending:edit.effect_ref}[edit.applies];
+  assert.ok(witnesses.has(inspectRef) && facts.has(inspectRef));
+  const observed=await evaluate([
+    '(() => {',
+    'const report=state.bundle.report, graph=report.graph;',
+    'const finding=report.findings.find(f=>f.id==='+JSON.stringify(payment.id)+'), ref='+JSON.stringify(inspectRef)+';',
+    'const edges=graph.edges.filter(e=>!(e.type==="supports_result" && e.to==="finding/"+finding.id && e.from===ref));',
+    'return [PhaseEvidence.amendmentFact(graph,finding,ref)?.id, PhaseEvidence.amendmentFact({...graph,edges},finding,ref)];',
+    '})()'
+  ].join('\n'));
+  assert.deepEqual(observed,[inspectRef,null]);
+  await evaluate(button+'.focus()');
+  await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r',unmodifiedText:'\r'});
+  await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+  await wait(node('#page-dialog')+'?.open && '+node('.located[data-fact]')+'?.dataset.fact==='+JSON.stringify(inspectRef),'keyboard opens the applicable original');
+  await wait(node('#page-dialog .page-image')+'?.naturalWidth>0','original page image loaded');
+  assert.equal(await evaluate('new URL('+node('#page-dialog .source-tools a')+'.href).searchParams.get("rev")'),String(rev));
+  await evaluate(node('#page-dialog [data-close]')+'.click()');
+  for (const width of [1440,1024,820,768,390,320]) {
+    await call('Emulation.setDeviceMetricsOverride',{width,height:width<600?844:940,deviceScaleFactor:1,mobile:width<600});
+    const fit='document.documentElement.scrollWidth<=innerWidth+1 && '+node(section)+'.scrollWidth<='+node(section)+'.clientWidth+1';
+    await evaluate(within('[data-mode=checks]')+'.click()');
+    assert.equal(await evaluate(within('[data-check=amendment]')+'.dataset.state'),edit.effective_on?'ok':'missing');
+    assert.ok(await evaluate(fit),'checklist fits '+width);
+    await evaluate(within('[data-mode=timeline]')+'.click()');
+    const dates=await evaluate('[...'+node(section)+'.querySelectorAll(".proof-rail time")].map(n=>n.dateTime)');
+    assert.deepEqual(dates,[...dates].sort());
+    assert.equal(new Set(dates).size,dates.length);
+    assert.ok(await evaluate(fit),'timeline fits '+width);
+    if (process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
+      const panel=node(section)+'.closest(".performance-panel")';
+      await evaluate('document.activeElement.blur();'+panel+'.scrollIntoView({block:"center"})'); await evaluate('document.fonts.ready.then(()=>true)');
+      const clip=await evaluate('(()=>{const b='+panel+'.getBoundingClientRect();return {x:b.x+scrollX,y:b.y+scrollY,width:b.width,height:b.height,scale:1}})()');
+      const shot=await call('Page.captureScreenshot',{format:'png',clip,captureBeyondViewport:true});
+      await writeFile(join(process.env.AUDIT_UI_SHOTS,'payment-'+edit.applies+'-'+width+'.png'),Buffer.from(shot.data,'base64'));
+    }
+  }
+  const seal=edit.effective_on===edit.seller_on?edit.seller_date_ref:edit.buyer_date_ref;
+  for (const [key,pair] of [['amendment-terms',[edit.original_ref,edit.revised_ref]],['amendment-payment-date',[edit.effective_on && seal,edit.paid_ref]]]) {
+    const shortcut=within('[data-pair="'+key+'"]');
+    if (pair.some(x=>!x)) { assert.equal(await evaluate(shortcut),null); continue; }
+    assert.ok(pair.every(ref=>witnesses.has(ref) && facts.has(ref)));
+    await evaluate(shortcut+'.click()');
+    await wait('document.querySelectorAll(".compare-leaf canvas").length===2','two verified original pages');
+    assert.deepEqual(await evaluate('[...document.querySelectorAll(".compare-leaf")].map(n=>n.dataset.fact)'),pair);
+    const mark=node('.compare-quote mark'), toggle=node('.compare-highlight input');
+    if (key==='amendment-terms') {
+      const printed=facts.get(edit.revised_ref).source_line.text;
+      assert.equal(await evaluate(mark+'.textContent'),'且买方收到本合同对应的发票');
+      const quote=node('.compare-leaf:nth-child(2) blockquote');
+      assert.equal(await evaluate(quote+'.textContent'),printed);
+      await evaluate(toggle+'.focus()');
+      await call('Input.dispatchKeyEvent',{type:'keyDown',key:' ',code:'Space',windowsVirtualKeyCode:32});
+      await call('Input.dispatchKeyEvent',{type:'keyUp',key:' ',code:'Space',windowsVirtualKeyCode:32});
+      assert.equal(await evaluate(mark),null);
+      assert.equal(await evaluate(quote+'.textContent'),printed);
+      await evaluate(toggle+'.click()');
+      assert.ok(await evaluate(mark+'!==null'));
+      if (process.env.AUDIT_UI_SHOTS && edit.applies==='amended') {
+        await call('Emulation.setDeviceMetricsOverride',{width:1440,height:940,deviceScaleFactor:1,mobile:false});
+        const panel=node('.evidence-compare');
+        await evaluate('document.activeElement.blur();'+panel+'.scrollIntoView({block:"center"})');
+        const clip=await evaluate('(()=>{const b='+panel+'.getBoundingClientRect();return {x:b.x+scrollX,y:b.y+scrollY,width:b.width,height:b.height,scale:1}})()');
+        const shot=await call('Page.captureScreenshot',{format:'png',clip,captureBeyondViewport:true});
+        await writeFile(join(process.env.AUDIT_UI_SHOTS,'payment-clause-diff.png'),Buffer.from(shot.data,'base64'));
+      }
+    } else assert.equal(await evaluate(mark),null);
+    const ledger=node('details.payment-amendment-relations');
+    await evaluate(ledger+'.querySelector("summary").click()');
+    await wait(ledger+'.querySelectorAll("[data-reservation-source]").length>0','graph original lines');
+    assert.ok(await evaluate(ledger+'.textContent.includes('+JSON.stringify(facts.get(edit.revised_ref).quote)+')'));
+    await evaluate(node('#tabs [data-tab=report]')+'.click()');
+    assert.equal(await evaluate(node('.phase-choice[aria-selected=true]')+'.dataset.phaseChoice'),phase.id);
+  }
+  for (const other of report.findings.filter(f=>f.rule==='H04' && !f.payment_change)) {
+    await evaluate(node('[data-phase-choice="'+other.id+'"]')+'.click()');
+    assert.equal(await evaluate(node('[data-phase-finding="'+other.id+'"] [data-payment-edition]')),null);
+  }
+  console.log('PASS · R'+rev+' · '+edit.applies+' · applicable clause, seal dates, transfer, originals, six viewport widths');
+}

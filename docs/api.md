@@ -9,6 +9,20 @@
 | `GET /showcase/{filename}` | 首页的三份合成原件，文件名为 `contract.pdf`、`acceptance.pdf`、`transfer.pdf`。可按资料索引复核 R7 案例的文件摘要。 |
 | `GET /workpaper/{id}`、`GET /w/{wid}/workpaper/{id}` | 校验版本及引文、发现参数，转入 `/app` 的相应底稿。旧的根路径片段书签和邀请链接在浏览器中转入相同工作区。 |
 
+## 验收款付款条款的适用版本
+
+`GET /api/cases/{id}/reports/{rev}` 返回固定版本。规则 `2026.11.25.24` 使用 `policy.quality_addenda = contract-addendum-v4`。协议出现付款条款变更时，`report.graph.quality_addenda.payments` 保存所涉原合同和补充协议的页、印刷行及关联事实。`payment_amendment_basis` 从文书连至原页。旧版底稿按各自存档的数据和规则展示、复算。
+
+| 发现中的字段 | 解释 |
+| --- | --- |
+| `payment_change.scope_clear` | 已确定只为对应的一期新增收票前提。归属或范围待核时，H03 附上判断和所据原页。 |
+| `original_ref`、`previous_ref`、`revised_ref` | 分别对应原合同付款行、协议记载的原条款及新条款。`scope_ref`、`timing_ref`、`effect_ref` 指向变更范围、适用时点、生效约定。均位于 `payment_change` 内。 |
+| `buyer_on`、`seller_on`、`effective_on` | 分别为两个盖章日和已核实的协议生效日。盖章日期随 `buyer_date_ref`、`seller_date_ref` 定位，未确定的日期为 `null`。 |
+| H04 的 `payment_change.applies` | `amended` 表示现有原件支持使用变更条款，`pending` 表示待核。H04 的 `status` 还考虑终验、收票等本期条件。 |
+| H05 的 `payment_change.applies` | `original` 或 `amended` 表示当笔实付适用的条款，`same_day` 表示需核盖章及支付时分，`pending` 表示依据不足。随附 `paid_on`、`paid_ref` 和逐项 `evidence`。 |
+
+总体建议读取 `report.result.verdict`。某笔实付采用原合同，或现有材料已补齐收票，均不能单独决定整案是否通过。[逐笔审计方法](audit-method.md#一笔验收款应当使用哪版条款)
+
 ## 签约权限与合同原文
 
 从规则版 `2026.11.25.22` 起，`policy.delegation_checks` 为 `written-contract-mandate-v4`。H01 的 `delegations[].limits` 记录逐条限制的 `field_ref`、`kind`、`status` 和可核对的 `comparison_ref`。比较两端均位于本条发现的取证范围内。委托书文字原页的 `text_only` 标记用于识别可能另含影像附注的页面。

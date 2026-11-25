@@ -16,18 +16,34 @@ const PhaseEvidence = (() => {
   function original(fact) {
     return fact && (()=>openPage(fact.doc,fact.page,fact.id));
   }
+  const editionFields=new Set(['previous_payment_stage','revised_payment_stage','change_scope','change_timing','change_effect_clause','buyer_sealed_on','seller_sealed_on']);
+  function amendmentLines(graph) {
+    const ledger=graph?.quality_addenda?.payments;
+    return ledger?.lines.filter(s=>editionFields.has(s.field) || s.field==='payment_stage' || !s.field) || [];
+  }
+  function amendmentFact(graph,item,ref) {
+    const index=graphIndex(graph);
+    if (!ref || !item.payment_change.evidence.includes(ref) || !item.evidence.includes(ref)
+        || !index.supports.get('finding/'+item.id)?.has(ref)) return null;
+    const fact=index.facts.get(ref);
+    return fact?.source_line?.rects?.length && ['anchored','confirmed'].includes(fact.status)?fact:null;
+  }
   function pageReferences(graph,doc,page,facts) {
     const rows=graph?.invoice_receipt_sources?.lines || [];
-    return rows.filter(s=>s.doc===doc && s.page===page && s.line &&
-      ['clause','qualification','unreviewed'].includes(s.role) && !facts.some(f=>s.facts.includes(f.id) && f.quote===s.quote))
-      .map(s=>{
-        const label=s.role==='clause'?'收票约定':'收票所据原行';
-        return {ref:'receipt-line/'+s.line,rawLine:s.line,label,quote:s.quote,option:label+' · 第 '+s.line+' 行',
-          quality:'invoice_receipt_reference',rects:[]};
-      });
+    const sources=new Map();
+    function add(s,label,quality) {
+      if (!s.line || s.doc!==doc || s.page!==page || sources.has(s.line) || facts.some(f=>s.facts.includes(f.id) && f.quote===s.quote)) return;
+      const prefix=quality==='invoice_receipt_reference'?'receipt-line/':'payment-change-line/';
+      sources.set(s.line,{ref:prefix+s.line,rawLine:s.line,label,quote:s.quote,option:label+' · 第 '+s.line+' 行',quality,rects:[]});
+    }
+    for (const s of rows) if (['clause','qualification','unreviewed'].includes(s.role))
+      add(s,s.role==='clause'?'收票约定':'收票所据原行','invoice_receipt_reference');
+    for (const s of amendmentLines(graph)) add(s,'付款变更所据原行','payment_amendment_reference');
+    return [...sources.values()];
   }
   function panel(phase,payments,findings,graph) {
     const gate=phase.invoice_receipt;
+    const change=phase.payment_change;
     const index=graphIndex(graph);
     const {facts}=index;
     index.phaseViews ??= new Map();
@@ -43,14 +59,14 @@ const PhaseEvidence = (() => {
     function point(key,label,icon,status,fact,actionIfMissing,caption) {
       checkpoints.push({key,label,icon,status,caption,open:original(fact) || actionIfMissing});
     }
-    function event(key,label,day,fact,status) {
-      if (day && fact) events.push({key,label,day,fact,status,open:original(fact)});
+    function event(key,label,day,fact,status,payment) {
+      if (day && fact) events.push({key,label,day,fact,status,payment,open:original(fact)});
     }
     const signed=findings.find(f=>f.rule==='H01');
     if (signed) {
       const day=unique(signed,'effect_on') || unique(signed,'signed_on');
       point('effect','合同生效','journal-text',signed.status,null,inspect(signed));
-      event('effect',day?.field==='effect_on'?'生效记载':'合同签订',dateOn(day),day,signed.status);
+      event('effect',day?.field==='effect_on'?(change?'主合同生效日':'生效记载'):'合同签订',dateOn(day),day,signed.status);
     }
     const plan=findings.find(f=>f.rule==='H03');
     if (plan && plan.status!=='ok') point('schedule','付款约定','layers',plan.status,null,inspect(plan));
@@ -65,6 +81,12 @@ const PhaseEvidence = (() => {
       const w=phase.warranty_check, fact=unique(phase,'warranty_release');
       point('warranty','质保期满','shield-check',w.status,fact,inspect(phase));
       event('warranty','期满确认',w.confirmed_on,fact,w.status);
+    }
+    if (change) {
+      const seal=change.effective_on===change.seller_on?change.seller_date_ref:change.buyer_date_ref;
+      const fact=change.effective_on?amendmentFact(graph,phase,seal):null;
+      point('amendment','协议生效','layers',fact?'ok':'missing',fact || amendmentFact(graph,phase,change.effect_ref),inspect(phase));
+      event('amendment','协议生效',change.effective_on,fact,'ok');
     }
     if (gate) {
       const bill=gate.invoice, ack=gate.receipt;
@@ -85,7 +107,7 @@ const PhaseEvidence = (() => {
     }
     for (const payment of payments) {
       const dates=payment.evidence.map(id=>facts.get(id)).filter(f=>f?.field==='paid_on');
-      if (dates.length===1) event('paid','实际付款',dateOn(dates[0]),dates[0],payment.status);
+      if (dates.length===1) event('paid','实际付款',dateOn(dates[0]),dates[0],payment.status,payment);
     }
     if (!checkpoints.length && !events.length) return null;
     const root=el('section','','phase-evidence');
@@ -96,7 +118,31 @@ const PhaseEvidence = (() => {
     const tools=box('proof-tools');
     const count=el('span','','proof-count');
     const header=box('proof-header',box('proof-name',el('h3','本期证据'),count),controls);
-    root.append(header,checks,rail,tools);
+    root.append(header);
+    for (const payment of payments) {
+      const edition=payment.payment_change;
+      if (!edition) continue;
+      const label={original:'原合同',amended:'补充协议',same_day:'同日待核',pending:edition.effective_on?'回单待核':'生效待核'}[edition.applies];
+      const ref={original:edition.original_ref,amended:edition.revised_ref,same_day:edition.timing_ref,pending:edition.effect_ref}[edition.applies];
+      const fact=amendmentFact(graph,payment,ref);
+      const button=fact?action('',original(fact),'edition-source'):el('span','','edition-source');
+      button.append(glyph('journal-text'),el('strong',label));
+      if (fact) {
+        button.append(glyph('arrows-angle-expand'));
+        button.setAttribute('aria-label',label+'，查看'+(edition.applies==='same_day'?'适用时点':edition.applies==='pending'?'生效条件':'付款条款')+'原件');
+      }
+      const row=box('proof-edition',el('span','实付依据'),button);
+      row.dataset.paymentEdition=edition.applies;
+      if (edition.paid_on) {
+        const when=el('time',edition.paid_on); when.dateTime=edition.paid_on; row.append(when);
+      }
+      if (payments.length>1) {
+        const name=facts.get(edition.paid_ref)?.name;
+        if (name) row.append(el('small',name));
+      }
+      root.append(row);
+    }
+    root.append(checks,rail,tools);
 
     for (const step of checkpoints) {
       const tile=step.open?action('',step.open,'proof-check'):el('div','','proof-check');
@@ -108,23 +154,63 @@ const PhaseEvidence = (() => {
       checks.append(tile);
     }
     events.sort((a,b)=>a.day.localeCompare(b.day));
-    for (const [i,entry] of events.entries()) {
-      const btn=action('',entry.open,'proof-event');
-      btn.dataset.event=entry.key; btn.dataset.state=entry.status;
-      const when=el('time',entry.day.slice(5).replace('-',' / ')); when.dateTime=entry.day;
-      const year=i===0 || events[i-1].day.slice(0,4)!==entry.day.slice(0,4) ? entry.day.slice(0,4)+' 年' : '';
+    const groups=[];
+    for (const entry of events) {
+      const last=groups.at(-1);
+      if (change && last?.[0].day===entry.day) last.push(entry);
+      else groups.push([entry]);
+    }
+    for (const [i,entries] of groups.entries()) {
+      const [first]=entries, shared=entries.length>1;
+      const item=shared?box('proof-event proof-date-group'):action('',first.open,'proof-event');
+      item.dataset.day=first.day; item.dataset.state=combined(entries);
+      const when=el('time',first.day.slice(5).replace('-',' / ')); when.dateTime=first.day;
+      const year=i===0 || groups[i-1][0].day.slice(0,4)!==first.day.slice(0,4) ? first.day.slice(0,4)+' 年' : '';
       const track=el('span','','proof-track'); track.setAttribute('aria-hidden','true'); track.append(el('i'));
-      btn.append(el('small',year),track,when,el('span',entry.label));
-      btn.append(el('span','。'+entry.day+'，'+statusName(entry.status)+'，打开原件','visually-hidden'));
-      rail.append(btn);
+      item.append(el('small',[year,shared?'同日 '+entries.length+' 项':''].filter(Boolean).join(' · ')),track,when);
+      if (shared) {
+        item.setAttribute('role','group'); item.setAttribute('aria-label',first.day+'，同日原件');
+        const records=box('proof-day-list');
+        for (const entry of entries) {
+          const btn=action(entry.label,entry.open,'proof-day-action');
+          btn.dataset.event=entry.key; btn.dataset.state=entry.status;
+          btn.setAttribute('aria-label',entry.label+'，'+entry.day+'，'+statusName(entry.status)+'，打开原件');
+          records.append(btn);
+        }
+        item.append(records);
+      } else {
+        item.dataset.event=first.key; item.append(el('span',first.label),
+          el('span','。'+first.day+'，'+statusName(first.status)+'，打开原件','visually-hidden'));
+      }
+      rail.append(item);
     }
     let timing='';
-    if (gate?.status==='ok' && gate.receipt.received_on) {
-      const received=Date.parse(gate.receipt.received_on+'T00:00:00Z');
-      const early=events.filter(e=>e.key==='paid' && e.status==='risk' && Date.parse(e.day+'T00:00:00Z')<received);
-      if (early.length===1) timing='付款早于收票 '+Math.round((received-Date.parse(early[0].day+'T00:00:00Z'))/86400000)+' 天';
-      else if (early.length>1) timing=early.length+' 笔付款早于收票';
-      else if (events.some(e=>e.key==='paid' && e.status==='missing' && e.day===gate.receipt.received_on)) timing='同日收付 · 时分待核';
+    const dated=events.filter(e=>e.payment?.invoice_receipt?.status==='ok');
+    const early=dated.filter(e=>e.status==='risk' && e.day<e.payment.invoice_receipt.receipt.received_on);
+    if (early.length===1) {
+      const e=early[0], days=(Date.parse(e.payment.invoice_receipt.receipt.received_on)-Date.parse(e.day))/86400000;
+      timing='付款早于收票 '+days+' 天';
+    } else if (early.length>1) timing=early.length+' 笔付款早于收票';
+    else if (payments.some(p=>p.payment_change?.applies==='same_day')) timing='生效与实付同日 · 时分待核';
+    else if (dated.some(e=>e.status==='missing' && e.day===e.payment.invoice_receipt.receipt.received_on)) timing='同日收付 · 时分待核';
+    const shortcuts=new Map();
+    function linked(item,key,label,destination=tools) {
+      if (!shortcuts.has(item)) {
+        const traced=traceReferences(graph,item).map(id=>facts.get(id)).filter(Boolean);
+        shortcuts.set(item,new Set(EvidenceCompare.presets(item,traced,graph).map(p=>p.key)));
+      }
+      if (!shortcuts.get(item).has(key)) return;
+      const btn=action(label,()=>showFindingPath(item,true,key),'proof-pair');
+      btn.prepend(glyph('layout-sidebar-inset-reverse')); btn.dataset.pair=key; destination.append(btn);
+    }
+    let more=tools;
+    if (change) {
+      linked(phase,'amendment-terms','对照新旧条款');
+      for (const payment of payments) linked(payment,'amendment-payment-date',payments.length===1?'对照生效与实付':'对照生效与实付 · '+payment.id);
+      const details=el('details','','proof-clauses proof-more');
+      const summary=el('summary','更多凭据'); summary.append(glyph('chevron-down'));
+      more=box('proof-tools'); details.append(summary,more); tools.append(details);
+      linked(phase,'amendment-seals','对照双方盖章日期',more);
     }
     if (gate) {
       const lines=[...gate.clauses,...gate.qualifications];
@@ -137,16 +223,11 @@ const PhaseEvidence = (() => {
         source.classList.add('proof-line');
         details.append(source);
       }
-      tools.append(details);
-      const linked=(item,key,label)=>{
-        const traced=traceReferences(graph,item).map(id=>facts.get(id)).filter(Boolean);
-        if (!EvidenceCompare.presets(item,traced,graph).some(p=>p.key===key)) return;
-        const btn=action(label,()=>showFindingPath(item,true,key),'proof-pair');
-        btn.prepend(glyph('layout-sidebar-inset-reverse')); btn.dataset.pair=key; tools.append(btn);
-      };
-      linked(phase,'receipt-number','对照票号');
-      for (const payment of payments) linked(payment,'receipt-payment-date',payments.length===1?'对照收付日期':'对照收付日期 · '+payment.id);
+      more.append(details);
+      linked(phase,'receipt-number','对照票号',more);
+      for (const payment of payments) linked(payment,'receipt-payment-date',payments.length===1?'对照收付日期':'对照收付日期 · '+payment.id,more);
     }
+    if (more!==tools && !more.children.length) more.parentElement.remove();
     const modes=[['checks','条件核对',checks],['timeline','时间线',rail]].filter(([, ,view])=>view.children.length);
     function select(key) {
       index.phaseViews.set(phase.id,key);
@@ -163,8 +244,8 @@ const PhaseEvidence = (() => {
     for (const [key,label] of modes) {
       const btn=action(label,()=>select(key),'proof-mode'); btn.dataset.mode=key; controls.append(btn);
     }
-    select(index.phaseViews.get(phase.id) || (timing?'timeline':modes[0][0]));
+    select(index.phaseViews.get(phase.id) || (timing || change && events.some(e=>e.payment)?'timeline':modes[0][0]));
     return root;
   }
-  return {combined,panel,pageReferences};
+  return {combined,panel,pageReferences,amendmentLines,amendmentFact};
 })();

@@ -2,6 +2,12 @@
 
 每项记录给出厂商原页、查看位置和查阅日。「画面」来自公开截图或动图，「操作说明」来自对应的帮助正文。「本地用法」说明国内中小企业的采购员、会计或复核人可以如何处理一笔业务。观察范围限于这些公开资料。
 
+## 付款条款与原件定位
+
+2026-11-25 查阅 Adobe Acrobat 的文件比较说明。并排模式将旧文件放在左侧、新文件放在右侧，可显示或隐藏差异标记。Fish Audit 的「对照新旧条款」沿用这个阅读顺序。只有两条已定位原行在去掉明确的字段名后可逐字验证一段新增文字，右栏才提供标记开关。[Adobe 官方操作说明](https://helpx.adobe.com/acrobat/using/compare-documents.html) · [本地实拍](../docs/interaction-design/payment-clause-diff.webp)
+
+DataSnipper 的 Alwin 帮助说明展示了从选定单元格定位到原件对应位置，也可从原件选中相应单元格。首页演练选用其中的单向操作，点击验收结论、检验依据或实测值，立即切到同一页的对应原行，并可放回整页核查上下文。[DataSnipper 官方操作说明](https://knowledge.datasnipper.com/en/articles/882479-how-to-review-a-task-s-output-in-alwin) · [R7 页图及字段出处](showcase-provenance.md#展示原件)
+
 ## Karbon · 工作清单与看板
 
 Karbon 的客户入职指南末页展示了事务所的容量看板。桌面按负责人分列，列头标件数，卡上保留任务名称与流程状态。其 2026-11-23 发布说明还介绍了工作清单和看板中的筛选标签。Fieldguide 的请求清单支持分组，点一条任务可在侧栏核对详情。查阅日期为 2026-11-25。[Karbon 指南末页的看板](https://assets.ctfassets.net/2wd1w7hp7waa/3iNm7OuDbSMWsHkMfu4xjd/05872a25e95083b64d1abb8ece37f998/The_Definitive_Guide_to_Client_Onboarding_by_Karbon.pdf) · [Karbon 发布说明](https://karbonhq.com/en-GB/release-notes/nov-23-2026/) · [Fieldguide 请求管理](https://help.fieldguide.io/en/articles/7207259-managing-requests)
