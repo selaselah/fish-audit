@@ -28,17 +28,19 @@ const PhaseEvidence = (() => {
     const fact=index.facts.get(ref);
     return fact?.source_line?.rects?.length && ['anchored','confirmed'].includes(fact.status)?fact:null;
   }
-  function pageReferences(graph,doc,page,facts) {
+  function pageReferences(graph,doc,page,facts,lineHint) {
     const rows=graph?.invoice_receipt_sources?.lines || [];
     const sources=new Map();
-    function add(s,label,quality) {
-      if (!s.line || s.doc!==doc || s.page!==page || sources.has(s.line) || facts.some(f=>s.facts.includes(f.id) && f.quote===s.quote)) return;
-      const prefix=quality==='invoice_receipt_reference'?'receipt-line/':'payment-change-line/';
+    function add(s,label,quality,prefix,hasFact) {
+      if (!s.line || s.doc!==doc || s.page!==page || sources.has(s.line)) return;
+      if (hasFact ?? facts.some(f=>s.facts.includes(f.id) && f.quote===s.quote)) return;
       sources.set(s.line,{ref:prefix+s.line,rawLine:s.line,label,quote:s.quote,option:label+' · 第 '+s.line+' 行',quality,rects:[]});
     }
+    for (const s of graph?AcceptanceOpinion.rows(graph):[])
+      add(s,'付款意见原行','acceptance_opinion_reference','payment-opinion-line/',s.line!==lineHint && Boolean(AcceptanceOpinion.observation(s,graph)));
     for (const s of rows) if (['clause','qualification','unreviewed'].includes(s.role))
-      add(s,s.role==='clause'?'收票约定':'收票所据原行','invoice_receipt_reference');
-    for (const s of amendmentLines(graph)) add(s,'付款变更所据原行','payment_amendment_reference');
+      add(s,s.role==='clause'?'收票约定':'收票所据原行','invoice_receipt_reference','receipt-line/');
+    for (const s of amendmentLines(graph)) add(s,'付款变更所据原行','payment_amendment_reference','payment-change-line/');
     return [...sources.values()];
   }
   function panel(phase,payments,findings,graph) {
@@ -109,7 +111,9 @@ const PhaseEvidence = (() => {
       const dates=payment.evidence.map(id=>facts.get(id)).filter(f=>f?.field==='paid_on');
       if (dates.length===1) event('paid','实际付款',dateOn(dates[0]),dates[0],payment.status,payment);
     }
-    if (!checkpoints.length && !events.length) return null;
+    const notes=AcceptanceOpinion.rows(graph,phase);
+    const opinion=notes.length?AcceptanceOpinion.panel(phase,accepted,notes,graph):null;
+    if (!checkpoints.length && !events.length && !opinion) return null;
     const root=el('section','','phase-evidence');
     root.setAttribute('aria-label',phase.stage.name+'履约证据');
     const controls=box('proof-switch');
@@ -143,6 +147,7 @@ const PhaseEvidence = (() => {
       root.append(row);
     }
     root.append(checks,rail,tools);
+    if (opinion) root.insertBefore(opinion,tools);
 
     for (const step of checkpoints) {
       const tile=step.open?action('',step.open,'proof-check'):el('div','','proof-check');
@@ -194,16 +199,25 @@ const PhaseEvidence = (() => {
     else if (payments.some(p=>p.payment_change?.applies==='same_day')) timing='生效与实付同日 · 时分待核';
     else if (dated.some(e=>e.status==='missing' && e.day===e.payment.invoice_receipt.receipt.received_on)) timing='同日收付 · 时分待核';
     const shortcuts=new Map();
-    function linked(item,key,label,destination=tools) {
+    function linked(item,key,label,destination=tools,rightRef) {
       if (!shortcuts.has(item)) {
         const traced=traceReferences(graph,item).map(id=>facts.get(id)).filter(Boolean);
-        shortcuts.set(item,new Set(EvidenceCompare.presets(item,traced,graph).map(p=>p.key)));
+        shortcuts.set(item,new Map(EvidenceCompare.presets(item,traced,graph).map(p=>[p.key,p])));
       }
-      if (!shortcuts.get(item).has(key)) return;
+      const pair=shortcuts.get(item).get(key);
+      if (!pair || rightRef && pair.right.id!==rightRef) return;
       const btn=action(label,()=>showFindingPath(item,true,key),'proof-pair');
       btn.prepend(glyph('layout-sidebar-inset-reverse')); btn.dataset.pair=key; destination.append(btn);
     }
     let more=tools;
+    if (opinion) {
+      const actions=box('proof-tools opinion-tools');
+      const measured=opinion.querySelector('[data-measured-ref]')?.dataset.measuredRef;
+      if (measured) linked(accepted,'reading','对照标准与实测',actions,measured);
+      linked(phase,'opinion-conflict','对照两项意见',actions);
+      for (const payment of payments) linked(payment,'opinion-transfer',payments.length===1?'对照意见与回单':'对照意见与回单 · '+payment.id,actions);
+      if (actions.children.length) opinion.append(actions);
+    }
     if (change) {
       linked(phase,'amendment-terms','对照新旧条款');
       for (const payment of payments) linked(payment,'amendment-payment-date',payments.length===1?'对照生效与实付':'对照生效与实付 · '+payment.id);
@@ -228,7 +242,7 @@ const PhaseEvidence = (() => {
       for (const payment of payments) linked(payment,'receipt-payment-date',payments.length===1?'对照收付日期':'对照收付日期 · '+payment.id,more);
     }
     if (more!==tools && !more.children.length) more.parentElement.remove();
-    const modes=[['checks','条件核对',checks],['timeline','时间线',rail]].filter(([, ,view])=>view.children.length);
+    const modes=[['checks','条件核对',checks],['timeline','时间线',rail],['opinion','付款意见',opinion]].filter(([, ,view])=>view?.children.length);
     function select(key) {
       index.phaseViews.set(phase.id,key);
       root.dataset.mode=key;
@@ -237,14 +251,18 @@ const PhaseEvidence = (() => {
         view.hidden=!active;
         controls.querySelector('[data-mode="'+mode+'"]').setAttribute('aria-pressed',String(active));
       }
-      count.textContent=key==='checks'?checkpoints.filter(s=>s.status==='ok').length+' / '+checkpoints.length+' 项相符':
+      count.textContent=key==='opinion'?AcceptanceOpinion.caption(phase.payment_opinion):key==='checks'?checkpoints.filter(s=>s.status==='ok').length+' / '+checkpoints.length+' 项相符':
         timing || events.length+' 项日期记录';
-      count.classList.toggle('timing-alert',Boolean(timing && key==='timeline'));
+      count.classList.toggle('timing-alert',Boolean(timing && key==='timeline' || key==='opinion' && phase.payment_opinion.state!=='assent'));
+      if (key==='opinion') opinion.dispatchEvent(new Event('show-opinion'));
     }
     for (const [key,label] of modes) {
       const btn=action(label,()=>select(key),'proof-mode'); btn.dataset.mode=key; controls.append(btn);
     }
-    select(index.phaseViews.get(phase.id) || (timing || change && events.some(e=>e.payment)?'timeline':modes[0][0]));
+    let initial=modes[0][0];
+    if (opinion && phase.payment_opinion.state!=='assent') initial='opinion';
+    if (timing || change && events.some(e=>e.payment)) initial='timeline';
+    select(index.phaseViews.get(phase.id) || initial);
     return root;
   }
   return {combined,panel,pageReferences,amendmentLines,amendmentFact};

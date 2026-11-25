@@ -905,7 +905,7 @@ button.icon-button:hover,button.icon-button:focus-visible { color:var(--accent);
   .audit-card:hover { box-shadow:0 3px 9px #1e325412; }
 }
 
-.phase-evidence { flex:1 1 100%; min-width:0; padding:14px 16px 12px; border:1px solid var(--line); border-radius:8px; background:var(--surface); }
+.phase-evidence { container-type:inline-size; flex:1 1 100%; min-width:0; padding:14px 16px 12px; border:1px solid var(--line); border-radius:8px; background:var(--surface); }
 .proof-header,.proof-name,.proof-switch,.proof-tools { display:flex; align-items:center; gap:8px; }
 .proof-header { justify-content:space-between; flex-wrap:wrap; gap:8px 14px; }
 .proof-name { flex-wrap:wrap; gap:4px 10px; }
@@ -960,8 +960,40 @@ button.icon-button:hover,button.icon-button:focus-visible { color:var(--accent);
 .proof-clauses[open] summary .ic-chevron-down { transform:rotate(180deg); }
 .proof-line { display:flex; align-items:baseline; flex-wrap:wrap; gap:3px 10px; padding:6px 9px; margin-bottom:4px; background:var(--canvas); font-size:.86rem; border-inline-start:2px solid var(--accent-line); }
 .phase-evidence [hidden] { display:none; }
+.proof-opinion { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.15fr); gap:8px; margin-top:12px; }
+.opinion-record:first-child { grid-column:1/-1; }
+.opinion-quality,.opinion-record { min-width:0; padding:12px 13px 7px; border:1px solid var(--line); border-radius:6px; }
+.opinion-record { border-inline-start:3px solid var(--accent-line); }
+.proof-opinion:is([data-payment-opinion-state=hold],[data-payment-opinion-state=conflict],[data-payment-opinion-state=unresolved]) .opinion-record { border-inline-start-color:var(--attention-line); }
+.opinion-card-head { display:flex; gap:6px; align-items:center; flex-wrap:wrap; min-height:28px; color:var(--secondary); }
+.opinion-card-head h4 { font-size:.86rem; margin:0; }
+.opinion-card-head .tag,.opinion-choices,.opinion-select { margin-inline-start:auto; }
+.opinion-card-head .tag { padding:1px 6px; font-size:.75rem; }
+.proof-opinion .reservation-note { display:grid; gap:0; padding:0; border:0; margin:7px 0 0; }
+.proof-opinion q { font-size:.94rem; font-weight:550; }
+.proof-opinion .ref { display:grid; width:100%; min-height:34px; padding:0; border:0; background:transparent; text-align:start; color:var(--accent-hover); font-size:.78rem; }
+.opinion-strip { position:relative; display:flex; align-items:center; min-height:47px; min-width:0; padding:3px 7px; background:var(--canvas); color:var(--ink); border-radius:3px; }
+.opinion-strip canvas { display:block; max-width:100%; max-height:39px; mix-blend-mode:multiply; }
+.opinion-location { display:flex; align-items:center; flex-wrap:wrap; gap:5px; min-height:33px; }
+.opinion-location i:last-child { font-size:.7em; }
+.proof-opinion .ref:hover .opinion-location span { text-decoration:underline; text-underline-offset:3px; }
+.proof-opinion .ref:focus-visible { outline-offset:2px; }
+@container (max-width:505px) {
+  .proof-opinion { grid-template-columns:minmax(0,1fr); }
+}
+.proof-opinion .opinion-tools { grid-column:1/-1; margin:0; padding:0; border:0; }
+.opinion-choices { display:inline-flex; padding:2px; border:1px solid var(--line); border-radius:5px; background:var(--canvas); }
+.opinion-choice { min-height:26px; border:1px solid transparent; padding:0 8px; border-radius:3px; background:transparent; color:var(--muted); font-size:.76rem; }
+.opinion-choice[aria-pressed=true] { background:var(--surface); color:var(--ink); border-color:var(--field-line); }
+.opinion-choice[data-opinion-choice=hold][aria-pressed=true] { color:var(--attention); }
+.opinion-select { min-height:30px; padding:2px 6px; font-size:.8rem; }
+@media (forced-colors:active) {
+  .opinion-choice[aria-pressed=true],.proof-mode[aria-pressed=true] { outline:2px solid Highlight; outline-offset:-2px; }
+}
 @media (max-width:600px) {
   .phase-evidence { padding:10px; }
+  .opinion-choice,.opinion-select,.proof-opinion .ref { min-height:44px; }
+  .opinion-record,.opinion-quality { padding:8px 10px 2px; }
   .proof-header { align-items:flex-start; }
   .proof-mode,.proof-pair,.proof-clauses summary,.proof-edition .edition-source { min-height:44px; }
   .proof-checkpoints { gap:5px; grid-template-columns:repeat(auto-fit,minmax(min(90px,100%),1fr)); }

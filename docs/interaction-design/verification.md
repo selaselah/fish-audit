@@ -1,5 +1,16 @@
 # 首页与工作台验收记录
 
+## 2026-11-25 · 验收单上的付款意见
+
+Chrome 在 320、390、768、820、1024、1440 像素宽度核查四个水印案件。逐项比对质量状态、意见归属和证据编号，从卡片回到固定版原件，再从两栏对照返回原先选中的期次和视图。相反意见可用方向键切换，「暂缓」「同意」分别对应第 15、16 行的实际页图。旧底稿 R7 和重审 R8 另行核验。[桌面实拍](acceptance-opinion.webp) · [手机实拍](acceptance-opinion-mobile.webp) · [用例源码](../../frontend/tests/payment-opinions.mjs)
+
+在浏览器的临时图谱副本中移除意见观察的引用边，仍可打开正确页码和文字行。缺少行坐标时，原页不画定位框。另在浏览器阻断页图请求，卡片保留归档文字，恢复连接后可重新显示裁切影像。axe-core 对桌面和手机各检查六个状态，涵盖全部或单期暂缓、相反意见、双栏原件、超限实测及完整原页，12 次 WCAG A/AA 自动检查均返回零违规。整站风格检查器返回 `GATE: OFF (no build active)`。[演练版本及复算记录](../acceptance.md#终验合格与付款能否放行)
+
+```sh
+node frontend/tests/workspace.mjs --payment-opinion-case 1f8712f4118d4a239da2aee83cf1c768
+AUDIT_OPINION_REV=7 node frontend/tests/workspace.mjs --payment-opinion-case 1a9e9a13e3054d6d97dc257a7c06f201
+```
+
 ## 2026-11-25 · 首页核图与验收款变更
 
 本机和企业模式的首页均用 320、390、768、820、1024、1440 像素宽度打开验收报告，切换三处原行和整页。已核对 PNG 与 R7 归档页图的摘要、原 PDF 入口、键盘方向键和 Escape 返回焦点。浏览器加载首页、打开演练和切换证据均使用公开静态资源。[首页核图实拍](landing-evidence-reader.webp) · [浏览器用例](../../frontend/tests/product.mjs)

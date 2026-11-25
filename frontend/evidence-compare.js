@@ -46,6 +46,20 @@ const EvidenceCompare = (() => {
       add('signatures', '双方签署', unique('buyer_signature', contract), unique('seller_signature', contract));
     }
     const byRef=ref=>facts.find(f=>f.id===ref && finding.evidence.includes(ref));
+    if (finding.payment_opinion) {
+      const notes=AcceptanceOpinion.rows(graph,finding);
+      function printed(row) {
+        const f=row?.line && AcceptanceOpinion.observation(row,graph);
+        return f && byRef(f.id);
+      }
+      const hold=notes.filter(n=>n.stance==='hold'), assent=notes.filter(n=>n.stance==='assent');
+      if (finding.payment_opinion.state==='conflict' && hold.length===1 && assent.length===1 && hold[0].unit===assent[0].unit)
+        add('opinion-conflict','暂缓与同意原文',printed(hold[0]),printed(assent[0]));
+      if (finding.rule==='H05' && notes.length===1 && ['hold','assent'].includes(finding.payment_opinion.state)) {
+        const paid=unique('paid_on',kinds.bank_receipt);
+        if (paid?.source_line?.rects?.length) add('opinion-transfer','付款意见与实付日期',printed(notes[0]),paid);
+      }
+    }
     const edition=finding.payment_change;
     if (edition) {
       const observed=ref=>edition.evidence.includes(ref)?byRef(ref):null;
@@ -157,7 +171,12 @@ const EvidenceCompare = (() => {
     return notice;
   }
 
-  function drawExcerpt(image, rects) {
+  function rectangles(fact) {
+    return (fact.source_line?.rects || []).filter(r=>Array.isArray(r) && r.length===4 &&
+      r.every(n=>Number.isFinite(n) && n>=0 && n<=1) && r[2]>r[0] && r[3]>r[1]);
+  }
+
+  function drawExcerpt(image, rects, compact=false) {
     const width = image.naturalWidth, height = image.naturalHeight;
     let x = 0, y = 0, w = width, h = height;
     if (rects.length) {
@@ -165,8 +184,8 @@ const EvidenceCompare = (() => {
       const top = Math.min(...rects.map(r => r[1])) * height;
       const right = Math.max(...rects.map(r => r[2])) * width;
       const bottom = Math.max(...rects.map(r => r[3])) * height;
-      w = Math.min(width, Math.max(width * .55, right - left + width * .08));
-      h = Math.min(height, Math.max(w / 4.5, bottom - top + height * .045));
+      w = Math.min(width, compact?right-left+width*.025:Math.max(width*.55,right-left+width*.08));
+      h = Math.min(height, compact?bottom-top+height*.011:Math.max(w/4.5,bottom-top+height*.045));
       x = Math.max(0, Math.min(width - w, (left + right - w) / 2));
       y = Math.max(0, Math.min(height - h, (top + bottom - h) / 2));
     }
@@ -268,22 +287,28 @@ const EvidenceCompare = (() => {
     return [after.text.slice(0,offset),after.text.slice(offset,offset+length),after.text.slice(offset+length)];
   }
 
-  function panel(finding, facts, pairs, index) {
-    // The image cache belongs to this finding and revision. A failed fetch can be retried.
-    const pages = new Map();
-    function pageImage(fact) {
-      const url = workpaperSource(fact.doc, 'pages/' + fact.page);
-      if (!pages.has(url)) {
-        if (pages.size >= 4) pages.delete(pages.keys().next().value);
-        const image = new Image();
-        const request = loadReviewImage(image, url).then(() => image).catch(error => {
-          if (pages.get(url) === request) pages.delete(url);
-          throw error;
-        });
-        pages.set(url,request);
-      }
-      return pages.get(url);
+  function pageImage(fact,index) {
+    const pages=index.images ??= new Map();
+    const url=workpaperSource(fact.doc,'pages/'+fact.page);
+    if (!pages.has(url)) {
+      if (pages.size>=4) pages.delete(pages.keys().next().value);
+      const image=new Image();
+      const request=loadReviewImage(image,url).then(()=>image).catch(error=>{
+        if (pages.get(url)===request) pages.delete(url);
+        throw error;
+      });
+      pages.set(url,request);
     }
+    return pages.get(url);
+  }
+
+  async function lineExcerpt(fact,index) {
+    const rects=rectangles(fact);
+    if (!rects.length) return null;
+    return drawExcerpt(await pageImage(fact,index),rects,true);
+  }
+
+  function panel(finding, facts, pairs, index) {
     const root = box('evidence-compare');
     const versionLabels={applied:'按补充协议',original:'按原合同',by_batch:'按各批验收日核对',pending:'适用版本待核'};
     const versionNote=box('compare-version');
@@ -322,8 +347,7 @@ const EvidenceCompare = (() => {
       }
       const nameText = index.documents.get(fact.doc)?.name || fact.doc;
       name.textContent = nameText;
-      const rects = (fact.source_line?.rects || []).filter(r => Array.isArray(r) && r.length === 4 &&
-        r.every(n => Number.isFinite(n) && n >= 0 && n <= 1) && r[2] > r[0] && r[3] > r[1]);
+      const rects = rectangles(fact);
       const frame = box('compare-scan',el('span','载入原页…'));
       frame.dataset.located = String(Boolean(rects.length));
       const origin = '第 ' + fact.page + ' 页' + (rects.length ? ' · 第 ' + fact.source_line.number + ' 行' : ' · 整页影像');
@@ -339,7 +363,7 @@ const EvidenceCompare = (() => {
         transcript.classList.add('compare-transcript'); quote.append(transcript);
       }
       sheet.replaceChildren(quote,open);
-      pageImage(fact).then(image => {
+      pageImage(fact,index).then(image => {
         frame.replaceChildren(drawExcerpt(image, rects));
       }).catch(() => {
         frame.replaceChildren(el('span','页图载入失败'));
@@ -398,5 +422,5 @@ const EvidenceCompare = (() => {
     use(focus || initial || pairs[0]);
     return root;
   }
-  return {presets, panel};
+  return {presets,panel,lineExcerpt};
 })();

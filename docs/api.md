@@ -9,6 +9,12 @@
 | `GET /showcase/{filename}` | 首页的三份合成原件，文件名为 `contract.pdf`、`acceptance.pdf`、`transfer.pdf`。可按资料索引复核 R7 案例的文件摘要。 |
 | `GET /workpaper/{id}`、`GET /w/{wid}/workpaper/{id}` | 校验版本及引文、发现参数，转入 `/app` 的相应底稿。旧的根路径片段书签和邀请链接在浏览器中转入相同工作区。 |
 
+## 验收原件的付款意见
+
+固定版底稿 `GET /api/cases/{id}/reports/{rev}` 自规则 `2026.11.25.25` 起使用 `policy.acceptance_reservations = acceptance-reservations-v3`。`report.graph.acceptance_reservation_sources.payment_opinions[]` 保留文书分册 `unit`、文件 `doc`、页码 `page`、原生行号 `line`、逐字引文 `quote` 和关联观察 `facts`。影像观察的行号为 `null`。原生文字可以直接构成逐字依据，此时 `facts` 可能为空。每条 `acceptance_payment_opinion` 边连接分册和留存原页。
+
+受影响的 H04 和已归期 H05 带有 `payment_opinion`。其中 `state` 为 `hold`（暂缓）、`conflict`（同一文书意见相反）、`assent`（原件载明同意）或 `unresolved`（有待解释）。`notes[].scope` 记录 `all`、`phase` 或 `unresolved`。`record_dates[]` 记录验收日期及其事实编号。`evidence` 关联范围、原页和意见，工作台只从本项已引用的依据定位。字段结构及本项状态可从离线证据包复核。[方法说明](audit-method.md#验收报告另有付款意见)
+
 ## 验收款付款条款的适用版本
 
 `GET /api/cases/{id}/reports/{rev}` 返回固定版本。规则 `2026.11.25.24` 使用 `policy.quality_addenda = contract-addendum-v4`。协议出现付款条款变更时，`report.graph.quality_addenda.payments` 保存所涉原合同和补充协议的页、印刷行及关联事实。`payment_amendment_basis` 从文书连至原页。旧版底稿按各自存档的数据和规则展示、复算。

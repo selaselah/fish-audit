@@ -157,6 +157,7 @@ function performanceOverview(findings, graph) {
         button.tabIndex = i===position ? 0 : -1;
         list.children[i].hidden = i!==position;
       });
+      list.children[position].querySelector('.proof-opinion:not([hidden])')?.dispatchEvent(new Event('show-opinion'));
     }
     buttons.forEach((button,i)=>{
       button.addEventListener('click',()=>select(i));

@@ -1,5 +1,16 @@
 # 合成财会审计演练
 
+## 终验报告和付款意见
+
+运行以下命令生成四套水印原件，分别演练全部暂缓、单期暂缓、同一期意见相反以及同意支付但实测超限。加 `--run` 通过本机服务上传到配置的模型，核对原件后模拟签字栏核图。可以用 `--cases phase conflict` 选取场景。
+
+```sh
+server/.venv/bin/python docs/samples/final_payment_opinions.py --run-id final-opinion-demo
+server/.venv/bin/python docs/samples/final_payment_opinions.py --run-id final-opinion-demo --run
+```
+
+每一期的预期结果和固定底稿列在[本机验收记录](../acceptance.md#终验合格与付款能否放行)。
+
 ## 验收款新增收票前提
 
 以下命令生成四套采购原件并逐案提交真实模型。四套采用相同的采购及终验条款，合同号各异，第二期均为 60%。协议生效日、买方签收记录和一方的签章状态分别变化。去掉 `--run` 只生成带水印的文件，`--cases earlier same_day` 可选择情形。
