@@ -100,6 +100,8 @@ function performanceOverview(findings, graph) {
     const sum=findings.find(f=>f.stage_payments && sameStage(f));
     if (sum) results.append(performanceJump(sum,'本期回单合计'));
     row.append(box('phase-contract',source,el('q',stage.clause)),results);
+    const evidence=PhaseEvidence.panel(phase,matched,findings,graph);
+    if (evidence) row.append(evidence);
     const authority=authorityPairs.find(p=>(!p.stageRef || p.stageRef===stage.clause_ref)
       && [p.left.id,p.right.id].every(ref=>phase.evidence.includes(ref)));
     if (authority) {
@@ -129,21 +131,23 @@ function performanceOverview(findings, graph) {
     choice.type = 'button';
     choice.id = 'phase-choice-'+phase.id;
     choice.dataset.phaseChoice = phase.id;
-    choice.dataset.state = phase.status;
+    const state=PhaseEvidence.combined([phase,...matched,...(sum?[sum]:[])]);
+    choice.dataset.state = state;
     choice.setAttribute('role','tab'); choice.setAttribute('aria-controls',row.id);
-    choice.setAttribute('aria-label',heading+'，'+statusName(phase.status));
-    choice.append(el('span',stage.name),el('strong',stage.share ? stage.share+'%' : '比例待核'),tag(phase.status));
+    choice.append(el('span',stage.name),el('strong',stage.share ? stage.share+'%' : '比例待核'),tag(state),
+      el('span','。付款条件'+statusName(phase.status)+(matched.length?'，实付时点'+statusName(PhaseEvidence.combined(matched)):''),'visually-hidden'));
     row.setAttribute('aria-labelledby',choice.id);
     choices.append(choice);
     list.append(row);
   }
   if (phases.length) {
     const buttons = [...choices.children];
-    function select(index) {
+    function select(position) {
+      index.activePhase=phases[position].id;
       buttons.forEach((button,i)=>{
-        button.setAttribute('aria-selected',String(i===index));
-        button.tabIndex = i===index ? 0 : -1;
-        list.children[i].hidden = i!==index;
+        button.setAttribute('aria-selected',String(i===position));
+        button.tabIndex = i===position ? 0 : -1;
+        list.children[i].hidden = i!==position;
       });
     }
     buttons.forEach((button,i)=>{
@@ -154,13 +158,15 @@ function performanceOverview(findings, graph) {
         event.preventDefault(); select(to); buttons[to].focus();
       });
     });
-    select(Math.max(0,phases.findIndex(phase=>phase.status!=='ok')));
+    const priority=PhaseEvidence.combined(buttons.map(b=>({status:b.dataset.state})));
+    const remembered=phases.findIndex(p=>p.id===index.activePhase);
+    select(remembered>=0?remembered:Math.max(0,buttons.findIndex(b=>b.dataset.state===priority)));
     const shares = phases.map(f=>Number(f.stage.share));
     if (plan?.status==='ok' && shares.every(n=>Number.isFinite(n) && n>0) && Math.abs(shares.reduce((a,b)=>a+b,0)-100)<.000001) {
       const bar=box('share-strip');
       bar.setAttribute('aria-hidden','true');
       for (const [i,share] of shares.entries()) {
-        const segment=el('span'); segment.dataset.state=phases[i].status;
+        const segment=el('span'); segment.dataset.state=buttons[i].dataset.state;
         segment.style.flexGrow=String(share);
         bar.append(segment);
       }

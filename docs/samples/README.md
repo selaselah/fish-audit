@@ -268,3 +268,7 @@ server/.venv/bin/python docs/samples/quality_reinspection.py --run --cases parti
 ```
 
 `server/.venv/bin/python docs/samples/quality_image_notes.py --run` 从同一张水印原页生成 JPEG 和无文字层的扫描 PDF，分别上传工作台。脚本只模拟核对编号栏“0042”及其同页说明。两个任务用于查看影像取证，每案仅含复验报告。可用 `node frontend/tests/workspace.mjs --quality-image-case 案件编号` 在 Chrome 的桌面和手机宽度从编号跳到原始读图说明。
+
+### 合同另约定验收款须先收票
+
+运行 `server/.venv/bin/python docs/samples/receipt_before_payment.py` 生成四套水印资料。加 `--run` 会上传至本机 8000 端口，使用项目配置的多模态模型，并按生成件原页核验模拟签章。可用 `--cases invoice_only paid_early before_payment different` 选取情形，用 `--run-id` 标识独立的一次演练。默认四笔均比较 H04 现时条件和 H05 回单付款时点。[原件字段与运行结果](../acceptance.md#2026-11-25--验收款收票前提与实付日期)

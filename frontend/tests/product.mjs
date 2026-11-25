@@ -48,6 +48,28 @@ export async function checkProduct({root,call,evaluate,wait}) {
     ['#temperature-readings dl > :last-child small','#sheet-acceptance'],
     ['.total strong','.total'],['.dial-share','.dial-share'],['.dial-label','.dial-label']
   ]) await checkTextContrast(evaluate,selector,surface);
+  const dates=select('.ledger-switch [aria-controls=sample-dates]');
+  await evaluate(dates+'.focus()');
+  await call('Input.dispatchKeyEvent',{type:'keyDown',key:'End',code:'End'});
+  await call('Input.dispatchKeyEvent',{type:'keyUp',key:'End',code:'End'});
+  assert.ok(await evaluate('!document.querySelector("#sample-dates").hidden && document.querySelector("#sample-installments").hidden'));
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".sample-dates a")].map(a=>[a.querySelector("time").dateTime,a.pathname])'),
+    [['2026-09-01','/showcase/contract.pdf'],['2026-09-20','/showcase/acceptance.pdf'],['2026-09-21','/showcase/transfer.pdf']]);
+  for (const width of [1440,390,320]) {
+    await call('Emulation.setDeviceMetricsOverride',{width,height:width<600?844:900,deviceScaleFactor:1,mobile:width<600});
+    assert.ok(await evaluate('document.querySelector("#sample-dates").scrollWidth<=document.querySelector("#sample-dates").clientWidth+1'));
+    if (width!==320 && process.env.AUDIT_UI_SHOTS) {
+      await evaluate('document.querySelector(".phase-ledger").scrollIntoView({block:"center",behavior:"instant"})');
+      const clip=await evaluate('(()=>{const r=document.querySelector(".phase-ledger").getBoundingClientRect();return {x:r.x+scrollX,y:r.y+scrollY,width:r.width,height:r.height,scale:1}})()');
+      await capture(call,'sample-dates-'+width,clip);
+    }
+  }
+  for (const selector of ['.sample-dates time','.sample-dates .flagged span small'])
+    await checkTextContrast(evaluate,selector,'.phase-ledger');
+  await checkTextContrast(evaluate,'.ledger-switch [aria-pressed=true]');
+  await call('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+  await evaluate(select('.ledger-switch [aria-controls=sample-installments]')+'.click()');
+  assert.ok(await evaluate('document.querySelector("#sample-dates").hidden && !document.querySelector("#sample-installments").hidden'));
   const readingSwitch = '.reading-switch';
   assert.ok(await evaluate('!document.querySelector(".reading-switch").hidden && !document.querySelector("#temperature-readings").hidden'));
   assert.deepEqual(await evaluate('[...document.querySelectorAll("#temperature-readings dd a")].map(a=>[a.textContent.trim(),a.pathname])'),
@@ -194,6 +216,7 @@ export async function checkReviewDesign({root,call,evaluate,wait}, caseId) {
   await evaluate('document.activeElement.blur()');
   await evaluate('Promise.all(document.getAnimations().filter(a=>a.effect.getTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{}))).then(()=>true)');
   const board=await (await fetch(root+'/api/inbox?view=board&q='+encodeURIComponent('合成演练'))).json();
+  await wait('performance.getEntriesByType("resource").some(r=>{const u=new URL(r.name);return u.pathname==="/api/inbox" && u.searchParams.get("q")==="合成演练" && u.searchParams.get("view")==="board"}) && !!document.querySelector(".verdict-board")','filtered board has finished loading');
   const buckets=Object.entries(board.lanes).filter(([id,lane])=>id!=='pending' || lane.total);
   for (const [id,lane] of buckets) {
     const selector=selectLane(id);

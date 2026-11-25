@@ -9,7 +9,7 @@ import {createHash} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {once} from 'node:events';
 import {checkProduct, checkReviewDesign} from './product.mjs';
-import {checkEvidenceCompare,checkMandateCompare} from './evidence-compare.mjs';
+import {checkEvidenceCompare,checkMandateCompare,checkPhaseEvidence} from './evidence-compare.mjs';
 
 const scratch = await mkdtemp(join(tmpdir(), 'fish-ui-'));
 const socket = createServer().listen(0, '127.0.0.1');
@@ -47,11 +47,12 @@ const performanceCase = caseArgument('--performance-case');
 const designCase = caseArgument('--design-case');
 const compareCase = caseArgument('--compare-case');
 const mandateCase = caseArgument('--mandate-case');
+const phaseEvidenceCase = caseArgument('--phase-evidence-case');
 const qualityImageCase = caseArgument('--quality-image-case');
 const reinspectionGap = caseArgument('--reinspection-gap-case');
 const brokenPayment = caseArgument('--payment-source-case');
 const waitingCase = caseArgument('--waiting-case');
-const seeded = [product,designCase,compareCase,mandateCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+const seeded = [product,designCase,compareCase,mandateCase,phaseEvidenceCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
 const root = product ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
@@ -121,6 +122,8 @@ try {
     await checkProduct({root,call,evaluate,wait});
   } else if (designCase) {
     await checkReviewDesign({root,call,evaluate,wait},designCase);
+  } else if (phaseEvidenceCase) {
+    await checkPhaseEvidence({root,call,evaluate,wait},phaseEvidenceCase);
   } else if (mandateCase) {
     await checkMandateCompare({root,call,evaluate,wait},mandateCase);
   } else if (compareCase) {

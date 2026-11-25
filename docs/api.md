@@ -173,6 +173,13 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
   -F 'files=@验收照片.jpg' http://127.0.0.1:8000/api/cases
 ```
 
+
+## 明列的分期收票条件
+
+策略字段 `invoice_receipt_conditions` 标识这项程序的版本。有相关约定时，`graph.invoice_receipt_sources.lines` 留存文件、逻辑资料、页码、文字行号、原文和对应事实编号。`stage_invoice_clause` 将条款连到原页。某行可直接来自原件文字层，此时 `facts` 可为空，页面按实际行号展示依据。
+
+受约束的 H04 及已归入该期的 H05 返回 `invoice_receipt`。`scope_clear` 表示本程序已辨明条款及适用期次。`invoice` 记录票号、开票日和原行引用。`receipt` 记录登记票号、收票日、收票方签章及对应引文。读到的日期和票号也可能属于待核记录，读取时需同时检查各自的 `status`。影响收票认定的附注见 `qualifications`，实付时点取 H05 本身的状态。材料中另有合法发票、足额、期限等前提，或票种及收票途径超出已支持的格式时，由审计员核查相应原件。[规则与适用范围](audit-method.md#合同约定收票后才支付某期款项)
+
 ## 逐页进度与资料预览
 
 `GET /api/ready` 是公开的就绪探测接口。任务线程运行且数据库可读时，响应为 `{"status":"ready","mode":"local"}` 或企业模式 `saas`。未就绪时返回 HTTP 503，`component` 为 `worker`、`database` 或 `database_write`。后者表明任务线程遇到数据库写锁，正在原事务开始或提交的位置等待。前台操作遇到持续写入占用时会返回 503，调用方可在解除占用后重试。在排队或处理中的任务详情内，`waiting_for_database: true` 用于显示这个等待状态。

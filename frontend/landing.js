@@ -54,6 +54,26 @@ if (!restoreWorkspaceLink()) {
   selectReading(readings[0]);
   readingSwitch.hidden = false;
 
+  const ledgerSwitch=document.querySelector('.ledger-switch');
+  const ledgerModes=[...ledgerSwitch.querySelectorAll('button')];
+  function selectLedger(button) {
+    for (const choice of ledgerModes) {
+      const selected=choice===button;
+      choice.setAttribute('aria-pressed',String(selected));
+      document.getElementById(choice.getAttribute('aria-controls')).hidden=!selected;
+    }
+  }
+  for (const [index,button] of ledgerModes.entries()) {
+    button.addEventListener('click',()=>selectLedger(button));
+    button.addEventListener('keydown',event=>{
+      if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+      event.preventDefault();
+      const next=ledgerModes[event.key==='Home'?0:event.key==='End'?ledgerModes.length-1:1-index];
+      selectLedger(next); next.focus();
+    });
+  }
+  ledgerSwitch.hidden=false;
+
   const phases=[...document.querySelectorAll('.phase-ledger .phase')];
   const shares=phases.map(p=>Number.parseFloat(p.querySelector('.phase-share').textContent));
   const dial=document.querySelector('.phase-dial');

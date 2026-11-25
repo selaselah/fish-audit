@@ -45,6 +45,12 @@ const EvidenceCompare = (() => {
       result.sort((a,b)=>({risk:0,missing:1}[a.status]??2)-({risk:0,missing:1}[b.status]??2));
       add('signatures', '双方签署', unique('buyer_signature', contract), unique('seller_signature', contract));
     }
+    const gate=finding.invoice_receipt;
+    if (gate) {
+      const byRef=ref=>facts.find(f=>f.id===ref && finding.evidence.includes(ref));
+      add('receipt-number','发票与签收登记票号',byRef(gate.invoice.number_ref),byRef(gate.receipt.number_ref));
+      if (finding.rule==='H05') add('receipt-payment-date','收票与实付日期',byRef(gate.receipt.date_ref),unique('paid_on',kinds.bank_receipt));
+    }
     if (finding.rule === 'H05' && finding.stage) {
       const clause = facts.find(f => f.id === finding.stage.clause_ref);
       add('payment', '付款条款与回单', clause, unique('paid_on', kinds.bank_receipt));

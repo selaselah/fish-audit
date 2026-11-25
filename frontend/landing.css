@@ -292,3 +292,24 @@ h1 em { color: var(--accent); font-style: normal; }
   .specimen .file-tabs button { padding-inline:9px; gap:4px; }
   .settlement-summary .total strong { font-size:clamp(1.65rem,7vw,2.25rem); }
 }
+.ledger-switch { display:flex; width:fit-content; margin:12px clamp(18px,2.4vw,34px) 0; padding:3px; border:1px solid var(--line); border-radius:7px; background:var(--canvas); }
+.ledger-switch button { min-height:34px; padding:3px 13px; border:1px solid transparent; border-radius:4px; background:transparent; color:var(--muted); font:550 .84rem var(--font-ui); cursor:pointer; }
+.ledger-switch button[aria-pressed=true] { background:var(--surface); border-color:var(--line); color:var(--accent-hover); box-shadow:0 1px 3px #162c5415; }
+.sample-dates { list-style:none; margin:8px 0 0; padding:0 clamp(18px,2.4vw,34px) 12px; }
+.sample-dates li + li { border-top:1px solid var(--line); }
+.sample-dates a { display:grid; grid-template-columns:5.2rem 1fr auto; gap:10px; align-items:center; padding:16px 8px; color:var(--ink); text-decoration:none; border-radius:4px; }
+.sample-dates a:hover,.sample-dates a:focus-visible { background:var(--canvas); }
+.sample-dates time { font:550 clamp(1.75rem,3vw,2.7rem)/1.05 var(--font-number); letter-spacing:-.05em; color:var(--accent-hover); font-variant-numeric:tabular-nums; }
+.sample-dates small { display:block; font:450 .82rem/1.4 var(--font-ui); color:var(--muted); letter-spacing:0; }
+.sample-dates time small { margin-bottom:3px; font:520 .74rem/1.15 var(--font-number); }
+.sample-dates strong { font-size:1.05rem; }
+.sample-dates .flagged span small { color:var(--issue); }
+.sample-dates i { margin-right:4px; color:var(--accent); }
+.ledger-switch[hidden],.sample-dates[hidden],#sample-installments[hidden] { display:none; }
+@media (max-width:600px) { .ledger-switch button { min-height:44px; } .sample-dates a { grid-template-columns:3.7rem 1fr auto; } }
+
+.sample-dates a:is(:hover,:focus-visible) strong { text-decoration:underline; text-underline-offset:.22em; }
+@media (prefers-reduced-motion:no-preference) {
+  .sample-dates a i { transition:transform .14s ease-out; }
+  .sample-dates a:is(:hover,:focus-visible) i { transform:translate(2px,-2px); }
+}

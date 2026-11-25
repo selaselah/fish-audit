@@ -264,3 +264,85 @@ export async function checkMandateCompare({root,call,evaluate,wait},cid) {
   }
   console.log('PASS · Signed mandate, source rows, six viewports and all affected installments · '+cid+' R'+task.rev);
 }
+
+export async function checkPhaseEvidence({root,call,evaluate,wait},cid) {
+  const api=root+'/api/cases/'+cid, task=await (await fetch(api)).json();
+  assert.ok(task.title.startsWith('合成演练 · '));
+  const {report}=await (await fetch(api+'/reports/'+task.rev)).json();
+  const phase=report.findings.find(f=>f.rule==='H04' && f.invoice_receipt);
+  const payment=report.findings.find(f=>f.rule==='H05' && f.invoice_receipt);
+  assert.ok(phase && payment);
+  const gate=phase.invoice_receipt, facts=new Map(report.graph.facts.map(f=>[f.id,f]));
+  const selector='[data-phase-finding="'+phase.id+'"] .phase-evidence';
+  const node=s=>'document.querySelector('+JSON.stringify(s)+')';
+  const get=key=>node(selector+' '+key);
+  await call('Page.navigate',{url:root+'/workpaper/'+cid+'?rev='+task.rev});
+  await wait(node(selector)+'?.children.length>0','issued phase evidence');
+  if (payment.status==='risk' || phase.status!=='ok')
+    assert.equal(await evaluate(node('.phase-choice[aria-selected=true]')+'.dataset.phaseChoice'),phase.id);
+  await evaluate(node('[data-phase-choice="'+phase.id+'"]')+'.click()');
+  if (payment.status==='risk') {
+    assert.equal(await evaluate(node(selector)+'.dataset.mode'),'timeline');
+    assert.equal(await evaluate(get('.proof-count')+'.textContent'),'付款早于收票 1 天');
+  }
+  for (const width of [1440,1024,820,768,390,320]) {
+    await call('Emulation.setDeviceMetricsOverride',{width,height:width<600?844:900,deviceScaleFactor:1,mobile:width<600});
+    for (const mode of ['checks','timeline']) {
+      await evaluate(get('[data-mode="'+mode+'"]')+'.click()');
+      assert.equal(await evaluate(get('[aria-pressed=true]')+'.dataset.mode'),mode);
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && '+node(selector)+'.scrollWidth<='+node(selector)+'.clientWidth+1'),'fits '+width);
+      if (mode==='checks') {
+        for (const key of ['invoice','receipt'])
+          assert.equal(await evaluate(get('[data-check="'+key+'"]')+'.dataset.state'),gate[key].status);
+      } else {
+        const dates=await evaluate('[...'+node(selector)+'.querySelectorAll(".proof-event time")].map(t=>t.dateTime)');
+        assert.deepEqual(dates,[...dates].sort());
+        assert.ok(dates.includes('2026-09-18') && dates.includes('2026-09-21'));
+        if (process.env.AUDIT_UI_SHOTS && (width===1440 || width===390) && payment.status==='risk') {
+          await evaluate(node(selector)+'.closest(".performance-panel").scrollIntoView({block:"center"})');
+          await evaluate('document.fonts.ready.then(()=>true)');
+          const clip=await evaluate('(()=>{const b='+node(selector)+'.closest(".performance-panel").getBoundingClientRect();return {x:b.x+scrollX,y:b.y+scrollY,width:b.width,height:b.height,scale:1}})()');
+          const shot=await call('Page.captureScreenshot',{format:'png',clip,captureBeyondViewport:true});
+          await writeFile(join(process.env.AUDIT_UI_SHOTS,'receipt-timeline-'+width+'.png'),Buffer.from(shot.data,'base64'));
+        }
+      }
+    }
+  }
+  await evaluate(get('[data-mode=checks]')+'.click()');
+  if (gate.receipt.status==='ok') {
+    await evaluate(get('[data-check=receipt]')+'.click()');
+    await wait('document.querySelector("#page-dialog")?.open && document.querySelector(".located[data-fact]")?.dataset.fact==='+JSON.stringify(gate.receipt.seal_ref),'buyer seal on the receipt');
+    await evaluate(node('#page-dialog [data-close]')+'.click()');
+  } else {
+    const status=await evaluate(get('[data-check=receipt] .tag')+'.textContent');
+    assert.equal(status,gate.receipt.number_ref?'票号不符':'待补签收');
+  }
+  await evaluate(get('[data-mode=timeline]')+'.click()');
+  await evaluate(get('[data-event=paid]')+'.focus()');
+  await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r',unmodifiedText:'\r'});
+  await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+  const paid=payment.evidence.map(id=>facts.get(id)).find(f=>f?.field==='paid_on');
+  await wait('document.querySelector("#page-dialog")?.open && document.querySelector(".located[data-fact]")?.dataset.fact==='+JSON.stringify(paid.id),'keyboard opens issued payment date');
+  await wait('document.querySelector("#page-dialog .page-image")?.naturalWidth>0','verified original image loaded');
+  assert.equal(await evaluate('new URL(document.querySelector("#page-dialog .source-tools a").href).searchParams.get("rev")'),String(task.rev));
+  await evaluate(node('#page-dialog [data-close]')+'.click()');
+  await evaluate(get('.proof-clauses summary')+'.click()');
+  const clause=gate.clauses[0];
+  assert.equal(await evaluate(get('.proof-line q')+'.textContent'),clause.quote);
+  await evaluate(get('.proof-line button')+'.click()');
+  await wait('document.querySelector("#page-dialog")?.open && [...document.querySelectorAll(".located blockquote")].some(q=>q.textContent==='+JSON.stringify(clause.quote)+')','printed rider or clause');
+  await evaluate(node('#page-dialog [data-close]')+'.click()');
+  for (const [key,expected] of [['receipt-number',[gate.invoice.number_ref,gate.receipt.number_ref]],
+                               ['receipt-payment-date',[gate.receipt.date_ref,paid.id]]]) {
+    if (expected.some(x=>!x)) {
+      assert.equal(await evaluate(get('[data-pair="'+key+'"]')),null); continue;
+    }
+    await evaluate(get('[data-pair="'+key+'"]')+'.click()');
+    await wait('document.querySelectorAll(".compare-leaf canvas").length===2','two original pages');
+    assert.deepEqual(await evaluate('[...document.querySelectorAll(".compare-leaf")].map(n=>n.dataset.fact)'),expected);
+    await evaluate(node('#tabs [data-tab=report]')+'.click()');
+    assert.equal(await evaluate(node('.phase-choice[aria-selected=true]')+'.dataset.phaseChoice'),phase.id);
+    assert.equal(await evaluate(node(selector)+'.dataset.mode'),'timeline');
+  }
+  console.log('PASS · R'+task.rev+' · '+phase.status+'/'+payment.status+' · receipt checklist, chronological dates, original rows and paired pages at six widths');
+}
