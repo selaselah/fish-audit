@@ -8,10 +8,12 @@ import equipment_exchanges
 
 LEGACY = "printed-equipment-models-v1"
 RETEST_FORMAT = "printed-equipment-models-v2"
-FORMAT = "printed-equipment-models-v3"
+EXCHANGE_FORMAT = "printed-equipment-models-v3"
+FORMAT = "printed-equipment-models-v4"
 SINCE = "2026.11.25.13"
 RETEST_SINCE = "2026.11.25.14"
 EXCHANGE_SINCE = "2026.11.25.15"
+REVIEW_SINCE = "2026.11.25.16"
 ORDERED = {"约定设备型号", "合同约定型号", "约定型号", "采购设备型号", "订购型号", "约定规格型号"}
 RECEIVED = {"实收设备型号", "实收型号", "实收规格型号", "实际交付型号", "实际验收型号", "本次验收型号", "复验实收型号"}
 MODEL = re.compile(r"型号|机型|换型|改型")
@@ -47,7 +49,8 @@ def sources(graph, read_text, version=FORMAT):
     for fact in graph["facts"]:
         facts_by_page[fact["doc"], fact["page"]].append(fact)
     gaps = {(g["doc"], g["page"]) for g in graph["gaps"] if g.get("quality") in ("partial", "unreadable")}
-    pages, lines, originals = [], [], []
+    pages, lines, originals, review_holds = [], [], [], []
+    include_exchange = version in (EXCHANGE_FORMAT, FORMAT)
     for node in graph["nodes"]:
         if node["type"] != "page":
             continue
@@ -60,10 +63,15 @@ def sources(graph, read_text, version=FORMAT):
         page_lines = []
         for fact in facts_by_page[doc, page]:
             loc = fact.get("source_line") or {}
-            if native and loc.get("rects") and loc["text"] == fact["quote"]:
+            exact = native and loc.get("rects") and loc["text"] == fact["quote"]
+            kind, value = source_kind(fact["quote"])
+            if (version == FORMAT and fact["status"] == "disputed" and place["role"] in ("contract", "acceptance", "reinspection")
+                    and (fact["field"] == "equipment_model" or kind in ("ordered", "received"))):
+                review_holds.append({**place, "line": loc["number"] if exact else None,
+                                     "quote": fact["quote"], "facts": [fact["id"]]})
+            if exact:
                 anchored[loc["number"], loc["text"]].append(fact["id"])
                 continue
-            kind, value = source_kind(fact["quote"])
             if kind or fact["field"] == "equipment_model":
                 page_lines.append({**place, "line": None, "kind": kind or "unassigned", "value": value,
                                    "quote": fact["quote"], "facts": [fact["id"]]})
@@ -78,14 +86,17 @@ def sources(graph, read_text, version=FORMAT):
                     page_lines.append({**place, "line": number, "kind": kind, "value": value,
                                        "quote": quote, "facts": anchored[number, quote]})
         coverage = {**place, "native": native, "text_only": node.get("clause_text_only") is True, "incomplete": (doc,page) in gaps}
-        if version==FORMAT:
+        if include_exchange:
             originals.append((coverage,raw,facts_by_page[doc,page],anchored))
         if page_lines or place["role"] in ("contract", "acceptance", "reinspection", "contract_addendum", "unknown", equipment_exchanges.TITLE):
             pages.append(coverage)
         lines.extend(page_lines)
     active = any(MODEL.search(r["quote"]) and r["role"] in ("contract", "acceptance", "reinspection", "contract_addendum", "unknown") for r in lines) or any(g.get("field") == "equipment_model" for g in graph["gaps"])
-    exchange = equipment_exchanges.sources(originals) if version==FORMAT else None
-    ledger = {"format": version, "pages": pages if active or exchange else [], "lines": lines if active or exchange else []}
+    exchange = equipment_exchanges.sources(originals) if include_exchange else None
+    active = active or exchange or review_holds
+    ledger = {"format": version, "pages": pages if active else [], "lines": lines if active else []}
+    if review_holds:
+        ledger["review_holds"] = review_holds
     if exchange:
         ledger["exchange"] = exchange
     return ledger
@@ -120,6 +131,9 @@ def assess(graph, contract, receipts, *, effective):
         return (row["unit"] in forms or exchange and row["role"] in ("acceptance","reinspection") and
                 equipment_exchanges.row_kind(row["quote"])[0]=="exchange_number")
     by_unit = defaultdict(list)
+    holds_by_unit = defaultdict(list)
+    for hold in ledger.get("review_holds", []):
+        holds_by_unit[hold["unit"]].append(hold)
     for row in lines:
         if not physical_record(row):
             by_unit[row["unit"]].append(row)
@@ -142,6 +156,9 @@ def assess(graph, contract, receipts, *, effective):
         rows = by_unit[doc.unit]
         received = exact_line(rows, "received")
         reasons = global_reasons.copy()
+        holds = [*holds_by_unit[contract.unit], *holds_by_unit[doc.unit]]
+        if holds:
+            reasons.append("型号引文已有人工异议，须复核原件并处理该项异议后才能判断约定与实收型号是否相符")
         association = {"matches": identity(contract, doc), "contract": contract.evidence(*LINK_KEYS),
                        "receipt": doc.evidence(*LINK_KEYS)}
         if not association["matches"]:
@@ -168,10 +185,13 @@ def assess(graph, contract, receipts, *, effective):
         units = {contract.unit, doc.unit}
         linked_pages = pages if global_reasons else [p for p in pages if p["unit"] in units]
         linked_lines = lines if global_reasons else [r for r in lines if r["unit"] in units]
-        records.append({"unit": doc.unit, "status": status, "detail": detail, "received": received,
-                        "comparison": comparison, "reasons": reasons, "identity": association,
-                        "evidence": list(dict.fromkeys([*evidence(linked_pages, linked_lines),
-                                                        *association["contract"], *association["receipt"]]))})
+        record = {"unit": doc.unit, "status": status, "detail": detail, "received": received,
+                  "comparison": comparison, "reasons": reasons, "identity": association,
+                  "evidence": list(dict.fromkeys([*evidence(linked_pages, linked_lines), *evidence(holds, holds),
+                                                  *association["contract"], *association["receipt"]]))}
+        if holds:
+            record["review_holds"] = holds
+        records.append(record)
     status = max((r["status"] for r in records), key=RANK.get, default="missing")
     if not records:
         detail = "须取得与本合同对应的验收原件，核对实收设备型号。"
@@ -260,12 +280,18 @@ def verify(report, read_text, *, signing=False):
             raise ValueError("旧版验收未逐项核对所列设备型号，请按现行程序重审后签收。")
         return
     version = policy.get("version", "")
-    expected = FORMAT if version >= EXCHANGE_SINCE else RETEST_FORMAT if version >= RETEST_SINCE else LEGACY
+    expected = (FORMAT if version >= REVIEW_SINCE else EXCHANGE_FORMAT if version >= EXCHANGE_SINCE
+                else RETEST_FORMAT if version >= RETEST_SINCE else LEGACY)
     if (marker != expected or policy.get("version", "") < SINCE or graph.get("equipment_model_sources") != sources(graph, read_text, marker)
             or [e for e in graph["edges"] if e["type"] in ("equipment_model_comparison","equipment_exchange_returned","equipment_exchange_received")] != edges(report["findings"])):
         raise ValueError("约定与实收型号的原行、单据或图谱关系与归档不符")
-    if signing and marker!=FORMAT and sources(graph,read_text).get("exchange"):
-        raise ValueError("旧版含设备换货交接或所据单号，请按现行退换与复验程序重审后签收。")
+    if signing and marker != FORMAT:
+        current = sources(graph, read_text)
+        if marker in (LEGACY, RETEST_FORMAT) and current.get("exchange"):
+            raise ValueError("旧版含设备换货交接或所据单号，请按现行退换与复验程序重审后签收。")
+        held_units = {h["unit"] for h in current.get("review_holds", [])}
+        if any(f.get("equipment_models") and held_units.intersection(f["scope"]) for f in report["findings"]):
+            raise ValueError("旧版底稿所据设备型号有人工异议，请按现行程序重审后签收。")
     if signing and marker == LEGACY and any(f.get("equipment_models") and f.get("reinspection") and
                                             any(r["comparison"] == "different" for r in f["equipment_models"]["records"])
                                             for f in report["findings"]):

@@ -289,6 +289,17 @@ try {
       assert.equal(await evaluate(panel+'.open'),equipment.status!=='ok');
       await keepEvidenceOpen(panel);
       await verifyRemarks(panel,modelLines);
+      const holds=report.graph.equipment_model_sources.review_holds || [];
+      assert.equal(await evaluate(panel+'.querySelectorAll("[data-model-review]").length'),holds.length);
+      for (const hold of holds) {
+        const fact=report.graph.facts.find(f=>f.id===hold.facts[0]);
+        const review=panel+'.querySelector('+JSON.stringify('[data-model-review="'+fact.id+'"]')+')';
+        assert.ok(await evaluate(review+'.textContent.includes('+JSON.stringify(fact.attestation.note)+')'));
+        await evaluate(review+'.querySelector("button").click()');
+        await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.dataset.fact==='+
+          JSON.stringify(fact.id)+' && document.querySelector("#page-dialog img")?.naturalWidth>0','disputed model on its original page');
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
       if (equipment.exchange) {
         const view='document.querySelector(".equipment-exchange")';
         const source=report.graph.equipment_model_sources.exchange;

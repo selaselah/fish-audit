@@ -624,6 +624,14 @@ function equipmentModelsPanel(check,graph) {
     section.append(el('h4',roleLabel),el('span',name,'small'));
     if (model || record || first.role==='contract') section.append(el('strong',model?.value || '型号待核','model-code'));
     if (record) section.append(tag(record.status));
+    for (const hold of (graph.equipment_model_sources.review_holds || []).filter(h=>h.unit===unit)) {
+      const fact=facts.get(hold.facts[0]);
+      const review=box('batch-source',tag('disputed'),el('strong',fact.attestation.reviewer || '人工核图'));
+      if (fact.attestation.note) review.append(el('p',fact.attestation.note));
+      review.append(action('查看提出异议的型号引文',()=>openPage(hold.doc,hold.page,fact.id),'ref'));
+      review.dataset.modelReview=fact.id;
+      section.append(review);
+    }
     const cited=lines.filter(s=>s.unit===unit);
     for (const line of cited) section.append(reservationSource(line,graph,true));
     for (const p of originals.filter(p=>!model || !p.native || !p.text_only || p.incomplete)) {

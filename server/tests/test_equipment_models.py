@@ -3,11 +3,12 @@ import unittest
 
 from config import PERFORMANCE
 from controls import VERSION, conclusion, execute
-from equipment_models import LEGACY, edges, verify
+from equipment_models import EXCHANGE_FORMAT, EXCHANGE_SINCE, LEGACY, edges, sources, verify
 from performance import verify_findings
 from test_delivery_batches import contract as batch_contract, receipt as batch_receipt
 from test_performance import BANK_DOC, CONTRACT, RECEIPT, WARRANTY, material
 from test_reinspection import FINAL, FIX, OLD
+from verify import verify_model_review_history
 
 
 ORDER = ("equipment_model", "约定设备型号", "YL-C4")
@@ -22,7 +23,121 @@ def findings(graph):
     return next(f for f in checks if f["rule"] == "H02"), [f for f in checks if f["rule"] == "H04"], checks
 
 
+def reviewed_material(groups, index, *, decision="dispute", edit=None, label="实收设备型号"):
+    position = next(n for n, row in enumerate(groups[index-1], 1) if row[1] == label)
+    ref = f"d{index:02d}/p1/f{position}"
+    review = {"decision": decision, "reviewer": "演练审计员", "note": "合成核图记录"}
+    if decision == "confirm":
+        review["source_check"] = {"fixture": True}
+    return material(groups, edit=edit, attestations={ref: review}), ref
+
+
 class EquipmentModelTests(unittest.TestCase):
+    def test_dispute_suspends_both_comparisons_without_losing_the_original_or_other_findings(self):
+        for label_field, value in (("equipment_model", "YL-C4"), ("other", "YL-C2")):
+            groups = [CONTRACT+[ORDER], RECEIPT+[(label_field, "实收设备型号", value)], WARRANTY, BANK_DOC]
+            graph, ref = reviewed_material(groups, 2)
+            inspection, phases, checks = findings(graph)
+            row, = inspection["equipment_models"]["records"]
+            hold, = row["review_holds"]
+            self.assertEqual((hold["doc"], hold["line"], hold["facts"], hold["quote"]),
+                             ("d02", len(groups[1]), [ref], "实收设备型号："+value))
+            self.assertEqual((row["received"]["value"], row["comparison"], inspection["status"]),
+                             (value, "unresolved", "missing"))
+            self.assertIn(ref, row["evidence"])
+            self.assertEqual([s["status"] for s in phases], ["ok","missing","missing"])
+            self.assertTrue(all(ref in s["evidence"] for s in phases[1:]))
+            self.assertNotEqual(next(f for f in checks if f["rule"]=="H05")["status"], "ok")
+            self.assertFalse(edges(checks))
+
+        groups = [CONTRACT+[ORDER], RECEIPT+[received("YL-C4")], WARRANTY, BANK_DOC]
+        hot, _ = reviewed_material(groups, 2, edit=lambda i,f,l,v:"柜温8℃" if f=="measured_result" else v)
+        inspection, _, checks = findings(hot)
+        self.assertEqual((inspection["status"], conclusion(checks)["verdict"]), ("issue","reject"))
+        self.assertIn("8", inspection["detail"])
+        resolved, _ = reviewed_material(groups, 2, decision="confirm")
+        inspection, phases, checks = findings(resolved)
+        self.assertNotIn("review_holds", resolved["equipment_model_sources"])
+        self.assertEqual((inspection["status"], conclusion(checks)["verdict"]), ("ok","pass"))
+        self.assertTrue(all(s["status"]=="ok" for s in phases))
+
+    def test_dispute_follows_specific_batch_or_shared_contract(self):
+        groups = [batch_contract()+[ORDER], batch_receipt(1)+[received("YL-C4")],
+                  batch_receipt(2)+[received("YL-C4")], WARRANTY, BANK_DOC]
+        for index, label, expected in ((3, "实收设备型号", ["ok","ok","missing","missing"]),
+                                       (1, "约定设备型号", ["ok","missing","missing","missing"])):
+            graph, ref = reviewed_material(groups, index, label=label)
+            inspection, phases, checks = findings(graph)
+            self.assertEqual([s["status"] for s in phases], expected)
+            rows = inspection["equipment_models"]["records"]
+            self.assertEqual([r["status"] for r in rows], expected[1:3])
+            self.assertEqual([ref in r["evidence"] for r in rows], [s=="missing" for s in expected[1:3]])
+            self.assertEqual([e["to"] for e in edges(checks)], ["d02/p1"] if index==3 else [])
+        graph, _ = reviewed_material([*groups[:2], groups[2]+[("other","包装编号","P9")], *groups[3:]],
+                                     3, label="包装编号")
+        self.assertEqual(findings(graph)[0]["equipment_models"]["status"], "ok")
+        with_rider = [*groups[:2], groups[2]+[("other","附注","变更第二期付款条件")], *groups[3:]]
+        graph, _ = reviewed_material(with_rider, 3)
+        self.assertTrue(any(g.get("quote")=="附注：变更第二期付款条件" for g in graph["gaps"]))
+        self.assertNotEqual(findings(graph)[1][1]["status"], "ok")
+
+    def test_archived_dispute_is_checked_against_the_journal_at_the_selected_revision(self):
+        groups = [CONTRACT+[ORDER], RECEIPT+[received("YL-C4")], WARRANTY, BANK_DOC]
+        graph, ref = reviewed_material(groups, 2)
+        fact = next(f for f in graph["facts"] if f["id"]==ref)
+        fact["attestation"].update(fact=ref, rev=7)
+        pages = [{"doc": d["id"], "page": 1, "output": {"facts": [f for f in graph["facts"] if f["doc"]==d["id"]]}}
+                 for d in graph["documents"]]
+        report = {"graph": graph, "policy": VERSION, "calls": {"pages": pages}}
+        original = {"seq": 11, **fact["attestation"]}
+        later = {**original, "seq": 12, "rev": 8, "decision": "confirm", "note": "已重新核对"}
+        journal = {"attestations": [later, original], "amendments": []}
+        verify_model_review_history(report, 8, journal)
+        with self.assertRaises(ValueError):
+            verify_model_review_history(report, 9, journal)
+        forged = copy.deepcopy(report)
+        next(f for f in forged["graph"]["facts"] if f["id"]==ref)["attestation"]["note"]="伪造意见"
+        with self.assertRaises(ValueError):
+            verify_model_review_history(forged, 8, journal)
+        forged["graph"]["facts"] = [f for f in forged["graph"]["facts"] if f["id"]!=ref]
+        with self.assertRaises(ValueError):
+            verify_model_review_history(forged, 8, journal)
+
+    def test_dispute_ledger_and_historical_replay(self):
+        groups = [CONTRACT+[ORDER], RECEIPT+[received("YL-C4")], WARRANTY, BANK_DOC]
+        def read(doc, page):
+            return "\n".join(label+"："+value if label else value for _,label,value in groups[int(doc[1:])-1])
+        graph, _ = reviewed_material(groups, 2)
+        _, _, checks = findings(graph)
+        report = {"graph": graph, "policy": {**VERSION, "profile": PERFORMANCE}, "findings": checks}
+        verify(report, read)
+        verify_findings(report)
+        damaged = copy.deepcopy(report)
+        del damaged["graph"]["equipment_model_sources"]["review_holds"]
+        with self.assertRaises(ValueError):
+            verify(damaged, read)
+        damaged = copy.deepcopy(report)
+        next(f for f in damaged["findings"] if f["rule"]=="H02")["equipment_models"]["records"][0]["comparison"] = "match"
+        with self.assertRaises(ValueError):
+            verify_findings(damaged)
+        for decision in ("dispute", "confirm"):
+            with self.subTest(decision=decision):
+                graph, _ = reviewed_material(groups, 2, decision=decision)
+                graph["equipment_model_sources"] = sources(graph, read, EXCHANGE_FORMAT)
+                _, _, checks = findings(graph)
+                graph["edges"].extend(edges(checks))
+                for finding in checks:
+                    finding["version"] = EXCHANGE_SINCE
+                policy = {**VERSION, "profile": PERFORMANCE, "version": EXCHANGE_SINCE, "equipment_models": EXCHANGE_FORMAT}
+                old = {"graph": graph, "policy": policy, "findings": checks}
+                verify(old, read)
+                verify_findings(old)
+                if decision=="dispute":
+                    with self.assertRaisesRegex(ValueError, "异议"):
+                        verify(old, read, signing=True)
+                else:
+                    verify(old, read, signing=True)
+
     def test_exact_originals_distinguish_delivered_model_from_quality_and_cash(self):
         for value,status,verdict in (("YL-C4","ok","pass"), ("YL-C2","issue","reject"), ("YL-C*","missing","review"),
                                      ("YL-c4","missing","review"), ("YL-C 4","missing","review"), ("","missing","review")):

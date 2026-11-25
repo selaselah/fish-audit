@@ -21,13 +21,29 @@ INITIAL = OLD+[received("YL-C2"),("delivered_serials","验收设备编号",SENT)
 RETEST = FINAL+[received("YL-C4"),("delivered_serials","验收设备编号",GOT),("exchange_number","所据换货交接单号","HH-001")]
 
 
-def packet(exchange=FORM, *, initial=INITIAL, final=RETEST, contract=CONTRACT, extra=(), edit=None, omissions=()):
+def packet(exchange=FORM, *, initial=INITIAL, final=RETEST, contract=CONTRACT, extra=(), edit=None, omissions=(), attestations=None):
     bank=[(f,l,"2026-09-27" if f=="paid_on" else v) for f,l,v in BANK_DOC]
     return material([contract+[ORDER],initial,FIX,final,WARRANTY,bank,*([exchange] if exchange else []),*extra],
-                    edit=edit,omissions=omissions)
+                    edit=edit,omissions=omissions,attestations=attestations)
 
 
 class EquipmentExchangeTests(unittest.TestCase):
+    def test_disputed_model_blocks_closure_even_when_handover_lists_correspond(self):
+        originals = packet()
+        for doc in ("d02", "d04"):
+            fact = next(f for f in originals["facts"] if f["doc"]==doc and f["field"]=="equipment_model")
+            graph = packet(attestations={fact["id"]: {"decision": "dispute", "note": "合成异议"}})
+            inspection, phases, checks = findings(graph)
+            model = inspection["equipment_models"]
+            row = next(r for r in model["records"] if r["unit"]==doc)
+            self.assertEqual(row["comparison"], "unresolved")
+            self.assertEqual(inspection["reinspection"]["state"], "open")
+            self.assertEqual(model["exchange"]["status"], "risk")
+            self.assertNotEqual(next(c for c in model["exchange"]["checks"] if c["key"]=="models")["status"], "ok")
+            self.assertTrue(all(c["status"]=="ok" for c in model["exchange"]["checks"] if c["key"] in ("returned","received")))
+            self.assertEqual([s["status"]=="ok" for s in phases], [True,False,False])
+            self.assertFalse(any(e["to"]==doc+"/p1" for e in edges(checks) if e["type"]=="equipment_model_comparison"))
+
     def test_signed_exchange_reconciles_both_inventories_and_unlocks_final_inspection(self):
         g=packet()
         accepted,stages,checks=findings(g)

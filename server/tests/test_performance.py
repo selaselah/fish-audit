@@ -33,7 +33,7 @@ SIGN_FIELDS = {"buyer_signature","seller_signature","acceptance_signer","approva
                "buyer_agent_signature","seller_agent_signature","grant_signature"}
 
 
-def material(groups, edit=None, confirm=True, omissions=()):
+def material(groups, edit=None, confirm=True, omissions=(), *, attestations=None):
     docs, pages, signoffs = [], [], {}
     for i, rows in enumerate(groups,1):
         doc = f"d{i:02d}"
@@ -53,7 +53,7 @@ def material(groups, edit=None, confirm=True, omissions=()):
         pages.append(dict(doc=doc,number=1,sha256="page",text="\n".join(lines),
                           layer={"type":"text","clause_text_only":True,"lines":{str(j):[[0,.1,.9,.2]] for j in range(1,len(lines)+1)}},
                           extraction={"output":{"quality":"readable","facts":facts}}))
-    graph = build_graph(docs,pages,signoffs)
+    graph = build_graph(docs,pages,{**signoffs, **(attestations or {})})
     graph["profile"] = PERFORMANCE
     return graph
 

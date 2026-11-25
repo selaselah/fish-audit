@@ -223,8 +223,18 @@ def page_sources(graph,read_text,version=FORMAT):
             release_fields.add("warranty_defects")
         coverage+=covered_rows(graph,read_text,set(graph["documents_by_kind"].get("warranty",[])),
                               release_fields,release_field,"质保确认材料")
+        # A disputed model can still be located on a specific batch. Other notes on the page retain their scope checks.
+        model_rows=defaultdict(set)
+        for hold in graph.get("equipment_model_sources",{}).get("review_holds",[]):
+            kind,value=equipment_models.source_kind(hold["quote"])
+            if (hold["line"] is not None and equipment_models.valid_code(value)
+                    and (hold["role"],kind) in (("contract","ordered"),("acceptance","received"))):
+                model_rows[hold["unit"],hold["page"]].add((hold["line"],hold["quote"]))
         mixed=set()
         for p in coverage:
+            classified=model_rows.get((p["unit"],p["page"]))
+            if classified:
+                p["uncovered"]=[r for r in p["uncovered"] if (r["line"],r["quote"]) not in classified]
             p["text_only"]=pages[f"{p['doc']}/p{p['page']}"].get("clause_text_only") is True
             if not p["text_only"]:
                 mixed.add((p["doc"],p["page"]))

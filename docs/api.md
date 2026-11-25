@@ -9,6 +9,12 @@
 | `GET /showcase/{filename}` | 首页的三份合成原件，文件名为 `contract.pdf`、`acceptance.pdf`、`transfer.pdf`。可按资料索引复核 R7 案例的文件摘要。 |
 | `GET /workpaper/{id}`、`GET /w/{wid}/workpaper/{id}` | 校验版本及引文、发现参数，转入 `/app` 的相应底稿。旧的根路径片段书签和邀请链接在浏览器中转入相同工作区。 |
 
+## 设备型号的核图异议
+
+从规则 `2026.11.25.16` 起，`policy.equipment_models` 为 `printed-equipment-models-v4`。合同、验收或复验的型号引文仍有人工异议时，`graph.equipment_model_sources.review_holds[]` 指明对应的 `doc`、物理页 `page`、单据 `unit`、角色 `role`、原文 `quote` 与观察编号 `facts`。能逐字定位时附原行号 `line`。从观察的 `attestation` 可读取经办人、意见和操作版本。
+
+H02 在实际依赖该引文的 `equipment_models.records[]` 中保存相同的 `review_holds`，并记为 `comparison=unresolved`。图谱暂停出具这一对型号的比较关系。H04 各期与 H05 回单沿所依赖的验收继续判断。没有待处理的型号异议时省略 `review_holds`。旧版结果可按原规则复算，有未处理型号异议的旧版验收底稿申请通过签收时须先重审。
+
 ## 设备换货交接与最终复验
 
 规则 `2026.11.25.15` 使用 `printed-equipment-models-v3`。识别到设备换货交接原件或验收页所引交接单号时，`graph.equipment_model_sources.exchange` 保存候选单据及实际页行。每条原行包含物理文件、页码、行号、逐字引文和观察编号。影像中的引文按观察定位，`line` 为空。

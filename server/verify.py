@@ -25,7 +25,7 @@ from performance_versions import DATE_FORMATS
 from quality_labels import verify_report as verify_quality_numbers
 from quality_references import verify_report as verify_quality_references
 from acceptance_authority import verify_sources as verify_acceptance_authority
-from equipment_models import verify as verify_equipment_models
+from equipment_models import REVIEW_SINCE as MODEL_REVIEW_SINCE, source_kind as model_source_kind, verify as verify_equipment_models
 from stage_payments import verify as verify_stage_payments
 from receipt_packets import verify_sources as verify_receipt_packets
 from delivery_batches import verify_sources as verify_delivery_batches
@@ -439,6 +439,31 @@ def render_addendum_sources(bundle, report, nodes):
     return count
 
 
+def verify_model_review_history(report, revision, journal):
+    graph = report["graph"]
+    if report["policy"].get("version", "") < MODEL_REVIEW_SINCE or not graph.get("equipment_model_sources", {}).get("pages"):
+        return
+    facts = {fact["id"]: fact for fact in graph["facts"]}
+    # An action on R8 first appears in R9. The export journal can also include actions taken after R9.
+    latest = {row["fact"]: row for row in sorted(journal["attestations"], key=lambda r: r["seq"]) if row["rev"] < revision}
+    def is_model(row):
+        return row["field"] == "equipment_model" or model_source_kind(row["quote"])[0] in ("ordered", "received")
+    refs = {ref for ref, fact in facts.items() if is_model(fact)}
+    refs.update(f"{p['doc']}/p{p['page']}/f{i}" for p in report["calls"]["pages"]
+                for i, row in enumerate(p["output"]["facts"], 1) if is_model(row))
+    refs.update(row["target"] for row in journal["amendments"] if row["rev"] < revision and is_model(row))
+    for ref in refs:
+        row = latest.get(ref)
+        if ref not in facts:
+            require(not row or row["decision"] != "dispute", "底稿遗漏仍有人工异议的型号观察")
+            continue
+        fact = facts[ref]
+        decision = {k:v for k,v in row.items() if k != "seq"} if row else None
+        require(fact.get("attestation") == decision and
+                (fact["status"] == "disputed") == bool(row and row["decision"] == "dispute"),
+                "设备型号的核图状态、意见或经办人与该版出具前的操作记录不符")
+
+
 def verify(source, strict_rules=False, *, rule_checker=None, render_addenda=False):
     with zipfile.ZipFile(source) as bundle:
         names = bundle.namelist()
@@ -516,6 +541,7 @@ def verify(source, strict_rules=False, *, rule_checker=None, render_addenda=Fals
             derived,relations = identity_relations(graph)
             require(derived==[n for n in graph["nodes"] if n["type"]=="invoice_identity"]
                     and relations==[e for e in graph["edges"] if e["type"]=="identified_invoice"],"发票标识与原页字段关系不符")
+        verify_model_review_history(report, revision, journal)
         verify_field_sources(bundle,hashes,report,revision,journal=journal)
         full_invoices = "invoice_proof.py" in report["policy"].get("code_sha256",{})
         require(report["policy"].get("invoice_sources") == (INVOICE_SOURCE_FORMAT if full_invoices else None),
