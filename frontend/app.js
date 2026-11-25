@@ -180,18 +180,26 @@ function openPage(docId, pageNumber, highlight, lineHint) {
   overlay.setAttribute('viewBox', '0 0 1000 1000');
   overlay.setAttribute('preserveAspectRatio', 'none');
   overlay.setAttribute('aria-hidden', 'true');
-  const sheet = box('image-sheet',image,overlay);
+  const plane = box('source-plane',image,overlay);
+  const sheet = box('image-sheet',plane);
   const canvas = box('source-scroll',sheet);
   canvas.tabIndex=0; canvas.setAttribute('role','region'); canvas.setAttribute('aria-label','可滚动的原件页图');
-  const levels = [100,125,150,200];
-  let zoom = 0;
+  const levels = [100,125,150,200,300,400];
+  let zoom = 0, turns = 0;
   const decrease = action('',()=>setZoom(zoom-1),'icon-button');
   const increase = action('',()=>setZoom(zoom+1),'icon-button');
   const fit = action('适宽',()=>setZoom(0),'zoom-fit');
   decrease.append(glyph('zoom-out')); increase.append(glyph('zoom-in'));
   decrease.setAttribute('aria-label','缩小原页'); increase.setAttribute('aria-label','放大原页');
   const scale = el('output','100%','zoom-scale'); scale.setAttribute('aria-label','相对适宽比例');
-  const tools = box('source-tools',box('zoom-group',decrease,scale,increase,fit),enlarged);
+  const rotateLeft=action('',()=>rotate(-1),'turn-page'), rotateRight=action('',()=>rotate(1),'turn-page');
+  rotateLeft.append(glyph('arrow-counterclockwise')); rotateRight.append(glyph('arrow-clockwise'));
+  for (const [button,label] of [[rotateLeft,'向左旋转 90°'],[rotateRight,'向右旋转 90°']]) {
+    button.setAttribute('aria-label',label); button.title=label; button.disabled=true;
+  }
+  const direction=el('output','','visually-hidden'); direction.setAttribute('aria-label','页图方向');
+  const tools = box('source-tools',box('source-adjust',box('zoom-group',decrease,scale,increase,fit),
+    box('zoom-group',rotateLeft,rotateRight,direction)),enlarged);
   const left = box('viewer-original',tools,canvas);
   const right = box('viewer-facts', el('h3', '本页引文'));
   left.id = 'viewer-original'; right.id = 'viewer-facts';
@@ -218,7 +226,28 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     if (!zoom) canvas.scrollLeft=0;
     revealPageMark();
   }
-  decrease.disabled = true;
+  function orient() {
+    const w=image.naturalWidth,h=image.naturalHeight;
+    if (!w || !h) return;
+    sheet.style.aspectRatio=turns%2?h+' / '+w:w+' / '+h;
+    sheet.dataset.turn=String(turns);
+    plane.style.width=(turns%2?100*w/h:100)+'%';
+    plane.style.aspectRatio=w+' / '+h;
+  }
+  function rotate(step) {
+    const before=sheet.getBoundingClientRect(), pane=canvas.getBoundingClientRect();
+    if (!before.width || !before.height || !image.naturalWidth) return;
+    const center=(a,b,start,end)=>(Math.max(a,start)+Math.min(b,end))/2;
+    const x=(center(before.left,before.right,pane.left,pane.right)-before.left)/before.width;
+    const y=(center(before.top,before.bottom,pane.top,pane.bottom)-before.top)/before.height;
+    turns=(turns+step+4)%4; orient();
+    const after=sheet.getBoundingClientRect();
+    canvas.scrollLeft+=(after.left+(step===1?1-y:y)*after.width)-(pane.left+canvas.clientWidth/2);
+    canvas.scrollTop+=(after.top+(step===1?x:1-x)*after.height)-(pane.top+canvas.clientHeight/2);
+    direction.textContent=turns?'顺时针 '+(turns*90)+'°':'原始方向';
+    revealPageMark();
+  }
+  decrease.disabled=increase.disabled=fit.disabled=true;
   function revealPageMark() {
     if (!left.isConnected || !image.naturalWidth) return;
     const rect = overlay.firstElementChild?.getBoundingClientRect();
@@ -511,15 +540,31 @@ function openPage(docId, pageNumber, highlight, lineHint) {
   }
   const controls = editable ? [...right.querySelectorAll('button:enabled,input:enabled')].filter(control => control !== compareButton) : [];
   for (const control of controls) control.disabled = true;
-  loadReviewImage(image,pageUrl).then(()=>{
-    for (const control of controls) control.disabled=false;
-    revealPageMark();
-  },()=>{
-    image.hidden=true; overlay.setAttribute('hidden','');
-    decrease.disabled=increase.disabled=fit.disabled=true;
-    const notice=el('p','原页加载失败，可单独打开页图查看原因。','note');
-    notice.setAttribute('role','alert'); left.prepend(notice);
-  });
+  const notice=box('source-error');
+  const loadStatus=el('span','原页加载失败。');
+  const retry=action('重新加载页图',load,'ref');
+  notice.append(loadStatus,retry); notice.setAttribute('role','alert');
+  async function load() {
+    const returnFocus=document.activeElement===retry;
+    retry.disabled=true;
+    if (notice.isConnected) { loadStatus.textContent='正在重新载入原页…'; notice.setAttribute('aria-busy','true'); }
+    try {
+      await loadReviewImage(image,pageUrl);
+      notice.remove();
+      sheet.hidden=false; image.hidden=false; overlay.removeAttribute('hidden'); orient();
+      rotateLeft.disabled=rotateRight.disabled=fit.disabled=false;
+      setZoom(zoom);
+      for (const control of controls) control.disabled=false;
+      if (returnFocus && canvas.isConnected && $('#page-dialog').open) canvas.focus({preventScroll:true});
+    } catch {
+      sheet.hidden=true; image.hidden=true; overlay.setAttribute('hidden','');
+      decrease.disabled=increase.disabled=fit.disabled=rotateLeft.disabled=rotateRight.disabled=true;
+      loadStatus.textContent='原页加载失败。'; notice.removeAttribute('aria-busy'); retry.disabled=false;
+      if (!notice.isConnected) left.prepend(notice);
+      if (returnFocus && retry.isConnected && $('#page-dialog').open) retry.focus({preventScroll:true});
+    }
+  }
+  load();
   $('#page-title').textContent = item.name + ' · 第 ' + pageNumber + ' 页';
   const jumpTo = (pane, target) => {
     pane.focus({preventScroll:true});

@@ -1,5 +1,9 @@
 # 审计与会计软件的公开界面
 
+## 拍照凭证的阅读方向
+
+Acrobat 的阅读视图可顺时针或逆时针转动页面，每次 90°，也可按页宽或放大比例阅读。Fish Audit 在固定版原件查看器上采用这两项操作。审计员把横置照片转正后可以放大核对状态栏，同一份原件在另一台设备上仍从归档方向打开。[Adobe Acrobat 调整页面视图](https://helpx.adobe.com/acrobat/using/adjusting-pdf-views.html) · [本机拍照凭证演练](../docs/acceptance.md#拍照与扫描工单的原页和签认)
+
 ## 维修工单与两份原件的核对
 
 Zendesk 将报修受理、等待处理、已解决和已关闭分别记录。Fish Audit 从上传工单上读取状态原文，在合同要求清结缺陷时，把「待维修」与期满确认单上的「无未关闭缺陷」同时摆到审计员面前。多单同案时优先展示有风险的工单，可以按工单号切换。[Zendesk 工单生命周期](https://support.zendesk.com/hc/en-us/articles/8263915942938-About-the-ticket-lifecycle-and-ticket-statuses)

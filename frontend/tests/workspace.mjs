@@ -15,6 +15,7 @@ import {checkRelease} from './payment-release.mjs';
 import {checkMandateCalendar} from './mandate-calendar.mjs';
 import {checkWarrantyTimeline} from './warranty-timeline.mjs';
 import {checkWarrantyTickets} from './warranty-tickets.mjs';
+import {checkWarrantyPhotos} from './warranty-photos.mjs';
 
 const scratch = await mkdtemp(join(tmpdir(), 'fish-ui-'));
 const socket = createServer().listen(0, '127.0.0.1');
@@ -55,6 +56,7 @@ const mandateCase = caseArgument('--mandate-case');
 const mandateCalendarCase = caseArgument('--mandate-calendar-case');
 const warrantyCase = caseArgument('--warranty-case');
 const ticketCase = caseArgument('--ticket-case');
+const photoCase = caseArgument('--warranty-photo-case');
 const phaseEvidenceCase = caseArgument('--phase-evidence-case');
 const paymentChangeCase = caseArgument('--payment-change-case');
 const paymentOpinionCase = caseArgument('--payment-opinion-case');
@@ -63,7 +65,7 @@ const qualityImageCase = caseArgument('--quality-image-case');
 const reinspectionGap = caseArgument('--reinspection-gap-case');
 const brokenPayment = caseArgument('--payment-source-case');
 const waitingCase = caseArgument('--waiting-case');
-const seeded = [product,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+const seeded = [product,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
 const root = product ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
@@ -147,6 +149,8 @@ try {
     await checkWarrantyTimeline({root,call,evaluate,wait},warrantyCase,process.env.AUDIT_WARRANTY_REV);
   } else if (ticketCase) {
     await checkWarrantyTickets({root,call,evaluate,wait},ticketCase,process.env.AUDIT_TICKET_REV);
+  } else if (photoCase) {
+    await checkWarrantyPhotos({root,call,evaluate,wait},photoCase,process.env.AUDIT_PHOTO_REV);
   } else if (mandateCase) {
     await checkMandateCompare({root,call,evaluate,wait},mandateCase);
   } else if (compareCase) {

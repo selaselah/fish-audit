@@ -27,7 +27,7 @@ const WarrantyTickets = (() => {
   }
   function pairs(finding,graph) {
     const w=finding.warranty_check, ledger=graph.warranty_sources;
-    if (!w?.tickets || ledger?.format!=='contract-warranty-release-v3') return [];
+    if (!w?.tickets || !['contract-warranty-release-v3','contract-warranty-release-v4'].includes(ledger?.format)) return [];
     const index=graphIndex(graph), result=[];
     function fact(ref,field,units) {
       const f=printedFact(index,finding,ref,field);
@@ -60,7 +60,7 @@ const WarrantyTickets = (() => {
   }
   function panel(phase,payments,graph) {
     const entry=phase.warranty_check, stored=entry?.tickets, ledger=graph.warranty_sources;
-    if (!stored?.length || ledger?.format!=='contract-warranty-release-v3') return null;
+    if (!stored?.length || !['contract-warranty-release-v3','contract-warranty-release-v4'].includes(ledger?.format)) return null;
     const index=graphIndex(graph), within=ref=>supports(index,phase,ref);
     function paper(ref,field,kind) {
       const f=printedFact(index,phase,ref,field);
@@ -108,6 +108,7 @@ const WarrantyTickets = (() => {
     root.append(head,body);
     function preview() {
       if (!root.isConnected || !root.getClientRects().length) return;
+      body.querySelector('.ticket-image-review')?.dispatchEvent(new Event('show-image'));
       for (const ink of body.querySelectorAll('.ticket-ink[data-preview="idle"]')) {
         ink.dataset.preview='loading';
         EvidenceCompare.lineExcerpt(index.facts.get(ink.parentElement.dataset.source),index).then(canvas=>{
@@ -161,7 +162,7 @@ const WarrantyTickets = (() => {
       if (decision==='late') caption=before?'回单早于工单关闭 '+days(closed,before.date)+' 天':'工单关闭晚于期满确认 '+days(closed,confirmDay)+' 天';
       if (decision==='identity' && conflicts.length) caption='工单与合同的'+conflicts.map(p=>p.label).join('、')+'不同';
       root.dataset.ticketState=decision; root.dataset.unit=r.unit;
-      heading.textContent=caption; pick.value=String(i); body.replaceChildren();
+      heading.textContent=caption; pick.value=String(i); body.replaceChildren(); delete root.dataset.details;
       const ticketPages=ledger.pages.filter(p=>p.ticket && p.unit===r.unit && within(p.doc+'/p'+p.page));
       const alternatives=pairs(phase,graph).filter(p=>p.unit===r.unit);
       const pairing=decision==='late' && before && payments.map(f=>({f,p:pairs(f,graph).find(p=>p.unit===r.unit &&
@@ -170,7 +171,10 @@ const WarrantyTickets = (() => {
         ['late','same_day','closed'].includes(decision)?'dates':'state';
       const chosen=pairing?.p || alternatives.find(p=>p.role===role);
       const primary=box('ticket-pair');
-      if (conflicts.length) {
+      const scan=decision==='scope' && WarrantyImages.panel(phase,r,ledger,index);
+      if (scan) {
+        heading.textContent='工单影像待核'; root.dataset.ticketState='scope';
+      } else if (conflicts.length) {
         for (const p of conflicts) primary.append(previewBlock('合同'+p.label,p.left,null,'contract'),previewBlock('工单'+p.label,p.right,null,'ticket'));
       } else if (chosen?.role==='payment' || chosen?.role==='dates') {
         const payment=chosen.role==='payment';
@@ -181,7 +185,7 @@ const WarrantyTickets = (() => {
         primary.append(previewBlock('期满确认单',defects,certPage,'certificate'),previewBlock('维修工单',state,ticketPages[0],'ticket'));
       }
       const toolbar=box('ticket-toolbar');
-      body.append(primary,toolbar);
+      body.append(scan || primary,toolbar);
       if (chosen) {
         const jump=action('双页对照',()=>showFindingPath(pairing?.f || phase,true,chosen.key),'ticket-compare');
         jump.prepend(glyph('arrows-angle-expand')); jump.append(el('span','，'+chosen.label,'visually-hidden'));
@@ -203,16 +207,17 @@ const WarrantyTickets = (() => {
       field(witness?'采购方签认':'签认栏待核',signer,witness || value(signer));
       field('期满确认',cert,confirmDay);
       for (const b of bankDates) field(bankDates.length>1?b.fact.name:'回单落款',b.fact,b.date);
-      if (facts.children.length) {
+      if (facts.children.length || scan) {
         const disclosure=action('工单详情',()=>{
           facts.hidden=!facts.hidden;
+          root.dataset.details=facts.hidden?'closed':'open';
           disclosure.setAttribute('aria-expanded',String(!facts.hidden));
         },'ticket-disclosure');
-        disclosure.setAttribute('aria-controls',facts.id); disclosure.setAttribute('aria-expanded','false');
+        disclosure.setAttribute('aria-controls',scan?facts.id+' scan-details-'+phase.id:facts.id); disclosure.setAttribute('aria-expanded','false');
         disclosure.append(glyph('chevron-down')); toolbar.append(disclosure); body.append(facts);
       }
       const riders=ledger.lines.filter(l=>l.kind==='ticket_line' && l.unit===r.unit && l.field==='qualification' && l.line && within(l.doc+'/p'+l.page));
-      if (decision==='scope') {
+      if (decision==='scope' && (!scan || riders.length || ticketPages.some(p=>p.native))) {
         const more=fold('核对工单原页及附注');
         for (const p of ticketPages) more.append(action((index.documents.get(p.doc)?.name || '原件')+' · 第 '+p.page+' 页',()=>openPage(p.doc,p.page),'ref'));
         for (const l of riders) more.append(action(l.quote,()=>openPage(l.doc,l.page,null,l.line),'ref'));

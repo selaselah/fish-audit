@@ -94,6 +94,8 @@
 .ic-zoom-in::before { content: "\f62c"; }
 .ic-zoom-out::before { content: "\f62d"; }
 .ic-arrows-angle-expand::before { content: "\f14a"; }
+.ic-arrow-clockwise::before { content: "\f116"; }
+.ic-arrow-counterclockwise::before { content: "\f117"; }
 .ic-receipt::before { content: "\f50f"; }
 .ic-card-checklist::before { content: "\f224"; }
 .ic-paperclip::before { content: "\f4b3"; }

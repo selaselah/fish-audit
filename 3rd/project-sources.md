@@ -45,7 +45,7 @@
 
 ### 操作图标
 
-工作台和首页的操作图标取自 Bootstrap Icons v1.13.1。所用 25 个字形按该版本的官方码点从 WOFF2 字体裁出，随本站加载。图标按钮具备独立文字或无障碍名称。[官方版本](https://github.com/twbs/icons/tree/v1.13.1) · [官方码点表](https://github.com/twbs/icons/blob/v1.13.1/font/bootstrap-icons.json) · [MIT 许可](licenses/bootstrap-icons-MIT.txt) · [本地字体](../frontend/assets/audit-icons.woff2)
+工作台和首页的操作图标取自 Bootstrap Icons v1.13.1。所用 27 个字形按该版本的官方码点从 WOFF2 字体裁出，随本站加载。原件查看器使用顺时针和逆时针图标，两个按钮分别提供旋转方向及角度的无障碍名称。[官方版本](https://github.com/twbs/icons/tree/v1.13.1) · [官方码点表](https://github.com/twbs/icons/blob/v1.13.1/font/bootstrap-icons.json) · [MIT 许可](licenses/bootstrap-icons-MIT.txt) · [本地字体](../frontend/assets/audit-icons.woff2)
 
 ### 首页字体
 
