@@ -118,6 +118,8 @@ function performanceOverview(findings, graph) {
     const sum=findings.find(f=>f.stage_payments && sameStage(f));
     if (sum) results.append(performanceJump(sum,'本期回单合计'));
     row.append(box('phase-contract',source,el('q',revised?revised.quote:stage.clause)),results);
+    const prior=PriorInstallment.panel(phase,matched,graph);
+    if (prior) row.append(prior);
     const evidence=PhaseEvidence.panel(phase,matched,findings,graph);
     if (evidence) row.append(evidence);
     const authority=authorityPairs.find(p=>(!p.stageRef || p.stageRef===stage.clause_ref)

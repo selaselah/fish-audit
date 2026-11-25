@@ -66,6 +66,7 @@ const Desk = {
         const {title,training}=caseName(row,true);
         const meta=el('small',[training?'合成演练':'',row.rev?'R'+row.rev:'',profileName(row.profile)].filter(Boolean).join(' · '),'card-meta');
         const card=el('article','','audit-card');
+        const stamp=el('small',[training?'演练':'',row.rev?'R'+row.rev:''].filter(Boolean).join(' · '),'card-edition');
         card.append(meta,title);
         if (['queued','running'].includes(row.status)) {
           const progress=el('progress'); progress.max=100; progress.value=row.progress;
@@ -78,9 +79,9 @@ const Desk = {
           }
           card.append(signals);
         }
-        const files=el('span',row.files+' 份'); files.prepend(glyph('paperclip'));
+        const files=el('span',row.files+' 份','card-files'); files.prepend(glyph('paperclip'));
         const status=row.decision ? el('span','人工'+statusName(row.decision),'card-decision') : tag(row.status);
-        card.append(box('card-foot',status,files,peekButton(row))); col.append(card);
+        card.append(box('card-foot',status,stamp,files,peekButton(row))); col.append(card);
       }
       if (!lane.cases.length) col.append(el('p','暂无任务','lane-empty'));
       if (lane.total>lane.cases.length) {
@@ -212,6 +213,7 @@ const Desk = {
     $('#queue-title').textContent = state.filter === 'all' ? (view==='board'?'审计建议':'任务台账') : active.textContent;
     $('#queue-count').textContent = data.total.toLocaleString('zh-CN')+' 项';
     $('#desk-views').hidden=Team.current?.role==='employee';
+    $('#desk-density-label').hidden=view!=='board';
     for (const b of $('#desk-views').children) b.setAttribute('aria-pressed',String(b.dataset.deskView===view));
     const filter=$('#verdict-filter');
     filter.hidden=!this.verdict; filter.replaceChildren();
@@ -253,6 +255,14 @@ const Desk = {
   },
   bind() {
     try { if (localStorage.getItem('fish-audit-desk-view')==='list') this.view='list'; } catch {}
+    const density=$('#desk-density'), list=$('#case-list');
+    try { density.checked=localStorage.getItem('fish-audit-card-details')==='expanded'; } catch {}
+    const showDetails=()=>list.dataset.density=density.checked?'expanded':'compact';
+    showDetails();
+    density.addEventListener('change',()=>{
+      showDetails();
+      try { localStorage.setItem('fish-audit-card-details',list.dataset.density); } catch {}
+    });
     for (const b of $('#desk-views').children) b.addEventListener('click',()=>this.setView(b.dataset.deskView));
     const icons = {all:'inboxes',active:'clock-history',ready:'clipboard-check',attention:'exclamation-diamond',
       in_review:'layers',closed:'folder2-open',failed:'exclamation-triangle'};

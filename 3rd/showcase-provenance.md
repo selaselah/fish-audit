@@ -2,6 +2,10 @@
 
 首页采用 Fish Audit 自制的冷藏柜采购演练。采购方「青禾演练采购中心」、供应方「云桥演练设备中心」、金额、温度、签认和回单均为虚构数据。每份原件第 1 行均印有「合成演练资料　仅供系统测试　无交易效力」。4℃ 是这份合同约定的柜温上限，8℃ 是这份验收报告填写的实测值。[水印和主体的生成定义](../docs/samples/generate.py) · [项目演练说明](../docs/samples/README.md#验收的是哪一种设备)
 
+
+## 首页双原件同步缩放
+
+首页验收报告的「原件对照」取固定 R7 的采购合同和验收报告。左片使用采购合同第 14 行，右片使用验收报告第 12 行。两份可下载 PDF、归档页图摘要及引用编号列在下方的 R7 清单中。滑杆使用同一档比例重绘两张原页，分别以证据行框为中心。窄屏改为上下排列。 [合同原页](../frontend/assets/showcase-contract-page.jpg) · [归档验收页](../frontend/assets/showcase-acceptance-page.png) · [浏览器实拍](../docs/interaction-design/public-source-compare.webp)
 ## 设备测温案例 R11
 
 「设备抽检」演示取自有水印的本机 R11。主合同第 1 页第 13、14、19 行分别记载交付数量、柜温限值和逐台检测要求。验收单第 1 页第 15 至 17 行分别列出四个设备编号、自报实测一台，以及 QC-01 的 3℃ 读数。公开阅读器直接使用两份归档 PDF 及其页图，点击原行可核对上下文。清单逐项记录文件和页图 SHA-256、物理行号、引文及原始坐标。[公开样本清单](../frontend/assets/showcase-inspection.json) · [水印采购合同](../frontend/showcase/inspection-contract.pdf) · [水印验收报告](../frontend/showcase/inspection-acceptance.pdf) · [固定 R11](http://127.0.0.1:8000/workpaper/08fdfa388dce4718a4cd46dada1385d8?rev=11)
@@ -33,7 +37,7 @@
 
 ## 展示原件
 
-首页核图窗口只在打开时载入水印验收报告的固定 R7 页图。仓库 PNG 与归档页图逐字节一致，宽 1547、高 2190 像素，SHA-256 为 `fb4799101ab7c9ee46baa4705ed0712abeede3e50e22d8f0b8aebfb5a9ef27bd`。三处高亮分别取自第 9、11、12 行的 `source_line.rects`，切换整页和原行使用相同坐标。[归档页图副本](../frontend/assets/showcase-acceptance-page.png) · [验收报告 PDF](../frontend/showcase/acceptance.pdf)
+首页核图窗口只在打开时载入水印验收报告的固定 R7 页图。该页归档为 JPEG，沿用最初的公开资源名 `showcase-acceptance-page.png`，服务以 `image/jpeg` 返回原始字节。页图宽 1547、高 2190 像素，SHA-256 为 `fb4799101ab7c9ee46baa4705ed0712abeede3e50e22d8f0b8aebfb5a9ef27bd`。三处高亮分别取自第 9、11、12 行的 `source_line.rects`，切换整页和原行使用相同坐标。[归档页图副本](../frontend/assets/showcase-acceptance-page.png) · [验收报告 PDF](../frontend/showcase/acceptance.pdf)
 
 首页「看原行」显示 R7 两张已归档页图的像素裁片。以下裁切坐标按左、上、右、下排列，单位为原始像素。可从对应 PDF 阅读完整上下文。
 

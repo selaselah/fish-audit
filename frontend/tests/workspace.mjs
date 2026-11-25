@@ -16,6 +16,7 @@ import {checkMandateCalendar} from './mandate-calendar.mjs';
 import {checkWarrantyTimeline} from './warranty-timeline.mjs';
 import {checkWarrantyTickets} from './warranty-tickets.mjs';
 import {checkWarrantyPhotos} from './warranty-photos.mjs';
+import {checkNavigation,checkPrior} from './prior-installment.mjs';
 import {checkInspectionCoverage} from './inspection-coverage.mjs';
 import {checkSigningParties} from './signing-parties.mjs';
 
@@ -61,6 +62,8 @@ const ticketCase = caseArgument('--ticket-case');
 const photoCase = caseArgument('--warranty-photo-case');
 const inspectionCase = caseArgument('--inspection-case');
 const signingCase = caseArgument('--signing-party-case');
+const priorCase=caseArgument('--prior-installment-case');
+const navCase=caseArgument('--navigation-case');
 const phaseEvidenceCase = caseArgument('--phase-evidence-case');
 const paymentChangeCase = caseArgument('--payment-change-case');
 const paymentOpinionCase = caseArgument('--payment-opinion-case');
@@ -69,7 +72,7 @@ const qualityImageCase = caseArgument('--quality-image-case');
 const reinspectionGap = caseArgument('--reinspection-gap-case');
 const brokenPayment = caseArgument('--payment-source-case');
 const waitingCase = caseArgument('--waiting-case');
-const seeded = [product,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+const seeded = [priorCase,navCase,product,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
 const root = product ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
@@ -137,6 +140,10 @@ try {
   await call('Page.navigate',{url:product ? root : root+'/app'});
   if (product) {
     await checkProduct({root,call,evaluate,wait});
+  } else if (priorCase) {
+    await checkPrior({root,call,evaluate,wait},priorCase,process.env.AUDIT_PRIOR_REV);
+  } else if (navCase) {
+    await checkNavigation({root,call,evaluate,wait},navCase);
   } else if (designCase) {
     await checkReviewDesign({root,call,evaluate,wait},designCase);
   } else if (phaseEvidenceCase) {
@@ -2063,6 +2070,12 @@ try {
       }
       console.log('PASS · Saved per-page extraction and visual checks, verified live preview and preserved expanded document');
       assert.ok(await evaluate('document.querySelector("#report-tools").hidden'),'employee scope');
+      await evaluate('document.querySelector("#quick-open").click()');
+      await wait('document.querySelector("#quick-dialog").open','employee commands');
+      const employeeCommands=await evaluate('document.querySelector("#quick-results").innerText');
+      assert.ok(employeeCommands.includes('逐份资料进度'));
+      assert.ok(!/本版原件|待核发现|知识图谱|证据检索|企业成员/.test(employeeCommands));
+      await evaluate('document.querySelector("#quick-close").click()');
       const detail = await evaluate('location.hash');
       await evaluate('document.querySelector("#nav-desk").click()');
       await wait('!document.querySelector("#desk").hidden && !!document.querySelector("[data-preview-case]")','employee task queue');

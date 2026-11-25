@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {writeFile} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
+import {checkPublicCompare} from './prior-installment.mjs';
 import {checkPublicInspection} from './inspection-coverage.mjs';
 
 // These are the three public, watermarked originals of the equipment-quality exercise, R7.
@@ -284,6 +285,7 @@ export async function checkProduct({root,call,evaluate,wait}) {
   await evaluate(select('.fish-wordmark')+'.click()');
   await wait('location.pathname==="/" && !!document.querySelector("#hero-title")','return to product site');
   await checkPublicInspection({root,call,evaluate,wait});
+  await checkPublicCompare({root,call,evaluate,wait});
   console.log('PASS · acceptance, signing and unit inspection, six original PDFs, keyboard, six viewports, workspace entry and legacy bookmark ('+mode+')');
 }
 

@@ -18,6 +18,13 @@
   <link rel="stylesheet" href="/landing.css">
   <link rel="stylesheet" href="/assets/inspection-coverage.css">
   <script src="/assets/inspection-coverage.js" defer></script>
+  <script>
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      document.documentElement.classList.add('m-enter');
+      setTimeout(() => document.documentElement.classList.add('m-enter-done'), 700);
+    }
+  </script>
+  <script src="/assets/sample-compare.js" defer></script>
   <script src="/landing.js" defer></script>
   <script src="/assets/sample-review.js" defer></script>
 </head>
@@ -50,9 +57,8 @@
             <button type="button" id="tab-transfer" role="tab" aria-selected="false" aria-controls="sheet-transfer" tabindex="-1"><i class="ui-glyph ic-receipt" aria-hidden="true"></i>付款回单</button>
           </div>
           <div class="evidence-paper" role="tabpanel" id="sheet-acceptance" aria-labelledby="tab-acceptance" tabindex="0">
-            <div class="paper-sheet"><div class="paper-meta"><span>验收记录</span><span>第 1 页</span></div>
-            <p class="paper-title">四门冷藏柜验收报告</p>
-            <p class="paper-id">YL-LY-32EED203</p>
+            <div class="paper-sheet"><div class="compare-paper-title"><p class="paper-title">四门冷藏柜验收报告</p><button type="button" id="compare-sample" aria-haspopup="dialog" aria-controls="sample-compare" hidden><i class="ui-glyph ic-layout-sidebar-inset-reverse" aria-hidden="true"></i>原件对照</button></div>
+            <p class="paper-id">YL-LY-32EED203 <span>· 第 1 页</span></p>
             <div class="reading-switch" role="group" aria-label="验收证据展示方式" hidden><button type="button" aria-controls="temperature-readings" aria-pressed="true">读数对照</button><button type="button" aria-controls="source-strips" aria-pressed="false">看原行</button><button type="button" aria-controls="acceptance-excerpt" aria-pressed="false">原文摘录</button></div>
             <div class="temperature-readings" id="temperature-readings" hidden>
               <dl><div><dt>合同上限</dt><dd><a href="/showcase/contract.pdf" target="_blank" rel="noopener" aria-label="合同上限 4℃，打开采购合同原件">≤ 4 <small>℃</small></a></dd></div><div><dt>实测柜温</dt><dd><a href="/showcase/acceptance.pdf" target="_blank" rel="noopener" aria-label="实测柜温 8℃，打开验收报告原件">8 <small>℃</small></a></dd></div></dl>
@@ -150,6 +156,17 @@
       </div>
     </section>
   </main>
+  <dialog id="sample-compare" aria-labelledby="sample-compare-title">
+    <header class="sample-review-head"><div><span>合成采购 · R7</span><h2 id="sample-compare-title">合同标准与验收实测</h2></div>
+      <form method="dialog"><button aria-label="关闭原件对照" autofocus><i class="ui-glyph ic-x-lg" aria-hidden="true"></i></button></form></header>
+    <div class="public-compare-panes">
+      <figure data-image="/assets/showcase-contract-page.jpg" data-fact="d02/p1/f13" data-rect="0.08209,0.56712,0.42211,0.58311"><figcaption><strong>采购合同</strong><a href="/showcase/contract.pdf" target="_blank" rel="noopener">第 1 页 · 第 14 行<i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i></a></figcaption>
+        <canvas role="img" aria-label="合同原件第 14 行，约定验收标准为柜温不高于 4℃"></canvas><span role="status">正在载入合同原页…</span></figure>
+      <figure data-image="/assets/showcase-acceptance-page.png" data-fact="d04/p1/f11" data-rect="0.08274,0.50274,0.29606,0.51918"><figcaption><strong>验收报告</strong><a href="/showcase/acceptance.pdf" target="_blank" rel="noopener">第 1 页 · 第 12 行<i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i></a></figcaption>
+        <canvas role="img" aria-label="验收报告原件第 12 行，实测柜温 8℃"></canvas><span role="status">正在载入验收原页…</span></figure>
+    </div>
+    <footer class="public-compare-scale"><label for="compare-zoom">同步缩放</label><button type="button" data-step="-1" aria-label="缩小两份原件"><i class="ui-glyph ic-zoom-out" aria-hidden="true"></i></button><input id="compare-zoom" type="range" min="0" max="3" step="1" value="2"><button type="button" data-step="1" aria-label="放大两份原件"><i class="ui-glyph ic-zoom-in" aria-hidden="true"></i></button><output for="compare-zoom">放大</output></footer>
+  </dialog>
   <dialog id="sample-review" aria-labelledby="sample-review-title">
     <header class="sample-review-head"><div><span>合成采购 · R7</span><h2 id="sample-review-title">验收报告</h2></div><form method="dialog"><button type="submit" autofocus aria-label="关闭验收报告"><i class="ui-glyph ic-x-lg" aria-hidden="true"></i></button></form></header>
     <div class="sample-review-body">

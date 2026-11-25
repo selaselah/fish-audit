@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/assets/signing-parties.css">
   <link rel="stylesheet" href="/assets/inspection-coverage.css">
+  <link rel="stylesheet" href="/assets/audit-navigation.css">
   <script src="/team.js" defer></script>
   <script src="/desk.js" defer></script>
   <script src="/assets/acceptance-opinion.js" defer></script>
@@ -24,6 +25,8 @@
   <script src="/assets/warranty-tickets.js" defer></script>
   <script src="/assets/signing-parties.js" defer></script>
   <script src="/assets/inspection-coverage.js" defer></script>
+  <link rel="stylesheet" href="/assets/prior-installment.css">
+  <script src="/assets/prior-installment.js" defer></script>
   <script src="/assets/phase-evidence.js" defer></script>
   <script src="/assets/mandate-calendar.js" defer></script>
   <script src="/provenance.js" defer></script>
@@ -31,6 +34,7 @@
   <script src="/checkpoints.js" defer></script>
   <script src="/peer-review.js" defer></script>
   <script src="/app.js" defer></script>
+  <script src="/assets/audit-navigation.js" defer></script>
 </head>
 <body>
   <a class="skip" href="#content">跳到工作区</a>
@@ -44,6 +48,7 @@
         <a href="#team" id="nav-team" hidden>企业成员</a>
       </nav>
       <div class="rail-footer">
+        <button type="button" id="quick-open" aria-label="快速定位" aria-haspopup="dialog" aria-controls="quick-dialog" aria-keyshortcuts="Control+k Meta+k"><i aria-hidden="true" class="ui-glyph ic-search"></i><span>快速定位</span><kbd aria-hidden="true">⌘ K</kbd></button>
         <span class="connection" id="connection" role="status">正在连接</span>
         <a class="account-link" id="nav-account" href="#account">企业登录</a>
       </div>
@@ -78,7 +83,7 @@
           </div><label class="search-field"><i aria-hidden="true" class="ui-glyph ic-search"></i><span class="visually-hidden">搜索任务、提交人或编号</span><input type="search" id="case-search" maxlength="100" placeholder="搜索任务、提交人或编号" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd></label>
             <details class="desk-filters" id="desk-filters"><summary><i aria-hidden="true" class="ui-glyph ic-sliders2"></i>筛选<span id="filter-count" hidden></span></summary>
               <div class="selects"><label>审计范围<select id="desk-profile" aria-label="审计范围"><option value="">全部范围</option><option value="cn-procurement-full-settlement/v1">采购与付款</option><option value="cn-contract-performance/v1">合同履约与分期</option><option value="cn-travel-reimbursement/v1">差旅报销</option><option value="cn-bank-contract-payment/v1">付款回单核对</option></select></label>
-              <label>排序<select id="desk-sort" aria-label="排序"><option value="updated">最近更新</option><option value="created">最近提交</option></select></label><button type="button" id="reset-filters">恢复默认</button></div>
+              <label>排序<select id="desk-sort" aria-label="排序"><option value="updated">最近更新</option><option value="created">最近提交</option></select></label><label id="desk-density-label" class="density-choice"><span>显示卡片详情</span><input id="desk-density" type="checkbox" role="switch"></label><button type="button" id="reset-filters">恢复默认</button></div>
             </details></div>
         </div>
         <div id="verdict-filter" hidden></div>
@@ -115,6 +120,15 @@
     </section>
     <p id="network-error" role="alert" hidden></p>
   </main>
+  <dialog id="quick-dialog" aria-labelledby="quick-title">
+    <h2 class="visually-hidden" id="quick-title">快速定位</h2>
+    <div class="quick-input"><i class="ui-glyph ic-search" aria-hidden="true"></i>
+      <input id="quick-query" type="text" role="combobox" aria-label="搜索可用操作、发现或原件" aria-controls="quick-results" aria-expanded="true" aria-autocomplete="list" placeholder="查找操作、审计发现或原件" autocomplete="off" maxlength="120" autofocus>
+      <button type="button" id="quick-close" aria-label="关闭快速定位"><i aria-hidden="true" class="ui-glyph ic-x-lg"></i></button></div>
+    <div id="quick-results" role="listbox" aria-label="可定位的项目"></div>
+    <p id="quick-empty" hidden>没有匹配项</p><output id="quick-count" class="visually-hidden"></output>
+    <footer class="quick-footer"><span id="quick-scope"></span><span aria-hidden="true"><kbd>↑</kbd><kbd>↓</kbd> 选择 <kbd>↵</kbd> 打开</span></footer>
+  </dialog>
   <dialog id="case-preview" aria-labelledby="preview-title">
     <div class="preview-head"><span><i aria-hidden="true" class="ui-glyph ic-layout-sidebar-inset-reverse"></i> 任务速览</span><button type="button" data-close aria-label="关闭速览" class="icon-button"><i aria-hidden="true" class="ui-glyph ic-x-lg"></i></button></div>
     <h2 id="preview-title"></h2><div id="preview-body" aria-live="polite"></div><div id="preview-action"></div>

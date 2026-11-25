@@ -275,7 +275,9 @@ def create_app(store, worker):
 
     @app.get("/assets/<filename>")
     def public_asset(filename):
-        return send_from_directory(FRONTEND / "assets", filename)
+        # Keep the published R7 URL while serving the archived JPEG page.
+        mime = "image/jpeg" if filename == "showcase-acceptance-page.png" else None
+        return send_from_directory(FRONTEND / "assets", filename, mimetype=mime)
 
     @app.get("/showcase/<filename>")
     def showcase_document(filename):

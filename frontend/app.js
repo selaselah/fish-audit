@@ -594,6 +594,11 @@ function citation(ref) {
     const row=InspectionCoverage.sources(graph).find(r=>r.id===ref);
     return row ? action(row.quote,()=>InspectionCoverage.open(row,graph),'ref') : el('span','设备检验原行待核','small');
   }
+  if (source?.type==='prior_installment_term') {
+    const graph=state.bundle.report.graph;
+    const row=PriorInstallment.sources(graph).find(r=>r.id===ref);
+    return row ? action(row.quote,()=>PriorInstallment.open(row,graph),'ref') : el('span','前款约定原行待核','small');
+  }
   if (source?.type==='contract_signing_line') {
     const graph=state.bundle.report.graph;
     const row=SigningParties.sources(graph).find(r=>r.id===ref);

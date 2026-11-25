@@ -1,5 +1,9 @@
 # 审计与会计软件的公开界面
 
+## 搜索当前底稿和按日期核对付款
+
+QuickBooks Online 的顶部搜索可查交易、操作和报告，支持按单号、交易类型等关键词定位。Fish Audit 在工作台提供一处「快速定位」入口，审计员可按规则编号或原件名称进入选定版本。桌面支持快捷键，手机可直接点放大镜。Ramp 的 Bill Pay 按不同业务日期提供筛选，包括账单日、发送日和到账日。Fish Audit 的首款凭证控件使用本案实际具备的两个时点，即案件提交日和某一张验收款回单的实付日。不同日期下展示不同的首款凭证金额。 [Intuit 搜索说明](https://quickbooks.intuit.com/learn-support/en-us/help-article/bank-transactions/search-transactions-quickbooks-online/L4hBemuUP_US_en_US) · [Ramp Bill Pay 操作说明与画面](https://support.ramp.com/managing-bills-and-payments-on-bill-pay/)
+
 ## 从单台设备读数查到凭证
 
 DataSnipper 的审阅界面允许从结果单元格直接打开相应来源。一项结果有多个片段时，审阅者可以逐条切换。Fish Audit 将这项操作用于验收单。选择设备编号后可以逐条打开读数，同一设备重复测温时保留两个原件入口。选中缺记录的设备则可核对验收清单和合同条款。中性的灰蓝承载正常数据，钴蓝表示选中，超限与缺项同时用颜色和文字提示。[DataSnipper 官方审阅说明](https://knowledge.datasnipper.com/en/articles/882479-how-to-review-a-task-s-output-in-alwin) · [Fish Audit 交互实拍](../docs/interaction-design/README.md#按设备检查验收记录)
