@@ -466,6 +466,32 @@ function deliveryBatchPanel(entry, graph, phases) {
   return panel;
 }
 
+function boardPageReferences(graph, doc, page, facts) {
+  const notes = graph?.contract_effect_sources?.conditions.filter(row =>
+    row.kind === 'approval_note' && row.doc === doc && row.page === page) || [];
+  if (!notes.length) return [];
+  const references = new Map();
+  for (const fact of facts.filter(f => f.field === 'approval_result')) {
+    references.set(fact.id, {ref:fact.id, label:'决定栏', option:fact.quote, quote:fact.quote});
+  }
+  let imageIndex = 0;
+  const images = notes.filter(note => !note.line).length;
+  for (const note of notes) {
+    const fact = facts.find(f => note.facts.includes(f.id) && f.quote === note.quote);
+    if (!fact && !note.line) continue;
+    const ref = fact?.id || 'line/' + note.line;
+    let label = '影像引文';
+    if (note.line) label = '第 ' + note.line + ' 行';
+    else if (images > 1) {
+      imageIndex++;
+      label += ' ' + imageIndex;
+    }
+    const printedLabel = note.quote.match(/^([^:：\r\n]{1,16})[:：]/u)?.[1] || '待核原文';
+    references.set(ref, {ref, label, option:printedLabel+' · '+label, quote:note.quote, rawLine:fact ? null : note.line});
+  }
+  return [...references.values()];
+}
+
 function contractEffectPanel(finding,graph) {
   const {conditions,mixed_pages,approval_pages=[]}=finding.effect_review;
   if (!conditions.length && !mixed_pages.length && !approval_pages.length) return null;

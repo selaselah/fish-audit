@@ -188,7 +188,10 @@ function openPage(docId, pageNumber, highlight, lineHint) {
   left.id = 'viewer-original'; right.id = 'viewer-facts';
   left.tabIndex = right.tabIndex = -1;
   const pageFacts = (state.bundle?.report.graph.facts || []).filter(fact => fact.doc === docId && fact.page === pageNumber);
-  let showAllFacts = !pageFacts.some(f=>f.id===highlight);
+  const boardRefs = boardPageReferences(state.bundle?.report.graph, docId, pageNumber, pageFacts);
+  const rawBoardLines = boardRefs.filter(source => source.rawLine);
+  const initialRaw = rawBoardLines.find(source => source.rawLine === lineHint);
+  let showAllFacts = !initialRaw && !pageFacts.some(f=>f.id===highlight);
   const coverage = state.bundle?.report.graph.delegation_coverage;
   const nameHolds = new Map([...(coverage?.agent_holds || []),...(coverage?.signer_holds || [])]
     .filter(h=>h.doc===docId && h.page===pageNumber && h.lines?.length).map(h=>[h.fact,h]));
@@ -215,40 +218,73 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     if (rect.left < pane.left + 8 || rect.right > pane.right - 8)
       canvas.scrollLeft += (rect.left + rect.right - pane.left - pane.right) / 2;
   }
-  function locate(fact) {
+  function locate(fact, raw) {
+    const ref = fact?.id || raw?.ref || '';
     overlay.replaceChildren();
-    for (const [left, top, right, bottom] of fact.source_line?.rects || []) {
+    for (const [left, top, right, bottom] of fact?.source_line?.rects || []) {
       const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
       for (const [name, value] of Object.entries({x:left,y:top,width:right-left,height:bottom-top}))
         rect.setAttribute(name,String(1000*value));
       overlay.append(rect);
     }
     for (const row of right.querySelectorAll('.evidence-row')) {
-      row.classList.toggle('located', row.dataset.fact === fact.id);
-      if (row.dataset.fact) row.hidden = !showAllFacts && row.dataset.fact!==fact.id;
+      const rowRef = row.dataset.fact || row.dataset.boardRef;
+      row.classList.toggle('located', Boolean(ref) && rowRef === ref);
+      if (rowRef) row.hidden = !showAllFacts && rowRef !== ref;
     }
-    if (fieldPicker) fieldPicker.value=showAllFacts ? '' : fact.id;
+    if (fieldPicker) fieldPicker.value=showAllFacts ? '' : ref;
+    if (compareButton) {
+      const next = boardRefs[(boardRefs.findIndex(source => source.ref === ref) + 1) % boardRefs.length];
+      compareButton.textContent = '对照' + next.label;
+      compareButton.dataset.nextRef = next.ref;
+    }
     revealPageMark();
   }
-  function focusObservation(source) {
-    locate(source);
+  function focusObservation(source, raw=null, moveFocus=true) {
+    locate(source, raw);
     const target = right.querySelector('.located');
+    if (!moveFocus || !target) return;
     target.tabIndex = -1;
     target.focus({preventScroll:true});
     target.scrollIntoView({block:'nearest'});
   }
-  let fieldPicker;
-  if (pageFacts.length) {
+  function selectReference(ref, moveFocus) {
+    const fact = pageFacts.find(f => f.id === ref);
+    const raw = rawBoardLines.find(source => source.ref === ref);
+    showAllFacts = !fact && !raw;
+    if (showAllFacts) {
+      for (const row of right.querySelectorAll('[data-fact],[data-board-ref]')) row.hidden = false;
+      return;
+    }
+    focusObservation(fact, raw, moveFocus);
+  }
+  let fieldPicker, compareButton;
+  if (pageFacts.length || rawBoardLines.length) {
     fieldPicker=el('select'); fieldPicker.setAttribute('aria-label','定位本页引文');
-    fieldPicker.add(new Option('全部引文 · '+pageFacts.length+' 项',''));
-    for (const fact of pageFacts) fieldPicker.add(new Option(fact.label+' · '+fact.value,fact.id));
-    fieldPicker.addEventListener('change',()=>{
-      const source=pageFacts.find(f=>f.id===fieldPicker.value);
-      showAllFacts=!source;
-      if (source) focusObservation(source);
-      else for (const row of right.querySelectorAll('[data-fact]')) row.hidden=false;
-    });
-    right.prepend(box('field-navigator',right.querySelector('h3'),fieldPicker));
+    fieldPicker.add(new Option('全部引文 · '+(pageFacts.length + rawBoardLines.length)+' 项',''));
+    if (boardRefs.length) {
+      const group = el('optgroup');
+      group.label = '审批决定与待核原文';
+      for (const source of boardRefs) group.append(new Option(source.option, source.ref));
+      fieldPicker.append(group);
+    }
+    for (const fact of pageFacts) {
+      if (!boardRefs.some(source => source.ref === fact.id)) fieldPicker.add(new Option(fact.label+' · '+fact.value,fact.id));
+    }
+    fieldPicker.addEventListener('change',() => selectReference(fieldPicker.value, true));
+    const navigator = box('field-navigator',right.querySelector('h3'),fieldPicker);
+    if (boardRefs.length > 1) {
+      const announcement = el('output','','visually-hidden');
+      compareButton = action('对照'+boardRefs[0].label,() => {
+        const next = boardRefs.find(source => source.ref === compareButton.dataset.nextRef);
+        selectReference(next.ref, false);
+        announcement.textContent = next.label+' · '+next.quote;
+      },'approval-switch');
+      compareButton.dataset.nextRef = boardRefs[0].ref;
+      fieldPicker.before(compareButton);
+      navigator.append(announcement);
+    }
+    right.prepend(navigator);
   }
   const selectionCount = el('span','','small');
   for (const fact of pageFacts) {
@@ -399,6 +435,10 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     if (source) gaps.push({...source,quality:'delivery_batch_clause'});
   }
   const effect=state.bundle?.report.graph.contract_effect_sources;
+  for (const source of rawBoardLines) {
+    if (!gaps.some(g => g.line === source.rawLine))
+      gaps.push({line:source.rawLine,quote:source.quote,quality:'approval_reference'});
+  }
   if (effect && lineHint && !gaps.some(g=>g.line===lineHint)) {
     const source=effect.conditions.find(s=>s.doc===docId && s.page===pageNumber && s.line===lineHint);
     if (source) gaps.push({...source,quality:source.kind==='approval_note'?'approval_reference':'effect_reference'});
@@ -422,6 +462,8 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     const label = {equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',approval_reference:'董事会审批记录原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
     const section = box('evidence-row',el('h4',label+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
     section.dataset.gapLine = String(gap.line);
+    const boardLine = rawBoardLines.find(source => source.rawLine === gap.line);
+    if (boardLine) section.dataset.boardRef = boardLine.ref;
     if (gap.line===lineHint) {
       section.classList.add('located');
       focusRow=section;
@@ -437,7 +479,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     }
     right.append(section);
   }
-  if (!pageFacts.length) right.append(el('p', '本页尚无可展示的提取记录。', 'muted'));
+  if (!pageFacts.length && !rawBoardLines.length) right.append(el('p', '本页尚无可展示的提取记录。', 'muted'));
   const submit = action('记录所选引文的核图意见', () => {
     $('#page-dialog').close(); openReview([...selected]);
   }, 'primary');
@@ -448,7 +490,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     reviewActions.append(action('补录本页字段', () => openAmend(docId, pageNumber, null)),selectionCount);
     right.append(reviewActions);
   }
-  const controls = editable ? [...right.querySelectorAll('button:enabled,input:enabled')] : [];
+  const controls = editable ? [...right.querySelectorAll('button:enabled,input:enabled')].filter(control => control !== compareButton) : [];
   for (const control of controls) control.disabled = true;
   loadReviewImage(image,pageUrl).then(()=>{
     for (const control of controls) control.disabled=false;
@@ -471,7 +513,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
   $('#page-dialog').showModal();
   if (focusRow) {
     const fact=pageFacts.find(f=>f.id===highlight);
-    if (fact) locate(fact);
+    if (fact || initialRaw) locate(fact, initialRaw);
     focusRow.scrollIntoView({block: 'nearest'});
   }
 }

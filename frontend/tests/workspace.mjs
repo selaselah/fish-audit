@@ -563,6 +563,61 @@ try {
         await evaluate(panel+'.querySelector('+JSON.stringify('[data-approval-page="'+pageId+'"]')+').click()');
         await wait('document.querySelector("#page-dialog").open && document.querySelector(".page-image")?.naturalWidth>0','original board resolution');
         if (decision) assert.equal(await evaluate('document.querySelector(".located")?.dataset.fact'),decision.id);
+        const notes = effect.conditions.filter(row => row.kind==='approval_note' && row.doc===p.doc && row.page===p.page);
+        const control = 'document.querySelector(".approval-switch")';
+        if (!notes.length) assert.equal(await evaluate('Boolean('+control+')'),false);
+        if (decision && notes.length===1) {
+          const note = notes[0];
+          const fact = report.graph.facts.find(f => note.facts.includes(f.id) && f.quote===note.quote);
+          const ref = fact?.id || 'line/'+note.line;
+          if (ref!==decision.id) {
+            await evaluate('document.querySelector("[aria-label=放大原页]").click()');
+            for (const width of [1440,390,320]) {
+              await call('Emulation.setDeviceMetricsOverride',{width,height:width===1440?900:844,deviceScaleFactor:1,mobile:width<600});
+              assert.equal(await evaluate(control+'.dataset.nextRef'),ref);
+              await evaluate(control+'.focus()');
+              assert.ok(await evaluate('document.activeElement==='+control+' && !'+control+'.disabled'));
+              await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13,text:'\r',unmodifiedText:'\r'});
+              await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+              assert.equal(await evaluate('document.querySelector(".field-navigator select").value'),ref);
+              assert.equal(await evaluate('document.querySelector(".located blockquote").textContent'),note.quote);
+              assert.equal(await evaluate('document.querySelectorAll(".image-sheet rect").length'),fact?.source_line?.rects.length || 0);
+              assert.equal(await evaluate('document.querySelector(".zoom-scale").textContent'),'125%');
+              assert.ok(await evaluate('document.activeElement==='+control+' && '+control+'.offsetHeight>=44 && document.querySelector("#page-dialog").scrollWidth<=innerWidth'));
+              if (process.env.AUDIT_UI_SHOTS && width===1440) {
+                const shot=await call('Page.captureScreenshot',{format:'png'});
+                await writeFile(join(process.env.AUDIT_UI_SHOTS,'board-'+performanceCase+'.png'),Buffer.from(shot.data,'base64'));
+              }
+              await evaluate(control+'.click()');
+              assert.equal(await evaluate('document.querySelector(".located").dataset.fact'),decision.id);
+            }
+            await call('Emulation.clearDeviceMetricsOverride');
+            if (fact && note.line) {
+              // Exercise a missed transcription in this browser's in-memory copy of a watermarked case.
+              const viewWithoutObservation = (omitted, doc, page, decisionId) => {
+                const original = state.bundle;
+                const graph = original.report.graph;
+                const ledger = graph.contract_effect_sources;
+                const conditions = ledger.conditions.map(row => ({...row,facts:row.facts.filter(id => id!==omitted)}));
+                try {
+                  state.bundle = {...original,report:{...original.report,graph:{...graph,
+                    facts:graph.facts.filter(f => f.id!==omitted),contract_effect_sources:{...ledger,conditions}}}};
+                  openPage(doc,page,decisionId);
+                } finally {
+                  state.bundle = original;
+                }
+              };
+              await evaluate('('+viewWithoutObservation+')(...'+JSON.stringify([fact.id,p.doc,p.page,decision.id])+')');
+              await wait('document.querySelector(".page-image")?.naturalWidth>0','original with an untranscribed line');
+              await evaluate(control+'.click()');
+              assert.equal(await evaluate('document.querySelector(".located").dataset.gapLine'),String(note.line));
+              assert.equal(await evaluate('document.querySelector(".located blockquote").textContent'),note.quote);
+              assert.equal(await evaluate('document.querySelectorAll(".image-sheet rect").length'),0);
+              await evaluate(control+'.click()');
+              assert.equal(await evaluate('document.querySelector(".located").dataset.fact'),decision.id);
+            }
+          }
+        }
         await evaluate('document.querySelector("#page-dialog [data-close]").click()');
         for (const f of report.findings.filter(f=>f.stage && ['H04','H05'].includes(f.rule) && f.evidence.includes(pageId))) {
           await evaluate('document.querySelector('+JSON.stringify('[data-finding="'+f.id+'"] [aria-controls="board-approval-evidence"]')+').click()');
