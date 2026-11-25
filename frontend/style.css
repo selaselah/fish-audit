@@ -137,6 +137,8 @@ textarea { width: 100%; resize: vertical; }
 .equipment-original .model-code { display:block; font:600 1.12rem/1.5 ui-monospace,monospace; margin:4px 0; }
 .equipment-original .batch-source { margin:6px 0; }
 .equipment-original details { margin-top:8px; }
+.equipment-sequence { margin:10px 0; padding:8px 12px; border-inline-start:2px solid var(--line); }
+.equipment-sequence p { margin:4px 0; }
 .stage-balances { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr)); gap:8px 12px; margin:0 0 10px; }
 .stage-balances dd,.stage-transfer { overflow-wrap:anywhere; }
 .stage-transfer { margin-top:12px; padding-top:10px; border-top:1px solid var(--line); min-width:0; }

@@ -271,6 +271,14 @@ try {
       assert.equal(await evaluate(panel+'.open'),equipment.status!=='ok');
       await evaluate(panel+'.open=true');
       await verifyRemarks(panel,modelLines);
+      if (equipment.sequence) {
+        assert.equal(await evaluate(panel+'.querySelector("[data-model-sequence]").dataset.modelSequence'),equipment.sequence.outcome);
+        await evaluate(panel+'.querySelector("[aria-controls=equipment-reinspection-trail]").click()');
+        await wait('document.activeElement?.id==="equipment-reinspection-trail"','original defect and reinspection for model comparison');
+        const roles=await evaluate('[...'+panel+'.querySelectorAll(".equipment-original h4")].map(e=>e.textContent)');
+        if (['original','final'].every(role=>equipment.records.some(r=>r.inspection_role===role)))
+          assert.ok(roles.indexOf('初验实收')>0 && roles.indexOf('初验实收')<roles.indexOf('复验实收'));
+      }
       for (const record of equipment.records) {
         const section='document.getElementById('+JSON.stringify('equipment-model-'+record.unit)+')';
         assert.equal(await evaluate(section+'.querySelector(".model-code").textContent'),record.received?.value || '型号待核');

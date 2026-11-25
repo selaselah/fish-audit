@@ -2,7 +2,18 @@
 
 ## 约定设备型号与实收型号
 
-规则 `2026.11.25.13` 新增 `policy.equipment_models=printed-equipment-models-v1`。报告的 `graph.equipment_model_sources` 保存涉查原页和型号引文。每个 `lines[]` 元素保存原件 `doc`、物理页 `page`、逻辑单据 `unit`、角色、原行号 `line`、原文 `quote`、原值 `value` 和同一原行的观察 ID `facts`。只有图像引文时行号为空。识别到型号的文字行可独立留存，模型漏录时 `facts` 可以为空。
+规则 `2026.11.25.14` 使用 `printed-equipment-models-v2`。遇有复验时，H02 的 `equipment_models.sequence` 记录原验收、整改、复验资料按既有程序核对后的 `record_chain_state`，以及型号核对的 `outcome`。`records[].inspection_role` 按原单与缺陷关系区分 `original`、`final`，支持标题仍为「验收报告」的复验单。
+
+| `outcome` | 所据材料及含义 |
+| --- | --- |
+| `same_model` | 原验收与复验所列型号均与约定相同，缺陷的关闭另依整改和复验记录。 |
+| `replacement_unverified` | 原单型号不同，复验写回约定型号，缺陷记录可衔接，实物换货与交接尚待证明。 |
+| `final_differs` | 有对应的复验记录，复验实收型号与合同约定仍不一致。 |
+| `model_unresolved`、`links_pending` | 初验或复验的型号不完整，或原单、整改、复验的关联尚待核实。 |
+
+`record_chain_state=closed` 表示三份资料中的缺陷编号、措施、签认及复验关闭记载能够衔接。若设备身份仍待核，H02 的 `reinspection.state` 保留 `open`，验收款和质保金继续待核。v1 底稿按当时规则复算。申请通过签收 v1 中存在整改前后型号差异的底稿时，接口返回 409 并提示重审。
+
+该程序首次发布于规则 `2026.11.25.13`，其标记为 `policy.equipment_models=printed-equipment-models-v1`。报告的 `graph.equipment_model_sources` 保存涉查原页和型号引文。每个 `lines[]` 元素保存原件 `doc`、物理页 `page`、逻辑单据 `unit`、角色、原行号 `line`、原文 `quote`、原值 `value` 和同一原行的观察 ID `facts`。只有图像引文时行号为空。识别到型号的文字行可独立留存，模型漏录时 `facts` 可以为空。
 
 H02 的 `equipment_models` 包含约定原行 `ordered`、逐份验收或复验的 `records[]`、汇总状态、理由和证据。每份记录的 `received` 指向实收原行，`identity` 保留合同号、双方和标的的关联结果与双方引文，`comparison` 取 `match`、`different` 或 `unresolved`。`status` 另行反映条款、归属及复核因素。例如两原件列示不同型号、合同生效尚待证时，记录可同时为 `different` 和 `risk`。型号完全相符时，H01 的批准条件及 H02 的实测质量仍分别计算。
 

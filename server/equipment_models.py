@@ -7,8 +7,10 @@ from reinspection import LINK_KEYS
 
 
 
-FORMAT = "printed-equipment-models-v1"
+LEGACY = "printed-equipment-models-v1"
+FORMAT = "printed-equipment-models-v2"
 SINCE = "2026.11.25.13"
+RETEST_SINCE = "2026.11.25.14"
 ORDERED = {"约定设备型号", "合同约定型号", "约定型号", "采购设备型号", "订购型号", "约定规格型号"}
 RECEIVED = {"实收设备型号", "实收型号", "实收规格型号", "实际交付型号", "实际验收型号", "本次验收型号", "复验实收型号"}
 MODEL = re.compile(r"型号|机型|换型|改型")
@@ -37,7 +39,7 @@ def source_kind(quote):
     return None, ""
 
 
-def sources(graph, read_text):
+def sources(graph, read_text, version=FORMAT):
     sections = {(u["source"], u["page"]): u["id"] for u in graph.get("audit_documents", []) if "source" in u}
     roles = {unit: role for role, units in graph["documents_by_kind"].items() for unit in units}
     facts_by_page = defaultdict(list)
@@ -78,7 +80,7 @@ def sources(graph, read_text):
                           "incomplete": (doc, page) in gaps})
         lines.extend(page_lines)
     active = any(MODEL.search(r["quote"]) and r["role"] in ("contract", "acceptance", "reinspection", "contract_addendum", "unknown") for r in lines) or any(g.get("field") == "equipment_model" for g in graph["gaps"])
-    return {"format": FORMAT, "pages": pages if active else [], "lines": lines if active else []}
+    return {"format": version, "pages": pages if active else [], "lines": lines if active else []}
 
 
 def valid_code(value):
@@ -161,11 +163,47 @@ def assess(graph, contract, receipts, *, effective):
         detail = "须取得与本合同对应的验收原件，核对实收设备型号。"
     else:
         detail = " ".join(dict.fromkeys(r["detail"] for r in records if r["status"] == status))
-    if status == "issue" and any(p["role"] == "reinspection" for p in pages):
+    if ledger["format"] == LEGACY and status == "issue" and any(p["role"] == "reinspection" for p in pages):
         status = "risk"
         detail += " 有复验记录，请核对原交付、换货及最终接受设备之间的对应关系。"
     refs = list(dict.fromkeys([*evidence(pages, lines), *(ref for item in records for ref in item["evidence"])]))
     return {"status": status, "detail": detail, "ordered": ordered, "records": records, "evidence": refs}
+
+
+def reconcile_reinspection(comparison, chain):
+    if not chain:
+        return
+    steps = chain["steps"]
+    finals = [s for s in steps if s["role"] == "final"]
+    if not finals:
+        return
+    by_unit = {r["unit"]: r for r in comparison["records"]}
+    for step in steps:
+        if step["unit"] in by_unit:
+            by_unit[step["unit"]]["inspection_role"] = step["role"]
+    originals = [by_unit[s["unit"]] for s in steps if s["role"] == "original" and s["unit"] in by_unit]
+    final = by_unit.get(finals[0]["unit"]) if len(finals) == 1 else None
+    outcome = "links_pending"
+    if chain["state"] == "closed" and len(originals) == 1 and final:
+        initial = originals[0]
+        if final["comparison"] == "different":
+            outcome = "final_differs"
+            comparison.update(status=final["status"], detail="复验所列实收型号与合同仍有差异。"+final["detail"])
+        elif final["comparison"] == "match" and initial["comparison"] == "different":
+            outcome = "replacement_unverified"
+            before, after = initial["received"]["value"], final["received"]["value"]
+            comparison.update(status="risk", detail=f"初验实收型号 {before}，复验实收型号 {after}，后者与合同约定相符。"
+                              "复验单记载原缺陷已关闭，请补核退换货、设备编号及交接凭证，确认最终接受的设备。")
+        elif final["comparison"] == initial["comparison"] == "match":
+            outcome = "same_model"
+        else:
+            outcome = "model_unresolved"
+            comparison.update(status="risk" if initial["comparison"] == "different" else "missing",
+                              detail="复验单记载原缺陷已关闭，初验或复验所据的完整设备型号仍待核实。")
+    elif comparison["status"] == "issue":
+        comparison.update(status="risk", detail=comparison["detail"]+" 原验收、整改与复验尚未完整对应，须核实最终接受的设备。")
+    comparison["sequence"] = {"record_chain_state": chain["state"], "outcome": outcome}
+    comparison["evidence"] = list(dict.fromkeys([*comparison["evidence"], *(ref for s in steps for ref in s["evidence"])]))
 
 
 def apply(finding, comparison):
@@ -205,6 +243,11 @@ def verify(report, read_text, *, signing=False):
         if signing and any(f["rule"] in ("H02", "H04", "H05") and f["status"] == "ok" for f in report["findings"]) and sources(graph, read_text)["pages"]:
             raise ValueError("旧版验收未逐项核对所列设备型号，请按现行程序重审后签收。")
         return
-    if (marker != FORMAT or policy.get("version", "") < SINCE or graph.get("equipment_model_sources") != sources(graph, read_text)
+    expected = FORMAT if policy.get("version", "") >= RETEST_SINCE else LEGACY
+    if (marker != expected or policy.get("version", "") < SINCE or graph.get("equipment_model_sources") != sources(graph, read_text, marker)
             or [e for e in graph["edges"] if e["type"] == "equipment_model_comparison"] != edges(report["findings"])):
         raise ValueError("约定与实收型号的原行、单据或图谱关系与归档不符")
+    if signing and marker == LEGACY and any(f.get("equipment_models") and f.get("reinspection") and
+                                            any(r["comparison"] == "different" for r in f["equipment_models"]["records"])
+                                            for f in report["findings"]):
+        raise ValueError("旧版整改前后的设备型号有差异，请按复验所据实际原单重审后签收。")

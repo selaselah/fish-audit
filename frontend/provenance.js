@@ -505,9 +505,20 @@ function equipmentModelsPanel(check,graph) {
   panel.tabIndex=-1;
   panel.dataset.modelStatus=check.status;
   panel.open=check.status!=='ok';
+  if (check.sequence) {
+    const recorded=check.sequence.record_chain_state==='closed';
+    const trace=box('equipment-sequence',el('strong','整改与复验'),
+      el('p',recorded?'原单、整改和复验记录对应同一缺陷，复验单记载已关闭。':'原单、整改记录及最终复验仍待对应。'),
+      evidenceJump('查看原验收、整改及复验依据','equipment-reinspection-trail'));
+    if (check.sequence.outcome==='replacement_unverified') trace.append(el('p','需核对退换货凭据、设备编号和实际交接记录。'));
+    trace.dataset.modelSequence=check.sequence.outcome;
+    panel.append(trace);
+  }
   const grid=box('equipment-originals');
   const roles={contract:'合同约定',acceptance:'验收实收',reinspection:'复验实收',contract_addendum:'补充协议'};
-  const units=[...new Set([...pages.filter(p=>p.role==='contract'),...pages].map(p=>p.unit))];
+  const firstUnits=pages.filter(p=>p.role==='contract').map(p=>p.unit);
+  for (const role of ['original','final']) firstUnits.push(...check.records.filter(r=>r.inspection_role===role).map(r=>r.unit));
+  const units=[...new Set([...firstUnits,...pages.map(p=>p.unit)])];
   for (const unit of units) {
     const originals=pages.filter(p=>p.unit===unit);
     const first=originals[0];
@@ -517,7 +528,8 @@ function equipmentModelsPanel(check,graph) {
     section.id='equipment-model-'+unit;
     section.tabIndex=-1;
     const name=documents.get(first.doc)?.name || unit;
-    section.append(el('h4',roles[first.role] || '其他资料'),el('span',name,'small'));
+    const roleLabel={original:'初验实收',final:'复验实收'}[record?.inspection_role] || roles[first.role] || '其他资料';
+    section.append(el('h4',roleLabel),el('span',name,'small'));
     if (model || record || first.role==='contract') section.append(el('strong',model?.value || '型号待核','model-code'));
     if (record) section.append(tag(record.status));
     const cited=lines.filter(s=>s.unit===unit);
@@ -874,6 +886,8 @@ function reinspectionTrail(chain, graph) {
   ];
   const list = el('ol','','reinspection-steps');
   const panel = box('reinspection-trail',el('h4',chain.state==='closed'?'整改复验已关闭缺陷':'整改复验待核'),list);
+  panel.id='equipment-reinspection-trail';
+  panel.tabIndex=-1;
   panel.dataset.disposition = chain.state;
   for (const [role,label,fields] of roles) {
     const steps=chain.steps.filter(s=>s.role===role);

@@ -12,6 +12,8 @@ server/.venv/bin/python docs/samples/equipment_models.py --run --run-id syntheti
 
 `camera` 同时上传原生 Word 合同、只有像素的 JPEG 验收单和两份 PDF。保留模型的首次读图供人工核对。脚本核对模型响应、所据原页、实际期次与整案建议，底稿留待审计人员签收。
 
+执行 `server/.venv/bin/python docs/samples/equipment_reinspection.py --run` 可再核对四组整改资料。`generic` 和 `formal` 的初验型号不同，复验都写回约定型号，两组分别使用普通验收表和专门复验表。`wrong` 的复验温度达标但复验型号有异，`same` 的两次型号相同且温控缺陷有完整整改和复验依据。
+
 ## 分期款分几笔支付
 
 在仓库根目录运行以下命令，生成并上传 11 组水印采购资料。每组有合同、验收报告、质保确认单和两张银行回单。本机工作台需已启动。去掉 `--run` 可只生成文件，追加 `--cases approval quality early` 可只运行三个指定情形。

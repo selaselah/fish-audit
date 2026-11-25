@@ -779,6 +779,12 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
                 if original["status"]=="issue":
                     accepted.update(status="issue",detail=original["detail"]+" "+accepted["detail"]+" 原验收缺陷仍需正式复验。")
     if models:
+        legacy_models = graph["equipment_model_sources"]["format"] == equipment_models.LEGACY
+        if not legacy_models:
+            chain = accepted.get("reinspection")
+            if chain and pending_units:
+                chain = {**chain, "state": "open"}
+            equipment_models.reconcile_reinspection(models, chain)
         accepted["equipment_models"] = models
         accepted["evidence"] = list(dict.fromkeys([*accepted["evidence"], *models["evidence"]]))
         accepted["scope"] = list(dict.fromkeys([*accepted["scope"], *(p["unit"] for p in graph["equipment_model_sources"]["pages"])]))

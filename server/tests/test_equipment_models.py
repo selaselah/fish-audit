@@ -3,10 +3,11 @@ import unittest
 
 from config import PERFORMANCE
 from controls import VERSION, conclusion, execute
-from equipment_models import edges, verify
+from equipment_models import LEGACY, edges, verify
 from performance import verify_findings
 from test_delivery_batches import contract as batch_contract, receipt as batch_receipt
 from test_performance import BANK_DOC, CONTRACT, RECEIPT, WARRANTY, material
+from test_reinspection import FINAL, FIX, OLD
 
 
 ORDER = ("equipment_model", "约定设备型号", "YL-C4")
@@ -100,3 +101,31 @@ class EquipmentModelTests(unittest.TestCase):
                 del damaged["policy"]["equipment_models"]
             with self.assertRaises(ValueError):
                 verify_findings(damaged) if target=="value" else verify(damaged,read)
+
+    def test_retest_role_follows_the_linked_defect_and_keeps_the_physical_handover_open(self):
+        for generic in (True,False):
+            retest = [("acceptance","","验收报告"),*FINAL[1:]] if generic else FINAL
+            for begin,end,status,decision in (("YL-C2","YL-C4","risk","replacement_unverified"),
+                                               ("YL-C4","YL-C2","issue","final_differs"),
+                                               ("YL-C4","YL-C4","ok","same_model"),
+                                               ("YL-C2","YL-C*","risk","model_unresolved")):
+                with self.subTest(generic=generic,begin=begin,end=end):
+                    graph=material([CONTRACT+[ORDER],OLD+[received(begin)],FIX,retest+[received(end)],WARRANTY,BANK_DOC],
+                                   lambda i,f,l,v:"2026-09-27" if f=="paid_on" else v)
+                    inspected,phases,_=findings(graph)
+                    comparison=inspected["equipment_models"]
+                    self.assertEqual(comparison["sequence"],{"record_chain_state":"closed","outcome":decision})
+                    self.assertEqual([r["inspection_role"] for r in comparison["records"]],["original","final"])
+                    self.assertEqual((inspected["status"],comparison["status"]),(status,status))
+                    self.assertEqual(inspected["reinspection"]["state"],"closed" if status=="ok" else "open")
+                    self.assertEqual(phases[0]["status"],"ok")
+                    self.assertEqual(phases[1]["status"]=="ok",status=="ok")
+                    graph["equipment_model_sources"]["format"]=LEGACY
+                    previous=findings(graph)[0]["equipment_models"]
+                    self.assertNotIn("sequence",previous)
+                    if begin=="YL-C2" and end=="YL-C4":
+                        self.assertEqual(previous["status"],"issue" if generic else "risk")
+        broken=material([CONTRACT+[ORDER],OLD+[received("YL-C2")],FIX,FINAL+[received("YL-C4")]],
+                        lambda i,f,l,v:"QX-02" if i==4 and f=="defect_number" else v)
+        comparison=findings(broken)[0]["equipment_models"]
+        self.assertEqual(comparison["sequence"],{"record_chain_state":"open","outcome":"links_pending"})
