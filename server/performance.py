@@ -16,6 +16,7 @@ import equipment_exchanges
 import contract_effect
 import warranty_terms
 import payment_windows
+import invoice_conditions
 import acceptance_reservations
 import repair_completion
 from performance_versions import (FIRST_FORMAT, BOARD_FORMAT, REINSPECTION_FORMAT, DELEGATION_FORMAT, IDENTITY_FORMAT,
@@ -43,6 +44,7 @@ LABELS = {
     **delivery_batches.LABELS,
     **warranty_terms.LABELS,
     **payment_windows.LABELS,
+    **invoice_conditions.LABELS,
     "effect_clause": ("生效条款", "合同生效条件", "生效条件", "合同生效条款"),
     **PARTY_SIGNATURES,
     "contract_state": ("合同状态", "协议状态"),
@@ -197,6 +199,7 @@ def result(rule, status, detail, refs, units, stage=None):
 DATE_LABELS = {**SOURCE_LABELS, "accepted_on":("验收日期","验收时间","复验日期","复验时间"),
                **{key:DELEGATION_FIELDS[key] for key in ("granted_on","grant_from","grant_until")},
                "repaired_on":REINSPECTION_FIELDS["repaired_on"],
+               "issued_on":invoice_conditions.SOURCE["issued_on"], "invoice_received_on":invoice_conditions.LABELS["invoice_received_on"],
                "paid_on":("付款日期","转账日期","交易日期","支付日期")}
 
 
@@ -490,7 +493,7 @@ def stage_terms(text):
     return ratio[0] if len(ratio) == 1 else "", "", ""
 
 
-def schedule(contract, *, warranty_checks=False, deadlines=False):
+def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=()):
     fields = ("payment_term","payment_stage","adjustment")
     refs = contract.evidence("contract",*fields)
     rows, counts, issues = [], set(), []
@@ -509,6 +512,15 @@ def schedule(contract, *, warranty_checks=False, deadlines=False):
                 rows.append(dict(index=number(prefix[1]) if prefix[1] else None,label=label,share=terms["share"],
                                  kind=terms["trigger"],condition=terms["trigger_text"],text=body,ref=fact["id"]))
                 continue
+        if invoice_terms and fact["field"]=="payment_stage":
+            raw = (fact.get("source_line") or {}).get("text", "")
+            term = invoice_conditions.INLINE.fullmatch(invoice_conditions.text(raw))
+            if term and any(s["line"] and fact["id"] in s["facts"] and s["quote"]==raw for s in invoice_terms):
+                prefix = STAGE_PREFIX.match(line)
+                if prefix:
+                    rows.append(dict(index=number(prefix[1]) if prefix[1] else None, label=term["stage"], share=term["share"],
+                                     kind="acceptance", condition=term["trigger"], text=row_body(fact), ref=fact["id"]))
+                    continue
         text = line if STAGE_PREFIX.match(line) else row_body(fact)
         for part in re.split(r"[;,，。]", text):
             if not part:
@@ -548,7 +560,10 @@ def schedule(contract, *, warranty_checks=False, deadlines=False):
         issues.append("付款条款存在变更或原页覆盖缺口")
     uncovered = [n for n in contract.notes if re.search(r"分期|分[两二三四五六七八九十\d]+期|预付|尾款|质保金|保留款|第.+期|补充协议|另附|另行约定",n["quote"])
                  and norm(n["quote"]) not in seen_lines and not (warranty_checks and warranty_terms.dedicated(n["quote"]))
-                 and not (deadlines and payment_windows.scoped_row(n["quote"]))]
+                 and not (deadlines and payment_windows.scoped_row(n["quote"]))
+                 and not any(s["quote"]==n["quote"] and s["line"]==n["line"] and s["supported"] and
+                             invoice_conditions.RIDER.fullmatch(invoice_conditions.text(s["quote"])) and
+                             len(invoice_conditions.targets(s, rows))==1 for s in invoice_terms)]
     if uncovered:
         refs += [n["page_id"] for n in uncovered]
         issues.append("另有待归入付款安排的原文")
@@ -674,7 +689,10 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
     else:
         accepted = acceptance(contract, receipts)
         accepted_on = day(receipts[0].single("accepted_on")) if accepted["status"]=="ok" else None
-    plan, rows = schedule(contract,warranty_checks=version in WARRANTY_FORMATS,deadlines=version in PAYMENT_WINDOW_FORMATS)
+    ledger = graph.get("invoice_receipt_sources") if version==FORMAT else None
+    invoice_terms = [s for s in ledger["lines"] if s["role"]=="clause"] if ledger else []
+    plan, rows = schedule(contract, warranty_checks=version in WARRANTY_FORMATS, deadlines=version in PAYMENT_WINDOW_FORMATS,
+                          invoice_terms=[s for s in invoice_terms if s["unit"]==contract.unit])
     batch = None
     models = equipment_models.assess(graph, contract, [*receipts, *retests], effective=signed["status"] == "ok") if version == FORMAT else None
     if version in BATCH_FORMATS:
@@ -909,6 +927,9 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
         if version in PAYMENT_WINDOW_FORMATS:
             window=payment_windows.stage_window(graph,contract,rows,idx-1,[*receipts,*retests],signed,accepted,accepted_on,check)
             payment_windows.attach_stage(check,window)
+        if invoice_terms:
+            entry = invoice_conditions.condition(ledger, contract, materials("invoice"), receipts, rows, idx-1)
+            invoice_conditions.attach(check, entry)
         output.append(check)
         stages.append((row,check))
 
@@ -974,6 +995,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
         add_date_checks(payment,timing)
         if version in PAYMENT_WINDOW_FORMATS:
             payment_windows.compare_transfer(payment,check,graph,contract,bank,row)
+        invoice_conditions.reconcile_payment(payment, check, graph, contract, bank, paid)
         sealed=signed.get("effect_review",{}).get("seals",{}).get("completed_on")
         if sealed and paid and paid.isoformat()<sealed and warranty_terms.bank_identity(contract,bank):
             bank_sources=graph.get("payment_window_sources",{})
@@ -1016,6 +1038,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("warranty_check") != entry.get("warranty_check")
                 or saved.get("equipment_models") != entry.get("equipment_models")
                 or saved.get("stage_payments") != entry.get("stage_payments")
+                or saved.get("invoice_receipt") != entry.get("invoice_receipt")
                 or saved.get("payment_window") != entry.get("payment_window")
                 or saved.get("acceptance_reservations") != entry.get("acceptance_reservations")
                 or (saved.get("id"),saved.get("version"),saved.get("title"),saved.get("basis")) !=

@@ -33,6 +33,7 @@ from contract_effect import verify as verify_contract_effect
 from warranty_terms import verify as verify_warranty
 from payment_windows import verify as verify_payment_windows
 from acceptance_reservations import verify as verify_reservations
+from invoice_conditions import verify as verify_invoice_conditions
 from repair_completion import verify as verify_repair_completion
 from contract_changes import verify_sources as verify_addendum_sources
 from delegation import verify_sources as verify_delegation_sources
@@ -253,6 +254,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
     verify_payment_windows(report,page_text)
     verify_reservations(report,page_text)
     verify_repair_completion(report,page_text)
+    verify_invoice_conditions(report,page_text)
     if "conclusions.py" in report["policy"].get("code_sha256",{}):
         verify_result(report)
     graph = report["graph"]
@@ -267,6 +269,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
         inspected = [*graph.get("quality_addenda",{}).get("pages",[]),*graph.get("acceptance_authority_sources",{}).get("pages",[]),*graph.get("delivery_batch_sources",{}).get("pages",[]),*graph.get("contract_effect_sources",{}).get("pages",[]),*graph.get("warranty_sources",{}).get("pages",[]),*graph.get("payment_window_sources",{}).get("pages",[]),*graph.get("acceptance_reservation_sources",{}).get("pages",[])]
         inspected.extend(graph.get("stage_payment_sources",{}).get("pages",[]))
         inspected.extend(graph.get("repair_completion_sources",{}).get("pages",[]))
+        inspected.extend(graph.get("invoice_receipt_sources",{}).get("pages",[]))
         inspected.extend(graph.get("equipment_model_sources",{}).get("pages",[]))
         inspected.extend(p for packet in graph.get("receipt_packet_sources",{}).get("packets",[]) for p in packet["pages"])
         if report["policy"].get("quality_addenda") and ("clause_text_only" in trace or

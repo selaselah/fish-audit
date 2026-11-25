@@ -23,6 +23,7 @@ import stage_payments
 import contract_effect
 import warranty_terms
 import payment_windows
+import invoice_conditions
 import acceptance_reservations
 import repair_completion
 from acceptance_authority import CLAUSE as AUTHORITY_CLAUSE, SIGNER as ACCEPTANCE_SIGNATURE, attach as record_signatories, witness_edges
@@ -299,7 +300,7 @@ def build_graph(docs, pages, attestations, amendments=()):
             if field in ADDENDUM_NUMBERS:
                 target, entity_label = number_target(field,value,quote,fact_id)
                 kind = ADDENDUM_NUMBERS[field]
-            if field in (AUTHORITY_CLAUSE,ACCEPTANCE_SIGNATURE,payment_windows.FIELD) or field in delivery_batches.LABELS or field in warranty_terms.LABELS:
+            if field in invoice_conditions.LABELS or field in (AUTHORITY_CLAUSE,ACCEPTANCE_SIGNATURE,payment_windows.FIELD) or field in delivery_batches.LABELS or field in warranty_terms.LABELS:
                 target = fact_id
             if target!=fact_id:
                 nodes[target] = {"id": target, "type": kind, "label": entity_label}
@@ -317,6 +318,9 @@ def build_graph(docs, pages, attestations, amendments=()):
     reservations = acceptance_reservations.sources(graph,lambda doc,number:texts[doc,number])
     graph["acceptance_reservation_sources"] = reservations
     graph["edges"].extend(acceptance_reservations.edges(reservations))
+    invoice_sources = invoice_conditions.sources(graph, lambda doc, number: texts[doc, number])
+    graph["invoice_receipt_sources"] = invoice_sources
+    graph["edges"].extend(invoice_conditions.edges(invoice_sources))
     completion = repair_completion.sources(graph,lambda doc,number:texts[doc,number])
     graph["repair_completion_sources"] = completion
     graph["edges"].extend(repair_completion.edges(completion))

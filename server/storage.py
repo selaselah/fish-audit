@@ -38,6 +38,7 @@ from contract_effect import verify as verify_contract_effect
 from warranty_terms import verify as verify_warranty
 from payment_windows import verify as verify_payment_windows
 from acceptance_reservations import verify as verify_reservations
+from invoice_conditions import verify as verify_invoice_conditions
 from repair_completion import verify as verify_repair_completion
 from contract_changes import verify_sources as verify_addendum_sources
 from delegation import verify_sources as verify_delegation_sources
@@ -729,7 +730,7 @@ class Store:
             paper = json.loads(row["content"])
             graph = paper["graph"]
             if row["profile"]!=BANK:
-                checks = [f for f in paper["findings"] if f.get("delegations") or f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("stage_payments") or f.get("equipment_models")]
+                checks = [f for f in paper["findings"] if f.get("delegations") or f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("stage_payments") or f.get("invoice_receipt") or f.get("equipment_models")]
                 packets = graph.get("receipt_packet_sources",{}).get("packets",[])
                 if packets:
                     checks.extend(f for f in paper["findings"] if f["rule"]=="H02" and f not in checks)
@@ -741,7 +742,7 @@ class Store:
                 units = {d["id"]:d.get("source", d["id"]) for d in graph.get("audit_documents", graph["documents"])}
                 originals = {units[unit] for finding in checks for unit in finding["scope"]}
                 originals.update(p["doc"] for p in packets)
-                full_pages = bool(packets) or any(f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("stage_payments") or f.get("equipment_models") for f in checks)
+                full_pages = bool(packets) or any(f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("stage_payments") or f.get("invoice_receipt") or f.get("equipment_models") for f in checks)
                 fields = [f["id"] for f in graph["facts"] if f["id"] in named or full_pages and f["doc"] in originals]
                 pages = {(p["doc"],p["page"]) for p in paper["calls"]["pages"] if p["doc"] in originals}
                 registered = {(r["doc"],r["number"]) for r in db.execute("SELECT doc,number FROM pages WHERE case_id=?",(case_id,))
@@ -849,6 +850,7 @@ class Store:
                     verify_payment_windows(paper,page_text,signing=True)
                     verify_reservations(paper,page_text,signing=True)
                     verify_repair_completion(paper,page_text,signing=True)
+                    verify_invoice_conditions(paper,page_text,signing=True)
                     inspected = [*paper["graph"].get("quality_addenda",{}).get("pages",[]),
                                  *paper["graph"].get("acceptance_authority_sources",{}).get("pages",[]),
                                  *paper["graph"].get("delivery_batch_sources",{}).get("pages",[]),
@@ -858,6 +860,7 @@ class Store:
                                  *paper["graph"].get("acceptance_reservation_sources",{}).get("pages",[])]
                     inspected.extend(paper["graph"].get("stage_payment_sources",{}).get("pages",[]))
                     inspected.extend(paper["graph"].get("repair_completion_sources",{}).get("pages",[]))
+                    inspected.extend(paper["graph"].get("invoice_receipt_sources",{}).get("pages",[]))
                     inspected.extend(paper["graph"].get("equipment_model_sources",{}).get("pages",[]))
                     inspected.extend(page for packet in paper["graph"].get("receipt_packet_sources",{}).get("packets",[]) for page in packet["pages"])
                     for page in inspected:
@@ -878,16 +881,19 @@ class Store:
         warranty_checked = any(f.get("warranty_check") for f in paper["findings"])
         effect_checked = any(f.get("effect_review") for f in paper["findings"])
         chronology = any(f.get("date_checks") for f in paper["findings"])
+        invoice_terms_checked = any(f.get("invoice_receipt") for f in paper["findings"])
         model_checked = any(f.get("equipment_models") for f in paper["findings"])
         multi_transfers = any(f.get("stage_payments") for f in paper["findings"])
         packets_checked = bool(graph.get("receipt_packet_sources",{}).get("packets")) and any(f["rule"]=="H02" for f in paper["findings"])
-        if graph.get("profile")!=BANK and (changed or named_acceptance or chronology or batches or packets_checked or multi_transfers or model_checked or effect_checked or warranty_checked or windows_checked or reservations_checked or any(f.get("delegations") for f in paper["findings"])):
+        if graph.get("profile")!=BANK and (changed or named_acceptance or chronology or batches or packets_checked or multi_transfers or invoice_terms_checked or model_checked or effect_checked or warranty_checked or windows_checked or reservations_checked or any(f.get("delegations") for f in paper["findings"])):
             if not payment_sources or len(payment_sources)!=1:
                 raise CaseError("签收前需重新核对合同及所据履约附件原件。",409)
             source = payment_sources[0][0]
             if (source.case_id,source.revision,source.report_hash)!=(case_id,revision,row["hash"]):
                 raise CaseError("履约原件所据的签收版已变化。",409)
             source.guard(db)
+            if invoice_terms_checked:
+                event(db,case_id,"invoice_receipt_sources",f"签收前核对 R{revision} 的合同收票条款、发票原件、买方签收及付款回单。")
             if model_checked:
                 event(db,case_id,"equipment_model_sources",f"签收前核对 R{revision} 的约定型号、实收型号及原件。")
             if multi_transfers:
@@ -910,7 +916,7 @@ class Store:
                 event(db,case_id,"acceptance_signature_sources",f"签收前核对 R{revision} 的具名条款、验收签字及相关页图，共 {len(source.files)} 个文件。")
             if changed:
                 event(db,case_id,"addendum_sources",f"签收前核对 R{revision} 合同、补充协议、验收原件和相关页图，共 {len(source.files)} 个文件。")
-            elif not named_acceptance and not chronology and not batches and not packets_checked and not multi_transfers and not effect_checked and not warranty_checked and not windows_checked and not reservations_checked:
+            elif not named_acceptance and not chronology and not batches and not packets_checked and not multi_transfers and not effect_checked and not warranty_checked and not windows_checked and not reservations_checked and not invoice_terms_checked:
                 event(db,case_id,"mandate_sources",f"签收前核对 R{revision} 的合同签字、委托书及相关页图，共 {len(source.files)} 个文件。")
         if graph.get("profile") == PERFORMANCE:
             return None
