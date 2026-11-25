@@ -19,6 +19,7 @@ import {checkWarrantyPhotos} from './warranty-photos.mjs';
 import {checkNavigation,checkPrior} from './prior-installment.mjs';
 import {checkInspectionCoverage} from './inspection-coverage.mjs';
 import {checkSigningParties} from './signing-parties.mjs';
+import {checkReinspectionTrail} from './reinspection-trail.mjs';
 
 const scratch = await mkdtemp(join(tmpdir(), 'fish-ui-'));
 const socket = createServer().listen(0, '127.0.0.1');
@@ -63,6 +64,7 @@ const photoCase = caseArgument('--warranty-photo-case');
 const inspectionCase = caseArgument('--inspection-case');
 const signingCase = caseArgument('--signing-party-case');
 const priorCase=caseArgument('--prior-installment-case');
+const trailCase=caseArgument('--reinspection-trail-case');
 const navCase=caseArgument('--navigation-case');
 const phaseEvidenceCase = caseArgument('--phase-evidence-case');
 const paymentChangeCase = caseArgument('--payment-change-case');
@@ -72,7 +74,7 @@ const qualityImageCase = caseArgument('--quality-image-case');
 const reinspectionGap = caseArgument('--reinspection-gap-case');
 const brokenPayment = caseArgument('--payment-source-case');
 const waitingCase = caseArgument('--waiting-case');
-const seeded = [priorCase,navCase,product,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+const seeded = [priorCase,trailCase,navCase,product,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
 const root = product ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
@@ -140,6 +142,8 @@ try {
   await call('Page.navigate',{url:product ? root : root+'/app'});
   if (product) {
     await checkProduct({root,call,evaluate,wait});
+  } else if (trailCase) {
+    await checkReinspectionTrail({root,call,evaluate,wait},trailCase,Number(process.env.AUDIT_TRAIL_REV));
   } else if (priorCase) {
     await checkPrior({root,call,evaluate,wait},priorCase,process.env.AUDIT_PRIOR_REV);
   } else if (navCase) {
@@ -182,7 +186,7 @@ try {
     assert.ok(gap);
     await call('Page.navigate',{url:root+'/workpaper/'+reinspectionGap+'?rev=1'});
     await wait('document.querySelector(".reinspection-trail")?.textContent.includes('+JSON.stringify(gap.quote)+')','unassigned reinspection page');
-    await evaluate('document.querySelector(".reinspection-trail").closest(".finding-disclosure").open=true');
+    await evaluate('document.querySelector("#trail-tab-final").click()');
     await click('核对原页第 '+gap.line+' 行','document.querySelector(".reinspection-trail")');
     await wait('document.querySelector("#page-dialog").open && document.querySelector(".located[data-gap-line] blockquote")?.textContent==='+JSON.stringify(gap.quote),'missing heading line');
     assert.equal(await evaluate('document.querySelector(".located[data-gap-line]").dataset.gapLine'),String(gap.line));
@@ -932,15 +936,17 @@ try {
     }
     if (chain) {
       assert.equal(await evaluate('document.querySelector(".reinspection-trail").dataset.disposition'),chain.state);
+      await evaluate('document.querySelector(".reinspection-trail").open=true');
       for (const role of ['original','repair','final']) {
         const step=chain.steps.find(s=>s.role===role);
         assert.ok(step);
         const row='document.querySelector('+JSON.stringify('[data-reinspection-role="'+role+'"]')+')';
-        assert.ok(await evaluate(row+'.textContent.includes('+JSON.stringify(step.date)+')'));
+        await evaluate('document.querySelector("#trail-tab-'+role+'").click()');
+        assert.ok(await evaluate('['+row+',document.querySelector("#trail-tab-'+role+'")].some(n=>n.textContent.includes('+JSON.stringify(step.date)+'))'));
         const factId=await evaluate(row+'.querySelector("[data-cited-fact]").dataset.citedFact');
         assert.ok(step.evidence.includes(factId));
         const fact=report.graph.facts.find(f=>f.id===factId);
-        await evaluate(row+'.querySelector("[data-cited-fact] button").click()');
+        await evaluate(row+'.querySelector("[data-cited-fact]").click()');
         await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.textContent.includes('+JSON.stringify(fact.quote)+')','reinspection source '+role);
         await evaluate('document.querySelector("#page-dialog [data-close]").click()');
       }

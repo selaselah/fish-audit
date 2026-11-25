@@ -2,6 +2,8 @@
 
 ## 复验原件的逐行核对
 
+固定版本的底稿入口支持 `/workpaper/<case_id>?rev=<rev>&view=reinspection`。有权限查看该版底稿且存在整改复验记录时，页面直接定位到履约时间线。企业入口在相同路径前加 `/w/<wid>`。
+
 规则 `2026.11.26.07` 使用 `acceptance-reservations-v4`。`graph.acceptance_reservation_sources.final_register` 保存纳入复验的页、文字层覆盖和另列原文。每条 `reinspection_register_line` 从该单据指向对应物理页，并携带原文、行号和已关联的事实 ID。读图引文的行号为空。
 
 报告 H02 的 `reinspection.register` 包含本次复验范围内的这些行、影像待核页和审计状态。`open` 表示原页有未结事项，`conditional` 表示附条件签认，`reported_closed` 表示另列关闭而相应依据待核。`matched` 对应已经核实的同号、同对象整改复验。`clear` 仅表示该处明载无未结项目。`unreviewed` 需要读原文判断。旧版归档保留当时结论。对曾被判为相符而按现行复验程序仍有疑点的底稿申请签收，接口返回 HTTP 409。

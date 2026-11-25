@@ -267,9 +267,10 @@ def create_app(store, worker):
                 raise CaseError("请选择有效的底稿版本和程序发现。", 400)
             args["finding"] = ref
         if "view" in request.args:
-            if request.args["view"]!="replay" or set(args)!={"rev"}:
-                raise CaseError("复算入口需要确定的底稿版本。",400)
-            args["view"] = "replay"
+            view = request.args["view"]
+            if view not in ("replay", "reinspection") or set(args)!={"rev"}:
+                raise CaseError("请选择有效的底稿视图及版本。",400)
+            args["view"] = view
         route = ("w/"+wid+"/" if wid else "")+"case/"+case_id
         return redirect("/app#"+route+("?" + urlencode(args) if args else ""))
 

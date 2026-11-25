@@ -1,5 +1,11 @@
 # 审计与会计软件的公开界面
 
+## 整改复验与原件核对
+
+Procore Punch List 把整改执行、提交复核、待关闭和关闭列为不同状态。Fish Audit 在做合同履约审查时，保留原验收、整改、复验各自的记录。最终报告上的关闭文字仍须对应到具体缺陷与措施。[Procore 整改项工作流说明](https://support.procore.com/faq/how-does-the-punch-list-workflow-affect-my-existing-punch-list-items)
+
+GOV.UK Design System 将标签页用于经常操作的办案系统，并指出跨标签来回记忆不适合比较。工作底稿按阶段切换，同一页的签认结论和保留事项直接并列。已有双原件对照入口仍用于跨文书核查。方向键、Home、End 的操作参考 W3C 标签页模式。[GOV.UK 标签页](https://design-system.service.gov.uk/components/tabs/) · [W3C Tabs Pattern](https://www.w3.org/WAI/ARIA/apg/patterns/tabs/)
+
 ## 搜索当前底稿和按日期核对付款
 
 QuickBooks Online 的顶部搜索可查交易、操作和报告，支持按单号、交易类型等关键词定位。Fish Audit 在工作台提供一处「快速定位」入口，审计员可按规则编号或原件名称进入选定版本。桌面支持快捷键，手机可直接点放大镜。Ramp 的 Bill Pay 按不同业务日期提供筛选，包括账单日、发送日和到账日。Fish Audit 的首款凭证控件使用本案实际具备的两个时点，即案件提交日和某一张验收款回单的实付日。不同日期下展示不同的首款凭证金额。 [Intuit 搜索说明](https://quickbooks.intuit.com/learn-support/en-us/help-article/bank-transactions/search-transactions-quickbooks-online/L4hBemuUP_US_en_US) · [Ramp Bill Pay 操作说明与画面](https://support.ramp.com/managing-bills-and-payments-on-bill-pay/)

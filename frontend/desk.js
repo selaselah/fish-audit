@@ -169,7 +169,9 @@ const Desk = {
       const {report} = await api(path+'/reports/'+task.rev,{signal:request.signal});
       if (!current()) return;
       loading.remove();
-      const result=box('preview-section',el('h3','审计建议'),box('preview-verdict',tag(report.result.verdict),el('span',humanReviewLabel(report.result),'small')));
+      const verdict=box('preview-verdict',tag(report.result.verdict));
+      appendHumanReview(verdict,report.result,'small');
+      const result=box('preview-section',el('h3','审计建议'),verdict);
       const signed=task.decisions.find(d=>d.rev===task.rev);
       if (signed) result.append(el('p','人工决定 · '+statusName(signed.decision),'small'));
       const priorities=priorityFindings(report.findings);

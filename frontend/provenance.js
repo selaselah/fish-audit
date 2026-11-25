@@ -74,6 +74,7 @@ function performanceOverview(findings, graph) {
   const parties=SigningParties.panel(effect,graph,phases);
   if (parties) overview.append(parties);
   const acceptance=findings.find(f=>f.rule==='H02');
+  if (acceptance?.reinspection) overview.append(ReinspectionTrail.panel(acceptance,graph));
   const inspection=InspectionCoverage.panel(acceptance,graph);
   if (inspection) overview.append(inspection);
   let expandedMandate=false;
@@ -141,7 +142,9 @@ function performanceOverview(findings, graph) {
     if (acceptance?.reinspection) {
       const candidates=pairs.filter(p=>p.key.startsWith('retest-') && [p.left.id,p.right.id].every(ref=>phase.evidence.includes(ref)));
       const selected=candidates.find(p=>p.key==='retest-'+acceptance.reinspection.focus) || candidates[0];
-      if (selected) row.append(action('对照整改与复验',()=>showFindingPath(acceptance,true,selected.key),'compare-jump'));
+      const register=ReinspectionTrail.phaseLink(acceptance,phase,graph);
+      if (register) row.append(register);
+      else if (selected) row.append(action('对照整改与复验',()=>showFindingPath(acceptance,true,selected.key),'compare-jump'));
     }
     const remarks = phaseRemarks(phase, batches, graph);
     if (remarks) row.append(remarks);
@@ -1149,46 +1152,6 @@ function acceptanceAuthorityPanel(entry, graph) {
     }
   }
   for (const note of sources.visual_notes) panel.append(sourceRow(note,'读图附注待核'));
-  return panel;
-}
-
-function reinspectionTrail(chain, graph) {
-  const index = graphIndex(graph);
-  const roles = [
-    ['original','原验收',['acceptance_result','acceptance_exception','measured_result','defect_number']],
-    ['repair','整改记录',['repair_action','repair_result','repair_number','defect_number']],
-    ['final','最终复验',['measured_result','defect_closure','acceptance_result','defect_number']],
-  ];
-  const list = el('ol','','reinspection-steps');
-  const panel = box('reinspection-trail',el('h4',chain.state==='closed'?'整改复验已关闭缺陷':'整改复验待核'),list);
-  panel.id='equipment-reinspection-trail';
-  panel.tabIndex=-1;
-  panel.dataset.disposition = chain.state;
-  for (const [role,label,fields] of roles) {
-    const steps=chain.steps.filter(s=>s.role===role);
-    if (!steps.length) {
-      const absent=el('li','尚无已核归属的'+label+'资料','muted');
-      const heading={original:'acceptance',repair:'remediation',final:'reinspection'}[role];
-      for (const gap of graph.gaps.filter(g=>g.quality==='uncovered_title' && g.title_hint===heading)) {
-        absent.append(box('reinspection-line',el('span','待核页内标题“'+gap.quote+'”'),
-          action('核对原页第 '+gap.line+' 行',()=>openPage(gap.doc,gap.page,null,gap.line),'ref')));
-      }
-      list.append(absent);
-    }
-    for (const step of steps) {
-      const row = el('li');
-      row.dataset.reinspectionRole = role;
-      row.append(box('flow',el('strong',label),el('span',step.date || '日期待核','small')));
-      const facts=step.evidence.map(ref=>index.facts.get(ref)).filter(f=>f && fields.includes(f.field));
-      for (const fact of facts) {
-        const line=box('reinspection-line',el('span',fact.quote),citation(fact.id));
-        line.dataset.citedFact=fact.id;
-        row.append(line);
-      }
-      if (!facts.length) row.append(citation(step.unit));
-      list.append(row);
-    }
-  }
   return panel;
 }
 

@@ -358,7 +358,9 @@ export async function checkReviewDesign({root,call,evaluate,wait}, caseId) {
   assert.equal(await evaluate('new URL(document.querySelector(".preview-open").href).searchParams.get("rev")'),String(task.rev));
   const latest = task.rev===7 ? report : (await (await fetch(endpoint+'/reports/'+task.rev)).json()).report;
   assert.equal(await evaluate('document.querySelector(".preview-verdict .tag").dataset.state'),latest.result.verdict);
-  assert.equal(await evaluate('document.querySelector(".preview-verdict .small").textContent'),latest.result.human_required?'需人工校验':'无专项待核项');
+  const human=latest.result.verdict==='review' && latest.result.human_required===true ? null :
+    latest.result.human_required===true?'需人工校验':latest.result.human_required===false?'无专项待核项':'人工校验要求待核';
+  assert.equal(await evaluate('document.querySelector(".preview-verdict .small")?.textContent ?? null'),human);
   const priority = ['issue','risk','missing'].flatMap(s=>latest.findings.filter(f=>f.status===s)).slice(0,3);
   assert.deepEqual(await evaluate('[...document.querySelectorAll(".preview-finding")].map(a=>Array.from(new URL(a.href).searchParams.values()))'),
     priority.map(f=>[String(task.rev),f.id]));

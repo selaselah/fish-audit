@@ -19,10 +19,10 @@ const profileName = profile => ({[travelProfile]:'差旅报销',[bankProfile]:'�
 const tone = {ready: 'risk', in_review: 'risk', closed: 'ok', failed: 'issue', pass: 'ok', review: 'risk', reject: 'issue',
   visual: 'risk', unsupported: 'issue', disputed: 'issue', confirmed: 'ok', anchored: 'ok'};
 const statusName = value => labels[value] || value;
-function humanReviewLabel(result) {
-  if (result.human_required === true) return '需人工校验';
-  if (result.human_required === false) return '无专项待核项';
-  return '人工校验要求待核';
+function appendHumanReview(row, result, className) {
+  if (result.verdict==='review' && result.human_required===true) return;
+  const label=result.human_required===true?'需人工校验':result.human_required===false?'无专项待核项':'人工校验要求待核';
+  row.append(el('span',label,className));
 }
 function priorityFindings(findings) {
   return ['issue','risk','missing'].flatMap(status=>findings.filter(item=>item.status===status));
@@ -168,7 +168,7 @@ async function loadReviewImage(image, source) {
     URL.revokeObjectURL(objectUrl);
   }
 }
-function openPage(docId, pageNumber, highlight, lineHint) {
+function openPage(docId, pageNumber, highlight, lineHint, registerPair) {
   const item = state.detail.documents.find(doc => doc.id === docId);
   if (!item) return;
   const pageUrl = workpaperSource(docId,'pages/'+pageNumber);
@@ -207,7 +207,24 @@ function openPage(docId, pageNumber, highlight, lineHint) {
   const pageFacts = (state.bundle?.report.graph.facts || []).filter(fact => fact.doc === docId && fact.page === pageNumber);
   const boardRefs = boardPageReferences(state.bundle?.report.graph, docId, pageNumber, pageFacts);
   const repairRefs = repairPageReferences(state.bundle?.report.graph, docId, pageNumber, pageFacts);
-  const pageRefs = [...boardRefs, ...repairRefs, ...PhaseEvidence.pageReferences(state.bundle?.report.graph,docId,pageNumber,pageFacts,lineHint)];
+  const paper=state.bundle?.report;
+  const registerRefs=ReinspectionTrail.pageReferences(paper?.findings.find(f=>f.rule==='H02'),paper?.graph,docId,pageNumber);
+  const pageRefs = [...registerRefs, ...boardRefs, ...repairRefs, ...PhaseEvidence.pageReferences(paper?.graph,docId,pageNumber,pageFacts,lineHint)];
+  const comparedFact=registerPair && pageFacts.find(f=>f.id===registerPair.fact && f.field==='acceptance_result' && f.source_line?.rects?.length);
+  const comparedNote=registerPair && registerRefs.find(s=>s.rawLine===registerPair.line && s.rawLine!==comparedFact?.source_line.number);
+  const comparison=comparedFact && comparedNote ? box('trail-reader-pair') : null;
+  if (comparison) {
+    comparison.setAttribute('role','group'); comparison.setAttribute('aria-label','切换同页核对位置');
+    const announce=el('output','','visually-hidden');
+    for (const [ref,label,line,quote] of [[comparedFact.id,'复验结论',comparedFact.source_line.number,comparedFact.quote],
+                                         [comparedNote.ref,'复验附注',comparedNote.rawLine,comparedNote.quote]]) {
+      const control=action('',()=>{selectReference(ref,false); announce.textContent=quote;});
+      control.dataset.pairRef=ref;
+      control.append(el('strong',label),el('small','第 '+line+' 行'));
+      comparison.append(control);
+    }
+    comparison.append(announce); left.insertBefore(comparison,canvas);
+  }
   const rawLines = pageRefs.filter(source => source.rawLine);
   const initialRaw = rawLines.find(source => source.rawLine === lineHint);
   let showAllFacts = !initialRaw && !pageFacts.some(f=>f.id===highlight);
@@ -260,6 +277,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
   }
   function locate(fact, raw) {
     const ref = fact?.id || raw?.ref || '';
+    comparison?.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.pairRef===ref)));
     overlay.replaceChildren();
     for (const [left, top, right, bottom] of fact?.source_line?.rects || raw?.rects || []) {
       const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
@@ -293,6 +311,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     const raw = rawLines.find(source => source.ref === ref);
     showAllFacts = !fact && !raw;
     if (showAllFacts) {
+      comparison?.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed','false'));
       for (const row of right.querySelectorAll('[data-fact],[data-source-ref]')) row.hidden = false;
       return;
     }
@@ -302,7 +321,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
   if (pageFacts.length || rawLines.length) {
     fieldPicker=el('select'); fieldPicker.setAttribute('aria-label','定位本页引文');
     fieldPicker.add(new Option('全部引文 · '+(pageFacts.length + rawLines.length)+' 项',''));
-    for (const [label,refs] of [['审批决定与待核原文',boardRefs],['整改状态与原行',repairRefs]]) {
+    for (const [label,refs] of [['审批决定与待核原文',boardRefs],['整改状态与原行',repairRefs],['复验附注',registerRefs]]) {
       if (!refs.length) continue;
       const group = el('optgroup');
       group.label = label;
@@ -314,7 +333,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     }
     fieldPicker.addEventListener('change',() => selectReference(fieldPicker.value, true));
     const navigator = box('field-navigator',right.querySelector('h3'),fieldPicker);
-    if (pageRefs.length > 1) {
+    if (pageRefs.length > 1 && !comparison) {
       const announcement = el('output','','visually-hidden');
       compareButton = action('对照'+pageRefs[0].label,() => {
         const next = pageRefs.find(source => source.ref === compareButton.dataset.nextRef);
@@ -505,7 +524,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
   }
   for (const gap of gaps) {
     const label = {inspection_reference:'设备检验原行',contract_signing_reference:'合同签章原行',payment_release_reference:'放行依据原行',acceptance_opinion_reference:'付款意见原行',payment_amendment_reference:'付款变更所据原行',invoice_receipt_reference:'收票条件所据原行',repair_completion_reference:'整改记录原行',equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',approval_reference:'董事会审批记录原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
-    const section = box('evidence-row',el('h4',label+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
+    const section = box('evidence-row',el('h4',(gap.quality==='register_reference'?'复验附注':label)+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
     section.dataset.gapLine = String(gap.line);
     const raw = rawLines.find(source => source.rawLine === gap.line);
     if (raw) {
@@ -774,7 +793,7 @@ function finding(item) {
     const dates = dateEvidencePanel(item,state.bundle.report.graph);
     if (dates) node.append(dates);
   }
-  if (item.reinspection) node.append(reinspectionTrail(item.reinspection,state.bundle.report.graph));
+  if (item.reinspection) node.append(evidenceJump('核对整改复验原件','equipment-reinspection-trail'));
   if (item.delegations) node.append(mandatePanel(item.delegations, state.bundle.report.graph));
   if (item.quality_change) node.append(qualityChangePanel(item.quality_change, state.bundle.report.graph));
   if (item.acceptance_authority) node.append(acceptanceAuthorityPanel(item.acceptance_authority, state.bundle.report.graph));
@@ -871,7 +890,9 @@ function finding(item) {
   row.tabIndex = -1;
   const foldout = el('details','','finding-disclosure');
   const summary = el('summary');
-  summary.append(el('span',item.rule,'mono procedure-code'), el('span',heading,'procedure-title'), tag(item.status), glyph('chevron-down'));
+  const procedure=el('h3','','procedure-heading');
+  procedure.append(el('span',item.rule,'mono procedure-code'), el('span',heading,'procedure-title'), tag(item.status), glyph('chevron-down'));
+  summary.append(procedure);
   foldout.append(summary,node);
   row.append(foldout);
   return row;
@@ -943,9 +964,9 @@ function reportPanel() {
   const performance = report.findings.filter(item => /^H0[1-6]$/.test(item.rule));
   const verdict = report.result.verdict;
   const mark = box('verdict-symbol',glyph(({pass:'shield-check',reject:'exclamation-diamond',review:'clipboard-check'})[verdict] || 'question-circle'));
-  const conclusion = box('panel conclusion-panel',box('verdict-line',mark,
-    box('verdict-name',el('h2','审计建议'),el('strong',statusName(verdict))),
-    el('span',humanReviewLabel(report.result),'human-required')));
+  const verdictLine=box('verdict-line',mark,box('verdict-name',el('h2','审计建议'),el('strong',statusName(verdict))));
+  appendHumanReview(verdictLine,report.result,'human-required');
+  const conclusion = box('panel conclusion-panel',verdictLine);
   conclusion.dataset.verdict = report.result.verdict;
   const priorities = priorityFindings(report.findings);
   if (priorities.length) {
@@ -1369,11 +1390,14 @@ async function refresh() {
         state.tab=traced?'graph':'report'; focusFinding=traced?'#trace-select':'[data-finding="'+requestedFinding+'"]';
       } else if (route.params.get('view')==='replay' && state.openedCitation!==location.hash && state.bundle) {
         state.openedCitation=location.hash; state.tab='activity'; focusFinding='.rule-replay button';
+      } else if (route.params.get('view')==='reinspection' && state.openedCitation!==location.hash &&
+                 bundle?.report.findings.some(f=>f.rule==='H02' && f.reinspection)) {
+        state.openedCitation=location.hash; state.tab='report'; focusFinding='#equipment-reinspection-trail';
       }
       renderCase(Boolean(focusFinding));
       if (focusFinding) {
         const target = $(focusFinding);
-        if (target?.dataset.finding) revealPaperTarget(target);
+        if (target?.dataset.finding || target?.id==='equipment-reinspection-trail') revealPaperTarget(target);
         else target?.focus();
       }
       const target = route.params.get('fact');
