@@ -291,6 +291,11 @@ function openPage(docId, pageNumber, highlight, lineHint) {
   }
   const batches=state.bundle?.report.graph.delivery_batch_sources;
   const monetary=state.bundle?.report.graph.stage_payment_sources;
+  const modelLines=state.bundle?.report.graph.equipment_model_sources?.lines;
+  if (lineHint && modelLines && !gaps.some(g=>g.line===lineHint)) {
+    const line=modelLines.find(r=>r.doc===docId && r.page===pageNumber && r.line===lineHint);
+    if (line) gaps.push({...line,quality:'equipment_model_reference'});
+  }
   if (monetary && lineHint && !gaps.some(g=>g.line===lineHint)) {
     const note=monetary.notes.find(r=>r.doc===docId && r.page===pageNumber && r.line===lineHint);
     const raw=monetary.pages.find(p=>p.doc===docId && p.page===pageNumber)?.uncovered.find(r=>r.line===lineHint);
@@ -328,7 +333,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     if (source) gaps.push({...source,quality:['seller','delivery_note'].includes(source.kind)?'supplier_reference':'reservation_reference'});
   }
   for (const gap of gaps) {
-    const label = {stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
+    const label = {equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
     const section = box('evidence-row',el('h4',label+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
     section.dataset.gapLine = String(gap.line);
     if (gap.line===lineHint) {
@@ -500,6 +505,7 @@ function installmentDetails(history) {
 function evidenceJump(label, targetId) {
   const jump=action(label,()=>{
     const target=document.getElementById(targetId);
+    for (let fold=target?.closest('details');fold;fold=fold.parentElement?.closest('details')) fold.open=true;
     target?.focus({preventScroll:true});
     target?.scrollIntoView({block:'start'});
   },'text-button');
@@ -540,6 +546,15 @@ function finding(item) {
   if (item.acceptance_reservations?.lines.length || item.acceptance_reservations?.mixed_pages.length)
     node.append(reservationPanel(item,state.bundle.report.graph));
   if (item.acceptance_reservations?.supplier) node.append(supplierPanel(item.acceptance_reservations.supplier,state.bundle.report.graph));
+  if (item.equipment_models) node.append(equipmentModelsPanel(item.equipment_models,state.bundle.report.graph));
+  if (item.stage && /验收|质保|保修/.test(item.stage.clause)) {
+    const models=state.bundle.report.findings.find(f=>f.equipment_models)?.equipment_models;
+    if (models) {
+      const records=models.records.filter(r=>item.scope.includes(r.unit) && r.identity.receipt.some(ref=>item.evidence.includes(ref)));
+      if (records.length || !models.records.length) node.append(evidenceJump('核对本期所据的实收型号',
+        records.length===1?'equipment-model-'+records[0].unit:'equipment-models'));
+    }
+  }
   const packets=state.bundle.report.graph.receipt_packet_sources?.packets;
   if (item.rule==='H02' && packets?.length) node.append(receiptPacketPanel(packets,state.bundle.report.graph));
   if (item.batch_acceptance) {
@@ -647,6 +662,28 @@ function graphPanel() {
     panel.append(list);
   }
   const supplierRows=graph.acceptance_reservation_sources?.supplier_rows;
+  const modelLines=graph.equipment_model_sources?.lines;
+  if (modelLines?.length) {
+    const relations=graph.edges.filter(e=>e.type==='equipment_model_comparison');
+    const list=lazyFold('设备型号与验收原行（'+modelLines.length+'）',()=>{
+      const paired=new Set();
+      const rows=relations.map(e=>{
+        const row=box('line',box('flow',el('strong','约定与实收型号'),tag(e.status)));
+        row.dataset.modelRelation=e.to;
+        for (const [page,line] of [[e.from,e.ordered_line],[e.to,e.received_line]]) {
+          const source=modelLines.find(s=>s.doc+'/p'+s.page===page && s.line===line);
+          if (source) {
+            paired.add(source);
+            row.append(reservationSource(source,graph));
+          }
+        }
+        return row;
+      });
+      return [...rows,...modelLines.filter(line=>!paired.has(line)).map(line=>reservationSource(line,graph))];
+    });
+    list.classList.add('equipment-model-relations');
+    panel.append(list);
+  }
   if (supplierRows?.length) {
     const list=lazyFold('供应方与交付原件（'+supplierRows.length+'）',()=>supplierRows.map(s=>reservationSource(s,graph)));
     list.classList.add('supplier-relations');

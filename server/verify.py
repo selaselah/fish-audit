@@ -25,6 +25,7 @@ from performance_versions import DATE_FORMATS
 from quality_labels import verify_report as verify_quality_numbers
 from quality_references import verify_report as verify_quality_references
 from acceptance_authority import verify_sources as verify_acceptance_authority
+from equipment_models import verify as verify_equipment_models
 from stage_payments import verify as verify_stage_payments
 from receipt_packets import verify_sources as verify_receipt_packets
 from delivery_batches import verify_sources as verify_delivery_batches
@@ -244,6 +245,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
     verify_acceptance_authority(report,page_text)
     verify_receipt_packets(report,page_text)
     verify_stage_payments(report,page_text)
+    verify_equipment_models(report,page_text)
     verify_delivery_batches(report,page_text)
     verify_contract_effect(report,page_text)
     verify_warranty(report,page_text)
@@ -262,6 +264,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
         page_node = nodes[f"{doc}/p{page}"]
         inspected = [*graph.get("quality_addenda",{}).get("pages",[]),*graph.get("acceptance_authority_sources",{}).get("pages",[]),*graph.get("delivery_batch_sources",{}).get("pages",[]),*graph.get("contract_effect_sources",{}).get("pages",[]),*graph.get("warranty_sources",{}).get("pages",[]),*graph.get("payment_window_sources",{}).get("pages",[]),*graph.get("acceptance_reservation_sources",{}).get("pages",[])]
         inspected.extend(graph.get("stage_payment_sources",{}).get("pages",[]))
+        inspected.extend(graph.get("equipment_model_sources",{}).get("pages",[]))
         inspected.extend(p for packet in graph.get("receipt_packet_sources",{}).get("packets",[]) for p in packet["pages"])
         if report["policy"].get("quality_addenda") and ("clause_text_only" in trace or
                 any(p["doc"]==doc and p["page"]==page for p in inspected)):
@@ -395,6 +398,7 @@ def render_addendum_sources(bundle, report, nodes):
     selected = {p["doc"] for key in ("pages","signals","limited_numbers") for p in ledger.get(key,[])}
     selected.update(p["doc"] for p in graph.get("acceptance_authority_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("stage_payment_sources",{}).get("pages",[]))
+    selected.update(p["doc"] for p in graph.get("equipment_model_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("receipt_packet_sources",{}).get("packets",[]))
     units = {d["id"]:d.get("source",d["id"]) for d in graph.get("audit_documents",graph["documents"])}
     selected.update(units[u] for f in report["findings"] if f.get("quality_change") or f.get("acceptance_authority") for u in f["scope"])

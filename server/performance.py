@@ -11,6 +11,7 @@ from contract_changes import LABELS as ADDENDUM_FIELDS, LIMIT, SOURCE_LABELS, ca
 from acceptance_authority import LABELS as AUTHORITY_FIELDS, SIGN_LABELS, check as check_acceptance_authority
 import delivery_batches
 import stage_payments
+import equipment_models
 import contract_effect
 import warranty_terms
 import payment_windows
@@ -35,6 +36,7 @@ LABELS = {
     **DELEGATION_FIELDS,
     **ADDENDUM_FIELDS,
     **AUTHORITY_FIELDS,
+    "equipment_model": tuple(sorted(equipment_models.ORDERED | equipment_models.RECEIVED)),
     **delivery_batches.LABELS,
     **warranty_terms.LABELS,
     **payment_windows.LABELS,
@@ -661,9 +663,10 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
         accepted_on = day(receipts[0].single("accepted_on")) if accepted["status"]=="ok" else None
     plan, rows = schedule(contract,warranty_checks=version in WARRANTY_FORMATS,deadlines=version in PAYMENT_WINDOW_FORMATS)
     batch = None
+    models = equipment_models.assess(graph, contract, [*receipts, *retests], effective=signed["status"] == "ok") if version == FORMAT else None
     if version in BATCH_FORMATS:
         batch = delivery_batches.inspect(graph,contract,receipts,native_spacing=version in EFFECT_FORMATS,
-                    requirements=batch_signers.get("batches"),final_requirement=batch_signers.get("final"),
+                    requirements=batch_signers.get("batches"),final_requirement=batch_signers.get("final"), model_checks=models,
                     other_terms=bool(signed["status"]!="ok" or extra_units or pending_units or change or authority or repairs or retests or
                                      any(r.fields[k] or k in r.uncertain for r in receipts for k in ("original_acceptance","repair_number","defect_closure"))))
     batch_rows = {r["index"]:r for r in batch["batches"]} if batch else {}
@@ -775,6 +778,15 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
                 original = evaluate(contract,receipts)
                 if original["status"]=="issue":
                     accepted.update(status="issue",detail=original["detail"]+" "+accepted["detail"]+" 原验收缺陷仍需正式复验。")
+    if models:
+        accepted["equipment_models"] = models
+        accepted["evidence"] = list(dict.fromkeys([*accepted["evidence"], *models["evidence"]]))
+        accepted["scope"] = list(dict.fromkeys([*accepted["scope"], *(p["unit"] for p in graph["equipment_model_sources"]["pages"])]))
+        equipment_models.apply(accepted, models)
+        if models["status"] != "ok":
+            accepted_on = None
+            if accepted.get("reinspection"):
+                accepted["reinspection"]["state"] = "open"
     if pending_units:
         page_refs = [f"{doc}/p{n}" for doc,n in packet_pages]
         if accepted["status"]=="ok":
@@ -959,6 +971,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("batch_acceptance") != entry.get("batch_acceptance")
                 or saved.get("effect_review") != entry.get("effect_review")
                 or saved.get("warranty_check") != entry.get("warranty_check")
+                or saved.get("equipment_models") != entry.get("equipment_models")
                 or saved.get("stage_payments") != entry.get("stage_payments")
                 or saved.get("payment_window") != entry.get("payment_window")
                 or saved.get("acceptance_reservations") != entry.get("acceptance_reservations")

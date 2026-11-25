@@ -24,7 +24,7 @@ FIELDS = {
     "currency": "币种", "unit": "金额单位", "issued_on": "开票日期", "signed_on": "签约日期",
     "accepted_on": "验收日期", "acceptance_result": "验收结论",
     "payment_term": "结算条款", "adjustment": "变更或红冲条款",
-    "subject": "采购标的", "other": "其他有待核实的记载",
+    "equipment_model":"设备型号原栏", "subject": "采购标的", "other": "其他有待核实的记载",
     "claim": "报销单标题", "claim_total": "申请报销金额", "traveler": "出差人员",
     "trip_start": "出差开始日期", "trip_end": "出差结束日期", "service_on": "费用发生日期",
     "claim_ref": "随附发票号码", "claim_full_ref":"随附发票代码及号码",
@@ -81,6 +81,7 @@ unit 单独抄明示的金额单位（如“金额单位：元”），value 抄
 合同逐项读取生效条件(effect_clause)、合同状态(contract_state)、实际生效日期(effect_on)、双方签署栏(buyer_signature/seller_signature)。逐字保留附审批、签字并盖章等限定。只抄可见姓名、签章等文字，不能把印章图案、空栏或印刷的公司名改写为“已盖章”或“已签字”。
 采购合同本身的甲方盖章日期和乙方盖章日期也分别用 buyer_sealed_on、seller_sealed_on，完整抄录对应一方及日期。
 补充协议有独立抬头，用 contract_addendum。逐行抄录补充协议编号 addendum_number、原合同编号 base_contract_ref、变更范围 change_scope、原验收标准 previous_criterion、变更后验收标准 revised_criterion、变更适用时点 change_timing、协议生效条款 change_effect_clause、补充协议状态 change_state。原交付数量用 previous_quantity，变更后交付数量用 revised_quantity，保留单位与原印数字间隔。验收单用 quantity_accepted 抄录实际数量。另行补交、欠交或待清点的附注单列 other。甲方和乙方盖章日期分别用 buyer_sealed_on、seller_sealed_on，各自的签章栏另抄为 buyer_signature、seller_signature。保留附加限制、其他变更以及页尾备注原文，其他未分类条件用 other。
+合同约定设备型号和实际验收、复验的实收型号分别逐行抄为 equipment_model。区分型号、品名与逐台序列号，完整保留大小写、分隔符、遮盖、替代型号及批准说明。
 合同中各批交付明细逐行归 delivery_batch，保留批序、数量、单位及逐台设备编号。分批独立验收付款及是否另作终验的条款归 batch_clause。各批共同适用或某一批单独适用的验收人约定逐行归 acceptance_signing_clause，保留批次、姓名及共同签认要求。该批原件上每人的实际签认另归 acceptance_signer。验收报告明确的本批范围归 acceptance_scope，验收设备编号或序列号归 delivered_serials，验收单自己的编号归 acceptance_number。同一文件可含多份验收、整改和复验原件。逐页保留本页标题，区分验收单自己的编号、复验自己的编号、被引用的原验收单号和所附批次单号。抄录本页验收范围、日期、签字及续页标记，保留限定、尾号和字符间隔。
 总验收单明列的全部交付终验范围归 acceptance_scope。原页列出“所附批次验收单号”等引用栏时，将完整一行录为 batch_receipt_refs，保留各个单号、字符间隔与分隔符。终验单自己的编号归 acceptance_number。仅抄录本页，不从其他单据、文件名、设备编号或金额补写引用。
 合同同时规定分批签认人和另行终验的签认人时，每条原行分别归 acceptance_signing_clause，逐字保留“第几批”“各批”“终验”及共同签字的范围。总单每个实际签字栏各记一条 acceptance_signer，保留代签、岗位或签字待辨的记载。其他单据上的签字仅属于各自原页。
@@ -323,7 +324,7 @@ def audit_graph(graph, controls):
     procedures = [{"rule": item["rule"], "status": item["status"], "observation": item["detail"],
                    "evidence": item["evidence"], "methods": MAPPING[item["rule"]]} for item in controls]
     for procedure, finding in zip(procedures, controls):
-        for key in ("stage","reinspection","delegations","quality_change","acceptance_authority","date_checks","batch_acceptance"):
+        for key in ("stage","reinspection","delegations","quality_change","acceptance_authority","equipment_models","date_checks","batch_acceptance"):
             if key in finding:
                 procedure[key] = finding[key]
         reservations = finding.get("acceptance_reservations")

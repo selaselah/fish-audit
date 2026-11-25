@@ -1,5 +1,13 @@
 # 本机审计接口
 
+## 约定设备型号与实收型号
+
+规则 `2026.11.25.13` 新增 `policy.equipment_models=printed-equipment-models-v1`。报告的 `graph.equipment_model_sources` 保存涉查原页和型号引文。每个 `lines[]` 元素保存原件 `doc`、物理页 `page`、逻辑单据 `unit`、角色、原行号 `line`、原文 `quote`、原值 `value` 和同一原行的观察 ID `facts`。只有图像引文时行号为空。识别到型号的文字行可独立留存，模型漏录时 `facts` 可以为空。
+
+H02 的 `equipment_models` 包含约定原行 `ordered`、逐份验收或复验的 `records[]`、汇总状态、理由和证据。每份记录的 `received` 指向实收原行，`identity` 保留合同号、双方和标的的关联结果与双方引文，`comparison` 取 `match`、`different` 或 `unresolved`。`status` 另行反映条款、归属及复核因素。例如两原件列示不同型号、合同生效尚待证时，记录可同时为 `different` 和 `risk`。型号完全相符时，H01 的批准条件及 H02 的实测质量仍分别计算。
+
+可逐字比较的两条原行产生 `equipment_model_comparison` 图关系，保存双方物理页、各自原行号、审查状态及用于关联单据的观察引用。型号遮盖、替代条件或归属不清时，原件仍供查看。验收记录分别参与依赖该单据的 H04 和 H05 判断。签收和离线校验会核对原页、所载型号及关系。旧版载有设备型号且已有肯定验收或付款判断的底稿，需按新程序重审后签收。
+
 ## 同一次提交的分期回单
 
 规则 `2026.11.25.12` 在报告中保存 `policy.stage_payments=submitted-stage-transfers-v1`。当合同履约程序识别到多份回单或同页有多组交易栏位时，`graph.stage_payment_sources` 列出银行单据 `banks`、所核原页 `pages`、原文附注 `notes`、待归属单据 `unknown_units` 及单笔边界待核的单据 `ambiguous_units`。附注保留原件、页、行号、引文以及能与原文相连的观察 ID。

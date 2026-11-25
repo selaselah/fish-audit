@@ -496,6 +496,54 @@ function supplierPanel(check,graph) {
   return panel;
 }
 
+function equipmentModelsPanel(check,graph) {
+  const {documents,facts}=graphIndex(graph);
+  const {pages,lines}=graph.equipment_model_sources;
+  const panel=fold('核对合同约定与实收型号');
+  panel.classList.add('equipment-models');
+  panel.id='equipment-models';
+  panel.tabIndex=-1;
+  panel.dataset.modelStatus=check.status;
+  panel.open=check.status!=='ok';
+  const grid=box('equipment-originals');
+  const roles={contract:'合同约定',acceptance:'验收实收',reinspection:'复验实收',contract_addendum:'补充协议'};
+  const units=[...new Set([...pages.filter(p=>p.role==='contract'),...pages].map(p=>p.unit))];
+  for (const unit of units) {
+    const originals=pages.filter(p=>p.unit===unit);
+    const first=originals[0];
+    const record=check.records.find(r=>r.unit===unit);
+    const model=first.role==='contract'?check.ordered:record?.received;
+    const section=box('equipment-original');
+    section.id='equipment-model-'+unit;
+    section.tabIndex=-1;
+    const name=documents.get(first.doc)?.name || unit;
+    section.append(el('h4',roles[first.role] || '其他资料'),el('span',name,'small'));
+    if (model || record || first.role==='contract') section.append(el('strong',model?.value || '型号待核','model-code'));
+    if (record) section.append(tag(record.status));
+    const cited=lines.filter(s=>s.unit===unit);
+    for (const line of cited) section.append(reservationSource(line,graph,true));
+    for (const p of originals.filter(p=>!model || !p.native || !p.text_only || p.incomplete)) {
+      const button=action('查看第 '+p.page+' 页原件',()=>openPage(p.doc,p.page),'ref');
+      button.dataset.modelPage=p.doc+'/p'+p.page;
+      section.append(button);
+    }
+    if (record) {
+      if (record.status!=='ok') section.append(el('p',record.detail));
+      const identity=record.identity;
+      const refs=[...identity.contract,...identity.receipt].filter(ref=>facts.has(ref));
+      if (refs.length) section.append(lazyFold(identity.matches?'核对合同号、双方和标的':'核对验收单归属',()=>refs.map(ref=>{
+        const f=facts.get(ref);
+        const row=box('batch-source',el('q',f.source_line?.text || f.quote),citation(ref));
+        row.dataset.modelIdentity=ref;
+        return row;
+      })));
+    }
+    grid.append(section);
+  }
+  panel.append(grid);
+  return panel;
+}
+
 function reservationPanel(finding,graph) {
   const {lines,mixed_pages}=finding.acceptance_reservations;
   const {documents}=graphIndex(graph);

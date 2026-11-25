@@ -130,6 +130,13 @@ textarea { width: 100%; resize: vertical; }
 .stage-payments { min-width:0; margin:14px 0; padding:12px 14px; border-inline-start:3px solid var(--green); background:var(--soft); }
 .stage-payments[data-stage-balance="over"],.stage-payments[data-stage-balance="unresolved"] { border-inline-start-color:#946421; background:#fbf7ed; }
 .stage-payments h4 { margin:0 0 8px; }
+.equipment-models { margin:12px 0; }
+.equipment-originals { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,245px),1fr)); gap:12px; margin:10px 0; }
+.equipment-original { min-width:0; padding:12px; background:var(--soft); border-top:2px solid var(--line); overflow-wrap:anywhere; scroll-margin-top:12px; }
+.equipment-original h4,.equipment-original p { margin:0 0 6px; }
+.equipment-original .model-code { display:block; font:600 1.12rem/1.5 ui-monospace,monospace; margin:4px 0; }
+.equipment-original .batch-source { margin:6px 0; }
+.equipment-original details { margin-top:8px; }
 .stage-balances { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr)); gap:8px 12px; margin:0 0 10px; }
 .stage-balances dd,.stage-transfer { overflow-wrap:anywhere; }
 .stage-transfer { margin-top:12px; padding-top:10px; border-top:1px solid var(--line); min-width:0; }

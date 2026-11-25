@@ -5,6 +5,7 @@ import re
 from collections import defaultdict
 from unicodedata import normalize
 
+import equipment_models
 from acceptance_authority import CLAUSE, LABELS as SIGNING_LABELS, covers, instruction, parts, required_names, signed_name
 from calculations import normalized
 from contract_changes import labelled_sources
@@ -187,6 +188,8 @@ def page_sources(graph,read_text,version=FORMAT):
                 from warranty_terms import dedicated
                 return dedicated(quote) and covers(field,value,quote)
             return covers(field,value,quote)
+        if "equipment_model_sources" in graph:
+            contract_fields.add("equipment_model")
         if "warranty_sources" in graph:
             contract_fields.update(("warranty_period","warranty_condition"))
         if "payment_window_sources" in graph:
@@ -202,6 +205,8 @@ def page_sources(graph,read_text,version=FORMAT):
             return contract_row(field,value,quote) or field==CLAUSE and bool(final_signers(quote)) and covers(field,value,quote)
         coverage+=covered_rows(graph,read_text,separate_units,contract_fields,separate_row,"另行终验合同")
         receipt_fields=set(RECEIPT_FIELDS)
+        if "equipment_model_sources" in graph:
+            receipt_fields.add("equipment_model")
         if version in FINAL_FORMS:
             receipt_fields.add(FINAL_REFS)
         def receipt_row(field,value,quote):
@@ -212,6 +217,8 @@ def page_sources(graph,read_text,version=FORMAT):
                 return normalized(value)==normalized(quote) and normalized(quote) in {"质保期满确认单","质保期满确认书"}
             return covers(field,value,quote)
         release_fields={"warranty",*LINK_KEYS,"warranty_release","acceptance_signer"}
+        if "equipment_model_sources" in graph:
+            contract_fields.add("equipment_model")
         if "warranty_sources" in graph:
             release_fields.add("warranty_defects")
         coverage+=covered_rows(graph,read_text,set(graph["documents_by_kind"].get("warranty",[])),
@@ -518,7 +525,7 @@ def reconcile_final(finals, batches, records, *, held, needs_final_authority):
     return finding("ok","终验单逐份列明各批验收单号，交付范围、实测质量及签认均有原件支持。")
 
 
-def inspect(graph,contract,receipts,*,other_terms,native_spacing=False,requirements=None,final_requirement=None):
+def inspect(graph,contract,receipts,*,other_terms,native_spacing=False,requirements=None,final_requirement=None,model_checks=None):
     source=graph.get("delivery_batch_sources",{})
     if not source.get("signals"):
         return None
@@ -540,6 +547,13 @@ def inspect(graph,contract,receipts,*,other_terms,native_spacing=False,requireme
     base.extend(r["ref"] for r in riders)
     signatures=graph.get("acceptance_authority_sources",{}).get("signatures",[])
     records=[record(contract,doc,source,native_spacing,requirements,signatures,separate,final_requirement) for doc in receipts]
+    if model_checks:
+        by_unit = {r["unit"]: r for r in model_checks["records"]}
+        for item in records:
+            model = by_unit.get(item["unit"])
+            if model:
+                equipment_models.apply(item, model)
+                item["evidence"] = list(dict.fromkeys([*item["evidence"], *model["evidence"]]))
     finals=[r for r in records if r.get("role")=="final"]
     expected={r["index"] for r in schedule}
     unknown=[r for r in records if r["scope_unclear"] or r.get("role")=="final" and len(finals)>1 or

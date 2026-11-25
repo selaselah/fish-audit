@@ -1,5 +1,17 @@
 # 合成财会审计演练
 
+## 验收的是哪一种设备
+
+在仓库根目录运行下列命令，可上传十一组合成采购资料。每页均带演练水印。去掉 `--run` 只生成文件，追加 `--cases wrong batches approval` 可选择个别案例。
+
+```sh
+server/.venv/bin/python docs/samples/equipment_models.py --run --run-id synthetic-equipment-models-v1
+```
+
+`match` 和 `wrong` 的验收数量、温度、签认及回单均相符，合同和验收单的完整型号分别相同或不同。`absent` 缺实收型号，`masked` 遮盖末位，`substitute` 另有经批准方可替代的约定，`image` 将换型说明放在验收页的影像中，`foreign` 使用另一合同号的验收原件。`approval` 的型号相符但缺董事会批准，`quality` 的型号相符但柜温超限，`batches` 的两批独立验收，只有第二批所列型号不同。
+
+`camera` 同时上传原生 Word 合同、只有像素的 JPEG 验收单和两份 PDF。保留模型的首次读图供人工核对。脚本核对模型响应、所据原页、实际期次与整案建议，底稿留待审计人员签收。
+
 ## 分期款分几笔支付
 
 在仓库根目录运行以下命令，生成并上传 11 组水印采购资料。每组有合同、验收报告、质保确认单和两张银行回单。本机工作台需已启动。去掉 `--run` 可只生成文件，追加 `--cases approval quality early` 可只运行三个指定情形。

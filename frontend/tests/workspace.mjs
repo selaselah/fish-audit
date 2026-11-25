@@ -263,6 +263,39 @@ try {
       }
     };
     const packets=report.graph.receipt_packet_sources?.packets || [];
+    const equipment=inspection?.equipment_models;
+    const modelLines=report.graph.equipment_model_sources?.lines || [];
+    if (equipment) {
+      const panel='document.getElementById("equipment-models")';
+      assert.equal(await evaluate(panel+'.dataset.modelStatus'),equipment.status);
+      assert.equal(await evaluate(panel+'.open'),equipment.status!=='ok');
+      await evaluate(panel+'.open=true');
+      await verifyRemarks(panel,modelLines);
+      for (const record of equipment.records) {
+        const section='document.getElementById('+JSON.stringify('equipment-model-'+record.unit)+')';
+        assert.equal(await evaluate(section+'.querySelector(".model-code").textContent'),record.received?.value || '型号待核');
+        const identity=record.identity.receipt.find(ref=>report.graph.facts.find(f=>f.id===ref)?.field==='contract_id');
+        if (identity) {
+          await evaluate(section+'.querySelector("details").open=true');
+          const source=section+'.querySelector('+JSON.stringify('[data-model-identity="'+identity+'"]')+')';
+          await wait(source,'equipment contract reference');
+          await evaluate(source+'.querySelector("button").click()');
+          await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(identity),'received equipment linked to the original contract number');
+          await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+          await evaluate(section+'.querySelector("details").open=false');
+        }
+      }
+      for (const stage of phases) {
+        const button='document.querySelector('+JSON.stringify('[data-finding="'+stage.id+'"] [aria-controls^="equipment-model"]')+')';
+        if (/^合同生效/.test(stage.stage.clause)) assert.equal(await evaluate('!!'+button),false);
+        if (/验收|质保/.test(stage.stage.clause) && equipment.records.some(r=>stage.scope.includes(r.unit))) {
+          await evaluate(panel+'.open=false');
+          const target=await evaluate(button+'.getAttribute("aria-controls")');
+          await evaluate(button+'.click()');
+          await wait(panel+'.open && document.activeElement?.id==='+JSON.stringify(target),'jump from installment to open model source');
+        }
+      }
+    }
     const settlements=report.findings.filter(f=>f.stage_payments);
     for (const f of settlements) {
       await jump(summary,f);
@@ -779,6 +812,15 @@ try {
     }
     for (const width of [1440,1024,820,768,390,320]) {
       await call('Emulation.setDeviceMetricsOverride',{width,height:880,deviceScaleFactor:1,mobile:false});
+      if (equipment) {
+        await evaluate('document.getElementById("equipment-models").open=true');
+        assert.ok(await evaluate('[...document.querySelectorAll(".equipment-originals,.equipment-original")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'equipment records fit at '+width);
+        if (process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
+          await evaluate('document.getElementById("equipment-models").scrollIntoView({block:"start"})');
+          const capture=await call('Page.captureScreenshot',{format:'png'});
+          await writeFile(join(process.env.AUDIT_UI_SHOTS,'equipment-'+performanceCase+'-'+width+'.png'),Buffer.from(capture.data,'base64'));
+        }
+      }
       assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll(".phase-summary li,.phase-results,.clause-source,.mandate-dates,.mandate-side,.quality-change,.change-comparison,.change-source,.acceptance-authority,.signature-record,.signer-source,.contract-date-evidence,.delivery-batches,.batch-source,.batch-record,.batch-receipt,.receipt-packets,.packet-file,.packet-page")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'performance layout at '+width);
       if (settlements.length) {
         assert.ok(await evaluate('[...document.querySelectorAll(".stage-payments,.stage-balances,.stage-transfer")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'stage payment totals at '+width);
@@ -880,6 +922,13 @@ try {
     await click('查看证据路径','document.querySelector('+JSON.stringify('[data-finding="'+target.id+'"]')+')');
     await wait('document.querySelector("#trace-select")?.value==='+JSON.stringify(target.id),'acceptance evidence graph');
     const allRemarks=report.graph.acceptance_reservation_sources?.lines || [];
+    if (modelLines.length) {
+      const panel='document.querySelector(".equipment-model-relations")';
+      await evaluate(panel+'.open=true');
+      await verifyRemarks(panel,modelLines);
+      assert.equal(await evaluate(panel+'.querySelectorAll("[data-model-relation]").length'),
+        report.graph.edges.filter(e=>e.type==='equipment_model_comparison').length);
+    }
     const quantities=report.graph.quality_addenda?.quantities?.lines || [];
     if (quantities.length) {
       const panel='document.querySelector(".quantity-relations")';

@@ -25,7 +25,7 @@ LABELS = {"total":("含税总额","含税总价","价税合计","含税合计"),
           "transfer_amount":("付款金额","转账金额","交易金额"),"paid_on":("付款日期","转账日期","交易日期"),
           "payment_designation":("款项用途","付款用途","款项性质","对应期次","付款期次"),
           "payee_account":("收款账号","收款账户","收款人账号"),"contract_account":("约定收款账号","合同收款账号")}
-CONTRACT = {"contract","contract_id","buyer","seller","subject","signed_on","effect_on","valid_until","effect_clause","contract_state",
+CONTRACT = {"equipment_model","contract","contract_id","buyer","seller","subject","signed_on","effect_on","valid_until","effect_clause","contract_state",
             "buyer_signature","seller_signature","buyer_sealed_on","seller_sealed_on","payment_term","payment_stage","total","currency","unit",
             "acceptance_criteria","quantity_agreed","delivery_batch","batch_clause","acceptance_signing_clause","warranty_period",
             "warranty_condition","payment_deadline","contract_account"}
