@@ -8,6 +8,7 @@ import {createServer} from 'node:net';
 import {createHash} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {once} from 'node:events';
+import {checkProduct, checkReviewDesign} from './product.mjs';
 
 const scratch = await mkdtemp(join(tmpdir(), 'fish-ui-'));
 const socket = createServer().listen(0, '127.0.0.1');
@@ -15,6 +16,7 @@ await once(socket, 'listening');
 const port = socket.address().port;
 await new Promise(resolve => socket.close(resolve));
 const sampleDesk = process.argv.includes('--sample-desk');
+const product = process.argv.includes('--product');
 function caseArgument(name) {
   const index = process.argv.indexOf(name);
   if (index < 0) return null;
@@ -41,16 +43,17 @@ const partialTransfer = caseArgument('--partial-transfer-case');
 const visibilityCase = caseArgument('--visibility-case');
 const accountReview = caseArgument('--account-review-case');
 const performanceCase = caseArgument('--performance-case');
+const designCase = caseArgument('--design-case');
 const qualityImageCase = caseArgument('--quality-image-case');
 const reinspectionGap = caseArgument('--reinspection-gap-case');
 const brokenPayment = caseArgument('--payment-source-case');
 const waitingCase = caseArgument('--waiting-case');
-const seeded = [sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+const seeded = [product,designCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
-const root = brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
+const root = product ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
   recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
-if (recoveringCase || waitingCase || legacyCase || brokenPayment) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
+if (product || recoveringCase || waitingCase || legacyCase || brokenPayment) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
 if (legacyCase || brokenPayment) assert.ok(!['8000','8010'].includes(new URL(root).port));
 const children = [];
 const faults = [];
@@ -110,8 +113,12 @@ try {
   };
   const click = (label, container='document') => evaluate('[...'+container+'.querySelectorAll("button,a")].find(b=>b.textContent==='+JSON.stringify(label)+' && b.getClientRects().length).click()');
   await call('Runtime.enable');
-  await call('Page.navigate',{url:root});
-  if (reinspectionGap) {
+  await call('Page.navigate',{url:product ? root : root+'/app'});
+  if (product) {
+    await checkProduct({root,call,evaluate,wait});
+  } else if (designCase) {
+    await checkReviewDesign({root,call,evaluate,wait},designCase);
+  } else if (reinspectionGap) {
     const api=root+'/api/cases/'+reinspectionGap;
     const task=await (await fetch(api)).json();
     assert.ok(task.title.startsWith('合成演练 · ') && task.profile==='cn-contract-performance/v1');

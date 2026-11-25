@@ -17,7 +17,7 @@ if __name__ == "__main__":
     if local_python.is_file() and Path(sys.prefix).resolve() != local_env:
         os.execv(str(local_python), [str(local_python), *sys.argv])
 
-from flask import Blueprint, Flask, g, jsonify, redirect, request, send_file
+from flask import Blueprint, Flask, g, jsonify, redirect, request, send_file, send_from_directory
 from waitress import serve
 from werkzeug.exceptions import HTTPException
 
@@ -237,7 +237,11 @@ def create_app(store, worker):
         return jsonify(error=messages.get(error.code, "请求失败。")), error.code
 
     @app.get("/")
-    def index():
+    def product_home():
+        return send_file(FRONTEND / "landing.html")
+
+    @app.get("/app")
+    def workspace():
         return send_file(FRONTEND / "index.html")
 
     @app.get("/workpaper/<case_id>")
@@ -267,11 +271,22 @@ def create_app(store, worker):
                 raise CaseError("复算入口需要确定的底稿版本。",400)
             args["view"] = "replay"
         route = ("w/"+wid+"/" if wid else "")+"case/"+case_id
-        return redirect("/#"+route+("?" + urlencode(args) if args else ""))
+        return redirect("/app#"+route+("?" + urlencode(args) if args else ""))
+
+    @app.get("/assets/<filename>")
+    def public_asset(filename):
+        return send_from_directory(FRONTEND / "assets", filename)
+
+    @app.get("/showcase/<filename>")
+    def showcase_document(filename):
+        if filename not in {"contract.pdf", "acceptance.pdf", "transfer.pdf"}:
+            raise CaseError("没有这份演练原件。", 404)
+        return send_file(FRONTEND / "showcase" / filename, mimetype="application/pdf")
 
     @app.get("/<filename>")
     def asset(filename):
-        if filename not in {"app.js", "team.js", "desk.js", "provenance.js", "supplements.js", "checkpoints.js", "peer-review.js", "style.css"}:
+        if filename not in {"app.js", "team.js", "desk.js", "provenance.js", "supplements.js", "checkpoints.js", "peer-review.js",
+                            "style.css", "brand.css", "landing.css", "landing.js"}:
             raise CaseError("资源不存在。", 404)
         return send_file(FRONTEND / filename)
 

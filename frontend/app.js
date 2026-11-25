@@ -35,7 +35,11 @@ function box(className, ...children) {
   node.append(...children);
   return node;
 }
-function tag(value) { return el('span', statusName(value), 'tag ' + (tone[value] || value)); }
+function tag(value) {
+  const badge = el('span', statusName(value), 'tag ' + (tone[value] || value));
+  badge.dataset.state = value;
+  return badge;
+}
 function action(label, callback, className = '') {
   const node = el('button', label, className);
   node.type = 'button';
@@ -85,14 +89,23 @@ function renderList() {
   const header = box('ledger-header ledger-row', ...['任务名称','处理状态','审计建议', $('#desk-sort').value === 'updated' ? '最近更新' : '提交时间'].map(label => el('span', label)));
   list.replaceChildren(header);
   for (const row of visible) {
-    const title = Team.paperLink(row.title, row.id, 'case-link');
-    const metadata = el('span', profileName(row.profile) + ' · ' + row.files + ' 份资料' + (row.rev ? ' · 底稿 R' + row.rev : ''), 'small');
+    const trainingPrefix = '合成演练 · ';
+    const training = row.title.startsWith(trainingPrefix) && row.title.length > trainingPrefix.length;
+    const title = Team.paperLink(training ? row.title.slice(trainingPrefix.length) : row.title, row.id, 'case-link');
+    if (training) title.setAttribute('aria-label', row.title);
+    const metadata = el('span', [training ? '合成演练' : '', profileName(row.profile), row.files+' 份资料',
+      row.rev ? 'R'+row.rev : ''].filter(Boolean).join(' · '), 'small case-meta');
     const status = box('', tag(row.status));
     if (row.status === 'running') status.append(el('small', row.progress + '%', 'small'));
     const result = row.decision ? '人工' + statusName(row.decision) :
       (row.verdict ? statusName(row.verdict) : '等待结果');
-    list.append(box('ledger-row', box('case-name',el('span','',row.profile===travelProfile?'doc-icon travel':'doc-icon'),box('',title,metadata)), status,
-      box('row-result',el('span',result), ...(row.issues || row.risks ? [el('small',[(row.issues ? row.issues+' 项问题' : ''),(row.risks ? row.risks+' 项风险' : '')].filter(Boolean).join(' · '),'small')] : [])),
+    const verdict = box('row-result', el('span',result));
+    verdict.dataset.verdict = row.decision || row.verdict || '';
+    if (row.issues || row.risks) verdict.append(el('small',
+      [row.issues ? row.issues+' 项问题' : '', row.risks ? row.risks+' 项风险' : ''].filter(Boolean).join(' · '),'small'));
+    const icon = el('span', '', 'doc-icon');
+    icon.dataset.kind = row.profile; icon.setAttribute('aria-hidden','true');
+    list.append(box('ledger-row', box('case-name',icon,box('',title,metadata)), status, verdict,
       el('span', time($('#desk-sort').value==='updated' ? row.updated : row.created), 'small row-date')));
   }
   if (!visible.length) list.append(el('p', state.filter === 'all' && !$('#case-search').value && !$('#desk-profile').value ? '还没有任务，选择「新建审计」上传资料。' : '当前筛选条件下没有任务。', 'empty'));
@@ -141,8 +154,10 @@ function openPage(docId, pageNumber, highlight, lineHint) {
   overlay.setAttribute('viewBox', '0 0 1000 1000');
   overlay.setAttribute('preserveAspectRatio', 'none');
   overlay.setAttribute('aria-hidden', 'true');
-  const left = box('', box('image-sheet', image, overlay), enlarged);
-  const right = box('', el('h3', '本页引文'));
+  const left = box('viewer-original', box('image-sheet', image, overlay), enlarged);
+  const right = box('viewer-facts', el('h3', '本页引文'));
+  left.id = 'viewer-original'; right.id = 'viewer-facts';
+  left.tabIndex = right.tabIndex = -1;
   const pageFacts = (state.bundle?.report.graph.facts || []).filter(fact => fact.doc === docId && fact.page === pageNumber);
   const coverage = state.bundle?.report.graph.delegation_coverage;
   const nameHolds = new Map([...(coverage?.agent_holds || []),...(coverage?.signer_holds || [])]
@@ -150,6 +165,14 @@ function openPage(docId, pageNumber, highlight, lineHint) {
   const editable = state.bundle?.rev === state.detail.rev && state.detail.status === 'ready';
   const selected = new Set();
   let focusRow;
+  function revealPageMark() {
+    if (!matchMedia('(min-width:761px)').matches || !left.isConnected || !image.naturalWidth) return;
+    const rect = overlay.firstElementChild?.getBoundingClientRect();
+    if (!rect) return;
+    const pane = left.getBoundingClientRect();
+    if (rect.top < pane.top + 8 || rect.bottom > pane.bottom - 8)
+      left.scrollTop += (rect.top + rect.bottom - pane.top - pane.bottom) / 2;
+  }
   function locate(fact) {
     overlay.replaceChildren();
     for (const [left, top, right, bottom] of fact.source_line?.rects || []) {
@@ -159,6 +182,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
       overlay.append(rect);
     }
     for (const row of right.querySelectorAll('[data-fact]')) row.classList.toggle('located', row.dataset.fact === fact.id);
+    revealPageMark();
   }
   function focusObservation(source) {
     locate(source);
@@ -363,13 +387,21 @@ function openPage(docId, pageNumber, highlight, lineHint) {
   for (const control of controls) control.disabled = true;
   loadReviewImage(image,pageUrl).then(()=>{
     for (const control of controls) control.disabled=false;
+    revealPageMark();
   },()=>{
     image.hidden=true; overlay.setAttribute('hidden','');
     const notice=el('p','原页加载失败，可单独打开页图查看原因。','note');
     notice.setAttribute('role','alert'); left.prepend(notice);
   });
   $('#page-title').textContent = item.name + ' · 第 ' + pageNumber + ' 页';
-  $('#page-content').replaceChildren(box('page-view', left, right));
+  const jumpTo = (pane, target) => {
+    pane.focus({preventScroll:true});
+    (target || pane).scrollIntoView({block:'center'});
+  };
+  const originalButton = action('看原页', () => jumpTo(left,overlay.querySelector('rect')));
+  const quotesButton = action('看引文', () => jumpTo(right,right.querySelector('.located')));
+  originalButton.setAttribute('aria-controls',left.id); quotesButton.setAttribute('aria-controls',right.id);
+  $('#page-content').replaceChildren(box('viewer-nav', originalButton, quotesButton), box('page-view', left, right));
   $('#page-dialog').showModal();
   if (focusRow) {
     const fact=pageFacts.find(f=>f.id===highlight);
@@ -613,10 +645,18 @@ function reportPanel() {
   const other = report.findings.filter(item => !performance.includes(item));
   const passed = other.filter(item => item.status === 'ok');
   const exceptions = other.filter(item => item.status !== 'ok');
-  const conclusion = box('panel', box('panel-head', el('h2', '审计建议'), tag(report.result.verdict)),
+  const conclusion = box('panel conclusion-panel', box('panel-head', el('h2', '审计建议'), tag(report.result.verdict)),
     el('p', '专项人工校验：' + (report.result.human_required ? '需要' : '无待核项') + ' · 最终决定由审计人员验收。'),
     el('p', report.result.counts.issue + ' 项问题 · ' + report.result.counts.risk + ' 项风险 · ' +
       report.result.counts.missing + ' 项证据不足', 'muted'));
+  conclusion.dataset.verdict = report.result.verdict;
+  const priorities = ['issue','risk','missing'].flatMap(status => report.findings.filter(item => item.status === status));
+  if (priorities.length) {
+    const links = box('priority-findings', el('strong','优先核对'));
+    for (const item of priorities.slice(0,3))
+      links.append(performanceJump(item, item.stage ? item.stage.name+' · '+item.title : item.title));
+    conclusion.append(links);
+  }
   const findings = box('panel', el('h2', performance.length ? '其他检查程序' : '风险与问题'));
   if (exceptions.length) findings.append(...exceptions.map(finding));
   else if (!performance.length) findings.append(el('p', '本次已执行的检查程序均相符。'));
@@ -644,7 +684,7 @@ function reportPanel() {
     review.append(conditions);
   }
   review.append(findings);
-  const side = box('', human);
+  const side = box('paper-side', human);
   const peer = PeerReview.panel(state.detail,state.bundle);
   if (peer) side.append(peer);
   side.append(working);
@@ -1211,10 +1251,50 @@ $('#review-form').addEventListener('submit', async event => {
 });
 $('#new-case').addEventListener('click', () => openIntake());
 $('#supplement-fields').addEventListener('input',()=>{state.key=null;});
-$('#upload-files').addEventListener('change', () => {
+const fileInput = $('#upload-files');
+const canEditFileList = typeof DataTransfer === 'function';
+function replaceFiles(files) {
+  const selection = new DataTransfer();
+  for (const file of files) selection.items.add(file);
+  fileInput.files = selection.files;
+  fileInput.dispatchEvent(new Event('change',{bubbles:true}));
+}
+fileInput.addEventListener('change', () => {
   state.key = null; $('#upload-error').textContent = '';
-  $('#chosen-files').replaceChildren(...[...$('#upload-files').files].map(file => el('li', file.name)));
+  const files = [...fileInput.files];
+  $('#chosen-files').replaceChildren(...files.map((file,index) => {
+    const row = el('li');
+    const size = file.size >= 1024**2 ? (file.size/1024**2).toFixed(1)+' MiB' : Math.ceil(file.size/1024)+' KiB';
+    row.append(el('span',file.name),el('small',size));
+    if (canEditFileList) {
+      const remove = action('移除',() => {
+        if ($('#submit-files').disabled) return;
+        replaceFiles(files.filter((_,i)=>i!==index));
+        const next = $('#chosen-files').children[index] || $('#chosen-files').lastElementChild;
+        (next?.querySelector('button') || fileInput).focus();
+      },'plain');
+      remove.setAttribute('aria-label','移除 '+file.name);
+      row.append(remove);
+    }
+    return row;
+  }));
 });
+if (canEditFileList) {
+  const zone = fileInput.closest('label');
+  $('#drop-hint').hidden = false;
+  zone.addEventListener('dragover', event => {
+    if (!Array.from(event.dataTransfer.types).includes('Files')) return;
+    event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; zone.classList.add('drag-over');
+  });
+  zone.addEventListener('dragleave', event => {
+    if (!zone.contains(event.relatedTarget)) zone.classList.remove('drag-over');
+  });
+  zone.addEventListener('drop', event => {
+    event.preventDefault(); zone.classList.remove('drag-over');
+    if ($('#submit-files').disabled || !event.dataTransfer.files.length) return;
+    replaceFiles([...fileInput.files,...event.dataTransfer.files]);
+  });
+}
 $('#upload-title').addEventListener('input', () => { state.key = null; });
 function profileChanged() {
   state.key = null;

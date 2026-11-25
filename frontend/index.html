@@ -7,6 +7,8 @@
   <meta name="page-type" content="software">
   <meta name="site-kind" content="software">
   <title>Fish Audit · 财会审计工作台</title>
+  <link rel="icon" href="/assets/fish-mark.png" type="image/png">
+  <link rel="stylesheet" href="/brand.css">
   <link rel="stylesheet" href="/style.css">
   <script src="/team.js" defer></script>
   <script src="/desk.js" defer></script>
@@ -20,7 +22,7 @@
   <a class="skip" href="#content">跳到工作区</a>
   <header class="bar">
     <div class="wrap header-inner">
-      <a class="brand" href="#desk" aria-label="Fish Audit 工作台"><span class="ledger" aria-hidden="true"></span>Fish Audit</a>
+      <a class="brand fish-wordmark" href="/" aria-label="Fish Audit 产品首页"><img src="/assets/fish-mark.png" width="36" height="36" alt="">Fish Audit</a>
       <nav class="primary-nav" aria-label="主导航">
         <a href="#desk" id="nav-desk">审计工作台</a>
         <a href="#library" id="nav-library">证据检索</a>
@@ -42,30 +44,30 @@
     <section id="desk" hidden>
       <div class="heading"><div><p class="eyebrow" id="workspace-name"></p><h1>审计工作台</h1></div>
         <button class="primary" id="new-case"><span aria-hidden="true">＋</span> 新建审计</button></div>
-      <div id="desk-metrics" class="metrics" aria-label="当前检索范围内的任务概况">
-        <button type="button" data-metric="ready"><span>待验收</span><strong>—</strong></button>
-        <button type="button" data-metric="attention"><span>待验收且有疑点</span><strong>—</strong></button>
-        <button type="button" data-metric="in_review"><span>待复核</span><strong>—</strong></button>
-        <button type="button" data-metric="active"><span>处理中</span><strong>—</strong></button>
-        <button type="button" data-metric="closed"><span>已归档</span><strong>—</strong></button>
-      </div>
-      <section class="board" aria-labelledby="queue-title">
-        <div class="board-head"><h2 id="queue-title">任务台账</h2>
-          <label class="search-field"><span class="visually-hidden">搜索任务、提交人或编号</span><input type="search" id="case-search" maxlength="100" placeholder="搜索任务或提交人"></label>
+      <div class="desk-layout">
+      <aside class="queue-column" aria-label="工作队列">
+        <div id="desk-metrics" class="queue-menu" role="group" aria-label="当前检索范围内的任务概况">
+          <button type="button" class="queue-total engraved" data-filter="all" data-metric="all" aria-pressed="true"><span>全部审计任务</span><strong>—</strong></button>
+          <h2>工作队列</h2>
+          <button type="button" data-metric="active" data-filter="active"><span>处理中</span><strong>—</strong></button>
+          <button type="button" data-metric="ready" data-filter="ready"><span>待验收</span><strong>—</strong></button>
+          <button type="button" data-metric="attention" data-filter="attention"><span>有疑点待验收</span><strong>—</strong></button>
+          <button type="button" data-metric="in_review" data-filter="in_review"><span>待复核</span><strong>—</strong></button>
+          <button type="button" data-metric="closed" data-filter="closed"><span>已归档</span><strong>—</strong></button>
+          <button type="button" data-metric="failed" data-filter="failed" hidden><span>已中断</span><strong>—</strong></button>
         </div>
-        <div class="toolbar"><div class="filters" aria-label="筛选任务">
-          <button type="button" data-filter="all" aria-pressed="true">全部</button>
-          <button type="button" data-filter="active" aria-pressed="false">进行中</button>
-          <button type="button" data-filter="ready" aria-pressed="false">待验收</button>
-          <button type="button" data-filter="in_review" aria-pressed="false">待复核</button>
-          <button type="button" data-filter="closed" aria-pressed="false">已归档</button>
-          <button type="button" data-filter="failed" aria-pressed="false" hidden>已中断</button>
-        </div><div class="selects"><label>审计范围<select id="desk-profile" aria-label="审计范围"><option value="">全部范围</option><option value="cn-procurement-full-settlement/v1">采购与付款</option><option value="cn-contract-performance/v1">合同履约与分期</option><option value="cn-travel-reimbursement/v1">差旅报销</option><option value="cn-bank-contract-payment/v1">付款回单核对</option></select></label>
+      </aside>
+      <section class="board" aria-labelledby="queue-title">
+        <div class="board-head"><div class="queue-heading"><h2 id="queue-title">任务台账</h2><span id="queue-count"></span></div>
+          <label class="search-field"><span class="visually-hidden">搜索任务、提交人或编号</span><input type="search" id="case-search" maxlength="100" placeholder="搜索任务、提交人或编号"></label>
+        </div>
+        <div class="toolbar"><div class="selects"><label>审计范围<select id="desk-profile" aria-label="审计范围"><option value="">全部范围</option><option value="cn-procurement-full-settlement/v1">采购与付款</option><option value="cn-contract-performance/v1">合同履约与分期</option><option value="cn-travel-reimbursement/v1">差旅报销</option><option value="cn-bank-contract-payment/v1">付款回单核对</option></select></label>
           <label>排序<select id="desk-sort" aria-label="排序"><option value="updated">最近更新</option><option value="created">最近提交</option></select></label></div>
         </div>
         <div id="case-list" aria-live="polite"></div>
         <div class="pager" id="desk-pager"></div>
       </section>
+      </div>
     </section>
     <section id="library" hidden>
       <div class="heading"><div><p class="eyebrow" id="library-scope"></p><h1>证据检索</h1></div></div>
@@ -105,15 +107,15 @@
         <p class="muted">如需替换某份资料，请取消勾选旧件，再添加新版。</p>
         <label>补件说明（选填）<textarea id="supplement-note" maxlength="2000" rows="2"></textarea></label>
       </div>
-      <label><span id="upload-file-label">待审资料</span><input id="upload-files" type="file" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,.tif,.tiff,.heic,.heif" required></label>
+      <label class="upload-zone"><span id="upload-file-label">待审资料</span><span id="drop-hint" class="small" hidden>拖入文件可追加到清单，也可重新选择文件。</span><input id="upload-files" type="file" multiple accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.webp,.tif,.tiff,.heic,.heif" required></label>
       <p class="muted">可一次选择多份 PDF、Word 或图片。单份 16 MiB，整案最多 12 份、48 MiB、60 页。</p>
-      <ul id="chosen-files" class="compact"></ul>
+      <ul id="chosen-files" aria-label="已选资料" aria-live="polite"></ul>
       <div class="note"><span id="profile-note">核对合同签署、交付验收与付款约定，并勾稽发票及全额结算资料。</span>提交后，系统将资料页图及证据内容发送至 OpenAI。</div>
       <p id="upload-error" role="alert"></p>
       <div class="actions"><button class="primary" id="submit-files">提交并开始审计</button></div>
     </form>
   </dialog>
-  <dialog id="page-dialog" class="wide-dialog">
+  <dialog id="page-dialog" class="wide-dialog" aria-labelledby="page-title">
     <div class="dialog-head"><h2 id="page-title">资料原页</h2><button class="plain" type="button" data-close>关闭</button></div>
     <div id="page-content"></div>
   </dialog>

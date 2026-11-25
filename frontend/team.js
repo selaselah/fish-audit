@@ -42,7 +42,6 @@ const Team = {
     $('#nav-team').href = this.hash('team');
     $('#nav-desk').href = this.hash('desk');
     $('#nav-rules').href = this.hash('rules');
-    $('.brand').href = guest ? '#account' : this.hash('desk');
     for (const back of document.querySelectorAll('.back')) back.href = guest ? '#account' : this.hash('desk');
     $('#rules .back').textContent = guest ? '返回企业登录' : '返回工作台';
   },
@@ -122,9 +121,11 @@ const Team = {
     form.append(action(registering?'已有账号，去登录':(invite?'创建账号并接受邀请':'创建企业账号'),()=>{
       this.authMode = registering?'login':'register'; this.account(invite);
     },'text-button'));
-    const info = box('auth-aside',el('h2','从资料提交到审计签收'),el('p','员工提交票据，审计人员逐项核对引文。企业管理员管理成员与权限。'));
+    const mark = el('img'); mark.src = '/assets/fish-mark-light.png'; mark.alt = ''; mark.width = mark.height = 42;
+    const info = box('auth-aside engraved',mark,el('h2','从资料提交到审计签收'),el('p','员工提交业务资料，审计人员逐项核对引文、记录签收意见。企业管理员管理成员与权限。'));
     if (session.mode === 'local') info.append(link('打开本机工作台','#desk','button'));
-    panel.append(box('account-grid',form,info));
+    else info.append(link('查看产品演示','/','button'));
+    panel.append(box('account-grid access-layout',form,info));
   },
   usagePanel(usage) {
     const limits = usage.limits;

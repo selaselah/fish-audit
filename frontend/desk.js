@@ -9,6 +9,8 @@ const Desk = {
     $('#desk-sort').value='updated'; $('#library-status').value='verified';
     for (const id of ['library-results','library-pager','desk-pager','case-list']) $('#'+id).replaceChildren();
     for (const n of document.querySelectorAll('[data-metric] strong')) n.textContent = '—';
+    $('#queue-count').textContent = '';
+    $('#queue-title').textContent = '任务台账';
   },
   pager(id, data, go, unit) {
     const parent = $('#'+id); parent.replaceChildren();
@@ -36,6 +38,9 @@ const Desk = {
       button.setAttribute('aria-pressed', String(state.filter===key));
     }
     document.querySelector('[data-filter=failed]').hidden = !data.counts.failed && state.filter !== 'failed';
+    const active = document.querySelector('[data-filter="'+state.filter+'"] span');
+    $('#queue-title').textContent = state.filter === 'all' ? '任务台账' : active.textContent;
+    $('#queue-count').textContent = data.total.toLocaleString('zh-CN')+' 项';
     renderList();
     this.pager('desk-pager',data,page=>{this.page=page; refresh();},'项任务');
   },
