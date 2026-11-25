@@ -286,6 +286,13 @@ try {
         if (!sources.length) continue;
         await evaluate(group+'.querySelector("summary").click()');
         assert.equal(await evaluate(group+'.querySelectorAll("q").length'),sources.length);
+        if (process.env.AUDIT_UI_SHOTS && stage.batch_index && sources.some(s=>s.kind==='limited_inspection') && sources.some(s=>s.kind==='payment_hold')) {
+          await call('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+          const clip=await evaluate('(()=>{const rect=document.querySelector(".performance-overview").getBoundingClientRect();return {x:rect.x+scrollX,y:rect.y+scrollY,width:rect.width,height:rect.height,scale:1}})()');
+          const shot=await call('Page.captureScreenshot',{format:'png',clip,captureBeyondViewport:true});
+          await writeFile(join(process.env.AUDIT_UI_SHOTS,'batch-payment-remarks-'+performanceCase+'.png'),Buffer.from(shot.data,'base64'));
+          await call('Emulation.clearDeviceMetricsOverride');
+        }
         await verifyRemarks(group,sources);
         await evaluate(group+'.querySelector("summary").click()');
         const paper='document.querySelector('+JSON.stringify('[data-finding="'+phase.id+'"] .phase-remarks')+')';
