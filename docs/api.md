@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## 逐台检验与抽检记录
+
+程序清单的 `inspection_coverage` 为 `inspection-coverage-v1` 时，`graph.inspection_coverage_sources` 保存原页及分类原行。每行含物理文件、页、归属单据、逐字引文、原生行号和对应字段。图谱用 `inspection_coverage_source` 连接原页和原行，用 `supports_result` 将依据连接到实际引用的发现。影像或无法定位的候选保留页码。
+
+H02 的 `inspection_coverage` 返回方式 `mode`、合同下限 `required`、验收自报数量 `declared`、有可对应读数的设备数 `tested`、清单 `equipment` 及逐条 `measurements`。空值表示该数量待核，零表示本版确实计得零条或原文明确为零。每条读数附原行编号、设备编号、原文数值和按合同限值比较的结果。重复读数全部保留。旧版未核实的阳性结论可按当时程序重放，签收前如现行程序发现遗漏须重审。
+
 ## 浏览器入口
 
 | 路径 | 内容 |

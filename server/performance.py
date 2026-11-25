@@ -15,6 +15,7 @@ import equipment_models
 import equipment_exchanges
 import contract_effect
 import signing_parties
+import inspection_coverage
 import warranty_terms
 import warranty_service
 import payment_windows
@@ -49,6 +50,7 @@ LABELS = {
     **delivery_batches.LABELS,
     **warranty_terms.LABELS,
     **signing_parties.IMPRINT_FIELDS,
+    **inspection_coverage.LABELS,
     **warranty_service.LABELS,
     **payment_windows.LABELS,
     **invoice_conditions.LABELS,
@@ -865,6 +867,18 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         accepted_on = None
         if accepted.get("reinspection"):
             accepted["reinspection"]["state"]="open"
+    if version==FORMAT:
+        coverage = inspection_coverage.assess(graph, contract, receipts, complex_scope=bool(
+            batch or repairs or retests or changes or extra_units or pending_units))
+        if coverage:
+            was_closed = accepted.get("reinspection",{}).get("state")=="closed"
+            inspection_coverage.apply(accepted,coverage)
+            if coverage["status"]!="ok":
+                accepted_on = None
+                if was_closed:
+                    original = evaluate(contract,receipts)
+                    if original["status"]=="issue":
+                        accepted.update(status="issue",detail=original["detail"]+" "+accepted["detail"])
     if payment_change and not scoped_change:
         payment_amendments.attach(plan,payment_change)
     output = [signed, accepted, plan]
@@ -1107,6 +1121,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("effect_review") != entry.get("effect_review")
                 or saved.get("warranty_check") != entry.get("warranty_check")
                 or saved.get("warranty_payment") != entry.get("warranty_payment")
+                or saved.get("inspection_coverage") != entry.get("inspection_coverage")
                 or saved.get("equipment_models") != entry.get("equipment_models")
                 or saved.get("stage_payments") != entry.get("stage_payments")
                 or saved.get("payment_change") != entry.get("payment_change")

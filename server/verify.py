@@ -33,6 +33,7 @@ from contract_effect import verify as verify_contract_effect
 from warranty_terms import verify as verify_warranty
 from payment_windows import verify as verify_payment_windows
 from acceptance_reservations import verify as verify_reservations
+from inspection_coverage import verify as verify_inspection
 from payment_releases import verify as verify_payment_releases
 from invoice_conditions import verify as verify_invoice_conditions
 from repair_completion import verify as verify_repair_completion
@@ -254,6 +255,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
     verify_warranty(report,page_text,submitted=submitted,signed=signed)
     verify_payment_windows(report,page_text)
     verify_reservations(report,page_text)
+    verify_inspection(report,page_text)
     verify_payment_releases(report,page_text,submitted=submitted,signed=signed)
     verify_repair_completion(report,page_text)
     verify_invoice_conditions(report,page_text)
@@ -274,6 +276,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
         inspected.extend(graph.get("repair_completion_sources",{}).get("pages",[]))
         inspected.extend(graph.get("invoice_receipt_sources",{}).get("pages",[]))
         inspected.extend(graph.get("quality_addenda",{}).get("payments",{}).get("pages",[]))
+        inspected.extend(graph.get("inspection_coverage_sources",{}).get("pages",[]))
         inspected.extend(graph.get("equipment_model_sources",{}).get("pages",[]))
         inspected.extend(p for packet in graph.get("receipt_packet_sources",{}).get("packets",[]) for p in packet["pages"])
         if report["policy"].get("quality_addenda") and ("clause_text_only" in trace or
@@ -408,6 +411,7 @@ def render_addendum_sources(bundle, report, nodes):
     selected = {p["doc"] for key in ("pages","signals","limited_numbers") for p in ledger.get(key,[])}
     selected.update(p["doc"] for p in graph.get("acceptance_authority_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("stage_payment_sources",{}).get("pages",[]))
+    selected.update(p["doc"] for p in graph.get("inspection_coverage_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("equipment_model_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("receipt_packet_sources",{}).get("packets",[]))
     units = {d["id"]:d.get("source",d["id"]) for d in graph.get("audit_documents",graph["documents"])}

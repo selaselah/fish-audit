@@ -22,6 +22,7 @@ import equipment_exchanges
 import stage_payments
 import contract_effect
 import signing_parties
+import inspection_coverage
 import warranty_terms
 import warranty_service
 import payment_windows
@@ -326,6 +327,11 @@ def build_graph(docs, pages, attestations, amendments=()):
     reservations = acceptance_reservations.sources(graph,lambda doc,number:texts[doc,number])
     graph["acceptance_reservation_sources"] = reservations
     graph["edges"].extend(acceptance_reservations.edges(reservations))
+    inspection = inspection_coverage.sources(graph,lambda doc,number:texts[doc,number])
+    graph["inspection_coverage_sources"] = inspection
+    lines,links = inspection_coverage.source_graph(inspection)
+    graph["nodes"].extend(lines)
+    graph["edges"].extend(links)
     cash=payment_releases.sources(graph,lambda doc,number:texts[doc,number])
     graph["payment_release_sources"]=cash
     graph["edges"].extend(payment_releases.relations(cash))
