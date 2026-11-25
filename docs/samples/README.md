@@ -1,5 +1,16 @@
 # 合成财会审计演练
 
+## 验收款签字放行
+
+以下命令生成六套带水印的采购合同、验收报告、银行回单、质保确认单和付款放行单。银行实付日相同，分别改变签字日、签认人、原验收单号或日期字段。加 `--run` 后通过本机服务调用已配置的多模态模型，核对生成件后模拟签认，等待生成底稿。`--cases late same` 可仅运行提前及同日两案。
+
+```sh
+server/.venv/bin/python docs/samples/payment_releases.py --run-id release-demo
+server/.venv/bin/python docs/samples/payment_releases.py --run-id release-demo --run
+```
+
+单项结果分别核对合同生效、终验、三期条件和银行实付。整案留待人工验收。[各案期望结果及固定版本](../acceptance.md#具名放行与银行实付)
+
 ## 终验报告和付款意见
 
 运行以下命令生成四套水印原件，分别演练全部暂缓、单期暂缓、同一期意见相反以及同意支付但实测超限。加 `--run` 通过本机服务上传到配置的模型，核对原件后模拟签字栏核图。可以用 `--cases phase conflict` 选取场景。

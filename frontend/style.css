@@ -965,6 +965,7 @@ button.icon-button:hover,button.icon-button:focus-visible { color:var(--accent);
 .opinion-quality,.opinion-record { min-width:0; padding:12px 13px 7px; border:1px solid var(--line); border-radius:6px; }
 .opinion-record { border-inline-start:3px solid var(--accent-line); }
 .proof-opinion:is([data-payment-opinion-state=hold],[data-payment-opinion-state=conflict],[data-payment-opinion-state=unresolved]) .opinion-record { border-inline-start-color:var(--attention-line); }
+.proof-opinion[data-release-state=matched] .opinion-record { border-inline-start-color:var(--confirmed-line); }
 .opinion-card-head { display:flex; gap:6px; align-items:center; flex-wrap:wrap; min-height:28px; color:var(--secondary); }
 .opinion-card-head h4 { font-size:.86rem; margin:0; }
 .opinion-card-head .tag,.opinion-choices,.opinion-select { margin-inline-start:auto; }

@@ -9,6 +9,12 @@
 | `GET /showcase/{filename}` | 首页的三份合成原件，文件名为 `contract.pdf`、`acceptance.pdf`、`transfer.pdf`。可按资料索引复核 R7 案例的文件摘要。 |
 | `GET /workpaper/{id}`、`GET /w/{wid}/workpaper/{id}` | 校验版本及引文、发现参数，转入 `/app` 的相应底稿。旧的根路径片段书签和邀请链接在浏览器中转入相同工作区。 |
 
+## 付款放行依据和实付先后
+
+固定底稿自规则 `2026.11.25.26` 起带有 `policy.payment_releases = stage-payment-release-v1`。在 `report.graph` 中，`payment_release_sources.pages` 和 `.lines` 留存核对范围、分册、文件、页、文字行、逐字引文、角色和所关联的观察。每条 `payment_release_basis` 边从分册指到原页。使用某行还需该项发现的 `supports_result` 边和证据引用。图谱按北京时间保存 `payment_release_as_of`，签收和离线复核时可核对原始提交记录。
+
+H04 和已归期 H05 在 `payment_opinion.release` 单列放行审查。原暂缓意见仍可审查。`state` 为 `matched`、`absent`、`pending`、`signer_mismatch`、`reference_mismatch` 或 `future`。`required`、`signer`、`held_on`、`signed_on`、`as_of` 记录可核实的人名和日期。`sources`、`units`、`evidence` 及 `*_ref` 可用于回查文件、页或对应观察。H05 另有 `paid_on`、`paid_ref` 和 `timing`。其中 `before`、`same_day` 和 `after` 均以回单相对放行日表述，缺少先后依据时为 `unknown`。原件未支持的专门日期或观察引用可为 `null`。[核对方法](audit-method.md#已暂缓的验收款何时可以恢复支付)
+
 ## 验收原件的付款意见
 
 固定版底稿 `GET /api/cases/{id}/reports/{rev}` 自规则 `2026.11.25.25` 起使用 `policy.acceptance_reservations = acceptance-reservations-v3`。`report.graph.acceptance_reservation_sources.payment_opinions[]` 保留文书分册 `unit`、文件 `doc`、页码 `page`、原生行号 `line`、逐字引文 `quote` 和关联观察 `facts`。影像观察的行号为 `null`。原生文字可以直接构成逐字依据，此时 `facts` 可能为空。每条 `acceptance_payment_opinion` 边连接分册和留存原页。

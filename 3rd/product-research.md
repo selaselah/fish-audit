@@ -4,6 +4,8 @@
 
 ## 付款条款与原件定位
 
+ApprovalMax 的 NetSuite 审批报告按时间记录经办审批的人及相应时间戳。Fish Audit 用相同的提问审查采购原件。选中一期可核对合同指定人和实际签认人，再沿时间线查放行与实付。企业上传的两张凭证如只记同一日期，两项共用一个日期位置，界面提示补核时分。[ApprovalMax 官方报告说明](https://support.approvalmax.com/en/articles/457333-how-audit-reports-work-in-approvalmax-for-netsuite) · [本项目时间线](../docs/interaction-design/payment-release-dates.webp)
+
 2026-11-25 查阅 Adobe Acrobat 的文件比较说明。并排模式将旧文件放在左侧、新文件放在右侧，可显示或隐藏差异标记。Fish Audit 的「对照新旧条款」沿用这个阅读顺序。只有两条已定位原行在去掉明确的字段名后可逐字验证一段新增文字，右栏才提供标记开关。[Adobe 官方操作说明](https://helpx.adobe.com/acrobat/using/compare-documents.html) · [本地实拍](../docs/interaction-design/payment-clause-diff.webp)
 
 DataSnipper 的 Alwin 帮助说明展示了从选定单元格定位到原件对应位置，也可从原件选中相应单元格。首页演练选用其中的单向操作，点击验收结论、检验依据或实测值，立即切到同一页的对应原行，并可放回整页核查上下文。[DataSnipper 官方操作说明](https://knowledge.datasnipper.com/en/articles/882479-how-to-review-a-task-s-output-in-alwin) · [R7 页图及字段出处](showcase-provenance.md#展示原件)

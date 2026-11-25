@@ -48,6 +48,7 @@ const EvidenceCompare = (() => {
     const byRef=ref=>facts.find(f=>f.id===ref && finding.evidence.includes(ref));
     if (finding.payment_opinion) {
       const notes=AcceptanceOpinion.rows(graph,finding);
+      const release=finding.payment_opinion.release;
       function printed(row) {
         const f=row?.line && AcceptanceOpinion.observation(row,graph);
         return f && byRef(f.id);
@@ -55,7 +56,13 @@ const EvidenceCompare = (() => {
       const hold=notes.filter(n=>n.stance==='hold'), assent=notes.filter(n=>n.stance==='assent');
       if (finding.payment_opinion.state==='conflict' && hold.length===1 && assent.length===1 && hold[0].unit===assent[0].unit)
         add('opinion-conflict','暂缓与同意原文',printed(hold[0]),printed(assent[0]));
-      if (finding.rule==='H05' && notes.length===1 && ['hold','assent'].includes(finding.payment_opinion.state)) {
+      if (release) {
+        const rows=ReleaseEvidence.sources(graph,finding), authority=ReleaseEvidence.one(rows,'authority');
+        const ref=id=>ReleaseEvidence.fact(graph,finding,id) && byRef(id);
+        if (authority) add('release-authority','合同指定人与放行签认',printed(authority),ref(release.signature_ref));
+        add('release-receipt','验收单号与放行所引原单',ref(release.original_ref),ref(release.receipt_ref));
+        if (finding.rule==='H05' && release.state==='matched') add('release-transfer','放行签字日与实付日',ref(release.date_ref),ref(release.paid_ref));
+      } else if (finding.rule==='H05' && notes.length===1 && ['hold','assent'].includes(finding.payment_opinion.state)) {
         const paid=unique('paid_on',kinds.bank_receipt);
         if (paid?.source_line?.rects?.length) add('opinion-transfer','付款意见与实付日期',printed(notes[0]),paid);
       }

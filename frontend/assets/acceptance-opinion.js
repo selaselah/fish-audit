@@ -108,25 +108,30 @@ const AcceptanceOpinion = (() => {
       else card.append(action('查看验收核对项',()=>revealPaperTarget(document.querySelector('[data-finding="'+CSS.escape(accepted.id)+'"]')),'ref'));
       root.append(card);
     }
-    const head=box('opinion-card-head',glyph('journal-text'),el('h4','付款意见'));
+    const stops=ReleaseEvidence.stops(phase,notes,graph), release=opinion.release;
+    if (release) root.dataset.releaseState=release.state;
+    const head=box('opinion-card-head',glyph('journal-text'),el('h4',release?'暂缓与放行':'付款意见'));
     const card=box('opinion-record',head), excerpt=box('opinion-excerpt');
+    const choicesForView=stops.length?stops.map(s=>s.row):notes;
     const buttons=[];
     function select(i) {
-      const row=notes[i];
+      const row=choicesForView[i];
       excerpt.replaceChildren(paper(row,observation(row,graph))); show();
       for (const [n,btn] of buttons.entries()) {
         btn.setAttribute('aria-pressed',String(n===i)); btn.tabIndex=n===i?0:-1;
       }
     }
-    if (notes.length===2) {
+    if ((stops.length>1 && stops.length<=3) || !stops.length && notes.length===2) {
       const choices=box('opinion-choices');
-      choices.setAttribute('role','group'); choices.setAttribute('aria-label','选择付款意见原行');
-      for (const [i,row] of notes.entries()) {
-        const label=row.stance===notes[1-i].stance ? '原文 '+(i+1) : stanceName[row.stance];
+      choices.setAttribute('role','group'); choices.setAttribute('aria-label',stops.length?'核对暂缓、放行权限与签发原件':'选择付款意见原行');
+      const total=choicesForView.length;
+      for (const [i,row] of choicesForView.entries()) {
+        const label=stops.length?stops[i].label:row.stance===notes[1-i].stance?'原文 '+(i+1):stanceName[row.stance];
         const btn=action(label,()=>select(i),'opinion-choice');
-        btn.dataset.opinionChoice=row.stance;
+        if (stops.length) btn.dataset.releaseStage=stops[i].key;
+        else btn.dataset.opinionChoice=row.stance;
         btn.addEventListener('keydown',e=>{
-          const next={ArrowLeft:1-i,ArrowRight:1-i,Home:0,End:1}[e.key];
+          const next={ArrowLeft:(i+total-1)%total,ArrowRight:(i+1)%total,Home:0,End:total-1}[e.key];
           if (next===undefined) return;
           e.preventDefault(); select(next); buttons[next].focus();
         });
@@ -139,8 +144,8 @@ const AcceptanceOpinion = (() => {
       for (const [i,row] of notes.entries()) choices.add(new Option((i+1)+' · '+stanceName[row.stance],i));
       choices.addEventListener('change',()=>select(choices.selectedIndex)); head.append(choices);
     }
-    if (notes.length>1) excerpt.setAttribute('aria-live','polite');
-    select(0); card.append(excerpt); root.append(card);
+    if (choicesForView.length>1) excerpt.setAttribute('aria-live','polite');
+    select(stops.length?stops.length-1:0); card.append(excerpt); root.append(card);
     return root;
   }
   return {rows,observation,source,caption,panel};

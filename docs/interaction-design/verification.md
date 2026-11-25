@@ -1,5 +1,16 @@
 # 首页与工作台验收记录
 
+## 2026-11-25 · 从放行权限查到银行实付
+
+Chrome 按 320、390、768、820、1024、1440 像素宽度打开六笔固定版底稿。在每期证据中切换条件、时间线和付款意见，核对默认视图、签发状态、同日分组和提前天数。以方向键、Home 和 End 在三处引文间切换，打开并逐项检查原文件、页码、原行及版本。签发人、原验收单号以及实付日前后的两栏对照均核至观察编号。[桌面实拍](payment-release-dates.webp) · [手机实拍](payment-release-signer-mobile.webp) · [浏览器用例](../../frontend/tests/payment-release.mjs)
+
+在浏览器临时图谱中去掉合同放行条款的观察引用，原生文字仍可定位至固定原页的正确行，页面不会生成坐标框。另行去掉原件关系或该项的原页引用后，该行从此项依据消失。axe-core 4.14.1 在桌面和手机各检查七个实付或签发状态，14 次 WCAG A/AA 自动检查均返回零违规。整站风格检查器当前无活动构建。首页另用本机、企业两种服务核查原件、键盘操作和工作区入口。[原件、案例与离线复算](../acceptance.md#具名放行与银行实付)
+
+```sh
+AUDIT_RELEASE_REV=7 node frontend/tests/workspace.mjs --release-case 2bf163a2b272462d9e535e6f1d3e25fe
+AUDIT_RELEASE_REV=6 node frontend/tests/workspace.mjs --release-case a1bad05c96224b94b42fc01847f0f960
+```
+
 ## 2026-11-25 · 验收单上的付款意见
 
 Chrome 在 320、390、768、820、1024、1440 像素宽度核查四个水印案件。逐项比对质量状态、意见归属和证据编号，从卡片回到固定版原件，再从两栏对照返回原先选中的期次和视图。相反意见可用方向键切换，「暂缓」「同意」分别对应第 15、16 行的实际页图。旧底稿 R7 和重审 R8 另行核验。[桌面实拍](acceptance-opinion.webp) · [手机实拍](acceptance-opinion-mobile.webp) · [用例源码](../../frontend/tests/payment-opinions.mjs)

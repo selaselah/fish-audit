@@ -475,7 +475,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     if (source) gaps.push({...source,quality:['seller','delivery_note'].includes(source.kind)?'supplier_reference':'reservation_reference'});
   }
   for (const gap of gaps) {
-    const label = {acceptance_opinion_reference:'付款意见原行',payment_amendment_reference:'付款变更所据原行',invoice_receipt_reference:'收票条件所据原行',repair_completion_reference:'整改记录原行',equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',approval_reference:'董事会审批记录原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
+    const label = {payment_release_reference:'放行依据原行',acceptance_opinion_reference:'付款意见原行',payment_amendment_reference:'付款变更所据原行',invoice_receipt_reference:'收票条件所据原行',repair_completion_reference:'整改记录原行',equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',approval_reference:'董事会审批记录原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
     const section = box('evidence-row',el('h4',label+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
     section.dataset.gapLine = String(gap.line);
     const raw = rawLines.find(source => source.rawLine === gap.line);
@@ -735,6 +735,8 @@ function finding(item) {
   if (item.payment_opinion) {
     const graph=state.bundle.report.graph, rows=AcceptanceOpinion.rows(graph,item);
     if (rows.length) node.append(lazyFold('核对付款意见原行',()=>rows.map(row=>AcceptanceOpinion.source(row,graph))));
+    const release=ReleaseEvidence.sources(graph,item).filter(s=>!['title','identity'].includes(s.role));
+    if (release.length) node.append(lazyFold('核对放行约定、签认及所引原单',()=>release.map(row=>AcceptanceOpinion.source(row,graph))));
   }
   if (item.stage && ['H04','H05'].includes(item.rule)) {
     const batch = state.bundle.report.findings.find(f => f.batch_acceptance)?.batch_acceptance;
@@ -893,11 +895,16 @@ function graphPanel() {
   const graph = state.bundle.report.graph;
   const {nodes,facts} = graphIndex(graph);
   const docIds = new Set((graph.audit_documents || graph.documents).map(doc => doc.id));
-  const relations = graph.edges.filter(edge => docIds.has(edge.from) && !['contains','section_page','acceptance_reservation','acceptance_payment_opinion','supplier_identity_basis','delivery_quantity_basis','stage_invoice_clause','payment_amendment_basis'].includes(edge.type));
+  const relations = graph.edges.filter(edge => docIds.has(edge.from) && !['contains','section_page','acceptance_reservation','acceptance_payment_opinion','payment_release_basis','supplier_identity_basis','delivery_quantity_basis','stage_invoice_clause','payment_amendment_basis'].includes(edge.type));
   const panel = box('panel', el('h2', '本案证据关系'), el('p', graph.nodes.length + ' 个节点 · ' +
     graph.edges.length + ' 条关系 · ' + graph.facts.length + ' 条提取记录', 'muted'));
   const grouped = new Map();
   const opinions=AcceptanceOpinion.rows(graph);
+  const released=ReleaseEvidence.sources(graph).filter(s=>!['title','identity'].includes(s.role));
+  if (released.length) {
+    const list=lazyFold('验收款暂缓与放行依据（'+released.length+'）',()=>released.map(s=>AcceptanceOpinion.source(s,graph)));
+    list.classList.add('release-relations'); panel.append(list);
+  }
   if (opinions.length) {
     const list=lazyFold('验收原件上的付款意见（'+opinions.length+'）',()=>opinions.map(row=>AcceptanceOpinion.source(row,graph)));
     list.classList.add('opinion-relations'); panel.append(list);

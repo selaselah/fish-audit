@@ -38,6 +38,8 @@ const PhaseEvidence = (() => {
     }
     for (const s of graph?AcceptanceOpinion.rows(graph):[])
       add(s,'付款意见原行','acceptance_opinion_reference','payment-opinion-line/',s.line!==lineHint && Boolean(AcceptanceOpinion.observation(s,graph)));
+    for (const s of graph?ReleaseEvidence.sources(graph):[]) if (!['title','identity'].includes(s.role))
+      add(s,'放行依据原行','payment_release_reference','release-line/',s.line!==lineHint && Boolean(AcceptanceOpinion.observation(s,graph)));
     for (const s of rows) if (['clause','qualification','unreviewed'].includes(s.role))
       add(s,s.role==='clause'?'收票约定':'收票所据原行','invoice_receipt_reference','receipt-line/');
     for (const s of amendmentLines(graph)) add(s,'付款变更所据原行','payment_amendment_reference','payment-change-line/');
@@ -113,6 +115,21 @@ const PhaseEvidence = (() => {
     }
     const notes=AcceptanceOpinion.rows(graph,phase);
     const opinion=notes.length?AcceptanceOpinion.panel(phase,accepted,notes,graph):null;
+    const release=opinion && phase.payment_opinion.release;
+    if (release) {
+      const matched=release.state==='matched', signatureDay=ReleaseEvidence.fact(graph,phase,release.date_ref);
+      point('release','具名放行','journal-text',matched?'ok':'missing',null,()=>select('opinion'));
+      const hold=notes.length===1 && notes[0].stance==='hold' ? notes[0] : null;
+      const held=phase.payment_opinion.record_dates.find(d=>d.unit===hold?.unit && d.date===release.held_on);
+      const mandate=ReleaseEvidence.one(ReleaseEvidence.sources(graph,phase),'authority');
+      if (mandate && hold?.line && held && inPhase.has(held.ref) && phase.payment_opinion.evidence.includes(held.ref) &&
+          index.supports.get('finding/'+phase.id)?.has(held.ref) && dateOn(facts.get(held.ref))===release.held_on) {
+        const observation=AcceptanceOpinion.observation(hold,graph);
+        events.push({key:'hold',label:'本期暂缓',day:release.held_on,status:'ok',
+          open:()=>openPage(hold.doc,hold.page,observation?.id,observation?null:hold.line)});
+      }
+      if (matched && signatureDay?.field==='release_signed_on') event('release','签字放行',release.signed_on,signatureDay,'ok');
+    }
     if (!checkpoints.length && !events.length && !opinion) return null;
     const root=el('section','','phase-evidence');
     root.setAttribute('aria-label',phase.stage.name+'履约证据');
@@ -162,7 +179,7 @@ const PhaseEvidence = (() => {
     const groups=[];
     for (const entry of events) {
       const last=groups.at(-1);
-      if (change && last?.[0].day===entry.day) last.push(entry);
+      if ((change || release) && last?.[0].day===entry.day) last.push(entry);
       else groups.push([entry]);
     }
     for (const [i,entries] of groups.entries()) {
@@ -198,6 +215,13 @@ const PhaseEvidence = (() => {
     } else if (early.length>1) timing=early.length+' 笔付款早于收票';
     else if (payments.some(p=>p.payment_change?.applies==='same_day')) timing='生效与实付同日 · 时分待核';
     else if (dated.some(e=>e.status==='missing' && e.day===e.payment.invoice_receipt.receipt.received_on)) timing='同日收付 · 时分待核';
+    const released=payments.map(p=>p.payment_opinion?.release).filter(Boolean);
+    const before=released.filter(r=>r.timing==='before');
+    let releaseTiming='';
+    if (before.length===1) releaseTiming='实付早于放行 '+(Date.parse(before[0].signed_on)-Date.parse(before[0].paid_on))/86400000+' 天';
+    else if (before.length) releaseTiming=before.length+' 笔实付早于放行';
+    else if (released.some(r=>r.timing==='same_day')) releaseTiming='放行与实付同日 · 时分待核';
+    if (releaseTiming) timing=[releaseTiming,timing].filter(Boolean).join(' · ');
     const shortcuts=new Map();
     function linked(item,key,label,destination=tools,rightRef) {
       if (!shortcuts.has(item)) {
@@ -214,6 +238,11 @@ const PhaseEvidence = (() => {
       const actions=box('proof-tools opinion-tools');
       const measured=opinion.querySelector('[data-measured-ref]')?.dataset.measuredRef;
       if (measured) linked(accepted,'reading','对照标准与实测',actions,measured);
+      if (release) {
+        linked(phase,'release-authority','对照签发权限',actions);
+        if (release.state==='reference_mismatch') linked(phase,'release-receipt','对照验收单号',actions);
+        for (const payment of payments) linked(payment,'release-transfer',payments.length===1?'对照放行与实付':'对照放行与实付 · '+payment.id,tools);
+      }
       linked(phase,'opinion-conflict','对照两项意见',actions);
       for (const payment of payments) linked(payment,'opinion-transfer',payments.length===1?'对照意见与回单':'对照意见与回单 · '+payment.id,actions);
       if (actions.children.length) opinion.append(actions);
@@ -251,9 +280,9 @@ const PhaseEvidence = (() => {
         view.hidden=!active;
         controls.querySelector('[data-mode="'+mode+'"]').setAttribute('aria-pressed',String(active));
       }
-      count.textContent=key==='opinion'?AcceptanceOpinion.caption(phase.payment_opinion):key==='checks'?checkpoints.filter(s=>s.status==='ok').length+' / '+checkpoints.length+' 项相符':
+      count.textContent=key==='opinion'?(release?ReleaseEvidence.caption(release,ReleaseEvidence.sources(graph,phase)):AcceptanceOpinion.caption(phase.payment_opinion)):key==='checks'?checkpoints.filter(s=>s.status==='ok').length+' / '+checkpoints.length+' 项相符':
         timing || events.length+' 项日期记录';
-      count.classList.toggle('timing-alert',Boolean(timing && key==='timeline' || key==='opinion' && phase.payment_opinion.state!=='assent'));
+      count.classList.toggle('timing-alert',Boolean(timing && key==='timeline' || key==='opinion' && phase.payment_opinion.state!=='assent' && release?.state!=='matched'));
       if (key==='opinion') opinion.dispatchEvent(new Event('show-opinion'));
     }
     for (const [key,label] of modes) {
