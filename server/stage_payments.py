@@ -87,7 +87,7 @@ def sources(graph,read_text):
     known=(known-ticket_units)|bounded_tickets
     ledger["unknown_units"]=[u["id"] for u in units if u["id"] not in known]
     coverage=covered_rows(graph,read_text,set(kinds.get("contract",[])),CONTRACT,is_printed,"分期合同")
-    covered_terms = {(r["doc"], r["page"], r["line"], r["quote"]) for r in prior_terms if r["supported"]}
+    covered_terms = {(r["doc"], r["page"], r["line"], r["quote"]) for r in prior_terms if r["supported"] or r.get("credit_only")}
     for page in coverage:
         page["uncovered"] = [r for r in page["uncovered"]
                              if (page["doc"], page["page"], r["line"], r["quote"]) not in covered_terms]

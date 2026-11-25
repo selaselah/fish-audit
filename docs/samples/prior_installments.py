@@ -72,8 +72,33 @@ def review(cid, mode, folder, records):
     field="prior_installment_clause" if report["policy"].get("prior_installment") else "other"
     reconcile_training_pages(cid,folder,records,case_titles=CASES.values(),printed_titles=titles,
                              field_labels={**LABELS,LABEL:field},row_spacing=25,
-                             exact_fields=("total","transfer_amount","transfer_ref","payment_stage","payment_designation",field))
+                             exact_fields=("total","currency","unit","contract_id","buyer","seller","payer","payee","transfer_status",
+                                           "paid_on","transfer_amount","transfer_ref","payment_stage","payment_designation",field))
     return check_training_watermark(cid,folder,records,confirm_printed_records(cid,folder,records))
+
+
+def validate(report, mode):
+    calls = report["calls"]
+    assert all(c["request_id"] and c["response_id"] for c in [*calls["pages"], calls["expert"]])
+    if not report["policy"].get("prior_installment"):
+        return
+    expected = {
+        "ready": ("met", "met"), "absent": ("absent", "absent"), "later": ("met", "early"),
+        "same": ("met", "same_day"), "partial": ("partial", "partial"),
+        "allocation": ("allocation", "allocation"), "credit": ("credit", "credit"), "quality": ("met", "met"),
+    }
+    findings = report["findings"]
+    prior = [f for f in findings if f.get("prior_installment")]
+    assert {f["stage"]["name"] for f in prior} == {"第二期"}
+    phase, payment = (next(f for f in prior if f["rule"] == rule) for rule in ("H04", "H05"))
+    assert (phase["prior_installment"]["state"], payment["prior_installment"]["state"]) == expected[mode], (mode, prior)
+    acceptance = next(f for f in findings if f["rule"] == "H02")
+    assert acceptance["status"] == ("issue" if mode == "quality" else "ok"), (mode, acceptance["status"])
+    if mode == "quality":
+        assert phase["status"] != "ok" and payment["status"] != "ok"
+    if mode == "later":
+        proof = payment["prior_installment"]
+        assert (payment["status"], proof["before"], proof["covered_on"]) == ("risk", "10000.00", "2026-09-24")
 
 
 if __name__=="__main__":
@@ -93,6 +118,7 @@ if __name__=="__main__":
             print(folder)
     for cid,mode,folder,records in pending:
         r=review(cid,mode,folder,records)
+        validate(r,mode)
         print(mode,BASE+"/workpaper/"+cid+"?rev="+str(get("/api/cases/"+cid)["rev"]),
               [(f["rule"],f.get("stage",{}).get("name"),f["status"],f.get("prior_installment",{}).get("state"))
                for f in r["findings"] if f["rule"].startswith("H")],flush=True)

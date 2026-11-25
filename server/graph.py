@@ -352,14 +352,14 @@ def build_graph(docs, pages, attestations, amendments=()):
     record_addenda(graph, lambda doc, number: texts[doc, number])
     graph["equipment_model_sources"] = equipment_models.sources(graph,lambda doc,number:texts[doc,number])
     delivery_batches.attach(graph, lambda doc, number: texts[doc,number])
-    record_signatories(graph, lambda doc, number: texts[doc, number])
-    record_quality_references(graph, lambda doc, number: texts[doc, number])
-    attach_payment_references(graph, lambda doc, number: texts[doc,number])
     prior = prior_installment.sources(graph, lambda doc, number: texts[doc, number])
     graph["prior_installment_sources"] = prior
     lines, links = prior_installment.source_graph(prior)
     graph["nodes"].extend(lines)
     graph["edges"].extend(links)
+    record_signatories(graph, lambda doc, number: texts[doc, number])
+    record_quality_references(graph, lambda doc, number: texts[doc, number])
+    attach_payment_references(graph, lambda doc, number: texts[doc,number])
     graph["stage_payment_sources"]=stage_payments.sources(graph,lambda doc,number:texts[doc,number])
     graph["invoice_identity"] = IDENTITY_FORMAT
     graph["invoice_lookup"] = INVOICE_LOOKUP

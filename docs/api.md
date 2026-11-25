@@ -2,7 +2,7 @@
 
 ## 前款回单与验收款时点
 
-规则清单的 `prior_installment` 为 `prior-installment-bank-evidence-v1` 时，`graph.prior_installment_sources` 记录检出的原约定、单据归属、页和印刷行。`prior_installment_source` 从原页连接至该约定。存在约定时，以案件提交记录的上海日期固定 `prior_installment_as_of`。
+规则清单的 `prior_installment` 为 `prior-installment-bank-evidence-v1` 或 `v2` 时，`graph.prior_installment_sources` 记录检出的原约定、单据归属、页和印刷行。`prior_installment_source` 从原页连接至该约定。v2 还标识可逐字确定、单独确认首款到账的付款约定 `credit_only`。它只作用于验收款，原页另列的终验签认人仍须核对。存在约定时，以案件提交记录的上海日期固定 `prior_installment_as_of`。
 
 受影响的 H04 和逐笔 H05 返回 `prior_installment`。其中 `target_stage` 与 `source_stage` 指向条款，`base` 包括合同总额、币种、单位与引文，`records` 逐笔保存金额、日期、归属、流水等原始字段引用。`expected` 为首款约定，`seen` 为具备核对条件的已见金额，`covered_on` 为达到约定金额的原件日期。对于日期可核的验收款，`before` 和 `on_day` 分别是实付日之前和当天的已见首款。金额为两位小数字符串，未知为 null。整项结论仍须结合该发现的 `status` 和其他履约检查。旧版可按发布规则重放，历史正向结论签收前须核查是否遗漏前款约定。
 

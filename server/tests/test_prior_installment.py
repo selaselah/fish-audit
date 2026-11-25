@@ -92,6 +92,21 @@ class PriorInstallmentTests(unittest.TestCase):
         self.assertNotEqual(phase(r, "H04")["status"], "ok")
         self.assertNotEqual(next(f for f in r["findings"] if f["rule"]=="H02")["status"], "ok")
 
+    def test_payee_credit_does_not_change_acceptance_or_discard_actual_signer_terms(self):
+        separate = paper(term=CREDIT)
+        self.assertEqual(next(f for f in separate["findings"] if f["rule"]=="H02")["status"], "ok")
+        self.assertEqual(phase(separate,"H06","第一期")["status"], "ok")
+        self.assertEqual(phase(separate,"H05")["prior_installment"]["state"], "credit")
+        from acceptance_authority import page_evidence
+        graph = separate["graph"]
+        previous = prior_installment.sources(graph, reader(separate, CREDIT), version=prior_installment.FIRST_FORMAT)
+        self.assertNotIn("credit_only", previous["lines"][0])
+        legacy = {**graph, "prior_installment_sources":previous}
+        self.assertTrue(page_evidence(legacy, reader(separate, CREDIT))["clauses"])
+        for report in (paper(term=CREDIT+"，验收须由指定人员签认"), paper(term=CREDIT, extra=[(1,"验收签认约定：验收须由张明签认")])):
+            self.assertTrue(report["graph"]["acceptance_authority_sources"]["clauses"])
+            self.assertNotEqual(next(f for f in report["findings"] if f["rule"]=="H02")["status"], "ok")
+
     def test_archive_recomputes_terms_source_graph_cutoff_and_historical_approval(self):
         report = paper()
         for what in ("cutoff", "node", "edge", "quote", "marker", "amount", "date"):

@@ -109,6 +109,10 @@ def page_evidence(graph, read_text):
     contracts = set(kinds.get("contract",[]))
     receipts = set(kinds.get("acceptance",[])) | set(kinds.get("reinspection",[]))
     releases = set(kinds.get("warranty",[])) if "warranty_sources" in graph else set()
+    # A narrowly identified confirmation of bank credit belongs to the payment condition.
+    prior = graph.get("prior_installment_sources", {})
+    credit_rows = {(s["doc"], s["page"], s["line"], s["quote"]) for s in prior.get("lines", ())
+                   if prior.get("format")=="prior-installment-bank-evidence-v2" and s.get("credit_only")}
     rules, signatures = [], []
     for ref,page in pages.items():
         doc, suffix = ref.rsplit("/p",1)
@@ -126,6 +130,8 @@ def page_evidence(graph, read_text):
             clause = mentions(raw) or any(f["field"]==CLAUSE for f in facts) or unit in contracts and label in SIGN_LABELS
             if native and any(s["role"]=="authority" and (s["doc"],s["page"],s["line"],s["quote"])==(doc,number,line,raw)
                               for s in graph.get("payment_release_sources",{}).get("lines",[])):
+                clause=False
+            if native and (doc, number, line, raw) in credit_rows:
                 clause=False
             if unit in releases and label in SIGN_LABELS and not re.search(r"终验|复验|验收|合同",body):
                 clause=False
@@ -164,6 +170,8 @@ def page_evidence(graph, read_text):
     fields = {f["field"] for f in graph["facts"]}
     coverage = covered_rows(graph,read_text,units,fields,covers,"验收签认依据")
     for p in coverage:
+        if credit_rows:
+            p["uncovered"] = [r for r in p["uncovered"] if (p["doc"],p["page"],r["line"],r["quote"]) not in credit_rows]
         p["text_only"] = pages[f"{p['doc']}/p{p['page']}"].get("clause_text_only") is True
     mixed = {(p["doc"],p["page"]) for p in coverage if not p["text_only"]}
     notes = [{"unit":f.get("unit",f["doc"]),"doc":f["doc"],"page":f["page"],"fact":f["id"],"quote":f["quote"]}

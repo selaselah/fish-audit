@@ -10,19 +10,22 @@ import stage_payments
 from payment_releases import submission_day
 
 
-FORMAT = "prior-installment-bank-evidence-v1"
+FIRST_FORMAT = "prior-installment-bank-evidence-v1"
+FORMAT = "prior-installment-bank-evidence-v2"
+CREDIT_SINCE = "2026.11.26.06"
 SINCE = "2026.11.26.05"
 FIELD = "prior_installment_clause"
 LABELS = {FIELD: ("验收款放款条件", "前款凭证约定", "验收款前款条件")}
 PRIOR = r"(?:首期预付款|首期款|首款|首付款|预付款|前一期款|上期款|前款|第一期款?)"
 SIGNAL = re.compile(PRIOR + r".{0,20}(?:付足|付清|足额|已付|到账|收讫)|(?:足额支付|付清|付足).{0,10}" + PRIOR)
 CONDITION = re.compile(r"验收款(?:放款条件|支付前提|付款前提|前款条件)[:：](?:首款|首期预付款|首付款)须(?:已付足|已付清|足额支付)[，,]以(?:付款银行成功回单为据|银行成功付款回单为准)[。]?")
+CREDIT_ONLY = re.compile(r"验收款(?:放款条件|前款条件)[:：]须由(?:供应方|收款方)确认(?:首款|首付款)已足额到账[。]?")
 ACCEPTANCE = re.compile(r"^(?:最终验收合格|终验合格|验收合格)后(?:支付|付)")
 FIRST = re.compile(r"^合同生效后(?:支付|付)")
 SEVERITY = {"ok": 0, "missing": 1, "risk": 2, "issue": 3}
 
 
-def sources(graph, read_text):
+def sources(graph, read_text, *, version=FORMAT):
     kinds = graph["documents_by_kind"]
     roles = {unit: kind for kind in ("contract", "contract_addendum") for unit in kinds.get(kind, ())}
     sections = {(d["source"], d["page"]): d["id"] for d in graph.get("audit_documents", ()) if "source" in d}
@@ -55,9 +58,14 @@ def sources(graph, read_text):
             ref = f"{doc}/p{page}/l{number}" if number else ids[0]
             # '验收款' identifies the dependent installment only when the heading itself says so.
             target = "acceptance" if label.startswith("验收款") else label if re.fullmatch(r"第[一二三四五六七八九十0-9]+期", label) else None
-            lines.append({**where,"id":"prior-term/"+ref,"line":number,"quote":quote,"facts":ids,"target":target,
+            row = {**where,"id":"prior-term/"+ref,"line":number,"quote":quote,"facts":ids,"target":target,
                           "supported":bool(number and roles[unit]=="contract" and CONDITION.fullmatch(quote.strip())
-                                           and not any(f["status"]=="disputed" for f in observations))})
+                                           and not any(f["status"]=="disputed" for f in observations))}
+            if version == FORMAT:
+                row["credit_only"] = bool(number and roles[unit]=="contract" and native and node.get("clause_text_only") is True
+                                          and CREDIT_ONLY.fullmatch(quote.strip())
+                                          and all(f["status"]!="disputed" for f in observations))
+            lines.append(row)
         for f in facts[doc,page]:
             location = f.get("source_line") or {}
             n = location.get("number")
@@ -69,7 +77,7 @@ def sources(graph, read_text):
                 observe(f["quote"],None,[f])
         for n, quote in enumerate(physical,1):
             observe(quote,n,located[n])
-    return {"format":FORMAT,"lines":lines,"pages":pages if lines else []}
+    return {"format":version,"lines":lines,"pages":pages if lines else []}
 
 
 def source_graph(ledger):
@@ -136,7 +144,7 @@ def condition(graph, findings, grouped):
             inputs=r["inputs"]
             receipts.append({"unit":r["unit"],"amount":r["amount"],"date":r["date"],"duplicate_of":r["duplicate_of"],
                              "refs":{k:v["ref"] for k,v in inputs.items() if v},"timing":timing.get(r["unit"])})
-    check = {"format":FORMAT,"terms":[r["id"] for r in terms],"scope":scope,"evidence":unique(evidence),
+    check = {"format":ledger["format"],"terms":[r["id"] for r in terms],"scope":scope,"evidence":unique(evidence),
              "source_stage":donor.get("clause_ref"),"source_name":donor.get("name"),"share":donor.get("share"),
              "base":base,"expected":stage_payments.fmt(expected) if clean else None,"seen":None,
              "as_of":cutoff,"covered_on":None,"records":receipts,"payment_date":None,"payment_date_ref":None,
@@ -223,8 +231,11 @@ def verify(report,read_text,*,submitted=None,signed=None,signing=False):
                                  or "验收" in (f.get("stage") or {}).get("name","") for f in positive):
                     raise ValueError("旧版付款结论尚未核对首款凭证约定，请按现行程序重审后签收。")
         return
-    ledger=sources(graph,read_text)
-    if marker!=FORMAT or policy.get("version","")<SINCE or ledger!=graph.get("prior_installment_sources") or (nodes,edges)!=source_graph(ledger):
+    expected_format = FORMAT if policy.get("version","") >= CREDIT_SINCE else FIRST_FORMAT
+    if marker != expected_format or policy.get("version","") < SINCE:
+        raise ValueError("前款凭证程序与底稿版本不符")
+    ledger = sources(graph, read_text, version=marker)
+    if ledger!=graph.get("prior_installment_sources") or (nodes,edges)!=source_graph(ledger):
         raise ValueError("首款约定的物理原页、原行或依据关系与归档不符")
     cutoff=graph.get("prior_installment_as_of")
     if ledger["lines"]:
