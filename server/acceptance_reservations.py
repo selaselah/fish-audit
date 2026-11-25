@@ -6,14 +6,17 @@ import unicodedata
 from collections import defaultdict
 
 import acceptance_payments
+import inspection_register
 from calculations import normalized
 from performance_versions import FORMAT as CURRENT
 
 
 LEGACY = "acceptance-reservations-v1"
 SUPPLIER = "acceptance-reservations-v2"
-FORMAT = "acceptance-reservations-v3"
-SUPPLIER_FORMATS = (SUPPLIER,FORMAT)
+OPINIONS = "acceptance-reservations-v3"
+FORMAT = "acceptance-reservations-v4"
+OPINION_FORMATS = (OPINIONS, FORMAT)
+SUPPLIER_FORMATS = (SUPPLIER, *OPINION_FORMATS)
 SELLER = {"供应方","供方","卖方","乙方","供应商","供货方","供货单位","销售方","销方"}
 DELIVERY = re.compile(r"实际(?:供货|供应|交付)(?:单位|方|人|商)?|(?:代为|代行|委托|代替|代为其|受托|另行指定).{0,22}(?:供货|交付|交货)|第三方(?:供货|交付|送货)")
 INCOMPLETE = re.compile(r"[*＊×□…]|待定|待填|不详|未提供|同(?:主)?合同|另见|尾号|^(?:无|略|乙方|供方|卖方|同上|—+|-+)$")
@@ -56,7 +59,7 @@ def sources(graph, read_text, format=FORMAT):
         observations[fact["doc"], fact["page"]].append(fact)
     contracts=set(graph["documents_by_kind"].get("contract",[])) if format in SUPPLIER_FORMATS else set()
     opinions,qualifications=[],[]
-    if format==FORMAT:
+    if format in OPINION_FORMATS:
         from graph import LABELS as fields
         known={label for key,labels in fields.items() if key!="release_signed_on" for label in labels} | LABELS | acceptance_payments.HEADINGS
     supplier_rows, supplier_pages = [], []
@@ -97,16 +100,18 @@ def sources(graph, read_text, format=FORMAT):
                     supplier_rows.append({**place,"line":i,"kind":party_kind,"quote":raw,"facts":anchored[i,raw]})
                 if unit in units and (kind := classify(raw)):
                     lines.append({**place, "line": i, "kind": kind, "quote": raw, "facts": anchored[i, raw]})
-        if format==FORMAT and unit in units:
+        if format in OPINION_FORMATS and unit in units:
             items,extra=acceptance_payments.page_rows(place,text,observations[doc,page],known)
             opinions.extend(items)
             qualifications.extend(extra)
     result={"format":format,"pages":pages,"lines":lines}
     if format in SUPPLIER_FORMATS:
         result.update(supplier_rows=supplier_rows,supplier_pages=supplier_pages)
-    if format==FORMAT:
+    if format in OPINION_FORMATS:
         active={s["unit"] for s in opinions}
         result["payment_opinions"]=opinions+[s for s in qualifications if s["unit"] in active]
+    if format == FORMAT:
+        result["final_register"] = inspection_register.sources(graph, read_text)
     return result
 
 
@@ -117,6 +122,8 @@ def edges(ledger):
         for row in ledger.get(key,[]):
             page=f"{row['doc']}/p{row['page']}"
             result.append({"type":relation,"from":row["unit"],"to":page,"line":row["line"],"evidence":[page,*row["facts"]]})
+    if "final_register" in ledger:
+        result.extend(inspection_register.edges(ledger["final_register"]))
     return result
 
 
@@ -197,6 +204,14 @@ def apply(finding, ledger, graph=None):
 def verify(report, read_text, *, signing=False):
     graph, policy = report["graph"], report["policy"]
     marker = policy.get("acceptance_reservations")
+    if signing and marker != FORMAT:
+        positives = [f for f in report["findings"] if f["rule"] == "H02" and f["status"] == "ok" and f.get("reinspection")]
+        if positives:
+            register = inspection_register.sources(graph, read_text)
+            for finding in positives:
+                check = inspection_register.assess(finding, register, graph)
+                if check and check["status"] != "ok":
+                    raise ValueError("旧版复验结论仍有待核的整改明细或签认附言，请重新审计后签收。")
     if not marker:
         if ("acceptance_reservations.py" in policy.get("code_sha256", {}) or "acceptance_reservation_sources" in graph
                 or policy.get("performance_checks") == CURRENT):
@@ -215,12 +230,13 @@ def verify(report, read_text, *, signing=False):
             if f["rule"]=="H02" and f["status"]=="ok" and not f.get("batch_acceptance"):
                 if supplier_check(current,set(f["scope"]),graph)["status"]!="ok":
                     raise ValueError("旧版验收供应方或第三方供货依据待核，请按现行程序重审后签收。")
-    if signing and marker!=FORMAT:
+    if signing and marker not in OPINION_FORMATS:
         acceptance_payments.legacy_signoff(report,sources(graph,read_text))
     ledger = sources(graph,read_text,marker)
-    actual = [e for e in graph["edges"] if e["type"] in ("acceptance_reservation","supplier_identity_basis","acceptance_payment_opinion")]
+    actual = [e for e in graph["edges"] if e["type"] in ("acceptance_reservation","supplier_identity_basis","acceptance_payment_opinion","reinspection_register_line")]
     version=policy.get("version","")
     if (marker not in (*SUPPLIER_FORMATS,LEGACY) or "2026.11.25.04"<=version<acceptance_payments.SINCE and marker!=SUPPLIER
-            or version>=acceptance_payments.SINCE and marker!=FORMAT or policy.get("performance_checks") != CURRENT
+            or acceptance_payments.SINCE<=version<inspection_register.SINCE and marker!=OPINIONS
+            or version>=inspection_register.SINCE and marker!=FORMAT or policy.get("performance_checks") != CURRENT
             or graph.get("acceptance_reservation_sources") != ledger or actual != edges(ledger)):
         raise ValueError("验收保留意见、整页影像覆盖或证据关系与归档不符")

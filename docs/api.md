@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## 复验原件的逐行核对
+
+规则 `2026.11.26.07` 使用 `acceptance-reservations-v4`。`graph.acceptance_reservation_sources.final_register` 保存纳入复验的页、文字层覆盖和另列原文。每条 `reinspection_register_line` 从该单据指向对应物理页，并携带原文、行号和已关联的事实 ID。读图引文的行号为空。
+
+报告 H02 的 `reinspection.register` 包含本次复验范围内的这些行、影像待核页和审计状态。`open` 表示原页有未结事项，`conditional` 表示附条件签认，`reported_closed` 表示另列关闭而相应依据待核。`matched` 对应已经核实的同号、同对象整改复验。`clear` 仅表示该处明载无未结项目。`unreviewed` 需要读原文判断。旧版归档保留当时结论。对曾被判为相符而按现行复验程序仍有疑点的底稿申请签收，接口返回 HTTP 409。
+
 ## 前款回单与验收款时点
 
 规则清单的 `prior_installment` 为 `prior-installment-bank-evidence-v1` 或 `v2` 时，`graph.prior_installment_sources` 记录检出的原约定、单据归属、页和印刷行。`prior_installment_source` 从原页连接至该约定。v2 还标识可逐字确定、单独确认首款到账的付款约定 `credit_only`。它只作用于验收款，原页另列的终验签认人仍须核对。存在约定时，以案件提交记录的上海日期固定 `prior_installment_as_of`。

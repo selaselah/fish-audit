@@ -354,3 +354,7 @@ server/.venv/bin/python docs/samples/quality_reinspection.py --run --cases parti
 ### 合同另约定验收款须先收票
 
 运行 `server/.venv/bin/python docs/samples/receipt_before_payment.py` 生成四套水印资料。加 `--run` 会上传至本机 8000 端口，使用项目配置的多模态模型，并按生成件原页核验模拟签章。可用 `--cases invoice_only paid_early before_payment different` 选取情形，用 `--run-id` 标识独立的一次演练。默认四笔均比较 H04 现时条件和 H05 回单付款时点。[原件字段与运行结果](../acceptance.md#2026-11-25--验收款收票前提与实付日期)
+
+### 复验签认与未结项目
+
+运行 `server/.venv/bin/python docs/samples/reinspection_register.py --run`，可在本机工作台提交四组水印资料。冷藏柜探头有原验收、整改记录和复验签认，复验表的另一栏分别记录门封待换、等待试运行、另一缺陷关闭、无未结事项。脚本核对生成件和归档页图摘要，并检查第二期验收款和第三期质保金的状态。

@@ -23,6 +23,7 @@ import payment_windows
 import invoice_conditions
 import payment_amendments
 import acceptance_reservations
+import inspection_register
 import acceptance_payments
 import payment_releases
 import repair_completion
@@ -893,6 +894,9 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
                     original = evaluate(contract,receipts)
                     if original["status"]=="issue":
                         accepted.update(status="issue",detail=original["detail"]+" "+accepted["detail"])
+    register = graph.get("acceptance_reservation_sources", {}).get("final_register")
+    if version == FORMAT and register is not None and inspection_register.apply(accepted, register, graph):
+        accepted_on = None
     if payment_change and not scoped_change:
         payment_amendments.attach(plan,payment_change)
     output = [signed, accepted, plan]
