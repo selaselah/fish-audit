@@ -1,6 +1,7 @@
 const $ = selector => document.querySelector(selector);
 const state = {cases: [], filter: 'all', detail: null, bundle: null, tab: 'report', pinned: 0,
   timer: null, epoch: 0, key: null, review: null};
+let displayedPaper = null;
 const ruleChecks = new WeakMap();
 const labels = {
   queued: '排队中', running: '处理中', ready: '待验收', in_review: '待复核', closed: '已归档', failed: '已中断',
@@ -842,7 +843,21 @@ function activityPanel() {
   }
   return box('', ruleReplayPanel(bundle), panel, log);
 }
-function renderCase() {
+function paperViewContext(data, rev) {
+  const canReview = data.status === 'ready' && data.rev === rev;
+  switch (state.tab) {
+    case 'report':
+      return JSON.stringify([canReview, data.decisions.find(row => row.rev === rev),
+        data.referrals?.find(row => row.rev === rev), Team.current?.role, Team.session.user?.id]);
+    case 'activity':
+      return JSON.stringify([canReview, data.events.at(-1)?.seq]);
+    case 'evidence':
+      return JSON.stringify(data.documents);
+    default:
+      return '';
+  }
+}
+function renderCase(forcePanel = false) {
   const data = state.detail;
   $('#case-title').textContent = data.title;
   $('#case-meta').textContent = profileName(data.profile) + ' · ' + time(data.created) + ' 提交';
@@ -875,23 +890,34 @@ function renderCase() {
   renderSupplementFamily(data,bundle?.rev);
   $('#report-tools').hidden = !bundle;
   if (!bundle) {
+    displayedPaper = null;
     const content = [sourceList(), activityPanel()];
     const decision = data.decisions?.at(-1);
     if (decision) content.unshift(box('panel',el('h2','验收决定'),tag(decision.decision),el('p',decision.note)));
     $('#case-panel').replaceChildren(...content); return;
   }
-  const nav = $('#tabs'); nav.replaceChildren();
-  for (const [id, label] of Object.entries(tabs)) {
-    const button = action(label, () => { state.tab = id; renderCase(); });
-    button.setAttribute('aria-pressed', String(state.tab === id)); nav.append(button);
+  const nav = $('#tabs');
+  if (!nav.childElementCount) {
+    for (const [id, label] of Object.entries(tabs)) {
+      const button = action(label, () => { state.tab = id; renderCase(); });
+      button.dataset.tab = id; nav.append(button);
+    }
   }
-  const versions = $('#version'); versions.replaceChildren();
-  for (const row of data.revisions) versions.add(new Option('R' + row.rev, row.rev, false, row.rev === bundle.rev));
+  for (const button of nav.children) button.setAttribute('aria-pressed', String(state.tab === button.dataset.tab));
+  const versions = $('#version');
+  if (versions.length !== data.revisions.length || data.revisions.some((row, i) => versions.options[i].value !== String(row.rev))) {
+    versions.replaceChildren(...data.revisions.map(row => new Option('R' + row.rev, row.rev)));
+  }
+  if (versions.value !== String(bundle.rev)) versions.value = String(bundle.rev);
+  const context = paperViewContext(data, bundle.rev);
+  if (!forcePanel && displayedPaper?.bundle === bundle && displayedPaper.tab === state.tab && displayedPaper.context === context) return;
   const panel = {report: reportPanel, evidence: sourceList, graph: graphPanel, activity: activityPanel}[state.tab]();
   $('#case-panel').replaceChildren(panel);
+  displayedPaper = {bundle, tab: state.tab, context};
 }
 function clearCaseView() {
   state.detail = null; state.bundle = null;
+  displayedPaper = null;
   PageProgress.reset();
   $('#supplement-family').hidden = true; $('#supplement-family').replaceChildren();
   for (const id of ['case-panel','case-title','case-meta','case-status','progress-panel','page-content'])
@@ -951,7 +977,7 @@ async function refresh() {
       } else if (route.params.get('view')==='replay' && state.openedCitation!==location.hash && state.bundle) {
         state.openedCitation=location.hash; state.tab='activity'; focusFinding='.rule-replay button';
       }
-      renderCase();
+      renderCase(Boolean(focusFinding));
       if (focusFinding) {
         const target = $(focusFinding);
         for (let p=target?.parentElement;p;p=p.parentElement) if (p.tagName==='DETAILS') p.open=true;

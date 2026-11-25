@@ -265,11 +265,22 @@ try {
     const packets=report.graph.receipt_packet_sources?.packets || [];
     const equipment=inspection?.equipment_models;
     const modelLines=report.graph.equipment_model_sources?.lines || [];
+    const keepEvidenceOpen=async panel=>{
+      const retained=await evaluate(`(async()=>{
+        const evidence=${panel};
+        evidence.open=true;
+        const summary=evidence.querySelector('summary');
+        summary.focus();
+        await refresh();
+        return evidence.isConnected && evidence.open && document.activeElement===summary;
+      })()`);
+      assert.ok(retained,'a progress refresh must keep the open evidence and its keyboard focus');
+    };
     if (equipment) {
       const panel='document.getElementById("equipment-models")';
       assert.equal(await evaluate(panel+'.dataset.modelStatus'),equipment.status);
       assert.equal(await evaluate(panel+'.open'),equipment.status!=='ok');
-      await evaluate(panel+'.open=true');
+      await keepEvidenceOpen(panel);
       await verifyRemarks(panel,modelLines);
       if (equipment.sequence) {
         assert.equal(await evaluate(panel+'.querySelector("[data-model-sequence]").dataset.modelSequence'),equipment.sequence.outcome);
@@ -932,7 +943,7 @@ try {
     const allRemarks=report.graph.acceptance_reservation_sources?.lines || [];
     if (modelLines.length) {
       const panel='document.querySelector(".equipment-model-relations")';
-      await evaluate(panel+'.open=true');
+      await keepEvidenceOpen(panel);
       await verifyRemarks(panel,modelLines);
       assert.equal(await evaluate(panel+'.querySelectorAll("[data-model-relation]").length'),
         report.graph.edges.filter(e=>e.type==='equipment_model_comparison').length);
@@ -1822,16 +1833,20 @@ try {
       const report = await evaluate('fetch("/api/w/'+path[1]+'/cases/'+path[3]+'/reports/1").then(r=>r.json())');
       console.log(JSON.stringify({verdict:report.report.result.verdict,pages:report.report.graph.nodes.filter(n=>n.type==='page').length,
         findings:report.report.findings.length, calculations:report.report.findings.flatMap(f=>f.calculations||[]).length}));
-      const needsReview = report.report.result.verdict === 'review';
-      if (needsReview) {
-        console.log(JSON.stringify({gaps:report.report.graph.gaps, pending:report.report.graph.facts.filter(f=>!['anchored','confirmed'].includes(f.status)).map(f=>[f.page,f.field,f.status]), rules:report.report.findings.filter(f=>f.status!=='ok').map(f=>[f.rule,f.detail])}));
-        assert.ok(report.report.graph.gaps.some(g=>g.doc==='d01' && g.page===1 && g.field==='payment_term' &&
-          g.quote?.endsWith('验收后一次性全额结算')),'review links to the printed contract clause');
-        assert.ok(report.report.findings.some(f=>f.rule==='M02' && f.status==='missing'),'unverified payment terms block the full-settlement calculation');
-        assert.ok(report.report.findings.filter(f=>f.status!=='ok').every(f=>['E01','C01','M02','X01'].includes(f.rule)),'only the evidenced contract clause needs review');
-      } else assert.equal(report.report.result.verdict,'pass','golden procurement result');
+      const printedTerm = row => row.doc==='d01' && row.page===1 && row.field==='payment_term' &&
+        row.quote?.endsWith('验收后一次性全额结算');
+      const term = report.report.graph.facts.find(printedTerm);
+      const termVerified = term && ['anchored','confirmed'].includes(term.status);
+      assert.equal(report.report.result.verdict,'review','the packet has no contract signatures or signed final acceptance');
+      console.log(JSON.stringify({gaps:report.report.graph.gaps, pending:report.report.graph.facts.filter(f=>!['anchored','confirmed'].includes(f.status)).map(f=>[f.page,f.field,f.status]), rules:report.report.findings.filter(f=>f.status!=='ok').map(f=>[f.rule,f.detail])}));
+      assert.ok(term || report.report.graph.gaps.some(printedTerm),'the printed payment term is cited or marked as an extraction gap');
+      const status = rule => report.report.findings.find(f=>f.rule===rule)?.status;
+      assert.equal(status('M02'),termVerified?'ok':'missing','the amount comparison depends on the verified full-settlement term');
+      assert.ok(['missing','risk'].includes(status('H01')),'the unsigned contract has outstanding effectiveness evidence');
+      assert.ok(['missing','risk'].includes(status('H02')),'the delivery form lacks signed evidence of final acceptance');
+      assert.equal(status('H04'),'missing','payment still needs the contract and final acceptance');
       const calcCount = report.report.findings.flatMap(f=>f.calculations || []).length;
-      assert.ok(calcCount >= (needsReview ? 1 : 3), 'operand-linked audit');
+      assert.ok(calcCount >= (termVerified ? 3 : 1), 'operand-linked audit');
       await evaluate('const detailEl = document.querySelector("#case-panel .formula .ref"); for (let a=detailEl.parentElement; a; a=a.parentElement) if(a.tagName==="DETAILS") a.open=true; detailEl.click()');
       await wait('document.querySelector("#page-dialog").open && !!document.querySelector(".evidence-row.located")','operand citation');
       const sourceUrl = await wait('document.querySelector("#page-dialog img")?.naturalWidth && document.querySelector("#page-dialog .image-sheet + a").href','verified source image loaded');
@@ -1854,7 +1869,6 @@ try {
       await wait('!!document.querySelector("#page-dialog input:enabled")','verified bytes restored for review');
       await evaluate('document.querySelector("#page-dialog").close()');
       let revision = 1;
-      let referForReview = needsReview;
       if (process.argv.includes('--confirm-source')) {
         const bill = report.report.graph.facts.find(f=>f.field==='invoice_id' && f.value==='YL-FP-071');
         assert.ok(bill?.doc==='d01' && bill.page===2);
@@ -1882,9 +1896,8 @@ try {
         await evaluate('document.querySelector("#page-dialog").close()');
         console.log('PASS · Refused a changed original after preview; restored source, confirmed bill number and pinned its three hashes');
       }
-      if (process.argv.includes('--dispute') && !needsReview) {
-        const term = report.report.graph.facts.find(f=>f.field==='payment_term' && f.doc==='d01' && f.page===1);
-        assert.ok(term);
+      const disputeTerm = process.argv.includes('--dispute') && termVerified;
+      if (disputeTerm) {
         await evaluate('location.hash='+JSON.stringify(detail+'?rev='+revision+'&fact='+encodeURIComponent(term.id)));
         await wait('document.querySelector("#page-dialog")?.open && !!document.querySelector(".located input:enabled")','printed payment term');
         await evaluate('document.querySelector(".located input").click()');
@@ -1896,58 +1909,56 @@ try {
         assert.equal(revised.graph.facts.find(f=>f.id===term.id)?.status,'disputed');
         assert.equal(revised.findings.find(f=>f.rule==='M02')?.status,'missing');
         assert.equal(revised.result.verdict,'review');
-        referForReview = true;
       }
       await click('填写验收意见');
-      let decision = referForReview ? 'escalate' : 'approve';
-      const note = referForReview ? '合成演练：合同结算条款尚待核实，提交复核。' : '已核合成演练三份原页及金额复算。';
-      await evaluate('document.querySelector("#review-decision").value='+JSON.stringify(decision)+';document.querySelector("#review-note").value='+JSON.stringify(note)+';document.querySelector("#review-form").requestSubmit()');
-      await wait('document.querySelector("#case-status").textContent==='+JSON.stringify(referForReview?'待复核':'已归档'),'auditor signoff');
-      assert.equal(await evaluate('fetch("/api/w/'+path[1]+'/cases/'+path[3]+'").then(r=>r.json()).then(c=>c.decisions.at(-1).decision)'),decision);
+      const note = disputeTerm ? '合成演练，对结算条款取值有异议，请复核。' : '合成演练，请复核合同生效与终验签认的依据。';
+      await evaluate('document.querySelector("#review-decision").value="escalate";document.querySelector("#review-note").value='+JSON.stringify(note)+';document.querySelector("#review-form").requestSubmit()');
+      await wait('document.querySelector("#case-status").textContent==="待复核"','auditor referral');
+      assert.equal(await evaluate('fetch("/api/w/'+path[1]+'/cases/'+path[3]+'").then(r=>r.json()).then(c=>c.decisions.at(-1).decision)'),'escalate');
       const usageUrl = '/api/workspaces/'+path[1]+'/team';
       const usageAtSignoff = await evaluate('fetch('+JSON.stringify(usageUrl)+').then(r=>r.json()).then(d=>d.usage)');
-      if (referForReview) {
-        assert.ok(await evaluate('document.querySelector(".peer-panel").textContent.includes("等待同企业另一位")'));
-        await evaluate('document.querySelector("#nav-team").click()');
-        await wait('!!document.querySelector("#team select[name=role]")','auditor invitation form');
-        await evaluate('document.querySelector("#team select[name=role]").value="auditor"');
-        await click('生成邀请链接');
-        const auditorInvite = await wait('document.querySelector("#team input[readonly]")?.value','peer invitation');
-        await evaluate('document.querySelector("#nav-account").click()');
-        await wait('!!document.querySelector("#account-panel details")','owner account options');
-        await click('退出登录');
-        await wait('!!document.querySelector("#account input[name=password]")','owner logged out');
-        await call('Page.navigate',{url:auditorInvite});
-        await wait('document.querySelector("#account-title")?.textContent==="加入企业"','auditor invited');
-        if (!await evaluate('!!document.querySelector("#account input[name=name]")')) await click('创建账号并接受邀请');
-        await entry({name:'陆复核',login:'ui.second.auditor',password});
-        await wait('document.querySelector("[data-metric=in_review] strong")?.textContent==="1" && !document.querySelector("#desk").hidden','peer inbox');
-        await evaluate('document.querySelector("[data-metric=in_review]").click()');
-        await wait('document.querySelector("[data-filter=in_review]").getAttribute("aria-pressed")==="true" && document.querySelectorAll(".case-link").length===1','filtered review queue');
-        await evaluate('document.querySelector(".case-link").click()');
-        await wait('!!document.querySelector(".peer-panel button")','independent reviewer can sign');
-        await click('填写复核意见');
-        await wait('document.querySelector("#peer-dialog").open','peer decision form');
-        assert.deepEqual(await evaluate('[document.querySelector("#peer-reviewer").value,document.querySelector("#peer-reviewer").readOnly]'),['陆复核',true]);
-        await evaluate('document.querySelector("#peer-note").value="合成演练，结算条款存在异议，请补交载明付款条件的资料。";document.querySelector("#peer-decision").value="return";document.querySelector("#peer-form").requestSubmit()');
-        await wait('document.querySelector("#peer-error").textContent.includes("勾选")','actual findings required');
-        const selected = await evaluate('(()=>{const row=[...document.querySelectorAll(".peer-finding")].find(r=>r.textContent.includes("M02"));row.querySelector("input").click();return [row.querySelector("input").value,row.querySelector("a").href]})()');
-        assert.equal(new URL(selected[1]).searchParams.get('rev'),String(revision));
-        assert.equal(new URL(selected[1]).searchParams.get('finding'),selected[0]);
-        for (const width of [1440,1024,820,768,390,320]) {
-          await call('Emulation.setDeviceMetricsOverride',{width,height:850,deviceScaleFactor:1,mobile:width<600});
-          assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && document.querySelector("#peer-dialog").scrollWidth<=document.querySelector("#peer-dialog").clientWidth+1'),'peer form at '+width);
-        }
-        await evaluate('document.querySelector("#peer-form").requestSubmit()');
-        decision = 'return'; revision++;
-        await wait('!document.querySelector("#peer-dialog").open && document.querySelector("#case-status").textContent==="已归档" && document.querySelector("#version").value==='+JSON.stringify(String(revision)),'independent peer signed');
-        const history = await evaluate('fetch("/api/w/'+path[1]+'/cases/'+path[3]+'").then(r=>r.json()).then(c=>c.decisions)');
-        assert.deepEqual(history.map(s=>s.decision),['escalate','return']);
-        assert.notEqual(history[0].actor,history[1].actor);
-        await evaluate('document.querySelector(".peer-panel a[href*=finding]").click()');
-        await wait('document.querySelector("#trace-select")?.value==='+JSON.stringify(selected[0]),'peer citation opened the disputed finding on its original revision');
-        assert.ok(await evaluate('location.hash.includes("rev='+(revision-1)+'")'));
+      assert.ok(await evaluate('document.querySelector(".peer-panel").textContent.includes("等待同企业另一位")'));
+      await evaluate('document.querySelector("#nav-team").click()');
+      await wait('!!document.querySelector("#team select[name=role]")','auditor invitation form');
+      await evaluate('document.querySelector("#team select[name=role]").value="auditor"');
+      await click('生成邀请链接');
+      const auditorInvite = await wait('document.querySelector("#team input[readonly]")?.value','peer invitation');
+      await evaluate('document.querySelector("#nav-account").click()');
+      await wait('!!document.querySelector("#account-panel details")','owner account options');
+      await click('退出登录');
+      await wait('!!document.querySelector("#account input[name=password]")','owner logged out');
+      await call('Page.navigate',{url:auditorInvite});
+      await wait('document.querySelector("#account-title")?.textContent==="加入企业"','auditor invited');
+      if (!await evaluate('!!document.querySelector("#account input[name=name]")')) await click('创建账号并接受邀请');
+      await entry({name:'陆复核',login:'ui.second.auditor',password});
+      await wait('document.querySelector("[data-metric=in_review] strong")?.textContent==="1" && !document.querySelector("#desk").hidden','peer inbox');
+      await evaluate('document.querySelector("[data-metric=in_review]").click()');
+      await wait('document.querySelector("[data-filter=in_review]").getAttribute("aria-pressed")==="true" && document.querySelectorAll(".case-link").length===1','filtered review queue');
+      await evaluate('document.querySelector(".case-link").click()');
+      await wait('!!document.querySelector(".peer-panel button")','independent reviewer can sign');
+      await click('填写复核意见');
+      await wait('document.querySelector("#peer-dialog").open','peer decision form');
+      assert.deepEqual(await evaluate('[document.querySelector("#peer-reviewer").value,document.querySelector("#peer-reviewer").readOnly]'),['陆复核',true]);
+      const peerNote = disputeTerm ? '合成演练，请补交载明结算条款的资料。' : '合成演练，请补交双方签署的合同和已签认的终验资料。';
+      await evaluate('document.querySelector("#peer-note").value='+JSON.stringify(peerNote)+';document.querySelector("#peer-decision").value="return";document.querySelector("#peer-form").requestSubmit()');
+      await wait('document.querySelector("#peer-error").textContent.includes("勾选")','actual findings required');
+      const peerRule = disputeTerm ? 'M02' : 'H01';
+      const selected = await evaluate('(()=>{const row=[...document.querySelectorAll(".peer-finding")].find(r=>r.textContent.includes('+JSON.stringify(peerRule)+'));row.querySelector("input").click();return [row.querySelector("input").value,row.querySelector("a").href]})()');
+      assert.equal(new URL(selected[1]).searchParams.get('rev'),String(revision));
+      assert.equal(new URL(selected[1]).searchParams.get('finding'),selected[0]);
+      for (const width of [1440,1024,820,768,390,320]) {
+        await call('Emulation.setDeviceMetricsOverride',{width,height:850,deviceScaleFactor:1,mobile:width<600});
+        assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && document.querySelector("#peer-dialog").scrollWidth<=document.querySelector("#peer-dialog").clientWidth+1'),'peer form at '+width);
       }
+      await evaluate('document.querySelector("#peer-form").requestSubmit()');
+      revision++;
+      await wait('!document.querySelector("#peer-dialog").open && document.querySelector("#case-status").textContent==="已归档" && document.querySelector("#version").value==='+JSON.stringify(String(revision)),'independent peer signed');
+      const history = await evaluate('fetch("/api/w/'+path[1]+'/cases/'+path[3]+'").then(r=>r.json()).then(c=>c.decisions)');
+      assert.deepEqual(history.map(s=>s.decision),['escalate','return']);
+      assert.notEqual(history[0].actor,history[1].actor);
+      await evaluate('document.querySelector(".peer-panel a[href*=finding]").click()');
+      await wait('document.querySelector("#trace-select")?.value==='+JSON.stringify(selected[0]),'peer citation opened the disputed finding on its original revision');
+      assert.ok(await evaluate('location.hash.includes("rev='+(revision-1)+'")'));
       const bundleUrl = '/api/w/'+path[1]+'/cases/'+path[3]+'/reports/'+revision+'/bundle';
       const b64 = await evaluate('fetch('+JSON.stringify(bundleUrl)+').then(r=>r.blob()).then(b=>new Promise(res=>{const f=new FileReader(); f.onload=()=>res(f.result.split(",")[1]);f.readAsDataURL(b)}))');
       const zip = join(scratch,'signed.zip');
@@ -1961,22 +1972,20 @@ try {
       await evaluate('document.querySelector("#library-results .source-jump").click()');
       await wait('document.querySelector("#page-dialog").open && !!document.querySelector(".evidence-row.located") && location.hash.includes("rev='+revision+'")','source opened on its indexed revision');
       await evaluate('document.querySelector("#page-dialog").close()');
-      if (referForReview) {
-        await evaluate('document.querySelector("#nav-account").click()');
-        await wait('!!document.querySelector("#account-panel details")','peer account');
-        await click('退出登录');
-        await wait('!!document.querySelector("#account-panel input[name=password]")','peer logged out');
-        if (await evaluate('!!document.querySelector("#account input[name=name]")')) await click('已有账号，去登录');
-        await entry({login:'ui.owner',password});
-        await wait('location.hash.endsWith("/desk") && !document.querySelector("#nav-team").hidden','owner returns');
-      }
+      await evaluate('document.querySelector("#nav-account").click()');
+      await wait('!!document.querySelector("#account-panel details")','peer account');
+      await click('退出登录');
+      await wait('!!document.querySelector("#account-panel input[name=password]")','peer logged out');
+      if (await evaluate('!!document.querySelector("#account input[name=name]")')) await click('已有账号，去登录');
+      await entry({login:'ui.owner',password});
+      await wait('location.hash.endsWith("/desk") && !document.querySelector("#nav-team").hidden','owner returns');
       await evaluate('document.querySelector("#nav-team").click()');
       await wait('document.querySelector(".usage-list")','workspace usage');
       const usage = await evaluate('fetch("/api/workspaces/'+path[1]+'/team").then(r=>r.json()).then(d=>d.usage)');
       assert.ok(usage.requests >= 4 && usage.input_tokens > 0 && usage.output_tokens > 0,'provider usage recorded');
       for (const key of ['requests','input_tokens','output_tokens']) assert.equal(usage[key],usageAtSignoff[key],'human review adds no model calls or tokens');
       console.log(JSON.stringify({requests:usage.requests,input_tokens:usage.input_tokens,output_tokens:usage.output_tokens}));
-      console.log('Signed '+decision+' on R'+revision);
+      console.log('Signed return on R'+revision);
       console.log('PASS · Employee upload, live audit, operand citation, signoff, offline replay and cross-case source retrieval');
     }
   }
