@@ -29,7 +29,26 @@ def literal(text):
     return normalize("NFKC",text).strip()
 
 
-def pages_and_lines(graph,read_text):
+def image_ticket_refs(facts):
+    signals=[]
+    fields=set()
+    for fact in facts:
+        field=fact["field"]
+        if field not in LABELS or fact["status"] not in ("visual","confirmed"):
+            continue
+        label,body=parts(fact["quote"])
+        if label not in LABELS[field] or not body or literal(fact["value"]) not in (body,literal(fact["quote"])):
+            continue
+        signals.append(fact["id"])
+        fields.add(field)
+    identifying={"warranty_ticket_id","warranty_ticket_state"}
+    reporting={"warranty_reported_on","warranty_fault"}
+    if identifying<=fields or "warranty_ticket_id" in fields and fields & reporting or {"warranty_ticket_state",*reporting}<=fields:
+        return signals
+    return []
+
+
+def pages_and_lines(graph,read_text,*,inspect_images=False):
     kinds=defaultdict(set)
     for kind,units in graph["documents_by_kind"].items():
         for unit in units:
@@ -42,6 +61,7 @@ def pages_and_lines(graph,read_text):
         if f["field"]==TITLE or literal(f["quote"]) in TITLES:
             candidates.add(f.get("unit",f["doc"]))
     originals=[]
+    image_refs={}
     for node in graph["nodes"]:
         if node["type"]!="page":
             continue
@@ -51,6 +71,11 @@ def pages_and_lines(graph,read_text):
         native=node.get("layer")=="text"
         text=read_text(doc,page) if native else ""
         raw=[(n,s) for n,s in enumerate((text or "").splitlines(),1) if not is_page_marker(s)]
+        if inspect_images and not native:
+            refs=image_ticket_refs(by_page[doc,page])
+            if refs:
+                image_refs[doc,page]=refs
+                candidates.add(unit)
         if any(literal(s) in TITLES for _,s in raw):
             candidates.add(unit)
         originals.append((unit,doc,page,node,text,raw))
@@ -81,7 +106,10 @@ def pages_and_lines(graph,read_text):
                 bounded=False
         counts=Counter(fields)
         bounded=bounded and all(counts[k]==1 for k in (TITLE,*LINK_KEYS,"warranty_ticket_id","warranty_reported_on","warranty_fault","warranty_ticket_state"))
-        pages.append({**place,"native":native,"text_only":node.get("clause_text_only") is True,"ticket":True,"bounded":bounded})
+        source={**place,"native":native,"text_only":node.get("clause_text_only") is True,"ticket":True,"bounded":bounded}
+        if (doc,page) in image_refs:
+            source["image_ticket_refs"]=image_refs[doc,page]
+        pages.append(source)
     return pages,lines
 
 

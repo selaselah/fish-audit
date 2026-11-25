@@ -18,8 +18,10 @@ import warranty_service
 
 LEGACY_FORMAT = "contract-warranty-release-v1"
 SUBMISSION_FORMAT = "contract-warranty-release-v2"
-FORMAT = "contract-warranty-release-v3"
-CUTOFF_FORMATS = {SUBMISSION_FORMAT,FORMAT}
+TICKET_FORMAT = "contract-warranty-release-v3"
+FORMAT = "contract-warranty-release-v4"
+TICKET_FORMATS = {TICKET_FORMAT,FORMAT}
+CUTOFF_FORMATS = {SUBMISSION_FORMAT,*TICKET_FORMATS}
 LABELS = {
     "warranty_period": ("质保期限","质保期","保修期限","保修期","质保截止日"),
     "warranty_condition": ("质保金返还条件","质保金释放条件","质保金支付条件","质保金返还前提"),
@@ -156,8 +158,8 @@ def sources(graph,read_text,version=FORMAT):
                 kind="unresolved" if MENTION.search(normalized(raw)) else None
             if kind:
                 lines.append({**place,"line":index,"kind":kind,"quote":raw,"facts":matches[index,raw]})
-    if version==FORMAT:
-        ticket_pages,ticket_lines=warranty_service.pages_and_lines(graph,read_text)
+    if version in TICKET_FORMATS:
+        ticket_pages,ticket_lines=warranty_service.pages_and_lines(graph,read_text,inspect_images=version==FORMAT)
         pages.extend(ticket_pages)
         lines.extend(ticket_lines)
     return {"format":version,"pages":pages,"lines":lines}
@@ -324,7 +326,7 @@ def assess(graph,contract,releases,receipts,accepted,accepted_on,stage_refs):
         snapshot["at_submission"]={"as_of":cutoff.isoformat() if cutoff else None,"future":future,
                                    "start_refs":list(dict.fromkeys(start_refs)),"defects":defect_state}
     tickets=[]
-    if ledger.get("format")==FORMAT:
+    if ledger.get("format") in TICKET_FORMATS:
         iso=lambda d:d.isoformat() if d else None
         covered_end=end if term and term["unadjusted"] else None
         tickets=warranty_service.assess(graph,contract,iso(start),iso(covered_end),iso(confirmed),iso(cutoff),needs_clear)
@@ -371,7 +373,9 @@ def verify(report,read_text,*,signing=False,submitted=None,signed=None):
     marker=policy.get("warranty_checks")
     version=policy.get("version","0").split(".")
     number=tuple(map(int,version)) if all(n.isdecimal() for n in version) else ()
-    if number>=(2026,11,25,29) and marker!=FORMAT:
+    if number>=(2026,11,26,1) and marker!=FORMAT:
+        raise ValueError("缺少质保金提交时点与维修工单影像候选页核对程序")
+    if number>=(2026,11,25,29) and marker not in TICKET_FORMATS:
         raise ValueError("缺少质保金提交时点与维修工单核对程序")
     if number>=(2026,11,25,28) and marker not in CUTOFF_FORMATS:
         raise ValueError("缺少质保金提交时点核对程序")
@@ -402,7 +406,7 @@ def verify(report,read_text,*,signing=False,submitted=None,signed=None):
         raise ValueError("质保条款、确认记录或原页版式与归档不符")
     if [e for e in graph["edges"] if e["type"] in ("warranty_release_basis","warranty_ticket_comparison")]!=edges(report["findings"]):
         raise ValueError("质保金期次所据的期满确认关系与归档不符")
-    fields=set(LABELS) | (set(warranty_service.LABELS) if marker==FORMAT else set())
+    fields=set(LABELS) | (set(warranty_service.LABELS) if marker in TICKET_FORMATS else set())
     expected=sorted((f.get("unit",f["doc"]),f["id"],f["field"],(f["id"],)) for f in graph["facts"]
                     if f["field"] in fields and f["status"] in ("anchored","confirmed"))
     actual=sorted((e["from"],e["to"],e["type"],tuple(e["evidence"])) for e in graph["edges"] if e["type"] in fields)

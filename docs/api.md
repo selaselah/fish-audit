@@ -429,3 +429,5 @@ H05 的 `warranty_payment` 保留本笔回单列示的 `paid_on`、日期字段�
 规则 `2026.11.25.29` 使用 `contract-warranty-release-v3` 与提示词 `2026.11.25.17`。图谱按原页收录 `warranty_ticket` 文种和工单的六类字段，即编号、报修日、报修事项、状态、关闭日和采购方关闭签认。相关原页在 `graph.warranty_sources.pages` 含 `ticket` 标记，`ticket_line` 行记录物理文件、页、印刷行、原文、候选字段及引用。不具备完整文字层的工单保留页级复核入口。
 
 出现工单时，相关 H04/H05 的 `warranty_check.tickets` 对每份原件保存 `unit`、`number`、`reported_on`、`closed_on`、`closed_by`、`printed_state`、`refs` 和 `evidence`。`state` 中 `closed` 表示所列具名关闭早于期满确认，`open` 表示原单列为待修，`late` 或 `same_day` 表示关闭晚于确认或同日。记录也可标记期间、编号、身份、整页范围、未来日期或关闭凭据待核。主体或标的不符时，`identity_conflicts` 引用双方原行。已逐项匹配且可核对状态的工单建立 `warranty_ticket_comparison` 边。只有整期条件相符时才建立 `warranty_release_basis` 边。
+
+规则 `2026.11.26.01` 的 `contract-warranty-release-v4` 同时核查照片和扫描页。缺少抬头时，同页出现工单编号及状态、报修日期或事项，或者同页有工单状态、报修日期和报修事项三项时，可归入待核工单。程序核对候选类别、引文中的字段标签和值。对应物理页的 `image_ticket_refs` 列出参与识别的字段引用，同文件的封面仍可核对。影像单保持 `bounded=false` 与 `state=scope`。单项引文经人工核图后会有独立的原件和页图摘要回执，质保期付款条件仍需复核。旧版底稿继续使用当时的分类规则复算。

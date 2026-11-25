@@ -5,7 +5,7 @@ from controls import VERSION, execute
 from performance import compute, verify_findings
 from test_performance import CONTRACT, RECEIPT, WARRANTY, BANK_DOC, material
 from test_warranty_terms import TERM, CONDITION, texts
-from warranty_terms import edges, sources, verify, SUBMISSION_FORMAT
+from warranty_terms import edges, sources, verify, SUBMISSION_FORMAT, TICKET_FORMAT
 
 
 def ticket(state="已关闭",closed="2026-11-19",signature="演练丁（已签字）",number="WX-101",opening="2026-11-02",item="冷藏柜"):
@@ -17,7 +17,7 @@ def ticket(state="已关闭",closed="2026-11-19",signature="演练丁（已签�
     return fields
 
 
-def audit(*tickets,cert="2026-11-21",paid="2026-11-22",attest=True,omissions=(),condition=CONDITION):
+def audit(*tickets,cert="2026-11-21",paid="2026-11-22",attest=True,omissions=(),condition=CONDITION,extra_pages=()):
     contract=CONTRACT+[("warranty_period","质保期限",TERM)]+([("warranty_condition","质保金返还条件",condition)] if condition else [])
     release=WARRANTY+[("warranty_defects","质保遗留事项","无未关闭缺陷")]
     confirmed={}
@@ -28,7 +28,7 @@ def audit(*tickets,cert="2026-11-21",paid="2026-11-22",attest=True,omissions=(),
                     confirmed[f"d{i:02d}/p1/f{j}"]={"decision":"confirm","source_check":{"fixture":True}}
     def change(i,k,l,v):
         return {"warranty_release":cert+"双方确认质保期已满","paid_on":paid,"payment_designation":"第三期"}.get(k,v)
-    graph=material([contract,RECEIPT,release,BANK_DOC,*tickets],change,omissions=omissions,attestations=confirmed)
+    graph=material([contract,RECEIPT,release,BANK_DOC,*tickets],change,omissions=omissions,attestations=confirmed,extra_pages=extra_pages)
     graph["warranty_as_of"]="2026-11-25"
     return graph
 
@@ -41,6 +41,50 @@ def decisions(graph):
 
 
 class WarrantyTicketTests(unittest.TestCase):
+    def test_image_fields_find_only_their_own_page_and_never_establish_release(self):
+        def image(number,rows):
+            return {"doc":"d05","number":number,"sha256":"scan","text":"","layer":{"type":"image_overlay","lines":{}},
+                    "extraction":{"output":{"quality":"readable","facts":[{"field":f,"value":v,"quote":l+"："+v,"region":"middle"} for f,l,v in rows]}}}
+        number=("warranty_ticket_id","质保工单编号","WX-TK-274")
+        status=("warranty_ticket_state","工单状态","已关闭")
+        first=[("other","","附件移交清单")]
+        g=audit(first,extra_pages=[image(2,[number,status])])
+        pages=[p for p in g["warranty_sources"]["pages"] if p.get("ticket")]
+        self.assertEqual([(p["page"],p.get("image_ticket_refs",[])) for p in pages],[(1,[]),(2,["d05/p2/f1","d05/p2/f2"])])
+        phases,bank=decisions(g)
+        w=phases[-1]["warranty_check"]
+        self.assertEqual([(t["state"],t["linked"]) for t in w["tickets"]],[("scope",False)])
+        self.assertEqual((phases[-1]["status"],bank["status"]),("missing","missing"))
+        self.assertTrue(set(pages[-1]["image_ticket_refs"])<=set(phases[-1]["evidence"]))
+        self.assertEqual(edges([*phases,bank]),[])
+        for inputs in ([image(2,[status])],[image(2,[number]),image(3,[status])],
+                       [image(2,[number,("warranty_ticket_state","审批状态","已关闭")])]):
+            graph=audit(first,extra_pages=inputs)
+            self.assertFalse(any(p.get("ticket") for p in graph["warranty_sources"]["pages"]))
+
+    def test_archived_invoice_with_scanned_work_order_requires_reaudit_before_approval(self):
+        quoted=[{"field":field,"value":value,"quote":label+"："+value,"region":"top"} for field,label,value in
+                [("warranty_ticket_state","工单状态","待维修"),("warranty_ticket_id","质保工单编号","WX-061")]]
+        image={"doc":"d05","number":2,"sha256":"scan","text":"","layer":{"type":"image","lines":{}},
+               "extraction":{"output":{"quality":"readable","facts":quoted}}}
+        g=audit([("invoice","","采购发票")],extra_pages=[image])
+        def read(doc,page):
+            return "\n".join(f["quote"] for f in g["facts"] if f["doc"]==doc and f["page"]==page)
+        current=g["warranty_sources"]
+        g["warranty_sources"]=sources(g,read,TICKET_FORMAT)
+        self.assertFalse(any(p.get("ticket") for p in g["warranty_sources"]["pages"]))
+        fs=compute(g)
+        self.assertEqual([f["status"] for f in fs if f["rule"] in ("H04","H05")],["ok"]*4)
+        g["edges"]+=edges(fs)
+        old={"graph":g,"findings":fs,"policy":{**VERSION,"version":"2026.11.25.29","warranty_checks":TICKET_FORMAT}}
+        verify(old,read,submitted="2026-11-25T10:00:00Z")
+        with self.assertRaisesRegex(ValueError,"重新审计"):
+            verify(old,read,submitted="2026-11-25T10:00:00Z",signing=True)
+        g["warranty_sources"]=current
+        current["pages"][-1]["image_ticket_refs"]=[]
+        with self.assertRaisesRegex(ValueError,"归档不符"):
+            verify({**old,"policy":{**VERSION}},read)
+
     def test_controls_follow_each_printed_work_order_without_reopening_other_phases(self):
         for order,state,status in [(ticket(),"closed","ok"),(ticket("待维修",None,None),"open","risk"),
             (ticket(closed="2026-11-24"),"late","risk"),(ticket(closed="2026-11-21"),"same_day","missing"),
