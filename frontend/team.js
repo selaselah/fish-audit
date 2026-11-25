@@ -121,8 +121,8 @@ const Team = {
     form.append(action(registering?'已有账号，去登录':(invite?'创建账号并接受邀请':'创建企业账号'),()=>{
       this.authMode = registering?'login':'register'; this.account(invite);
     },'text-button'));
-    const mark = el('img'); mark.src = '/assets/fish-mark-light.png'; mark.alt = ''; mark.width = mark.height = 42;
-    const info = box('auth-aside engraved',mark,el('h2','从资料提交到审计签收'),el('p','员工提交业务资料，审计人员逐项核对引文、记录签收意见。企业管理员管理成员与权限。'));
+    const mark = el('img'); mark.src = '/assets/fish-mark.png'; mark.alt = ''; mark.width = mark.height = 42;
+    const info = box('auth-aside document-mat',mark,el('h2','从资料提交到审计签收'),el('p','员工提交业务资料，审计人员逐项核对引文、记录签收意见。企业管理员管理成员与权限。'));
     if (session.mode === 'local') info.append(link('打开本机工作台','#desk','button'));
     else info.append(link('查看产品演示','/','button'));
     panel.append(box('account-grid access-layout',form,info));

@@ -8,25 +8,53 @@
 :root {
   --font-ui: Geist, -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
   --font-number: Geist, "Helvetica Neue", sans-serif;
-  --brand-ink: #142c27;
-  --brand-green: #115946;
-  --brand-paper: #fafbf7;
+  --ink: #202431;
+  --secondary: #404859;
+  --muted: #5d6678;
+  --surface: #fff;
+  --canvas: #f6f7fa;
+  --soft: #f1f3f7;
+  --line: #dce0e8;
+  --field-line: #8993a6;
+  --accent: #344ed1;
+  --accent-hover: #263ba9;
+  --accent-soft: #edf1ff;
+  --accent-line: #aabaf3;
+  --focus: #283cb1;
+  --confirmed: #415673;
+  --confirmed-soft: #ecf1f7;
+  --confirmed-line: #8293ad;
+  --attention: #814b0b;
+  --attention-soft: #fff3dc;
+  --attention-line: #ac711b;
+  --issue: #a32c40;
+  --issue-soft: #ffedf0;
+  --issue-line: #c34c61;
+  --peer: #65428f;
+  --peer-soft: #f3eef9;
 }
 .fish-wordmark {
   display: inline-flex;
   align-items: center;
   min-height: 44px;
   gap: 9px;
-  color: var(--brand-ink);
+  color: var(--ink);
   text-decoration: none;
   white-space: nowrap;
   font: 650 25px/1 var(--font-ui);
   letter-spacing: -.065em;
 }
 .fish-wordmark img { width: 36px; height: 36px; flex: 0 0 auto; }
-.engraved {
-  background-color: #124f41;
-  background-image: url("/assets/engraving.webp"), linear-gradient(125deg,#367966 0%,#1b5a49 48%,#103d35 100%);
-  background-size: cover;
+.document-mat {
+  background-color: #e8edff;
+  background-image: linear-gradient(to right, rgb(72 92 160 / 8%) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgb(72 92 160 / 8%) 1px, transparent 1px);
+  background-size: 30px 30px;
   background-position: center;
+}
+@media (forced-colors: active) {
+  :root :is([role=tab][aria-selected=true], button[aria-pressed=true], nav a[aria-current]) {
+    text-decoration: underline double;
+    text-underline-offset: .25em;
+  }
 }
