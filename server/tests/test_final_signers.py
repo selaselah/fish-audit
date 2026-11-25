@@ -107,6 +107,7 @@ class FinalSignatoryTests(unittest.TestCase):
                               "layer":{"type":"text","clause_text_only":True,"lines":lines},
                               "extraction":{"output":{"quality":"readable","facts":raw}}})
             g=build_graph([{"id":"packet","name":"合成采购合订件.pdf","sha256":"fixture"}],pages,attestations)
+            g["warranty_as_of"]="2026-12-31"
             g["profile"]=original["profile"]
             h,phases,_=states(g)
             final=next(r for r in h["batch_acceptance"]["records"] if r.get("role")=="final")

@@ -6,7 +6,7 @@ from controls import VERSION, execute
 from performance import compute, verify_findings
 from performance_versions import EFFECT_FORMAT
 from test_performance import BANK_DOC, CONTRACT, RECEIPT, WARRANTY, material
-from warranty_terms import calendar_end, edges, parse_period, sources, verify
+from warranty_terms import LEGACY_FORMAT, calendar_end, edges, parse_period, sources, verify
 
 
 TERM="自终验合格之日起2个月，届满日不顺延"
@@ -41,6 +41,65 @@ def texts(graph):
 
 
 class WarrantyTermsTests(unittest.TestCase):
+    def test_future_dated_originals_with_matching_amounts_cannot_establish_payment(self):
+        for cutoff,stage_status,bank_status,future in (
+                ("2026-09-19","risk","risk",["accepted_on","calendar_end","confirmed_on"]),
+                ("2026-11-19","risk","risk",["calendar_end","confirmed_on"]),
+                ("2026-11-20","risk","risk",["confirmed_on"]),
+                ("2026-11-21","ok","risk",[]),
+                ("2026-11-22","ok","ok",[]),
+                (None,"missing","missing",[])):
+            with self.subTest(cutoff=cutoff):
+                graph=audit()
+                graph["warranty_as_of"]=cutoff
+                phases,bank=decisions(graph)
+                self.assertEqual([f["status"] for f in phases]+[bank["status"]],["ok","ok",stage_status,bank_status])
+                entry=phases[-1]["warranty_check"]
+                self.assertEqual(entry["at_submission"]["future"],future)
+                self.assertTrue(set(entry["at_submission"]["start_refs"])<=set(phases[-1]["evidence"]))
+                self.assertTrue(entry["at_submission"]["start_refs"])
+                self.assertEqual(entry["at_submission"]["defects"],"stated_clear")
+                payment=bank["warranty_payment"]
+                self.assertTrue(set(payment["date_refs"])<=set(bank["evidence"]))
+                self.assertEqual(payment["after_submission"],payment["paid_on"]>cutoff if cutoff else None)
+                self.assertEqual(len(edges(phases)),int(stage_status=="ok"))
+
+    def test_freeze_uses_beijing_submission_day_and_preserves_legacy_audit_history(self):
+        graph=audit()
+        read=lambda doc,num:texts(graph)[doc]
+        graph["warranty_as_of"]="2026-11-21"
+        policy={**VERSION,"profile":graph["profile"]}
+        def paper():
+            report={"policy":policy.copy(),"graph":graph,"findings":execute(graph,graph["profile"])}
+            graph["edges"]=[e for e in graph["edges"] if e["type"]!="warranty_release_basis"]+edges(report["findings"])
+            return report
+        report=paper()
+        verify(report,read,submitted="2026-11-20T16:00:00+00:00")
+        with self.assertRaisesRegex(ValueError,"截止日"):
+            verify(report,read,submitted="2026-11-20T15:59:59+00:00")
+        with self.assertRaisesRegex(ValueError,"截止日"):
+            verify(report,read,signed="2026-11-20T00:00:00+08:00")
+        for mark in ("warranty_payment","at_submission"):
+            altered=copy.deepcopy(report)
+            bank=next(f for f in altered["findings"] if f["rule"]=="H05")
+            if mark=="at_submission":
+                bank["warranty_check"][mark]["future"]=["accepted_on"]
+            else:
+                bank[mark]["date_refs"]=[]
+            with self.assertRaises(ValueError):
+                verify_findings(altered)
+        del graph["warranty_as_of"]
+        graph["warranty_sources"]["format"]=LEGACY_FORMAT
+        policy.update(warranty_checks=LEGACY_FORMAT,version="2026.11.25.27")
+        old=paper()
+        self.assertTrue(all(f["status"]=="ok" for f in old["findings"] if f["rule"] in ("H04","H05")))
+        verify(old,read,submitted="2026-11-20T16:00:00+00:00")
+        with self.assertRaisesRegex(ValueError,"旧版质保金"):
+            verify(old,read,signing=True,submitted="2026-11-20T16:00:00+00:00")
+        verify(old,read,signing=True,submitted="2026-11-21T16:00:00+00:00")
+        old["policy"]["version"]=VERSION["version"]
+        with self.assertRaisesRegex(ValueError,"提交时点"):
+            verify(old,read)
     def test_period_and_conditions_reconcile_to_distinct_originals(self):
         for inline in (False,True):
             graph=audit(inline=inline)
@@ -152,6 +211,7 @@ class WarrantyTermsTests(unittest.TestCase):
         original=texts(graph)
         original["d01"]+="\n质保期限："+TERM.replace("2个","12个")
         del graph["warranty_sources"]
+        del graph["warranty_as_of"]
         old={"policy":{"performance_checks":EFFECT_FORMAT},"graph":graph,"findings":compute(graph,EFFECT_FORMAT)}
         self.assertTrue(all(f["status"]=="ok" for f in old["findings"]))
         verify(old,read)

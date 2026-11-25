@@ -847,7 +847,7 @@ class Store:
                     verify_equipment_models(paper,page_text,signing=True)
                     verify_delivery_batches(paper,page_text,signing=True)
                     verify_contract_effect(paper,page_text,signing=True)
-                    verify_warranty(paper,page_text,signing=True)
+                    verify_warranty(paper,page_text,signing=True,submitted=row["submitted"])
                     verify_payment_windows(paper,page_text,signing=True)
                     verify_reservations(paper,page_text,signing=True)
                     verify_payment_releases(paper,page_text,submitted=row["submitted"])

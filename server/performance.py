@@ -1036,6 +1036,15 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         payment = result("H05",status,detail,refs,scope,check["stage"])
         if row["kind"]=="warranty" and release_check:
             payment["warranty_check"]=release_check
+            snapshot=release_check.get("at_submission")
+            if snapshot:
+                dates_on_receipt=bank.evidence("paid_on")
+                as_of=snapshot["as_of"]
+                beyond=paid.isoformat()>as_of if as_of else None
+                payment["warranty_payment"]={"paid_on":paid.isoformat(),"date_refs":dates_on_receipt,"after_submission":beyond}
+                if beyond:
+                    timing.append(date_check("payment","risk",f"回单列示付款日 {paid} 晚于资料提交日 {as_of}，需核实实际扣款记录。",
+                                             dates_on_receipt+bank.evidence("transfer_status","payment_designation")))
         add_date_checks(payment,timing)
         if version in PAYMENT_WINDOW_FORMATS:
             payment_windows.compare_transfer(payment,check,graph,contract,bank,row)
@@ -1087,6 +1096,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("batch_acceptance") != entry.get("batch_acceptance")
                 or saved.get("effect_review") != entry.get("effect_review")
                 or saved.get("warranty_check") != entry.get("warranty_check")
+                or saved.get("warranty_payment") != entry.get("warranty_payment")
                 or saved.get("equipment_models") != entry.get("equipment_models")
                 or saved.get("stage_payments") != entry.get("stage_payments")
                 or saved.get("payment_change") != entry.get("payment_change")

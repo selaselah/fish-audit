@@ -55,6 +55,8 @@ def material(groups, edit=None, confirm=True, omissions=(), *, attestations=None
                           extraction={"output":{"quality":"readable","facts":facts}}))
     graph = build_graph(docs,[*pages,*extra_pages],{**signoffs, **(attestations or {})})
     graph["profile"] = PERFORMANCE
+    if graph["warranty_sources"]["pages"]:
+        graph["warranty_as_of"]="2026-12-31"
     return graph
 
 

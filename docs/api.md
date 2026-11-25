@@ -417,3 +417,9 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 规则 `2026.11.24.28` 使用 `contract-performance-v9`。涉及日期疑点的 H01、H02 或 H05 附有 `date_checks[]`。每一项保存 `event`（`contract_period`、`acceptance`、`reinspection` 或 `payment`）、`status`（`risk` 或 `missing`）、案情说明 `detail` 和引用 `evidence`。原生日期的证据可定位到逐字引文和文字层原行，人工核图的日期可以回到其核图回执。H04 继承该期所据的签署、验收或质保条件。历史底稿保留当时的程序，申请签收时会重新检查原为相符的日期判断。
 
 `--render-performance` 可从 v9 本案的合同、审批、验收、质保、回单等履约程序所据原件重现分页，同时校核文字、定位和版式。使用 `--rules-from-git main` 可按当时的程序重算各版结论。
+
+### 质保金的案件提交时点
+
+规则 `2026.11.25.28` 使用 `policy.warranty_checks=contract-warranty-release-v2`。当图谱有对应原页，`graph.warranty_as_of` 取自案件提交记录，按 UTC+8 转为自然日。H04 与匹配成功回单的 H05 共用 `warranty_check.at_submission`。其中 `as_of` 为该截止日，`future` 列出晚于截止日的 `accepted_on`、`calendar_end` 或 `confirmed_on`，`start_refs` 引用用于起算的终验或复验日期。`defects` 的 `listed_open`、`stated_clear`、`unverified` 分别表示原件列有未结问题、原件明确载明无未结、记录待核。
+
+H05 的 `warranty_payment` 保留本笔回单列示的 `paid_on`、日期字段引用 `date_refs` 以及 `after_submission`。只有该日严格晚于截止日时才记为 `true`，同日付款仍独立核对履约前提。旧版归档沿用当时的程序。离线验包从案件提交记录复核截止日，重放时使用该版底稿的程序和原件。

@@ -251,7 +251,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
     verify_equipment_models(report,page_text)
     verify_delivery_batches(report,page_text)
     verify_contract_effect(report,page_text)
-    verify_warranty(report,page_text)
+    verify_warranty(report,page_text,submitted=submitted,signed=signed)
     verify_payment_windows(report,page_text)
     verify_reservations(report,page_text)
     verify_payment_releases(report,page_text,submitted=submitted,signed=signed)

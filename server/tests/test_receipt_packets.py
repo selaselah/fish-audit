@@ -37,6 +37,7 @@ def packet(*,original=None,modify=None):
             modify(n,lines,page)
         pages.append({**page,"text":"\n".join(lines)})
     graph = build_graph(docs,pages,signatures)
+    graph["warranty_as_of"]=original["warranty_as_of"]
     graph["profile"] = original["profile"]
     texts = {(p["doc"],p["number"]):p["text"] for p in pages}
     return graph,lambda doc,n:texts[doc,n]

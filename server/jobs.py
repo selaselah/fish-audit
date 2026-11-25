@@ -143,6 +143,8 @@ class Worker:
         store.progress(case_id, "graph", 74, f"已读取 {page_count} 页，正在校验引文并建立关系。")
         refresh_addendum_layout(store,case_id,docs,pages)
         graph = build_graph(docs, pages, store.attestations(case_id), store.amendments(case_id))
+        if graph["warranty_sources"]["pages"]:
+            graph["warranty_as_of"]=submission_day(case["created"])
         if graph["payment_release_sources"]["pages"]:
             graph["payment_release_as_of"]=submission_day(case["created"])
         store.check_graph_field_history(case_id,case["rev"]+1,graph)
