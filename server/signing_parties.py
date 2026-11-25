@@ -7,6 +7,8 @@ from contract_changes import SOURCE_LABELS
 from delegation import PARTY_SIGNATURES
 
 
+NATIVE_FORMAT = "contract-effect-sources-v4"
+IMAGE_FORMAT = "contract-effect-sources-v5"
 IMPRINT_FIELDS={"buyer_seal_name":("甲方印章单位名称","采购方印章单位名称","买方印章单位名称"),
                 "seller_seal_name":("乙方印章单位名称","供应方印章单位名称","卖方印章单位名称")}
 SIDES={"buyer":"甲方","seller":"乙方"}
@@ -86,9 +88,53 @@ def checked(f,graph):
             correction.get("value")==f["value"] and correction.get("quote")==f["quote"])
 
 
+def field_source(row, pages, facts, contract, graph):
+    """Describe what supports this one reading, independently of coverage of the whole contract."""
+    page = pages.get((row["doc"], row["page"]), {})
+    layer = page.get("layer")
+    if layer == "text" and row["line"] is not None:
+        kind = "text" if page.get("clause_text_only") else "mixed"
+    elif layer in ("image", "image_overlay") and row["line"] is None:
+        kind = "image"
+    else:
+        kind = "unlocated"
+    candidates = [facts[ref] for ref in row["facts"] if ref in facts]
+    exact = [f for f in candidates if f["field"] == row["field"] and f["doc"] == row["doc"] and
+             f["page"] == row["page"] and f.get("unit", f["doc"]) == row["unit"] and
+             f["quote"] == row["quote"] and unicodedata.normalize("NFC", f["value"].strip()) in
+             (unicodedata.normalize("NFC", row["quote"]), split(row["quote"])[1])]
+    fact = exact[0] if len(exact) == 1 else None
+    receipt_rev = None
+    if fact and fact in contract.fields.get(row["field"], []) and checked(fact,graph):
+        receipt_rev = fact["attestation"]["rev"]
+    return {"row": row["id"], "kind": kind, "fact": fact["id"] if fact else None,
+            "receipt_rev": receipt_rev, "disputed": any(f["status"] == "disputed" for f in exact)}
+
+
+def usable(row, origin, contract, graph):
+    if not row:
+        return False
+    if origin:
+        if origin["kind"] == "unlocated" or origin["disputed"]:
+            return False
+        if origin["kind"] in ("image", "mixed"):
+            return origin["receipt_rev"] is not None
+    if row["role"] == "imprint":
+        return row["line"] is not None
+    fact = typed(row, contract)
+    return checked(fact, graph) if row["role"] == "signature" else bool(fact)
+
+
 def assess(ledger,contract,graph):
     rows=[r for r in ledger.get("signing_rows",[]) if r["unit"]==contract.unit]
     clean=bool(rows) and all(p["native"] and p["text_only"] for p in ledger["pages"] if p["unit"]==contract.unit)
+    current = ledger.get("format") == IMAGE_FORMAT
+    sources = {}
+    if current and rows:
+        physical = {f"{p['doc']}/p{p['page']}":(p["doc"],p["page"]) for p in ledger["pages"] if p["unit"]==contract.unit}
+        pages = {physical[n["id"]]:n for n in graph["nodes"] if n["type"]=="page" and n["id"] in physical}
+        facts = {f["id"]:f for f in contract.refs}
+        sources = {r["id"]:field_source(r,pages,facts,contract,graph) for r in rows}
     records=[]
     for side in (*SIDES,"unspecified"):
         own=[r for r in rows if r["side"]==side]
@@ -100,20 +146,35 @@ def assess(ledger,contract,graph):
         party=names.get("party","")
         if not groups["imprint"] and not (party and holder and holder!=party and (complete(holder) or complete(party))):
             continue
+        origins = {role:sources.get(r["id"]) for role,r in single.items()}
+        def legible(role):
+            return usable(single.get(role), origins.get(role), contract, graph)
+        def awaiting_image(role):
+            return (origins.get(role) or {}).get("kind") in ("image","mixed") and not legible(role)
         state,status,target="pending","missing",None
         if side=="unspecified":
             state="side"
+        elif current and any(sources[r["id"]]["disputed"] for r in own):
+            state="disputed"
+        elif current and any(sources[r["id"]]["kind"]=="unlocated" for r in own):
+            state="unlocated"
         elif any(len(items)>1 for items in groups.values()):
-            state="multiple"
-        elif not clean or any(r["line"] is None for r in own):
+            repeated=[r for items in groups.values() if len(items)>1 for r in items]
+            state="ambiguous" if current and any(sources[r["id"]]["kind"]!="text" and
+                       not sources[r["id"]]["receipt_rev"] for r in repeated) else "multiple"
+        elif not current and (not clean or any(r["line"] is None for r in own)):
             state="image"
-        elif not complete(party) or not typed(single["party"],contract):
+        elif awaiting_image("party") or awaiting_image("imprint"):
+            state="image_pending"
+        elif not complete(party) or not legible("party"):
             state="party"
         elif "imprint" in single and not complete(names["imprint"]):
             state="partial"
         elif "imprint" in single and names["imprint"]!=party:
             state,status,target="different","risk","imprint"
-        elif not holder or not complete(holder) or not checked(typed(single["signature"],contract),graph):
+        elif awaiting_image("signature"):
+            state="image_pending"
+        elif not holder or not complete(holder) or not legible("signature"):
             state="signature"
         elif holder!=party:
             state,status,target="different","risk","signature"
@@ -122,10 +183,13 @@ def assess(ledger,contract,graph):
         evidence=[]
         for r in own:
             evidence.extend([r["id"],f"{r['doc']}/p{r['page']}",*r["facts"]])
-        records.append({"side":side,"state":state,"status":status,"unit":contract.unit,
+        record={"side":side,"state":state,"status":status,"unit":contract.unit,
                         "rows":{k:[r["id"] for r in rs] for k,rs in groups.items()},
                         "comparison":[single["party"]["id"],single[target]["id"]] if target else [],
-                        "evidence":list(dict.fromkeys(evidence))})
+                        "evidence":list(dict.fromkeys(evidence))}
+        if current:
+            record["field_sources"]=[sources[r["id"]] for r in own]
+        records.append(record)
     return records
 
 
@@ -154,7 +218,12 @@ def review(finding,ledger,contract,graph):
                 finding["status"]="missing"
             detail=side+{"multiple":"名称或签章有多栏，需核对各栏用途及所据原件。","partial":"印章单位名称记载不完整，需核对清晰原件。",
                          "side":"另有未注明甲乙方的印章单位名称，归属待核。","image":"签章主体所据原页含影像，需核对整页。",
+                         "image_pending":"签章影像的名称栏需要核对原页并记录相应字段。","disputed":"签章栏位有已登记的异议，需核对原文。",
+                         "ambiguous":"同一签章栏有多条候选记录，需核对其在原页的位置和实际记载。",
+                         "unlocated":"签章候选文字尚未定位至对应原行，需核对原页。",
                          "party":"合同约定主体名称及其出处待核。","signature":"签章栏的完整名称和核图记录待核。"}.get(r["state"],"签章主体待核。")
+        elif any(s["kind"] in ("image","mixed") for s in r.get("field_sources",[])):
+            detail=side+"所核三栏的单位名称相符，影像页的其他约定仍须通读。"
         else:
             detail=side+"约定主体、核图签章栏与单列印章单位名称相符。"
         finding["detail"]+=" "+detail

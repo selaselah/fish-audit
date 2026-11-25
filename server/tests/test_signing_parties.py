@@ -14,7 +14,7 @@ FIELD = "甲方印章单位名称"
 BRANCH = BUYER + "杭州分公司"
 
 
-def sample(imprints=(), *, omitted=(), signing=None, checked=True):
+def sample(imprints=(), *, omitted=(), signing=None, checked=True, extra_pages=(), extra_attestations=None):
     def names(doc, field, label, value):
         if field == "buyer_signature" and signing is not None:
             return signing
@@ -29,7 +29,8 @@ def sample(imprints=(), *, omitted=(), signing=None, checked=True):
             receipt["page_sha256"] = "other page"
         attestations[ref] = dict(fact=ref, decision="confirm", rev=1, source_check=receipt)
     rows = CONTRACT + list(imprints)
-    graph = material([rows, RECEIPT, WARRANTY, BANK_DOC], names, omissions=omitted, attestations=attestations)
+    graph = material([rows, RECEIPT, WARRANTY, BANK_DOC], names, omissions=omitted, extra_pages=extra_pages,
+                     attestations={**attestations, **(extra_attestations or {})})
     return graph
 
 

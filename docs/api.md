@@ -11,6 +11,8 @@
 
 ## 合同签章主体的原行
 
+从 `contract-effect-sources-v5` 起，H01 每一方的 `field_sources` 逐项列出来源行、来源类别、可对应的字段及模拟或实际核图所据版本。类别为 `text`（原文字层）、`image`（影像观察）、`mixed`（需要核图的混排原行）或 `unlocated`（原行待定位）。字段有异议时另记 `disputed`。图像候选的 `line` 为 null。无可读栏位的合同影像仍在 `effect_review.mixed_pages` 中，可按实际文件和页码核对。旧版有已核影像但漏列签章名称差异时，通过签收返回 HTTP 409，须生成新底稿供复核。
+
 `report.graph.contract_effect_sources` 的 v4 保留 `signing_rows`。每行包含合同归属 `unit`、物理文件与页码、原文 `quote`、行号 `line`、已有观察 `facts`、甲乙方及行的用途。图像观察的物理行号为 null。原生文字层可以在模型漏读时独立提供原行。固定版 H01 的 `effect_review.party_seals` 给出对应行、比较结果、引用以及已比较的两个端点。可在图谱中跟随 `contract_signing_source`、`contract_seal_name_comparison` 和 `supports_result` 重查来源。未触发这项检查的底稿沿用原展示。
 
 旧报告仍可按固定版本导出、回放。对旧版肯定性 H01 尝试通过签收时，服务按同一合同原件重新核对签章主体。已发现差异或资料不足时返回 HTTP 409 并要求重审。
