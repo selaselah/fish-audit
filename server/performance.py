@@ -19,6 +19,7 @@ import payment_windows
 import invoice_conditions
 import payment_amendments
 import acceptance_reservations
+import acceptance_payments
 import repair_completion
 from performance_versions import (FIRST_FORMAT, BOARD_FORMAT, REINSPECTION_FORMAT, DELEGATION_FORMAT, IDENTITY_FORMAT,
                                   NATIVE_FORMAT, ADDENDUM_FORMAT, SIGNATORY_FORMAT, DATE_FORMAT, BATCH_FORMAT, FORMAT,
@@ -618,14 +619,15 @@ def receipts_without_schedule(graph, contracts, plan_evidence, plan_units):
         yield result("H05","missing",detail,[*refs,*pages,*plan_evidence,*contract_pages],[*plan_units,unit])
 
 
-def compute(graph, version=FORMAT, *, include_unassigned_receipts=True):
-    results = performance_findings(graph,version,include_unassigned_receipts=include_unassigned_receipts)
+def compute(graph, version=FORMAT, *, include_unassigned_receipts=True, recheck_payment_opinions=False):
+    results = performance_findings(graph,version,include_unassigned_receipts=include_unassigned_receipts,
+                                  recheck_payment_opinions=recheck_payment_opinions)
     if version==FORMAT:
         results.extend(stage_payments.findings(graph,results))
     return results
 
 
-def performance_findings(graph, version, *, include_unassigned_receipts):
+def performance_findings(graph, version, *, include_unassigned_receipts,recheck_payment_opinions=False):
     kinds = graph["documents_by_kind"]
     def materials(kind):
         return [Material(graph, unit) for unit in kinds.get(kind, ())]
@@ -868,7 +870,14 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
         if batch and (len(releases)!=1 or not same_contract(contract,releases[0]) or
                       not labelled_sources(releases[0],LINK_KEYS) or not delivery_batches.readable(graph["delivery_batch_sources"],releases[0].unit)):
             expiry=None
-    holds = (batch or {}).get("payment_holds",[])
+    has_batch_notes=graph.get("delivery_batch_sources",{}).get("format") in (delivery_batches.REMARK_FORMAT,delivery_batches.FORMAT)
+    opinions={}
+    if version==FORMAT and (not batch or has_batch_notes or recheck_payment_opinions):
+        opinions=acceptance_payments.for_stages(graph,contract,[*receipts,*retests],rows,plan)
+    opinion_lines={(n["doc"],n["page"],n["line"],n["quote"]) for entry in opinions.values() for n in entry["notes"]
+                   if n["scope"]!="unresolved" and n["line"] and n["stance"] in ("hold","assent")}
+    holds=[s for s in (batch or {}).get("payment_holds",[]) if not s.get("payment_only")
+           or (s["doc"],s["page"],s["line"],s["quote"]) not in opinion_lines]
     hold_refs = [ref for note in holds for ref in (f"{note['doc']}/p{note['page']}",*note["facts"])]
     stages = []
     prior_checks = {}
@@ -931,8 +940,10 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
         if kind=="warranty" and release_check:
             check["warranty_check"]=release_check
         if version in PAYMENT_WINDOW_FORMATS:
-            window=payment_windows.stage_window(graph,contract,rows,idx-1,[*receipts,*retests],signed,accepted,accepted_on,check)
+            window=payment_windows.stage_window(graph,contract,rows,idx-1,[*receipts,*retests],signed,accepted,accepted_on,check,
+                                                separate_opinions=opinion_lines)
             payment_windows.attach_stage(check,window)
+        acceptance_payments.attach(check,opinions.get(row["ref"]))
         if scoped_change and scoped_change["original_ref"]==row["ref"]:
             prior_checks[row["ref"]] = dict(check)
         if invoice_terms:
@@ -1021,6 +1032,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
             clean=pages and all(p["native"] and p["text_only"] for p in pages) and not any(s["unit"]==bank.unit for s in bank_sources["lines"])
             if clean:
                 payment.update(status="risk",detail=f"本笔回单付款日 {paid} 早于合同双方最后盖章日 {sealed}，须核实提前支付的授权、追认或其他履约依据。")
+        acceptance_payments.attach(payment,check.get("payment_opinion"))
         output.append(payment)
     return output
 
@@ -1057,6 +1069,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("equipment_models") != entry.get("equipment_models")
                 or saved.get("stage_payments") != entry.get("stage_payments")
                 or saved.get("payment_change") != entry.get("payment_change")
+                or saved.get("payment_opinion") != entry.get("payment_opinion")
                 or saved.get("invoice_receipt") != entry.get("invoice_receipt")
                 or saved.get("payment_window") != entry.get("payment_window")
                 or saved.get("acceptance_reservations") != entry.get("acceptance_reservations")

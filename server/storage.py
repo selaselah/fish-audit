@@ -730,7 +730,7 @@ class Store:
             paper = json.loads(row["content"])
             graph = paper["graph"]
             if row["profile"]!=BANK:
-                checks = [f for f in paper["findings"] if f.get("delegations") or f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("stage_payments") or f.get("invoice_receipt") or f.get("payment_change") or f.get("equipment_models")]
+                checks = [f for f in paper["findings"] if f.get("delegations") or f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("stage_payments") or f.get("invoice_receipt") or f.get("payment_change") or f.get("payment_opinion") or f.get("equipment_models")]
                 packets = graph.get("receipt_packet_sources",{}).get("packets",[])
                 if packets:
                     checks.extend(f for f in paper["findings"] if f["rule"]=="H02" and f not in checks)
@@ -742,7 +742,7 @@ class Store:
                 units = {d["id"]:d.get("source", d["id"]) for d in graph.get("audit_documents", graph["documents"])}
                 originals = {units[unit] for finding in checks for unit in finding["scope"]}
                 originals.update(p["doc"] for p in packets)
-                full_pages = bool(packets) or any(f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("stage_payments") or f.get("invoice_receipt") or f.get("payment_change") or f.get("equipment_models") for f in checks)
+                full_pages = bool(packets) or any(f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("stage_payments") or f.get("invoice_receipt") or f.get("payment_change") or f.get("payment_opinion") or f.get("equipment_models") for f in checks)
                 fields = [f["id"] for f in graph["facts"] if f["id"] in named or full_pages and f["doc"] in originals]
                 pages = {(p["doc"],p["page"]) for p in paper["calls"]["pages"] if p["doc"] in originals}
                 registered = {(r["doc"],r["number"]) for r in db.execute("SELECT doc,number FROM pages WHERE case_id=?",(case_id,))

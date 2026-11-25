@@ -176,10 +176,11 @@ def located_day(doc,field):
     return when,fact["id"]
 
 
-def stage_window(graph,contract,rows,index,receipts,signed,accepted,accepted_on,check):
+def stage_window(graph,contract,rows,index,receipts,signed,accepted,accepted_on,check,*,separate_opinions=()):
     ledger=graph.get("payment_window_sources",{})
     row=rows[index]
-    lines=[s for s in ledger.get("lines",[]) if s["document_kind"]!=BANK and index in (row_targets(s,rows) or range(len(rows)))]
+    lines=[s for s in ledger.get("lines",[]) if s["document_kind"]!=BANK and index in (row_targets(s,rows) or range(len(rows)))
+           and (s["doc"],s["page"],s["line"],s["quote"]) not in separate_opinions]
     relevant={contract.unit}
     if row["kind"] in ("acceptance","batch","warranty"):
         relevant.update(d.unit for d in receipts)

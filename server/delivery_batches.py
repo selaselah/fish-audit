@@ -294,6 +294,13 @@ def page_sources(graph,read_text,version=FORMAT):
     result = {"format":version,"signals":signals,"pages":coverage,"visual_notes":notes}
     if version in (REMARK_FORMAT,FORMAT):
         result["remarks"] = receipt_remarks(coverage,facts_by_page,contracts,read_text)
+        units={p["unit"] for p in coverage}
+        seen={(s["doc"],s["page"],s["line"]) for s in result["remarks"]}
+        for s in graph.get("acceptance_reservation_sources",{}).get("payment_opinions",[]):
+            if (s["unit"] in units and s["line"] and s["stance"] in ("hold","assent")
+                    and (s["doc"],s["page"],s["line"]) not in seen):
+                row={k:s[k] for k in ("doc","page","line","unit","quote","facts")}
+                result["remarks"].append({**row,"kind":"stage_payment_opinion","payment_only":True})
     return result
 
 
