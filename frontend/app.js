@@ -504,7 +504,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     if (source) gaps.push({...source,quality:['seller','delivery_note'].includes(source.kind)?'supplier_reference':'reservation_reference'});
   }
   for (const gap of gaps) {
-    const label = {payment_release_reference:'放行依据原行',acceptance_opinion_reference:'付款意见原行',payment_amendment_reference:'付款变更所据原行',invoice_receipt_reference:'收票条件所据原行',repair_completion_reference:'整改记录原行',equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',approval_reference:'董事会审批记录原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
+    const label = {contract_signing_reference:'合同签章原行',payment_release_reference:'放行依据原行',acceptance_opinion_reference:'付款意见原行',payment_amendment_reference:'付款变更所据原行',invoice_receipt_reference:'收票条件所据原行',repair_completion_reference:'整改记录原行',equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',approval_reference:'董事会审批记录原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
     const section = box('evidence-row',el('h4',label+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
     section.dataset.gapLine = String(gap.line);
     const raw = rawLines.find(source => source.rawLine === gap.line);
@@ -589,6 +589,11 @@ function citation(ref) {
     return Team.paperLink(label,prior.case_id,'button ref',new URLSearchParams({rev:String(prior.rev),fact:prior.fact}));
   }
   const source = index?.nodes.get(ref);
+  if (source?.type==='contract_signing_line') {
+    const graph=state.bundle.report.graph;
+    const row=SigningParties.sources(graph).find(r=>r.id===ref);
+    return row ? action(row.quote,()=>SigningParties.open(row,graph),'ref') : el('span','签章原行待核','small');
+  }
   if (source?.type==='method_reference') {
     const method=state.bundle.report.policy.sources?.[ref.slice('source/'.length)];
     if (!method || method.url!==source.url || !method.url.startsWith('https://')) return el('span','制度来源待核','small');
@@ -944,6 +949,8 @@ function graphPanel() {
   const panel = box('panel', el('h2', '本案证据关系'), el('p', graph.nodes.length + ' 个节点 · ' +
     graph.edges.length + ' 条关系 · ' + graph.facts.length + ' 条提取记录', 'muted'));
   const grouped = new Map();
+  const signing=SigningParties.relations(state.bundle.report.findings.find(f=>f.rule==='H01'),graph);
+  if (signing) panel.append(signing);
   const opinions=AcceptanceOpinion.rows(graph);
   const released=ReleaseEvidence.sources(graph).filter(s=>!['title','identity'].includes(s.role));
   if (released.length) {

@@ -1,19 +1,23 @@
-// The image and three rectangles are from the same public, watermarked R7 page.
+// Each public sample pairs a watermarked original with the locations from its fixed workpaper.
 (() => {
   const dialog=document.querySelector('#sample-review');
   if (!dialog?.showModal) return;
   const rows=[...dialog.querySelectorAll('[data-ref]')];
-  const rectangles=new Map(rows.map(r=>[r,r.dataset.rect.split(',').map(Number)]));
-  const bounds=[...rectangles.values()];
-  const start=Math.min(...bounds.map(r=>r[0])), end=Math.max(...bounds.map(r=>r[2]));
+  const describe = r => ({...r.dataset, label:r.querySelector('span').textContent, value:r.querySelector('strong').textContent});
+  const samples = {
+    acceptance:{title:'验收报告',version:'合成采购 · R7',image:'/assets/showcase-acceptance-page.png',pdf:'/showcase/acceptance.pdf',lines:rows.map(describe)},
+    signing:{title:'采购合同',version:'合成采购 · R9',image:'/assets/showcase-signing-page.jpg',pdf:'/showcase/signing-contract.pdf',
+      lines:[...document.querySelectorAll('.public-signing-lines [data-ref]')].map(describe)}
+  };
   const modes=[...dialog.querySelectorAll('[data-scale]')];
   const canvas=dialog.querySelector('canvas'), status=dialog.querySelector('[role=status]');
   const context=canvas.getContext('2d');
   if (!context) return;
-  const page=new Image();
+  let page, sample, start, end;
+  const rectangles=new Map();
   let opener, row=rows.find(r=>r.getAttribute('aria-pressed')==='true'), mode='line';
   function draw() {
-    if (!dialog.open || !page.naturalWidth) return;
+    if (!dialog.open || !page?.naturalWidth) return;
     const width=canvas.clientWidth, height=canvas.clientHeight;
     if (!width || !height) return;
     const density=Math.min(devicePixelRatio || 1,2);
@@ -43,7 +47,7 @@
     for (const m of modes) m.setAttribute('aria-pressed',String(m.dataset.scale===mode));
     const location='第 1 页 · 第 '+row.dataset.line+' 行';
     dialog.querySelector('output').textContent=location;
-    canvas.setAttribute('aria-label','验收报告'+location+'，'+row.querySelector('span').textContent+'，'+row.querySelector('strong').textContent);
+    canvas.setAttribute('aria-label',sample.title+location+'，'+row.querySelector('span').textContent+'，'+row.querySelector('strong').textContent);
     draw();
   }
   for (const [index,button] of rows.entries()) {
@@ -55,21 +59,43 @@
     });
   }
   for (const button of modes) button.addEventListener('click',()=>select(row,button.dataset.scale));
-  page.onload=draw;
-  page.onerror=()=>{
-    page.removeAttribute('src'); status.hidden=false; status.textContent='页图未能载入，可打开原始 PDF。';
-  };
+  function load(next) {
+    sample=next;
+    dialog.querySelector('h2').textContent=sample.title;
+    dialog.querySelector('.sample-review-head span').textContent=sample.version;
+    dialog.querySelector('form button').setAttribute('aria-label','关闭'+sample.title);
+    dialog.querySelector('.sample-records').setAttribute('aria-label','选择'+sample.title+'原行');
+    dialog.querySelector('.sample-records a').href=sample.pdf;
+    for (const [i,button] of rows.entries()) {
+      const line=sample.lines[i];
+      for (const key of ['ref','line','rect']) button.dataset[key]=line[key];
+      button.querySelector('span').textContent=line.label;
+      button.querySelector('strong').textContent=line.value;
+      rectangles.set(button,line.rect.split(',').map(Number));
+    }
+    const bounds=[...rectangles.values()];
+    start=Math.min(...bounds.map(r=>r[0])); end=Math.max(...bounds.map(r=>r[2]));
+    if (page?.getAttribute('src')===sample.image) return;
+    // Changing width resets the pixels, so a delayed load cannot show the previous case.
+    canvas.width=canvas.width; delete canvas.dataset.fact;
+    status.textContent='正在载入原页…'; status.hidden=false;
+    const requested=new Image(); page=requested;
+    requested.onload=()=>{if (page===requested) draw();};
+    requested.onerror=()=>{
+      if (page!==requested) return;
+      page=null; status.hidden=false; status.textContent='页图未能载入，可打开原始 PDF。';
+    };
+    requested.src=sample.image;
+  }
   new ResizeObserver(draw).observe(canvas.parentElement);
   for (const link of document.querySelectorAll('.open-sample-review')) {
     link.setAttribute('aria-haspopup','dialog'); link.setAttribute('aria-controls',dialog.id);
     link.addEventListener('click',event=>{
       if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
-      event.preventDefault(); opener=link; dialog.showModal();
-      if (!page.hasAttribute('src')) {
-        status.textContent='正在载入原页…'; status.hidden=false;
-        page.src='/assets/showcase-acceptance-page.png';
-      }
-      select(rows[2],'line'); row.focus({preventScroll:true});
+      event.preventDefault(); opener=link;
+      load(samples[link.dataset.sample || 'acceptance']);
+      dialog.showModal();
+      select(rows.find(r=>r.dataset.ref===link.dataset.ref) || rows[2],'line'); row.focus({preventScroll:true});
     });
   }
   dialog.addEventListener('close',()=>opener?.focus({preventScroll:true}));

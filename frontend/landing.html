@@ -114,7 +114,25 @@
     <section class="workflow" id="workflow" aria-labelledby="workflow-title">
       <div class="wrap section-inner">
         <div class="section-copy"><p class="eyebrow"><span class="eyebrow-rule"></span>审计流程</p><h2 id="workflow-title">从资料提交，<br>到人工签收。</h2><p>离开页面后，仍可查看处理进度。签收意见与所据版本一同留存。</p><a class="button light" href="/app">打开审计工作台</a></div>
-        <a class="workflow-image open-sample-review" href="/showcase/acceptance.pdf" target="_blank" rel="noopener" aria-label="核对这张合成验收报告"><img src="/assets/review-sample.webp" width="1360" height="819" loading="lazy" alt="核图工作台在验收单上定位到实测柜温 8℃ 的原行"><span><i class="ui-glyph ic-eye" aria-hidden="true"></i>核对这张验收单</span></a>
+        <div class="workflow-demo">
+          <div class="scene-tabs" role="tablist" aria-label="选择核图案例" hidden>
+            <button type="button" id="scene-tab-acceptance" role="tab" aria-selected="true" aria-controls="scene-acceptance">验收读数</button>
+            <button type="button" id="scene-tab-signing" role="tab" aria-selected="false" aria-controls="scene-signing" tabindex="-1">合同签章</button>
+          </div>
+          <div id="scene-acceptance" role="tabpanel" aria-labelledby="scene-tab-acceptance">
+            <a class="workflow-image open-sample-review" href="/showcase/acceptance.pdf" target="_blank" rel="noopener" aria-label="核对这张合成验收报告"><img src="/assets/review-sample.webp" width="1360" height="819" loading="lazy" alt="核图工作台在验收单上定位到实测柜温 8℃ 的原行"><span><i class="ui-glyph ic-eye" aria-hidden="true"></i>核对这张验收单</span></a>
+          </div>
+          <div id="scene-signing" class="signing-sample" role="tabpanel" aria-labelledby="scene-tab-signing" hidden>
+            <div class="signing-sample-header"><span><i class="ui-glyph ic-journal-text" aria-hidden="true"></i> 采购合同</span><small>合成案例 · R9</small></div>
+            <h3>印章单位多出「杭州分公司」</h3>
+            <div class="public-signing-lines">
+              <a class="open-sample-review" data-sample="signing" data-ref="d02/p1/f3" data-line="4" data-rect="0.08209,0.24749,0.43051,0.26393" href="/showcase/signing-contract.pdf" target="_blank" rel="noopener"><span>采购方</span><strong>青禾演练设备有限公司</strong><i aria-hidden="true" class="ui-glyph ic-arrows-angle-expand"></i></a>
+              <a class="open-sample-review" data-sample="signing" data-ref="d02/p1/f10" data-line="11" data-rect="0.08403,0.48037,0.57531,0.49909" href="/showcase/signing-contract.pdf" target="_blank" rel="noopener"><span>甲方签章</span><strong>青禾演练设备有限公司（已盖章）</strong><i aria-hidden="true" class="ui-glyph ic-arrows-angle-expand"></i></a>
+              <a class="open-sample-review" data-sample="signing" data-ref="d02/p1/f18" data-line="19" data-rect="0.08403,0.74612,0.68261,0.76256" href="/showcase/signing-contract.pdf" target="_blank" rel="noopener"><span>甲方印章单位</span><strong>青禾演练设备有限公司<mark>杭州分公司</mark></strong><i aria-hidden="true" class="ui-glyph ic-arrows-angle-expand"></i></a>
+            </div>
+            <p><span class="finding-dot risk"></span>签章授权待核 · 三期付款条件待核</p>
+          </div>
+        </div>
         <ol class="process-list">
           <li><i aria-hidden="true" class="ui-glyph ic-paperclip"></i><h3>提交资料</h3></li>
           <li><i aria-hidden="true" class="ui-glyph ic-diagram-3"></i><h3>逐页解析与建图</h3></li>

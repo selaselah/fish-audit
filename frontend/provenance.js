@@ -71,6 +71,8 @@ function performanceOverview(findings, graph) {
   overview.setAttribute('aria-label','履约结论与期次');
   overview.append(summary);
   const effect=findings.find(f=>f.rule==='H01');
+  const parties=SigningParties.panel(effect,graph,phases);
+  if (parties) overview.append(parties);
   let expandedMandate=false;
   for (const entry of effect?.delegations || []) {
     const calendar=MandateCalendar.panel(effect,entry,graph,!expandedMandate);

@@ -21,26 +21,34 @@ if (!restoreWorkspaceLink()) {
       menu.querySelector('summary').focus();
     }
   });
-  const tabs = [...document.querySelectorAll('.file-tabs [role="tab"]')];
-  function selectTab(tab) {
-    for (const item of tabs) {
-      const selected = item === tab;
-      item.setAttribute('aria-selected', String(selected));
-      item.tabIndex = selected ? 0 : -1;
-      document.getElementById(item.getAttribute('aria-controls')).hidden = !selected;
+  function enableTabs(tabs) {
+    function selectTab(tab) {
+      for (const item of tabs) {
+        const selected = item === tab;
+        item.setAttribute('aria-selected', String(selected));
+        item.tabIndex = selected ? 0 : -1;
+        document.getElementById(item.getAttribute('aria-controls')).hidden = !selected;
+      }
     }
-  }
-  tabs.forEach((tab, index) => {
-    tab.addEventListener('click', () => selectTab(tab));
-    tab.addEventListener('keydown', event => {
-      const positions = {ArrowLeft: (index + tabs.length - 1) % tabs.length, ArrowRight: (index + 1) % tabs.length, Home: 0, End: tabs.length - 1};
-      if (!(event.key in positions)) return;
-      event.preventDefault();
-      const next = tabs[positions[event.key]];
-      selectTab(next);
-      next.focus();
+    tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => selectTab(tab));
+      tab.addEventListener('keydown', event => {
+        const positions = {ArrowLeft: (index + tabs.length - 1) % tabs.length, ArrowRight: (index + 1) % tabs.length, Home: 0, End: tabs.length - 1};
+        if (!(event.key in positions)) return;
+        event.preventDefault();
+        const next = tabs[positions[event.key]];
+        selectTab(next);
+        next.focus();
+      });
     });
-  });
+    return selectTab;
+  }
+  enableTabs([...document.querySelectorAll('.file-tabs [role="tab"]')]);
+  const scenes = document.querySelector('.scene-tabs');
+  const sceneTabs = [...scenes.querySelectorAll('[role="tab"]')];
+  const selectScene = enableTabs(sceneTabs);
+  if (new URLSearchParams(location.search).get('scene') === 'signing') selectScene(sceneTabs[1]);
+  scenes.hidden = false;
   const readingSwitch = document.querySelector('.reading-switch');
   const readings = [...readingSwitch.querySelectorAll('button')];
   function selectReading(button) {

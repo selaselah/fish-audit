@@ -77,6 +77,51 @@ async function checkSampleReader({root,call,evaluate,wait}) {
   assert.equal(await evaluate('performance.getEntriesByType("resource").some(r=>new URL(r.name).pathname.startsWith("/api/"))'),false);
 }
 
+async function checkSigningSample({root,call,evaluate,wait}) {
+  const q = s=>'document.querySelector('+JSON.stringify(s)+')';
+  const dialog = q('#sample-review'), canvas = q('#sample-review canvas');
+  const signingTab = q('#scene-tab-signing'), acceptanceTab = q('#scene-tab-acceptance');
+  for (const [path,hash] of [
+    ['/assets/showcase-signing-page.jpg','5bcc03f483827ae679d14455dec8c3e8a85b04dd8b218c197417c2cfd57988fc'],
+    ['/showcase/signing-contract.pdf','f5d63eb3c3630fe538e409a55df09b641ab4b9b9987136bdd19f3a2d3ff4390d']
+  ]) {
+    const response=await fetch(root+path);
+    assert.equal(response.status,200);
+    assert.equal(createHash('sha256').update(Buffer.from(await response.arrayBuffer())).digest('hex'),hash);
+  }
+  assert.equal(await evaluate('performance.getEntriesByType("resource").some(r=>r.name.endsWith("/showcase-signing-page.jpg"))'),false);
+  for (const width of [320,390,600,768,1024,1440]) {
+    await call('Emulation.setDeviceMetricsOverride',{width,height:width<600?844:900,deviceScaleFactor:1,mobile:width<600});
+    await evaluate(acceptanceTab+'.focus()');
+    await call('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowRight',code:'ArrowRight'});
+    assert.equal(await evaluate('document.activeElement.id'),'scene-tab-signing');
+    assert.equal(await evaluate(signingTab+'.getAttribute("aria-selected")'),'true');
+    assert.equal(await evaluate(q('#scene-signing mark')+'.textContent'),'杭州分公司');
+    assert.ok(await evaluate(q('#scene-signing')+'.scrollWidth<='+q('#scene-signing')+'.clientWidth+1'));
+    if (process.env.AUDIT_UI_SHOTS && [390,1440].includes(width)) {
+      await evaluate(q('.workflow-demo')+'.scrollIntoView({block:"center"});document.activeElement.blur()');
+      const clip=await evaluate('(()=>{const r='+q('.workflow-demo')+'.getBoundingClientRect();return {x:r.x+scrollX,y:r.y+scrollY,width:r.width,height:r.height,scale:1}})()');
+      await capture(call,'landing-signing-'+width,clip);
+    }
+    for (const [id,line] of [['d02/p1/f3',4],['d02/p1/f10',11],['d02/p1/f18',19]]) {
+      const source = q('#scene-signing [data-ref="'+id+'"]');
+      await evaluate(source+'.click()');
+      await wait(dialog+'.open && '+canvas+'.dataset.fact==='+JSON.stringify(id),'matching public contract line');
+      assert.equal(await evaluate(q('#sample-review-title')+'.textContent'),'采购合同');
+      assert.equal(await evaluate(q('#sample-location')+'.textContent'),'第 1 页 · 第 '+line+' 行');
+      assert.equal(await evaluate(q('#sample-review .sample-records a')+'.pathname'),'/showcase/signing-contract.pdf');
+      await evaluate(q('#sample-review [data-scale=page]')+'.click()');
+      await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+      await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+      await wait('!'+dialog+'.open && document.activeElement==='+source,'focus back on signed contract row');
+    }
+    await evaluate(signingTab+'.focus()'); await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Home',code:'Home'});
+    await evaluate(q('.workflow-image')+'.click()');
+    await wait(canvas+'.dataset.fact==="d04/p1/f11" && '+q('#sample-review-title')+'.textContent==="验收报告"','switch to other archived original');
+    await evaluate(dialog+'.close()');
+  }
+}
+
 export async function checkProduct({root,call,evaluate,wait}) {
   const select = selector => 'document.querySelector('+JSON.stringify(selector)+')';
   const mode = (await (await fetch(root+'/api/ready')).json()).mode;
@@ -86,6 +131,7 @@ export async function checkProduct({root,call,evaluate,wait}) {
   assert.equal(await evaluate('performance.getEntriesByType("resource").some(r=>new URL(r.name).pathname.startsWith("/api/"))'),false);
   assert.equal((await fetch(root+'/showcase/other.pdf')).status,404);
   await checkSampleReader({root,call,evaluate,wait});
+  await checkSigningSample({root,call,evaluate,wait});
   await call('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
   const primary = await checkTextContrast(evaluate,'.hero-actions .button');
   for (const [selector,surface] of [
@@ -235,7 +281,7 @@ export async function checkProduct({root,call,evaluate,wait}) {
   await wait('location.pathname==="/app" && !document.querySelector("#rules").hidden','legacy rules bookmark');
   await evaluate(select('.fish-wordmark')+'.click()');
   await wait('location.pathname==="/" && !!document.querySelector("#hero-title")','return to product site');
-  console.log('PASS · public demo, three original PDFs, keyboard, six viewports, workspace entry and legacy bookmark ('+mode+')');
+  console.log('PASS · acceptance and signing demos, four original PDFs, keyboard, six viewports, workspace entry and legacy bookmark ('+mode+')');
 }
 
 export async function checkReviewDesign({root,call,evaluate,wait}, caseId) {

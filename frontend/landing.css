@@ -160,6 +160,34 @@ h1 em { color: var(--accent); font-style: normal; }
 .phase-detail p { margin: 7px 0 1px; color: var(--muted); font-size: .92rem; line-height: 1.75; }
 .workflow { background: #eff2fb; color: var(--ink); }
 .workflow .section-inner { align-content:center; row-gap:clamp(40px,8vh,78px); }
+.workflow-demo { min-width:0; }
+.scene-tabs { display:inline-flex; margin-bottom:14px; border-bottom:1px solid #bdc8dc; }
+.scene-tabs button {
+  display:inline-flex; justify-content:center; align-items:center; min-height:44px; padding:6px 16px;
+  background:transparent; border:0; border-bottom:2px solid transparent; font:600 .88rem var(--font-ui);
+  color:var(--muted); cursor:pointer;
+}
+.scene-tabs button[aria-selected=true] { color:var(--accent-hover); border-color:var(--accent); }
+.signing-sample { padding:clamp(16px,2.2vw,32px); background:white; border:1px solid #ccd4e3; border-radius:8px; box-shadow:0 12px 30px #2c385510; }
+.signing-sample-header { display:flex; align-items:center; justify-content:space-between; gap:12px; font-weight:600; }
+.signing-sample-header i { color:var(--accent); }
+.signing-sample-header small { color:var(--muted); font-weight:500; }
+.signing-sample h3 { margin:24px 0 18px; font:640 clamp(1.15rem,2.25vw,1.6rem)/1.45 var(--font-ui); letter-spacing:-.025em; }
+.public-signing-lines a {
+  display:grid; grid-template-columns:6em minmax(0,1fr) 16px; align-items:baseline; gap:10px; min-height:52px;
+  padding:13px 2px; border-top:1px solid var(--line); text-decoration:none; color:var(--ink);
+}
+.public-signing-lines a:hover { background:var(--accent-soft); }
+.public-signing-lines span { color:var(--muted); font-size:.82rem; }
+.public-signing-lines strong { font-size:.93rem; font-weight:570; overflow-wrap:anywhere; }
+.public-signing-lines i { font-size:.79rem; color:var(--accent); }
+.signing-sample mark { display:inline-block; max-width:100%; color:var(--attention); background:var(--attention-soft); border-bottom:2px solid var(--attention-line); }
+.signing-sample > p { display:flex; gap:8px; align-items:center; margin:12px 0 0; font-size:.83rem; color:var(--attention); }
+.scene-tabs[hidden], .signing-sample[hidden] { display:none; }
+@media (max-width:520px) {
+  .public-signing-lines a { grid-template-columns:5.4em minmax(0,1fr) 13px; gap:4px; }
+  .public-signing-lines strong { font-size:.86rem; }
+}
 .workflow-image { display:block; line-height:0; border-radius:5px; box-shadow:0 12px 30px rgb(44 56 85 / 14%); }
 .workflow-image img { width:100%; height:auto; border-radius:5px; }
 .workflow-image { position:relative; }

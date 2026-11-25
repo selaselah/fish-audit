@@ -10,16 +10,7 @@ const WarrantyImages=(()=>{
   const norm=s=>String(s ?? '').normalize('NFKC').trim();
   function fieldStatus(f,doc,node) {
     if (f.status==='disputed') return '有异议';
-    const a=f.attestation, receipt=a?.source_check || f.amendment?.source_check;
-    const confirmed=a?.decision==='confirm' && receipt?.operation==='confirm';
-    const amended=f.amendment && receipt?.operation==='amend';
-    const bundle=state.bundle;
-    if (f.status==='confirmed' && (confirmed || amended) && receipt?.format==='field-source-v1' &&
-        receipt.case_id===bundle?.report?.case_id && Number.isInteger(receipt.rev) && receipt.rev>0 && receipt.rev<bundle.rev &&
-        state.detail?.revisions?.some(r=>r.rev===receipt.rev && r.hash===receipt.report_hash) &&
-        receipt.doc===f.doc && receipt.page===f.page &&
-        receipt.original_sha256===doc.sha256 && receipt.page_sha256===node.sha256) return confirmed?'已核图':'已补录';
-    return '待核图';
+    return {confirm:'已核图', add:'已补录', correct:'已更正'}[fieldReceiptOperation(f,doc,node)] || '待核图';
   }
   function panel(finding,t,ledger,index) {
     const support=index.supports.get('finding/'+finding.id);

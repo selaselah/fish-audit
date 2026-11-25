@@ -6,7 +6,7 @@
 | --- | --- |
 | `GET /` | 产品首页，浏览固定合成采购的合同、验收和回单，逐期查看付款条件。首页加载的字体、图像和演示均由同源提供。 |
 | `GET /app` | 工作台。本机审计员首次进入打开建议看板。企业模式根据会话进入登录页或所属工作区。 |
-| `GET /showcase/{filename}` | 首页的三份合成原件，文件名为 `contract.pdf`、`acceptance.pdf`、`transfer.pdf`。可按资料索引复核 R7 案例的文件摘要。 |
+| `GET /showcase/{filename}` | 首页 R7 合成采购的三份原件为 `contract.pdf`、`acceptance.pdf`、`transfer.pdf`。独立的 R9 签章案例使用 `signing-contract.pdf`，四份原件均有固定摘要。 |
 | `GET /workpaper/{id}`、`GET /w/{wid}/workpaper/{id}` | 校验版本及引文、发现参数，转入 `/app` 的相应底稿。旧的根路径片段书签和邀请链接在浏览器中转入相同工作区。 |
 
 ## 合同签章主体的原行

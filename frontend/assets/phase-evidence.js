@@ -37,11 +37,13 @@ const PhaseEvidence = (() => {
   function pageReferences(graph,doc,page,facts,lineHint) {
     const rows=graph?.invoice_receipt_sources?.lines || [];
     const sources=new Map();
-    function add(s,label,quality,prefix,hasFact) {
+    function add(s,label,quality,prefix,hasFact,rects=[]) {
       if (!s.line || s.doc!==doc || s.page!==page || sources.has(s.line)) return;
       if (hasFact ?? facts.some(f=>s.facts.includes(f.id) && f.quote===s.quote)) return;
-      sources.set(s.line,{ref:prefix+s.line,rawLine:s.line,label,quote:s.quote,option:label+' · 第 '+s.line+' 行',quality,rects:[]});
+      sources.set(s.line,{ref:prefix+s.line,rawLine:s.line,label,quote:s.quote,option:label+' · 第 '+s.line+' 行',quality,rects});
     }
+    for (const s of SigningParties.sources(graph))
+      add(s,'合同签章原行','contract_signing_reference','signing-line/',s.line!==lineHint && Boolean(SigningParties.observation(s,graph)),SigningParties.rectangles(s,graph));
     for (const s of graph?AcceptanceOpinion.rows(graph):[])
       add(s,'付款意见原行','acceptance_opinion_reference','payment-opinion-line/',s.line!==lineHint && Boolean(AcceptanceOpinion.observation(s,graph)));
     for (const s of graph?ReleaseEvidence.sources(graph):[]) if (!['title','identity'].includes(s.role))

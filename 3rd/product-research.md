@@ -1,5 +1,9 @@
 # 审计与会计软件的公开界面
 
+## 从名称差异回到合同原行
+
+Ramp 的采购订单匹配把核对摘要放在账单行上方，实际匹配仍落实到具体的采购行。Acrobat 的文档比较以高亮标出差异，读者可选择单个差异查看它所处的原文。Fish Audit 借用了这两个操作习惯。审计员先选择甲方或乙方，纵向对齐同一方的几个单位名称，仅给有差异的字加琥珀色底和下划线。点击该行即可核查对应原件。首页使用独立的水印合同演示这次操作。[Ramp 采购订单与账单行匹配](https://support.ramp.com/importing-and-matching-purchase-orders-pos-on-ramp-bill-pay/) · [Acrobat 文档比较](https://helpx.adobe.com/acrobat/using/compare-documents.html) · [本地界面与实拍](../docs/interaction-design/README.md#签章主体对照)
+
 ## 拍照凭证的阅读方向
 
 Acrobat 的阅读视图可顺时针或逆时针转动页面，每次 90°，也可按页宽或放大比例阅读。Fish Audit 在固定版原件查看器上采用这两项操作。审计员把横置照片转正后可以放大核对状态栏，同一份原件在另一台设备上仍从归档方向打开。[Adobe Acrobat 调整页面视图](https://helpx.adobe.com/acrobat/using/adjusting-pdf-views.html) · [本机拍照凭证演练](../docs/acceptance.md#拍照与扫描工单的原页和签认)
