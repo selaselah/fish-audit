@@ -12,7 +12,9 @@ from quality_references import incomplete_number
 
 
 LEGACY = "acceptance-addendum-v1"
-FORMAT = "acceptance-addendum-v2"
+QUANTITY_FORMAT = "acceptance-addendum-v2"
+FORMAT = "acceptance-addendum-v3"
+QUANTITY_FORMATS = (QUANTITY_FORMAT,FORMAT)
 QUANTITY_FIELDS = {"previous_quantity": ("原交付数量", "变更前交付数量"),
                    "revised_quantity": ("变更后交付数量", "调整后交付数量")}
 TITLES = ("补充协议", "合同补充协议", "采购合同补充协议", "验收标准变更协议", "采购合同变更协议")
@@ -103,7 +105,7 @@ def page_signals(graph, read_text, version=FORMAT):
                 "signed_on","effect_on","valid_until","accepted_on","buyer_sealed_on","seller_sealed_on")
                 for label in SOURCE_LABELS[field]}
     anchors = defaultdict(list)
-    if version == FORMAT:
+    if version in QUANTITY_FORMATS:
         for fact in graph["facts"]:
             loc = fact.get("source_line") or {}
             if loc.get("rects") and loc["text"] == fact["quote"]:
@@ -113,7 +115,7 @@ def page_signals(graph, read_text, version=FORMAT):
         doc, page_number = ref.rsplit("/p",1)
         number = int(page_number)
         place = {"doc":doc,"page":number,"unit":sections.get((doc,number),doc)}
-        if version == FORMAT and place["unit"] in kinds:
+        if version in QUANTITY_FORMATS and place["unit"] in kinds:
             quantity_pages.append({**place,"native":page.get("layer")=="text","text_only":page.get("clause_text_only") is True})
         if page.get("layer")!="text":
             continue
@@ -123,13 +125,13 @@ def page_signals(graph, read_text, version=FORMAT):
         for i, raw in enumerate(source.splitlines(),1):
             line = normalized(raw)
             observed = {**place,"line":i,"quote":raw}
-            quantity_signal = version == FORMAT and QUANTITY_SIGNAL.search(line)
+            quantity_signal = version in QUANTITY_FORMATS and QUANTITY_SIGNAL.search(line)
             if quantity_signal:
                 quantity_seen = True
             if SIGNAL.search(line) or quantity_signal:
                 signals.append(observed)
             printed_label,_,printed_body = unicodedata.normalize("NFKC",raw).partition(":")
-            if version == FORMAT and place["unit"] in kinds:
+            if version in QUANTITY_FORMATS and place["unit"] in kinds:
                 field = fields.get(printed_label.strip())
                 if field or QUANTITY_NOTE.search(line):
                     quantity_lines.append({**observed,"field":field or "quantity_note",
@@ -141,7 +143,7 @@ def page_signals(graph, read_text, version=FORMAT):
             if CONTRACT_NUMBER.search(line) and (incomplete_number(line) or separated):
                 limited.append(observed)
     for f in graph["facts"]:
-        if version == FORMAT and (f["field"] in QUANTITY_FIELDS or QUANTITY_SIGNAL.search(normalized(f["quote"]))):
+        if version in QUANTITY_FORMATS and (f["field"] in QUANTITY_FIELDS or QUANTITY_SIGNAL.search(normalized(f["quote"]))):
             quantity_seen = True
         if pages[f"{f['doc']}/p{f['page']}"].get("layer")!="text" and CONTRACT_NUMBER.search(normalized(f["quote"])) and incomplete_number(f["quote"]):
             limited.append({"doc":f["doc"],"page":f["page"],"unit":f.get("unit",f["doc"]),"fact":f["id"],"quote":f["quote"]})
@@ -152,7 +154,7 @@ def page_signals(graph, read_text, version=FORMAT):
 def observed_units(graph):
     from contract_effect import FORMAT as SEAL_FORMAT
     originals=set(graph["documents_by_kind"].get("contract",[])) if graph.get("contract_effect_sources",{}).get("format")==SEAL_FORMAT else set()
-    current = graph.get("quality_addenda",{}).get("format")==FORMAT
+    current = graph.get("quality_addenda",{}).get("format") in QUANTITY_FORMATS
     return {f.get("unit",f["doc"]) for f in graph["facts"] if (f["field"] in LABELS and (current or f["field"] not in QUANTITY_FIELDS) and not
             (f["field"] in ("buyer_sealed_on","seller_sealed_on") and f.get("unit",f["doc"]) in originals)) or f["field"]=="contract_addendum"
             or SIGNAL.search(normalized(f["quote"])) or current and QUANTITY_SIGNAL.search(normalized(f["quote"]))}
@@ -161,7 +163,7 @@ def observed_units(graph):
 def ledger(graph, read_text, version=FORMAT):
     units = set(graph["documents_by_kind"].get("contract_addendum",[]))
     nodes = {n["id"]:n for n in graph["nodes"] if n["type"]=="page"}
-    fields = FIELDS if version == FORMAT else [f for f in FIELDS if f not in QUANTITY_FIELDS]
+    fields = FIELDS if version in QUANTITY_FORMATS else [f for f in FIELDS if f not in QUANTITY_FIELDS]
     pages = covered_rows(graph,read_text,units,fields,printed_value,"补充协议")
     for p in pages:
         p["text_only"] = nodes[f"{p['doc']}/p{p['page']}"].get("clause_text_only") is True
@@ -220,7 +222,9 @@ def verify_sources(report, read_text, *, signing=False):
         return
     marker = policy["quality_addenda"]
     current = ledger(graph,read_text,marker)
-    if (marker not in (LEGACY,FORMAT) or policy.get("version","")>="2026.11.25.06" and marker!=FORMAT
+    version=policy.get("version","")
+    if (marker not in (LEGACY,*QUANTITY_FORMATS) or "2026.11.25.06"<=version<"2026.11.25.20" and marker!=QUANTITY_FORMAT
+            or version>="2026.11.25.20" and marker!=FORMAT
             or policy.get("performance_checks") not in ADDENDUM_FORMATS
             or graph.get("quality_addenda")!=current or gaps(current)!=[g for g in graph["gaps"] if g["quality"]=="addendum_clause"]):
         raise ValueError("补充协议的原页、变更条款或未覆盖的约定与底稿不符")
@@ -229,6 +233,22 @@ def verify_sources(report, read_text, *, signing=False):
     if signing and marker == LEGACY and any(f["rule"]=="H02" and f["status"]=="ok" for f in report["findings"]):
         if page_signals(graph,read_text)[2]:
             raise ValueError("旧版终验有交付数量变更线索，请按现行程序重审后签收。")
+    if signing and marker!=FORMAT:
+        from performance import Material, printed_day
+        for finding in report["findings"]:
+            change=finding.get("quality_change")
+            if not change or change["state"] not in ("original","applied","by_batch"):
+                continue
+            contracts=graph["documents_by_kind"].get("contract",[])
+            receipts=graph["documents_by_kind"].get("acceptance",[])
+            dates=[(u,k) for u in contracts for k in ("signed_on","effect_on")]
+            dates.extend((u,k) for u in change["units"] for k in ("buyer_sealed_on","seller_sealed_on"))
+            if change.get("accepted_on"):
+                dates.extend((u,"accepted_on") for u in receipts)
+            materials={u:Material(graph,u) for u in {unit for unit,_ in dates}}
+            dates.extend((u,"valid_until") for u in contracts if materials[u].fields["valid_until"] or "valid_until" in materials[u].uncertain)
+            if any(not printed_day(materials[u],field) for u,field in dates):
+                raise ValueError("该版所据签署或验收日期需逐字核对，请用现行程序重审后签收。")
     nodes = {n["id"]:n for n in graph["nodes"]}
     expected = []
     allowed = fully_read_units(current)
@@ -310,7 +330,12 @@ def resolve(graph, contract, changes, receipts, *, multiple_events, contract_sup
         refs.extend(receipt.evidence("accepted_on","inspection_basis","measured_result"))
     quantity_sources = ledger.get("quantities")
     def dated(material,field):
-        return exact_date(material,field,quantity_sources["identities"]) if quantity_sources else material.date(field)
+        if quantity_sources:
+            return exact_date(material,field,quantity_sources["identities"])
+        if ledger.get("format")==FORMAT:
+            from performance import printed_day
+            return printed_day(material,field)
+        return material.date(field)
     receipt_date = dated(receipts[0],"accepted_on") if len(receipts)==1 else None
     dates = {"accepted_on":receipt_date.isoformat() if receipt_date else None,
              "buyer_sealed_on":None,"seller_sealed_on":None,"effective_on":None}
@@ -383,7 +408,9 @@ def resolve(graph, contract, changes, receipts, *, multiple_events, contract_sup
         return decision("需分别核对原合同生效依据、补充协议双方签章原页和各自的盖章日期。")
     effective = max(buyer_day,seller_day)
     signed, base_effect, expiry = (dated(contract,k) for k in ("signed_on","effect_on","valid_until"))
-    if quantity and not expiry and any(r["unit"]==contract.unit and r["field"]=="valid_until" for r in identities):
+    expiry_printed = (quantity and any(r["unit"]==contract.unit and r["field"]=="valid_until" for r in identities)
+                      or ledger.get("format")==FORMAT and (contract.fields["valid_until"] or "valid_until" in contract.uncertain))
+    if expiry_printed and not expiry:
         return decision("原合同列有待辨的有效截止日，须核对协议生效时的合同期间。")
     if not signed or not base_effect or min(buyer_day,seller_day)<max(signed,base_effect) or expiry and effective>expiry:
         return decision("补充协议签章与原合同生效、有效期间的先后仍待核对。")

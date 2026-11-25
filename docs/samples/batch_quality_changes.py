@@ -14,7 +14,8 @@ from warranty_release import check_training_watermark
 
 CASES = {"relaxed":"两批之间放宽柜温上限，第二批实测六度",
          "stricter":"两批之间收紧柜温上限，第二批仍用旧标准",
-         "same_day":"第二批验收与补充协议盖章同日"}
+         "same_day":"第二批验收与补充协议盖章同日",
+         "split_date":"补充协议盖章日的两个数字隔开，第二批实测六度"}
 
 
 def generate(seed, mode):
@@ -22,7 +23,8 @@ def generate(seed, mode):
     records=batch_documents(code,"complete")
     base=dict(records["采购合同"])
     revised="柜温不高于2℃" if mode=="stricter" else "柜温不高于8℃"
-    records[TITLE]=agreement_rows(code,base,revised,"2026年9月20日" if mode=="same_day" else "2026年9月12日")
+    seller_day={"same_day":"2026年9月20日","split_date":"2026年9月1 2日"}.get(mode,"2026年9月12日")
+    records[TITLE]=agreement_rows(code,base,revised,seller_day)
     values={"检验依据":base["约定验收标准"] if mode=="stricter" else revised,
             "实测结果":"柜温3℃" if mode=="stricter" else "柜温6℃"}
     records["第二批验收报告"]=[(k,values.get(k,v)) for k,v in records["第二批验收报告"]]
@@ -42,6 +44,14 @@ def validate(report,mode):
     phases=[f for f in findings if f["rule"]=="H04"]
     paid=next(f for f in findings if f["rule"]=="H05")
     batch=h["batch_acceptance"]
+    if mode=="split_date":
+        change=h["quality_change"]
+        assert change["state"]=="pending" and change["seller_sealed_on"] is None and change["effective_on"] is None
+        assert h["status"]=="missing" and paid["status"]=="missing" and report["result"]["verdict"]=="review"
+        assert all(r["standard"]["state"]=="pending" for r in batch["records"])
+        assert all(f["status"]=="missing" for f in phases)
+        assert not any(e["type"]=="batch_quality_comparison" for e in report["graph"]["edges"])
+        return
     expected={"relaxed":("ok","ok","applied","ok","pass"),
               "stricter":("issue","risk","applied","missing","reject"),
               "same_day":("missing","missing","pending","missing","review")}[mode]

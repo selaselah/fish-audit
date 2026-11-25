@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 import pypdfium2 as pdfium
 from PIL import Image
 
-from contract_changes import LEGACY, ledger, verify_sources
+from contract_changes import LEGACY, QUANTITY_FORMAT, ledger, verify_sources
 from controls import VERSION, execute
 from documents import clause_text_only, layer_type
 from jobs import refresh_addendum_layout
@@ -45,6 +45,31 @@ def quantity_case(*, actual="6台", sealed="2026-09-12", reading="柜温3℃", r
 
 
 class ContractChangeTests(unittest.TestCase):
+    def test_quality_change_dates_preserve_separated_digits_on_the_original(self):
+        for field in ("buyer_sealed_on","seller_sealed_on"):
+            graph=case({field:"2026年9月1 2日"})
+            h,phases=assessment(graph)
+            change=h["quality_change"]
+            self.assertIsNone(change[field])
+            self.assertIsNone(change["effective_on"])
+            self.assertIsNone(change["applied_criterion"])
+            self.assertNotEqual(h["status"],"ok")
+            self.assertFalse(any(s=="ok" for s in phases[1:]))
+        h,_=assessment(case(receipt={"accepted_on":"2026-09-2 0"}))
+        self.assertIsNone(h["quality_change"]["accepted_on"])
+        self.assertEqual(h["quality_change"]["state"],"pending")
+
+    def test_prior_amendment_date_can_be_replayed_and_must_be_rechecked_to_sign(self):
+        graph=case({"seller_sealed_on":"2026年9月1 2日"})
+        texts={d["id"]:"\n".join(f["quote"] for f in graph["facts"] if f["doc"]==d["id"]) for d in graph["documents"]}
+        read=lambda doc,page:texts[doc]
+        graph["quality_addenda"]=ledger(graph,read,QUANTITY_FORMAT)
+        old={"policy":{**VERSION,"version":"2026.11.25.19","quality_addenda":QUANTITY_FORMAT},"graph":graph,"findings":compute(graph)}
+        self.assertEqual(old["findings"][1]["quality_change"]["state"],"applied")
+        verify_sources(old,read)
+        with self.assertRaisesRegex(ValueError,"日期"):
+            verify_sources(old,read,signing=True)
+
     def test_quantity_change_has_its_own_effective_date_and_does_not_replace_quality_tests(self):
         for args,state,count,diff,status,phases in (
             ({}, "applied",6,0,"ok",["ok"]*3),
