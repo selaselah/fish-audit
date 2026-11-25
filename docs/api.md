@@ -8,6 +8,8 @@ H02 的 `equipment_models.exchange.checks` 给出每项判断及其依据。交�
 
 全部检查成立时，`equipment_models.sequence.outcome` 为 `replacement_verified`。有金额差异以外的未决事项时，H04 继续依合同各期前提给出结论。验收不明时，H05 也会保留实付款日和未证实的履约前提。历史底稿沿用发行时的程序复算。
 
+网页用 H04、H05 各自的 `scope` 和 `evidence` 确认本期引用的交接原页，再链接 `exchange.checks` 中的具体检查。换入编号差异可从相应验收款直接定位，交接单另列付款约定时可从受影响的期款定位到该原行。
+
 ## 约定设备型号与实收型号
 
 规则 `2026.11.25.14` 使用 `printed-equipment-models-v2`。遇有复验时，H02 的 `equipment_models.sequence` 记录原验收、整改、复验资料按既有程序核对后的 `record_chain_state`，以及型号核对的 `outcome`。`records[].inspection_role` 按原单与缺陷关系区分 `original`、`final`，支持标题仍为「验收报告」的复验单。

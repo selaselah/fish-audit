@@ -526,6 +526,8 @@ function equipmentExchangePanel(check, graph) {
   const audit=check.exchange;
   const ledger=graph.equipment_model_sources.exchange;
   const panel=box('equipment-exchange',box('panel-head',el('h4','换货交接凭证'),tag(audit.status)));
+  panel.id='equipment-exchange';
+  panel.tabIndex=-1;
   panel.dataset.exchangeStatus=audit.status;
   const pending=audit.checks.filter(row=>row.status!=='ok');
   if (pending.length) panel.append(box('chips exchange-pending',el('strong','待核 '+pending.length+' 项'),
@@ -554,6 +556,33 @@ function equipmentExchangePanel(check, graph) {
     section.id='exchange-check-'+row.key;
     section.tabIndex=-1;
     panel.append(section);
+  }
+  return panel;
+}
+
+function paymentExchangeEvidence(item, report) {
+  if (!item.stage || !['H04','H05'].includes(item.rule)) return null;
+  const ledger=report.graph.equipment_model_sources?.exchange;
+  const audit=report.findings.find(f=>f.equipment_models?.exchange)?.equipment_models.exchange;
+  if (!audit || !ledger) return null;
+  const scopeIssue=audit.checks.find(row=>row.key==='scope' && row.status!=='ok');
+  const needsInspection=Boolean(item.stage.batch_index || /验收|质保|保修/.test(item.stage.clause));
+  if (!needsInspection && !scopeIssue) return null;
+  const cited=ledger.pages.some(page=>{
+    if (!item.scope.includes(page.unit) || !(page.form || needsInspection && page.rows.some(r=>r.kind==='exchange_number'))) return false;
+    const ref=page.doc+'/p'+page.page;
+    return item.evidence.some(id=>id===ref || id.startsWith(ref+'/'));
+  });
+  if (!cited) return null;
+  const outstanding=needsInspection?audit.checks.filter(row=>row.status!=='ok'):[scopeIssue];
+  const panel=box('exchange-payment-proof');
+  if (!outstanding.length) {
+    panel.append(evidenceJump('查看本期所据的换货交接','equipment-exchange'));
+  } else {
+    for (const row of outstanding.slice(0,2)) {
+      panel.append(box('exchange-payment-check',evidenceJump('核对'+row.label,'exchange-check-'+row.key),el('p',row.detail)));
+    }
+    if (outstanding.length>2) panel.append(evidenceJump('查看全部换货交接依据','equipment-exchange'));
   }
   return panel;
 }

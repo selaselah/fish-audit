@@ -10,6 +10,8 @@ server/.venv/bin/python docs/samples/equipment_exchanges.py --run --run-id synth
 
 `complete` 的四台退回与四台换入设备分别能和两次验收对应。`serial` 只改交接单上的第四台换入编号，`unsigned` 缺供应方签认，`late` 的交接晚于复验，`other` 的交接单写有另一合同号。`rider` 在交接单另写第二期改付 80%。`scan` 把完整交接单制成只有像素的扫描 PDF，保留实际模型初读和原图。演练可按 `--cases complete serial` 选择。整案的人工验收决定留给审计人员。
 
+扫描案例仍校对其他六份电子原件，并验证扫描页的模型观察与初读一致。交接单上读到的编号可打开原图复核。
+
 ## 验收的是哪一种设备
 
 在仓库根目录运行下列命令，可上传十一组合成采购资料。每页均带演练水印。去掉 `--run` 只生成文件，追加 `--cases wrong batches approval` 可选择个别案例。

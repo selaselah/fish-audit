@@ -80,16 +80,21 @@ def generate(seed, mode):
 def settle(cid, folder, records):
     with pdfium.PdfDocument(folder/(FORM+".pdf")) as source:
         scan=not source[0].get_textpage().get_text_bounded().strip()
+    layout=None
     if scan:
-        report=wait(cid)
-        hashes={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in folder.glob("*.pdf")}
-        assert hashes=={d["name"]:d["sha256"] for d in report["graph"]["documents"]}
-        return report
+        wait(cid)
+        first=get("/api/cases/"+cid+"/reports/1")["report"]
+        # The file is included in the hash check. Only native training pages participate in scripted corrections.
+        layout={title:([title] if title!=FORM else []) for title in records}
     reconcile_training_pages(cid,folder,records,case_titles=CASES.values(),field_labels=LABELS,
                              document_types={FORM:"equipment_exchange"},row_spacing=23,
                              exact_fields=("contract_id","buyer","seller","subject","equipment_model","payment_stage",
-                                           "delivered_serials","buyer_signature","seller_signature","exchange_number"))
-    paper=confirm_printed_records(cid, folder, records)
+                                           "delivered_serials","buyer_signature","seller_signature","exchange_number"),layout=layout)
+    paper=confirm_printed_records(cid,folder,records,layout=layout)
+    if scan:
+        def image_facts(report): return [f for f in report["graph"]["facts"] if f["name"]==FORM+".pdf"]
+        assert image_facts(first) and image_facts(first)==image_facts(paper)
+        return paper
     return check_training_watermark(cid, folder, records, paper)
 
 

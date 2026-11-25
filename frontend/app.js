@@ -548,6 +548,8 @@ function finding(item) {
     node.append(reservationPanel(item,state.bundle.report.graph));
   if (item.acceptance_reservations?.supplier) node.append(supplierPanel(item.acceptance_reservations.supplier,state.bundle.report.graph));
   if (item.equipment_models) node.append(equipmentModelsPanel(item.equipment_models,state.bundle.report.graph));
+  const exchangeEvidence=paymentExchangeEvidence(item,state.bundle.report);
+  if (exchangeEvidence) node.append(exchangeEvidence);
   if (item.stage && /验收|质保|保修/.test(item.stage.clause)) {
     const models=state.bundle.report.findings.find(f=>f.equipment_models)?.equipment_models;
     if (models) {

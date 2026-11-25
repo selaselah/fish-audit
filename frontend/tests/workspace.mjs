@@ -306,6 +306,21 @@ try {
             .filter(row=>['buyer_signature','seller_signature'].includes(row.kind)));
           if (selector==='data-exchange-check') await evaluate(part+'.open=false');
         }
+        for (const item of report.findings.filter(f=>f.stage && ['H04','H05'].includes(f.rule))) {
+          const box='document.querySelector('+JSON.stringify('[data-finding="'+item.id+'"] .exchange-payment-proof')+')';
+          const forms=source.pages.filter(p=>p.form && item.scope.includes(p.unit));
+          const cited=forms.some(p=>item.evidence.some(ref=>ref===p.doc+'/p'+p.page || ref.startsWith(p.doc+'/p'+p.page+'/')));
+          if (/^合同生效/.test(item.stage.clause) && !pending.some(c=>c.key==='scope')) {
+            assert.equal(await evaluate('!!'+box),false,'an independent prepayment does not depend on an equipment exchange');
+          } else if (cited) {
+            const target=await evaluate(box+'.querySelector("button").getAttribute("aria-controls")');
+            if (/^合同生效/.test(item.stage.clause)) assert.equal(target,'exchange-check-scope');
+            if (!pending.length) assert.equal(target,'equipment-exchange');
+            if (pending.length===1) assert.ok(await evaluate(box+'.textContent.includes('+JSON.stringify(pending[0].detail)+')'));
+            await evaluate(panel+'.open=false;'+box+'.querySelector("button").click()');
+            await wait(panel+'.open && document.activeElement?.id==='+JSON.stringify(target),'payment phase opens the specific exchange evidence');
+          }
+        }
       }
       if (equipment.sequence) {
         assert.equal(await evaluate(panel+'.querySelector("[data-model-sequence]").dataset.modelSequence'),equipment.sequence.outcome);
