@@ -133,6 +133,18 @@ function stagePaymentsPanel(finding,graph,findings) {
   }));
   const phase=findings.find(f=>f.rule==='H04' && f.stage && f.stage.clause_ref===finding.stage?.clause_ref && f.stage.name===finding.stage?.name);
   if (phase) panel.append(performanceJump(phase,'核对本期履约条件'));
+  if (phase && phase.status!=='ok') {
+    const references=new Set(phase.evidence);
+    const subjects=[
+      ['H01','合同签署与生效',['effect_clause','buyer_signature','seller_signature','approval_result']],
+      ['H02','交付与验收',['acceptance','acceptance_signer','measured_result','reinspection','defect_closure']]
+    ];
+    for (const [rule,label,fields] of subjects) {
+      const issue=findings.find(f=>f.rule===rule && f.status!=='ok' &&
+        f.evidence.some(ref=>references.has(ref) && fields.includes(facts.get(ref)?.field)));
+      if (issue) panel.append(box('stage-prerequisite',performanceJump(issue,label),el('p',issue.detail)));
+    }
+  }
   for (const r of check.records) {
     const label=nodes.get(r.unit)?.label || documents.get(r.unit)?.name || r.unit;
     const section=el('section','','stage-transfer');

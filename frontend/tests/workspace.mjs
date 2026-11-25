@@ -280,6 +280,17 @@ try {
       assert.equal(await evaluate(panel+'.querySelectorAll(".stage-transfer").length'),item.records.length);
       const phase=phases.find(p=>p.stage.clause_ref===f.stage?.clause_ref && p.stage.name===f.stage?.name);
       if (phase) await jump(panel,phase);
+      if (!phase || phase.status==='ok') assert.equal(await evaluate(panel+'.querySelectorAll(".stage-prerequisite").length'),0);
+      else {
+        for (const upstream of report.findings.filter(h=>['H01','H02'].includes(h.rule) && h.status!=='ok')) {
+          const field=upstream.rule==='H01'?'effect_clause':'acceptance';
+          const shared=report.graph.facts.some(fact=>fact.field===field && phase.evidence.includes(fact.id) && upstream.evidence.includes(fact.id));
+          if (shared) {
+            assert.ok(await evaluate(panel+'.textContent.includes('+JSON.stringify(upstream.detail)+')'),'original contract or quality finding on the relevant installment');
+            await jump(panel,upstream);
+          }
+        }
+      }
       for (const r of item.records) {
         const row=panel+'.querySelector('+JSON.stringify('[data-transfer-unit="'+r.unit+'"]')+')';
         for (const value of [r.inputs.transfer_amount,r.inputs.transfer_ref].filter(Boolean)) {

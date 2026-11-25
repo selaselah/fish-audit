@@ -134,6 +134,8 @@ textarea { width: 100%; resize: vertical; }
 .stage-balances dd,.stage-transfer { overflow-wrap:anywhere; }
 .stage-transfer { margin-top:12px; padding-top:10px; border-top:1px solid var(--line); min-width:0; }
 .stage-payments .performance-jump { margin-top:6px; }
+.stage-prerequisite { margin:.5rem 0; border-inline-start:2px solid var(--line); padding-inline-start:.75rem; }
+.stage-prerequisite p { margin:.25rem 0; line-height:1.55; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
 .payment-window { margin:14px 0; padding:12px 14px; border-inline-start:3px solid var(--green); background:var(--soft); min-width:0; }
 .payment-window:is([data-status="risk"],[data-status="missing"]) { border-inline-start-color:#946421; background:#fbf7ed; }
 .payment-window[data-status="issue"] { border-inline-start-color:#903a30; background:#fbf2ef; }
