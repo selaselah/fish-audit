@@ -14,6 +14,7 @@ import stage_payments
 import equipment_models
 import equipment_exchanges
 import contract_effect
+import signing_parties
 import warranty_terms
 import warranty_service
 import payment_windows
@@ -47,6 +48,7 @@ LABELS = {
     "equipment_model": tuple(sorted(equipment_models.ORDERED | equipment_models.RECEIVED)),
     **delivery_batches.LABELS,
     **warranty_terms.LABELS,
+    **signing_parties.IMPRINT_FIELDS,
     **warranty_service.LABELS,
     **payment_windows.LABELS,
     **invoice_conditions.LABELS,
@@ -659,7 +661,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
     grants = materials("power_of_attorney") if version in MANDATE_FORMATS else ()
     signed = effect(contract, approvals, version, grants)
     if version in EFFECT_FORMATS:
-        contract_effect.review(signed,graph.get("contract_effect_sources",{}),contract)
+        contract_effect.review(signed,graph.get("contract_effect_sources",{}),contract,graph)
     if version in DATE_FORMATS:
         add_date_checks(signed,period_checks(contract))
     classified = {u for group in kinds.values() for u in group}

@@ -13,6 +13,14 @@ EVIDENCE = {"title": "《中国注册会计师审计准则第1301号——审计
             "edition": "2022-12-22 修订", "scope": "注册会计师审计的方法参考，用于说明证据评估与追加程序思路。"}
 SOURCES = {
     WORKDAY_KEY:WORKDAY_NOTICE,
+    "branch-activities":{"title":"《中华人民共和国民法典》","edition":"2020-05-28 通过",
+        "url":"https://www.cac.gov.cn/2020-06/01/c_1592561777268319.htm","locator":"第七十四条",
+        "scope":"分支机构名义及民事责任的法律背景。具体归属与授权需要核实。",
+        "summary":"分支机构可以自己的名义从事民事活动，需结合签约名义、分支机构及所属法人核实本案。"},
+    "seal-authority":{"title":"《最高人民法院关于适用〈中华人民共和国民法典〉合同编通则若干问题的解释》",
+        "edition":"法释〔2023〕13号","url":"https://www.court.gov.cn/zixun/xiangqing/419382.html","locator":"第二十二条",
+        "scope":"合同签署、用印及代表或代理权限的审查背景。",
+        "summary":"结合合同约定、签署人员的权限与交易事实审查效力。名称差异提示需核查用印主体及授权材料。"},
     "payment-time":{"title":"《中华人民共和国民法典》","edition":"2020-05-28 通过",
         "url":"https://www.court.gov.cn/zixun/xiangqing/233181.html","locator":"第二百条至第二百零四条、第六百二十八条",
         "scope":"依本案约定核对价款支付时间及期间起止。以合同明确采用的口径及实际履约材料确定比较基准。",
@@ -86,7 +94,7 @@ SOURCES = {
     "follow-up": {**EVIDENCE, "locator": "第十五条",
                   "summary": "不同来源的材料相互矛盾或可靠性存疑时，应考虑调整检查或追加程序。"},
 }
-MAPPING = {"H01":["contract-effect","written-mandate","contract-signing","purchase-records"],"H02":["receipt","received-specifications","acceptance-roles","contract-change","batch-delivery","exchange-records","evidence-quality"],
+MAPPING = {"H01":["contract-effect","written-mandate","contract-signing","branch-activities","seal-authority","purchase-records"],"H02":["receipt","received-specifications","acceptance-roles","contract-change","batch-delivery","exchange-records","evidence-quality"],
            "H03":["payment","purchase-records"],"H04":["payment","receipt","contract-change","batch-delivery","warranty-period","payment-time"],
            "H06":["payment","installment-tracking","evidence-quality"],
            "H05":["payment","evidence-quality","warranty-period","payment-time"],

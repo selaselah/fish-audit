@@ -158,8 +158,9 @@ def page_signals(graph, read_text, version=FORMAT):
 
 
 def observed_units(graph):
-    from contract_effect import FORMAT as SEAL_FORMAT
-    originals=set(graph["documents_by_kind"].get("contract",[])) if graph.get("contract_effect_sources",{}).get("format")==SEAL_FORMAT else set()
+    from contract_effect import SEAL_FORMAT, APPROVAL_FORMAT, FORMAT as SIGNING_FORMAT
+    has_main_contract_seals = graph.get("contract_effect_sources",{}).get("format") in (SEAL_FORMAT,APPROVAL_FORMAT,SIGNING_FORMAT)
+    originals=set(graph["documents_by_kind"].get("contract",[])) if has_main_contract_seals else set()
     current = graph.get("quality_addenda",{}).get("format") in QUANTITY_FORMATS
     return {f.get("unit",f["doc"]) for f in graph["facts"] if (f["field"] in LABELS and (current or f["field"] not in QUANTITY_FIELDS) and not
             (f["field"] in ("buyer_sealed_on","seller_sealed_on") and f.get("unit",f["doc"]) in originals)) or f["field"]=="contract_addendum"

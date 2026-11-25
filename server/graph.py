@@ -21,6 +21,7 @@ import equipment_models
 import equipment_exchanges
 import stage_payments
 import contract_effect
+import signing_parties
 import warranty_terms
 import warranty_service
 import payment_windows
@@ -336,6 +337,9 @@ def build_graph(docs, pages, attestations, amendments=()):
     graph["edges"].extend(repair_completion.edges(completion))
     graph["payment_window_sources"]=payment_windows.sources(graph,lambda doc,number:texts[doc,number])
     graph["contract_effect_sources"]=contract_effect.sources(graph,lambda doc,number:texts[doc,number])
+    signing_nodes,signing_edges=signing_parties.source_graph(graph["contract_effect_sources"])
+    graph["nodes"].extend(signing_nodes)
+    graph["edges"].extend(signing_edges)
     graph["warranty_sources"]=warranty_terms.sources(graph,lambda doc,number:texts[doc,number])
     record_mandate_pages(graph, lambda doc, number: texts[doc, number])
     record_addenda(graph, lambda doc, number: texts[doc, number])
@@ -422,6 +426,7 @@ def link_procedures(graph, findings, calls):
     edges.extend(stage_payments.edges(findings))
     edges.extend(equipment_models.edges(findings))
     edges.extend(warranty_terms.edges(findings))
+    edges.extend(signing_parties.comparisons(findings))
     edges.extend(payment_windows.edges(findings))
     expert_id = "model/expert"
     nodes.append({"id": expert_id, "type": "model_call", "label": "专家追加程序",
