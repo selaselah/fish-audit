@@ -79,10 +79,15 @@ def inbox(store, workspace, owner, params):
     query = params.get("q", "").strip()
     profile = params.get("profile", "")
     order = params.get("sort", "updated")
+    view = params.get("view","list")
+    verdict = params.get("verdict","")
+    lanes = {"reject":"t.verdict='reject'", "review":"t.verdict='review'", "pass":"t.verdict='pass'",
+             "pending":"t.verdict IS NULL"}
     groups = {"all":"1", "active":"c.status IN ('queued','running')", "ready":"c.status='ready'",
               "attention":"c.status='ready' AND t.verdict IN ('reject','review')",
               "in_review":"c.status='in_review'", "closed":"c.status='closed'", "failed":"c.status='failed'"}
-    if group not in groups or (profile and profile not in PROFILES) or len(query) > 100 or order not in ("updated","created"):
+    if (group not in groups or (profile and profile not in PROFILES) or len(query) > 100 or order not in ("updated","created")
+            or view not in ("list","board") or verdict and (verdict not in lanes or view=="board")):
         raise CaseError("台账筛选条件无效。", 400)
     conditions, args = ["c.workspace=?"], [workspace]
     if owner:
@@ -94,17 +99,28 @@ def inbox(store, workspace, owner, params):
     if query:
         conditions.append("instr(lower(c.title||' '||coalesce(c.submitter_name,'')||' '||c.id),lower(?))>0")
         args.append(query)
+    if verdict:
+        conditions.append(lanes[verdict])
     source = " FROM cases c LEFT JOIN case_stats t ON t.case_id=c.id LEFT JOIN signoffs s ON s.case_id=c.id AND s.rev=c.rev WHERE " + " AND ".join(conditions)
+    fields = """SELECT c.id,c.title,c.profile,c.created,c.updated,c.status,c.stage,c.progress,
+                c.message,c.rev,c.submitter_name,t.verdict,t.issues,t.risks,t.missing,s.decision,
+                (SELECT count(*) FROM docs WHERE case_id=c.id) AS files"""
+    scoped = source + " AND ("+groups[group]+")"
+    ordered = f" ORDER BY c.{order} DESC,c.id LIMIT ? OFFSET ?"
     with store.connect() as db:
         db.execute("BEGIN")
         measures = ",".join(f"count(*) FILTER (WHERE {expr}) AS [{key}]" for key, expr in groups.items())
         counts = dict(db.execute("SELECT "+measures+source,args).fetchone())
+        if view=="board":
+            buckets = dict(db.execute("SELECT coalesce(t.verdict,'pending'),count(*)"+scoped+" GROUP BY t.verdict",args))
+            board = {}
+            for key,condition in lanes.items():
+                total = buckets.get(key,0)
+                cards = db.execute(fields+scoped+" AND "+condition+ordered,[*args,3,0]) if total else ()
+                board[key] = {"total":total,"cases":[dict(row) for row in cards]}
+            return {"counts":counts,"total":counts[group],"lanes":board}
         page = page_info(counts[group], page_number(params), 12)
-        rows = db.execute("""SELECT c.id,c.title,c.profile,c.created,c.updated,c.status,c.stage,c.progress,
-                          c.message,c.rev,c.submitter_name,t.verdict,t.issues,t.risks,t.missing,s.decision,
-                          (SELECT count(*) FROM docs WHERE case_id=c.id) AS files""" + source + " AND ("+groups[group]+")"
-                          +f" ORDER BY c.{order} DESC,c.id LIMIT ? OFFSET ?",
-                          [*args,page["page_size"],(page["page"]-1)*page["page_size"]])
+        rows = db.execute(fields+scoped+ordered,[*args,page["page_size"],(page["page"]-1)*page["page_size"]])
         return {"cases": [dict(row) for row in rows], "counts": counts, **page}
 
 

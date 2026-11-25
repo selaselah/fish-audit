@@ -97,16 +97,29 @@ async function api(url, options = {}) {
 function post(url, body) {
   return api(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
 }
+function caseName(row, pinRevision=false) {
+  const prefix='合成演练 · ';
+  const training=row.title.startsWith(prefix) && row.title.length>prefix.length;
+  const params=pinRevision && row.rev>0 ? new URLSearchParams({rev:String(row.rev)}) : undefined;
+  const title=Team.paperLink(training ? row.title.slice(prefix.length) : row.title,row.id,'case-link',params);
+  title.dataset.caseId=row.id;
+  if (training) title.setAttribute('aria-label',row.title);
+  return {title,training};
+}
+function peekButton(row) {
+  const button=action('',()=>Desk.peek(row),'icon-button case-peek');
+  button.append(glyph('layout-sidebar-inset-reverse'));
+  button.dataset.previewCase=row.id; button.title='速览任务';
+  button.setAttribute('aria-label','速览 '+row.title); button.setAttribute('aria-haspopup','dialog');
+  return button;
+}
 function renderList() {
   const list = $('#case-list');
   const visible = state.cases;
   const header = box('ledger-header ledger-row', ...['任务名称','处理状态','审计结果', $('#desk-sort').value === 'updated' ? '最近更新' : '提交时间',''].map(label => el('span', label)));
   list.replaceChildren(header);
   for (const row of visible) {
-    const trainingPrefix = '合成演练 · ';
-    const training = row.title.startsWith(trainingPrefix) && row.title.length > trainingPrefix.length;
-    const title = Team.paperLink(training ? row.title.slice(trainingPrefix.length) : row.title, row.id, 'case-link');
-    if (training) title.setAttribute('aria-label', row.title);
+    const {title,training} = caseName(row);
     const metadata = el('span', [training ? '合成演练' : '', profileName(row.profile)].filter(Boolean).join(' · '), 'small case-meta');
     const status = box('', tag(row.status));
     if (row.status === 'running') status.append(el('small', row.progress + '%', 'small'));
@@ -117,12 +130,8 @@ function renderList() {
     if (row.issues || row.risks) verdict.append(el('small',
       [row.issues ? row.issues+' 项问题' : '', row.risks ? row.risks+' 项风险' : ''].filter(Boolean).join(' · '),'small'));
     const icon = box('case-glyph',glyph(row.profile===bankProfile || row.profile===travelProfile ? 'receipt' : 'journal-text'));
-    const preview = action('',()=>Desk.peek(row),'icon-button case-peek');
-    preview.append(glyph('layout-sidebar-inset-reverse'));
-    preview.dataset.previewCase = row.id; preview.title='速览任务';
-    preview.setAttribute('aria-label','速览 '+row.title); preview.setAttribute('aria-haspopup','dialog');
     list.append(box('ledger-row', box('case-name',icon,box('',title,metadata)), status, verdict,
-      el('span', time($('#desk-sort').value==='updated' ? row.updated : row.created), 'small row-date'),preview));
+      el('span', time($('#desk-sort').value==='updated' ? row.updated : row.created), 'small row-date'),peekButton(row)));
   }
   if (!visible.length) list.append(el('p', state.filter === 'all' && !$('#case-search').value && !$('#desk-profile').value ? '还没有任务，选择「新建审计」上传资料。' : '当前筛选条件下没有任务。', 'empty'));
   for (const button of document.querySelectorAll('[data-filter]')) {

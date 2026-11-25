@@ -214,3 +214,53 @@ export async function checkEvidenceCompare({root,call,evaluate,wait},caseId,requ
   assert.ok(images.length && images.every(url=>url.startsWith(base+'/documents/') && new URL(url).searchParams.get('rev')===String(rev)));
   console.log('PASS · R'+rev+' · '+facts.length+' supported observations · '+pairs.join(', ')+' · pinned originals, keyboard and six widths');
 }
+
+export async function checkMandateCompare({root,call,evaluate,wait},cid) {
+  const path=root+'/api/cases/'+cid;
+  const task=await (await fetch(path)).json();
+  assert.ok(task.title.startsWith('合成演练 · '));
+  const {report}=await (await fetch(path+'/reports/'+task.rev)).json();
+  const finding=report.findings.find(f=>f.rule==='H01');
+  const witnesses=new Set(report.graph.edges.filter(e=>e.type==='supports_result' && e.to==='finding/'+finding.id).map(e=>e.from));
+  const facts=new Map(report.graph.facts.filter(f=>finding.evidence.includes(f.id) && witnesses.has(f.id)).map(f=>[f.id,f]));
+  const entry=finding.delegations[0];
+  const limits=entry.limits || [];
+  const adverse=limits.find(c=>c.comparison_ref && c.status==='risk');
+  const dateRef=key=>[...facts.values()].find(f=>f.field===key).id;
+  const expected=adverse?[adverse.field_ref,adverse.comparison_ref]:
+    limits.length>=2?limits.slice(0,2).map(c=>c.field_ref):[dateRef('signed_on'),dateRef('grant_until')];
+  const url=root+'/workpaper/'+cid+'?rev='+task.rev;
+  await call('Page.navigate',{url:url+'&finding='+finding.id});
+  await wait('document.querySelectorAll(".compare-scan canvas").length===2','authorized originals side by side');
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".compare-leaf")].map(n=>n.dataset.fact)'),expected);
+  const quotes=expected.map(ref=>facts.get(ref).source_line.text);
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".compare-quote blockquote")].map(n=>n.textContent)'),quotes);
+  for (const width of [1440,1024,820,768,390,320]) {
+    await call('Emulation.setDeviceMetricsOverride',{width,height:width<600?844:900,deviceScaleFactor:1,mobile:width<600});
+    await evaluate('document.querySelector(".compare-bar").scrollIntoView({block:"start"})');
+    assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll(".compare-original")].every(n=>{const r=n.getBoundingClientRect();return r.left>=0 && r.right<=innerWidth+1 && r.height>=44})'),'comparison width '+width);
+    if ([390,1440].includes(width) && process.env.AUDIT_UI_SHOTS) {
+      const shot=await call('Page.captureScreenshot',{format:'png'});
+      await writeFile(join(process.env.AUDIT_UI_SHOTS,'mandate-'+cid+'-'+width+'.png'),Buffer.from(shot.data,'base64'));
+    }
+  }
+  await evaluate('document.querySelectorAll(".compare-original")[1].click()');
+  await wait('document.querySelector("#page-dialog").open && !!document.querySelector(".located")','right original and coordinates');
+  await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+  await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+  await wait('!document.querySelector("#page-dialog").open','return from full original');
+  await call('Page.navigate',{url});
+  await wait('!!document.querySelector("[data-authority-pair]")','authorization shortcut from a payment phase');
+  for (const phase of report.findings.filter(f=>f.rule==='H04' && f.stage)) {
+    await evaluate('document.querySelector("[data-tab=report]").click()');
+    await evaluate('document.querySelector("[data-phase-choice='+phase.id+']").click()');
+    const button='document.querySelector("[data-phase-finding='+phase.id+'] [data-authority-pair]")';
+    assert.ok(await evaluate(button+' && '+button+'.getClientRects().length'));
+    await evaluate(button+'.click()');
+    assert.equal(await evaluate('document.querySelector("#trace-select").value'),finding.id);
+    const ids=await evaluate('[...document.querySelectorAll(".compare-leaf")].map(n=>n.dataset.fact)');
+    assert.ok(ids.every(id=>phase.evidence.includes(id) && witnesses.has(id)));
+    if (facts.get(ids[1]).field==='payment_stage') assert.equal(ids[1],phase.stage.clause_ref);
+  }
+  console.log('PASS · Signed mandate, source rows, six viewports and all affected installments · '+cid+' R'+task.rev);
+}

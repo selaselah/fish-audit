@@ -1,9 +1,11 @@
 const Desk = {
   page: 1, libraryPage: 1, search: '', status: 'verified', fingerprint: '', debounce: 0,
-  previewRequest: null,
+  previewRequest: null, view:'board', verdict:'', lane:'', queryKey:'',
+  laneLabels:{reject:'建议不通过',review:'需要人工校验',pass:'建议通过',pending:'尚无建议'},
   tenantPath(resource) { return (Team.current ? '/api/w/'+Team.current.id : '/api')+'/'+resource; },
   reset() {
     this.page = 1; this.libraryPage = 1; this.search = ''; this.status = 'verified'; this.fingerprint = '';
+    this.verdict=''; this.lane=''; this.queryKey='';
     clearTimeout(this.debounce);
     state.filter = 'all';
     for (const id of ['case-search','library-query','desk-profile']) $('#'+id).value = '';
@@ -15,6 +17,7 @@ const Desk = {
     for (const n of document.querySelectorAll('[data-metric] strong')) n.textContent = '—';
     $('#queue-count').textContent = '';
     $('#queue-title').textContent = '任务台账';
+    $('#verdict-filter').hidden=true; $('#verdict-filter').replaceChildren(); $('#desk-announcement').textContent='';
   },
   pager(id, data, go, unit) {
     const parent = $('#'+id); parent.replaceChildren();
@@ -28,6 +31,67 @@ const Desk = {
     }
   },
   filter(status) { state.filter = status; this.page=1; this.fingerprint=''; refresh(); },
+  setView(view, verdict='') {
+    this.view=view; this.verdict=verdict; this.page=1;
+    try { localStorage.setItem('fish-audit-desk-view',view); } catch {}
+    refresh();
+  },
+  renderBoard(data) {
+    const list=$('#case-list');
+    if (!data.total) {
+      list.replaceChildren(el('p',state.filter==='all' && !$('#case-search').value && !$('#desk-profile').value ?
+        '还没有任务，选择「新建审计」上传资料。' : '当前筛选条件下没有任务。','empty'));
+      return;
+    }
+    const lanes=Object.keys(this.laneLabels).filter(id=>id!=='pending' || data.lanes[id].total)
+      .map(id=>[id,data.lanes[id]]);
+    if (!lanes.some(([id])=>id===this.lane)) this.lane=lanes.find(([,lane])=>lane.total)[0];
+    const selector=box('lane-selector'), board=box('verdict-board');
+    selector.setAttribute('role','group'); selector.setAttribute('aria-label','选择审计建议');
+    const selectLane=id=>{
+      this.lane=id;
+      for (const b of selector.children) b.setAttribute('aria-pressed',String(b.dataset.laneChoice===id));
+      for (const col of board.children) col.classList.toggle('selected-lane',col.dataset.lane===id);
+    };
+    for (const [id,lane] of lanes) {
+      const label=this.laneLabels[id];
+      const count=lane.total.toLocaleString('zh-CN');
+      const choice=action('',()=>selectLane(id),'lane-choice');
+      choice.dataset.laneChoice=id; choice.setAttribute('aria-controls','lane-'+id);
+      choice.append(el('span',label),el('strong',count)); selector.append(choice);
+      const col=el('section','','verdict-lane'); col.id='lane-'+id; col.dataset.lane=id;
+      const heading=el('h3',label); heading.id='lane-title-'+id; col.setAttribute('aria-labelledby',heading.id);
+      col.append(box('lane-heading',glyph(({reject:'exclamation-diamond',review:'eye',pass:'shield-check',pending:'clock-history'})[id]),heading,el('strong',count)));
+      for (const row of lane.cases) {
+        const {title,training}=caseName(row,true);
+        const meta=el('small',[training?'合成演练':'',row.rev?'R'+row.rev:'',profileName(row.profile)].filter(Boolean).join(' · '),'card-meta');
+        const card=el('article','','audit-card');
+        card.append(meta,title);
+        if (['queued','running'].includes(row.status)) {
+          const progress=el('progress'); progress.max=100; progress.value=row.progress;
+          progress.setAttribute('aria-label',statusName(row.stage)+' '+row.progress+'%');
+          card.append(box('card-progress',el('span',statusName(row.stage)+' · '+row.progress+'%'),progress));
+        } else if (row.issues || row.risks || row.missing) {
+          const signals=box('card-signals');
+          for (const [num,word,kind] of [[row.issues,'问题','issue'],[row.risks,'风险','risk'],[row.missing,'证据不足','missing']]) {
+            if (num) signals.append(el('span',num+' '+word,kind));
+          }
+          card.append(signals);
+        }
+        const files=el('span',row.files+' 份'); files.prepend(glyph('paperclip'));
+        const status=row.decision ? el('span','人工'+statusName(row.decision),'card-decision') : tag(row.status);
+        card.append(box('card-foot',status,files,peekButton(row))); col.append(card);
+      }
+      if (!lane.cases.length) col.append(el('p','暂无任务','lane-empty'));
+      if (lane.total>lane.cases.length) {
+        const more=action('查看全部 '+count+' 项',()=>{ this.setView('list',id); $('#desk-views [data-desk-view=list]').focus(); },'lane-more');
+        more.setAttribute('aria-label',more.textContent+'，'+label); more.dataset.moreLane=id; col.append(more);
+      }
+      board.append(col);
+    }
+    selectLane(this.lane);
+    list.replaceChildren(selector,board);
+  },
   updateFilterBadge() {
     const count = Number(Boolean($('#desk-profile').value)) + Number($('#desk-sort').value!=='updated');
     $('#filter-count').hidden = count===0;
@@ -122,13 +186,22 @@ const Desk = {
     }
   },
   async load(epoch) {
+    const view=Team.current?.role==='employee' ? 'list' : this.view;
     const params = new URLSearchParams({q:$('#case-search').value.trim(), profile:$('#desk-profile').value,
-      sort:$('#desk-sort').value, page:String(this.page), status:state.filter});
-    const data = await api(this.tenantPath('inbox')+'?'+params);
+      sort:$('#desk-sort').value, page:String(this.page), status:state.filter,view});
+    if (view==='list' && this.verdict) params.set('verdict',this.verdict);
+    const path=this.tenantPath('inbox')+'?'+params;
+    if (path!==this.queryKey) {
+      this.queryKey=path; this.fingerprint='';
+      this.lane='';
+      $('#case-list').replaceChildren(el('p','正在读取任务…','empty'));
+      $('#verdict-filter').hidden=true; $('#desk-pager').replaceChildren();
+    }
+    const data = await api(path);
     if (epoch !== state.epoch) return;
     const fingerprint = params + JSON.stringify(data);
     if (this.fingerprint === fingerprint) return;
-    this.fingerprint = fingerprint; this.page = data.page; state.cases = data.cases;
+    this.fingerprint = fingerprint; this.page = data.page || 1; state.cases = data.cases || [];
     for (const button of document.querySelectorAll('[data-metric]')) {
       const key = button.dataset.metric;
       button.querySelector('strong').textContent = data.counts[key].toLocaleString('zh-CN');
@@ -136,10 +209,27 @@ const Desk = {
     }
     document.querySelector('[data-filter=failed]').hidden = !data.counts.failed && state.filter !== 'failed';
     const active = document.querySelector('[data-filter="'+state.filter+'"] span');
-    $('#queue-title').textContent = state.filter === 'all' ? '任务台账' : active.textContent;
+    $('#queue-title').textContent = state.filter === 'all' ? (view==='board'?'审计建议':'任务台账') : active.textContent;
     $('#queue-count').textContent = data.total.toLocaleString('zh-CN')+' 项';
-    renderList();
-    this.pager('desk-pager',data,page=>{this.page=page; refresh();},'项任务');
+    $('#desk-views').hidden=Team.current?.role==='employee';
+    for (const b of $('#desk-views').children) b.setAttribute('aria-pressed',String(b.dataset.deskView===view));
+    const filter=$('#verdict-filter');
+    filter.hidden=!this.verdict; filter.replaceChildren();
+    if (this.verdict) {
+      const clear=action(this.laneLabels[this.verdict],()=>{ this.setView('list'); $('#desk-views [data-desk-view=list]').focus(); },'verdict-chip');
+      clear.setAttribute('aria-label','移除建议筛选：'+this.laneLabels[this.verdict]); clear.append(glyph('x-lg')); filter.append(clear);
+    }
+    const focus=document.activeElement;
+    const focused=['previewCase','caseId','laneChoice','moreLane'].find(k=>focus?.dataset[k]);
+    if (view==='board') this.renderBoard(data); else renderList();
+    if (focused && !focus.isConnected) {
+      const restored=[...$('#case-list').querySelectorAll('a,button')].find(n=>n.dataset[focused]===focus.dataset[focused]);
+      (restored || $('#case-search')).focus({preventScroll:true});
+    }
+    if (view==='list') this.pager('desk-pager',data,page=>{this.page=page; refresh();},'项任务');
+    else $('#desk-pager').replaceChildren();
+    const message=$('#queue-title').textContent+'，'+data.total+' 项任务';
+    if ($('#desk-announcement').textContent!==message) $('#desk-announcement').textContent=message;
   },
   async library(epoch) {
     const results = $('#library-results');
@@ -162,6 +252,8 @@ const Desk = {
     this.pager('library-pager',data,page=>{this.libraryPage=page; refresh();},'条引文');
   },
   bind() {
+    try { if (localStorage.getItem('fish-audit-desk-view')==='list') this.view='list'; } catch {}
+    for (const b of $('#desk-views').children) b.addEventListener('click',()=>this.setView(b.dataset.deskView));
     const icons = {all:'inboxes',active:'clock-history',ready:'clipboard-check',attention:'exclamation-diamond',
       in_review:'layers',closed:'folder2-open',failed:'exclamation-triangle'};
     for (const button of document.querySelectorAll('[data-metric]')) button.querySelector('span').prepend(glyph(icons[button.dataset.metric]));

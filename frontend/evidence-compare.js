@@ -13,6 +13,36 @@ const EvidenceCompare = (() => {
     const kinds = graph.documents_by_kind || {};
     const contract = kinds.contract;
     if (finding.rule === 'H01') {
+      for (const entry of finding.delegations || []) {
+        if (!entry.signature_field || entry.units.length!==1) continue;
+        const observed=id=>facts.find(f=>f.id===id && entry.evidence.includes(id));
+        const field=(key,units)=>{
+          const f=unique(key,units); return f && entry.evidence.includes(f.id) ? f : null;
+        };
+        const name=finding.delegations.length>1 ? (entry.side==='buyer'?'甲方':'乙方') : '';
+        function mandate(key,label,left,right,extra={}) {
+          if (!left || !right || left.id===right.id) return;
+          result.push({key:'mandate-'+entry.side+'-'+key,label:name+label,left,right,authority:true,...extra});
+        }
+        const limits=entry.limits || [];
+        for (const limit of [...limits].sort((a,b)=>Number(b.status==='risk')-Number(a.status==='risk'))) {
+          if (!limit.comparison_ref) continue;
+          const left=observed(limit.field_ref),right=observed(limit.comparison_ref);
+          if (!left || !right || !entry.units.includes(unit(left)) || !contract?.includes(unit(right))) continue;
+          const label=limit.kind==='prepayment'?'预付款权限':'签约金额上限';
+          mandate(left.id+'-'+right.id,label,left,right,{status:limit.status,stageRef:limit.kind==='prepayment'?right.id:null});
+        }
+        const pending=limits.filter(c=>c.status!=='ok').map(c=>observed(c.field_ref)).filter(Boolean);
+        const distinct=[...new Map(pending.map(f=>[f.id,f])).values()];
+        if (distinct.length>=2) mandate('clauses','两条授权限制',distinct[0],distinct[1],{status:'missing'});
+        for (const [key,prop,text] of [['grant_until','valid_until','签约与截止日'],['grant_from','valid_from','签约与起始日'],['granted_on','issued_on','签约与出具日']]) {
+          const outside=entry.signed_on && entry[prop] && (key==='grant_until'?entry.signed_on>entry[prop]:entry.signed_on<entry[prop]);
+          if (key==='grant_until' || outside || !entry[prop]) mandate(key,text,field('signed_on',contract),field(key,entry.units),
+            {status:outside?'risk':(!entry[prop] || !entry.signed_on?'missing':null)});
+        }
+        mandate('signer','签字与受托人',field(entry.signature_field,contract),field('grant_agent',entry.units));
+      }
+      result.sort((a,b)=>({risk:0,missing:1}[a.status]??2)-({risk:0,missing:1}[b.status]??2));
       add('signatures', '双方签署', unique('buyer_signature', contract), unique('seller_signature', contract));
     }
     if (finding.rule === 'H05' && finding.stage) {
@@ -284,6 +314,10 @@ const EvidenceCompare = (() => {
       const [left,right] = selection;
       const selected = pairs.find(p => p.left.id === left?.id && p.right.id === right?.id);
       for (const button of shortcuts.children) button.setAttribute('aria-pressed',String(button.dataset.pair === selected?.key));
+      if (finding.delegations) {
+        versionNote.hidden=!selected?.status;
+        if (selected?.status) versionNote.replaceChildren(tag(selected.status));
+      }
       if (finding.quality_change) {
         const batch=finding.batch_acceptance?.batches.find(b=>'batch-'+b.index===selected?.key);
         const record=batch?.records.length===1 && finding.batch_acceptance.records.find(r=>r.unit===batch.records[0]);
@@ -304,7 +338,7 @@ const EvidenceCompare = (() => {
     }
     const bar = box('compare-bar');
     if (pairs.length) bar.append(shortcuts);
-    if (finding.quality_change) bar.append(versionNote);
+    if (finding.quality_change || finding.delegations) bar.append(versionNote);
     if (finding.reinspection) {
       const closed = finding.reinspection.state === 'closed';
       const state = box('compare-version',glyph(closed?'clipboard-check':'clock-history'),el('span',closed?'缺陷已关闭':'缺陷待核'));

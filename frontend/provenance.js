@@ -72,6 +72,9 @@ function performanceOverview(findings, graph) {
   const batches = findings.find(f => f.batch_acceptance)?.batch_acceptance;
   const index = graphIndex(graph);
   const acceptance=findings.find(f=>f.rule==='H02');
+  const signing=findings.find(f=>f.rule==='H01' && f.delegations?.some(d=>d.status!=='ok'));
+  const authorityPairs=signing ? EvidenceCompare.presets(signing,
+    traceReferences(graph,signing).map(id=>index.facts.get(id)).filter(Boolean),graph).filter(p=>p.authority && p.status) : [];
   const pairs=acceptance && (acceptance.reinspection || batches?.records.some(r=>r.standard)) ? EvidenceCompare.presets(acceptance,
     traceReferences(graph,acceptance).map(id=>index.facts.get(id)).filter(Boolean),graph) : [];
   const paymentLabel = f => {
@@ -97,6 +100,12 @@ function performanceOverview(findings, graph) {
     const sum=findings.find(f=>f.stage_payments && sameStage(f));
     if (sum) results.append(performanceJump(sum,'本期回单合计'));
     row.append(box('phase-contract',source,el('q',stage.clause)),results);
+    const authority=authorityPairs.find(p=>(!p.stageRef || p.stageRef===stage.clause_ref)
+      && [p.left.id,p.right.id].every(ref=>phase.evidence.includes(ref)));
+    if (authority) {
+      const jump=action('对照签约授权',()=>showFindingPath(signing,true,authority.key),'compare-jump');
+      jump.dataset.authorityPair=authority.key; row.append(jump);
+    }
     const batch=batches?.batches.find(b=>b.index===stage.batch_index);
     const record=batch?.records.length===1 && batches.records.find(r=>r.unit===batch.records[0]);
     if (record?.standard) {
@@ -1468,7 +1477,8 @@ function provenancePanel(report) {
       const details=installmentDetails(graph.payment_history.installments);
       details.classList.add('trace-installments'); trail.append(details);
     }
-    show(preferred || (f.rule==='H02' && pairs.length?'compare':'details'));
+    const pairedByDefault=f.rule==='H02' && pairs.length || pairs.some(p=>p.authority && p.status);
+    show(preferred || (pairedByDefault?'compare':'details'));
   }
   select.addEventListener('change',render); render();
   return box('panel trace-panel',

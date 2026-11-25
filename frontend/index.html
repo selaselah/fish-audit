@@ -46,11 +46,10 @@
     <section id="desk" hidden>
       <div class="heading"><div><p class="eyebrow" id="workspace-name"></p><h1>审计工作台</h1></div>
         <button class="primary" id="new-case"><i aria-hidden="true" class="ui-glyph ic-plus-lg"></i> 新建审计</button></div>
-      <div class="desk-layout">
-      <aside class="queue-column" aria-label="工作队列">
-        <div id="desk-metrics" class="queue-menu" role="group" aria-label="当前检索范围内的任务概况">
+      <div class="desk-stack">
+      <nav class="queue-overview" aria-label="工作队列">
+        <div id="desk-metrics" class="queue-strip" role="group" aria-label="当前检索范围内的任务概况">
           <button type="button" class="queue-total" data-filter="all" data-metric="all" aria-pressed="true"><span>全部审计任务</span><strong>—</strong></button>
-          <h2>工作队列</h2>
           <button type="button" data-metric="active" data-filter="active"><span>处理中</span><strong>—</strong></button>
           <button type="button" data-metric="ready" data-filter="ready"><span>待验收</span><strong>—</strong></button>
           <button type="button" data-metric="attention" data-filter="attention"><span>有疑点待验收</span><strong>—</strong></button>
@@ -58,16 +57,21 @@
           <button type="button" data-metric="closed" data-filter="closed"><span>已归档</span><strong>—</strong></button>
           <button type="button" data-metric="failed" data-filter="failed" hidden><span>已中断</span><strong>—</strong></button>
         </div>
-      </aside>
+      </nav>
       <section class="board" aria-labelledby="queue-title">
         <div class="board-head"><div class="queue-heading"><h2 id="queue-title">任务台账</h2><span id="queue-count"></span></div>
-          <div class="desk-actions"><label class="search-field"><i aria-hidden="true" class="ui-glyph ic-search"></i><span class="visually-hidden">搜索任务、提交人或编号</span><input type="search" id="case-search" maxlength="100" placeholder="搜索任务、提交人或编号" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd></label>
+          <div class="desk-actions"><div id="desk-views" class="desk-views" role="group" aria-label="任务视图">
+            <button type="button" data-desk-view="board" aria-pressed="true"><i aria-hidden="true" class="ui-glyph ic-layout-sidebar-inset-reverse"></i>建议看板</button>
+            <button type="button" data-desk-view="list" aria-pressed="false"><i aria-hidden="true" class="ui-glyph ic-card-checklist"></i>台账</button>
+          </div><label class="search-field"><i aria-hidden="true" class="ui-glyph ic-search"></i><span class="visually-hidden">搜索任务、提交人或编号</span><input type="search" id="case-search" maxlength="100" placeholder="搜索任务、提交人或编号" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd></label>
             <details class="desk-filters" id="desk-filters"><summary><i aria-hidden="true" class="ui-glyph ic-sliders2"></i>筛选<span id="filter-count" hidden></span></summary>
               <div class="selects"><label>审计范围<select id="desk-profile" aria-label="审计范围"><option value="">全部范围</option><option value="cn-procurement-full-settlement/v1">采购与付款</option><option value="cn-contract-performance/v1">合同履约与分期</option><option value="cn-travel-reimbursement/v1">差旅报销</option><option value="cn-bank-contract-payment/v1">付款回单核对</option></select></label>
               <label>排序<select id="desk-sort" aria-label="排序"><option value="updated">最近更新</option><option value="created">最近提交</option></select></label><button type="button" id="reset-filters">恢复默认</button></div>
             </details></div>
         </div>
-        <div id="case-list" aria-live="polite"></div>
+        <div id="verdict-filter" hidden></div>
+        <p class="visually-hidden" id="desk-announcement" role="status"></p>
+        <div id="case-list"></div>
         <div class="pager" id="desk-pager"></div>
       </section>
       </div>

@@ -4,7 +4,7 @@
 
 | 要核对什么 | 查阅入口 |
 | --- | --- |
-| 六款软件的页面标题、原始链接、可见操作和国内工作台用法 | [产品界面调研](product-research.md) |
+| 七款软件的原始链接、可见操作和国内工作台用法，包括 Karbon 看板和 Fieldguide 侧栏 | [产品界面调研](product-research.md) |
 | Ramp、Xero、Fieldguide 与 FloQast 怎样用颜色区分操作、选择和风险 | [官方截图的配色观察](interface-color.md) |
 | 本工程采用的研究方法、法规条款、外部软件及字体来源 | [文献、制度与技术来源](project-sources.md) |
 | 首页的合同金额、柜温、分期条件及三份水印 PDF 的逐字节摘要 | [合成资料声明与 R7 底稿字段](showcase-provenance.md) |

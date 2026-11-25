@@ -43,6 +43,11 @@ export async function checkProduct({root,call,evaluate,wait}) {
   assert.equal(await evaluate('performance.getEntriesByType("resource").some(r=>new URL(r.name).pathname.startsWith("/api/"))'),false);
   assert.equal((await fetch(root+'/showcase/other.pdf')).status,404);
   const primary = await checkTextContrast(evaluate,'.hero-actions .button');
+  for (const [selector,surface] of [
+    ['#temperature-readings dl > :first-child small','#sheet-acceptance'],
+    ['#temperature-readings dl > :last-child small','#sheet-acceptance'],
+    ['.total strong','.total'],['.dial-share','.dial-share'],['.dial-label','.dial-label']
+  ]) await checkTextContrast(evaluate,selector,surface);
   const readingSwitch = '.reading-switch';
   assert.ok(await evaluate('!document.querySelector(".reading-switch").hidden && !document.querySelector("#temperature-readings").hidden'));
   assert.deepEqual(await evaluate('[...document.querySelectorAll("#temperature-readings dd a")].map(a=>[a.textContent.trim(),a.pathname])'),
@@ -111,6 +116,17 @@ export async function checkProduct({root,call,evaluate,wait}) {
     await evaluate('document.querySelectorAll(".phase summary")['+index+'].click()');
     assert.equal(await evaluate('document.querySelectorAll(".phase[open]").length'),1);
     assert.ok(await evaluate('!!document.querySelector(".phase[open] .phase-detail a").getClientRects().length'));
+    await wait('document.querySelector(".dial-share").textContent==='+JSON.stringify(['30%','60%','10%'][index]),'contract share follows selected installment');
+  }
+  await evaluate(select('.phase-dial')+'.focus()');
+  await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Home',code:'Home'});
+  assert.equal(await evaluate('document.querySelector(".phase[open] .phase-name").textContent'),'生效预付款');
+  await evaluate(select('.phase-dial')+'.click()');
+  assert.equal(await evaluate('document.querySelector(".phase[open] .phase-name").textContent'),'终验款');
+  if (process.env.AUDIT_UI_SHOTS) {
+    await call('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+    await evaluate('document.querySelector("#payments").scrollIntoView()');
+    await capture(call,'installment-dial-1440');
   }
   await evaluate(select('.hero-actions a')+'.click()');
   if (mode==='saas') {
@@ -177,11 +193,40 @@ export async function checkReviewDesign({root,call,evaluate,wait}, caseId) {
   assert.ok(await evaluate('[...document.querySelectorAll(".case-link")].every(a=>a.getAttribute("aria-label")?.startsWith("合成演练 · "))'));
   await evaluate('document.activeElement.blur()');
   await evaluate('Promise.all(document.getAnimations().filter(a=>a.effect.getTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{}))).then(()=>true)');
-  for (const width of [1440,390]) {
+  const board=await (await fetch(root+'/api/inbox?view=board&q='+encodeURIComponent('合成演练'))).json();
+  const buckets=Object.entries(board.lanes).filter(([id,lane])=>id!=='pending' || lane.total);
+  for (const [id,lane] of buckets) {
+    const selector=selectLane(id);
+    assert.equal(await evaluate(selector+'.querySelector(".lane-heading strong").textContent'),lane.total.toLocaleString('zh-CN'));
+    assert.deepEqual(await evaluate('[...'+selector+'.querySelectorAll("[data-case-id]")].map(x=>x.dataset.caseId)'),lane.cases.map(c=>c.id));
+    assert.deepEqual(await evaluate('[...'+selector+'.querySelectorAll("[data-case-id]")].map(x=>new URL(x.href).searchParams.get("rev"))'),
+      lane.cases.map(c=>c.rev>0?String(c.rev):null));
+  }
+  function selectLane(id) { return 'document.querySelector("#lane-'+id+'")'; }
+  for (const width of [1440,1024,820,768,390,320]) {
     await call('Emulation.setDeviceMetricsOverride',{width,height:width===390?844:900,deviceScaleFactor:1,mobile:width<600});
     await evaluate('scrollTo(0,0)');
-    await capture(call,'desk-'+width);
+    assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),'verdict board at '+width);
+    if (width<600) {
+      for (const id of ['pass','review','reject']) {
+        await evaluate('document.querySelector("[data-lane-choice='+id+']").click()');
+        assert.equal(await evaluate('[...document.querySelectorAll(".verdict-lane")].filter(n=>n.getClientRects().length).map(n=>n.id).join()'),'lane-'+id);
+      }
+    }
+    if (width===1440 || width===390) await capture(call,'desk-'+width);
   }
+  const bucket=buckets.find(([,lane])=>lane.total>3);
+  assert.ok(bucket);
+  await evaluate('document.querySelector("[data-lane-choice='+bucket[0]+']").click();document.querySelector("[data-more-lane='+bucket[0]+']").click()');
+  await wait('!!document.querySelector(".verdict-chip") && !!document.querySelector(".ledger-header")','board to filtered ledger');
+  assert.equal(await evaluate('document.querySelector("#queue-count").textContent'),bucket[1].total.toLocaleString('zh-CN')+' 项');
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".ledger-row [data-case-id]")].slice(0,3).map(n=>n.dataset.caseId)'),bucket[1].cases.map(c=>c.id));
+  await evaluate('document.querySelector(".verdict-chip").click()');
+  await wait('document.querySelector("#queue-count").textContent==='+JSON.stringify(board.total.toLocaleString('zh-CN')+' 项')+' && document.querySelector("#verdict-filter").hidden','remove recommendation filter');
+  await call('Page.reload');
+  await wait('!!document.querySelector(".ledger-header") && document.querySelector("[data-desk-view=list]").getAttribute("aria-pressed")==="true"','preferred view on reload');
+  await evaluate('document.querySelector("[data-desk-view=board]").click()');
+  await wait('!!document.querySelector(".verdict-board")','restore grouped view');
   await evaluate('document.querySelector("[data-metric=attention]").click()');
   await wait('document.querySelector("#queue-title").textContent==="有疑点待验收" && document.querySelector("[data-metric=attention]").getAttribute("aria-pressed")==="true"','scoped attention queue');
   await evaluate('document.querySelector("[data-metric=all]").click();document.querySelector("#case-search").value='+JSON.stringify(task.title)+';document.querySelector("#case-search").dispatchEvent(new Event("input"))');

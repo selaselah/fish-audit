@@ -1,6 +1,12 @@
-# 六款审计与会计软件的公开界面
+# 审计与会计软件的公开界面
 
 每项记录给出厂商原页、查看位置和查阅日。「画面」来自公开截图或动图，「操作说明」来自对应的帮助正文。「本地用法」说明国内中小企业的采购员、会计或复核人可以如何处理一笔业务。观察范围限于这些公开资料。
+
+## Karbon · 工作清单与看板
+
+Karbon 的客户入职指南末页展示了事务所的容量看板。桌面按负责人分列，列头标件数，卡上保留任务名称与流程状态。其 2026-11-23 发布说明还介绍了工作清单和看板中的筛选标签。Fieldguide 的请求清单支持分组，点一条任务可在侧栏核对详情。查阅日期为 2026-11-25。[Karbon 指南末页的看板](https://assets.ctfassets.net/2wd1w7hp7waa/3iNm7OuDbSMWsHkMfu4xjd/05872a25e95083b64d1abb8ece37f998/The_Definitive_Guide_to_Client_Onboarding_by_Karbon.pdf) · [Karbon 发布说明](https://karbonhq.com/en-GB/release-notes/nov-23-2026/) · [Fieldguide 请求管理](https://help.fieldguide.io/en/articles/7207259-managing-requests)
+
+Fish Audit 在同一检索范围下提供建议看板与任务台账。卡片据底稿分组，点列底可以逐页查看全部命中项。卡片保留底稿版本和人工处理状态。切换视图、分组或速览均为读取操作，签收须在底稿上登记意见。[看板实拍与交互](../docs/interaction-design/README.md#任务队列与资料提交)
 
 ## DataSnipper · 底稿单元格如何指向证据
 

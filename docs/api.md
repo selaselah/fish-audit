@@ -5,9 +5,15 @@
 | 路径 | 内容 |
 | --- | --- |
 | `GET /` | 产品首页，浏览固定合成采购的合同、验收和回单，逐期查看付款条件。首页加载的字体、图像和演示均由同源提供。 |
-| `GET /app` | 工作台。本机模式打开台账，企业模式根据会话进入登录页或所属工作区。 |
+| `GET /app` | 工作台。本机审计员首次进入打开建议看板。企业模式根据会话进入登录页或所属工作区。 |
 | `GET /showcase/{filename}` | 首页的三份合成原件，文件名为 `contract.pdf`、`acceptance.pdf`、`transfer.pdf`。可按资料索引复核 R7 案例的文件摘要。 |
 | `GET /workpaper/{id}`、`GET /w/{wid}/workpaper/{id}` | 校验版本及引文、发现参数，转入 `/app` 的相应底稿。旧的根路径片段书签和邀请链接在浏览器中转入相同工作区。 |
+
+## 签约权限与合同原文
+
+从规则版 `2026.11.25.22` 起，`policy.delegation_checks` 为 `written-contract-mandate-v4`。H01 的 `delegations[].limits` 记录逐条限制的 `field_ref`、`kind`、`status` 和可核对的 `comparison_ref`。比较两端均位于本条发现的取证范围内。委托书文字原页的 `text_only` 标记用于识别可能另含影像附注的页面。
+
+禁止预付且分期原文明确仅以合同生效为支付条件时提示签约风险。比对签约上限须有同一合同的含税总价、明确的人民币元及可定位的完整原行。超过上限提示风险，多个额度冲突、要求另行批准、金额口径不明或授权日期断字均留给审计人员核实。底稿保留已有的交付和实测结论。旧版仍可复算，旧版曾认可的含限制授权须经现行程序核对后才能据以签收。[水印案例与验证结果](acceptance.md#2026-11-25--合同签约权限的四笔演练)
 
 ## 整改完成依据
 
@@ -248,7 +254,8 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 
 | 路径 | 参数与返回 |
 | --- | --- |
-| `GET /inbox` | `q`、`profile`、`sort=updated/created`、`status=all/ready/active/attention/in_review/closed/failed`、`page`。返回 `cases`、`counts`、总数及页数 |
+| `GET /inbox` | `q`、`profile`、`sort=updated/created`、`status=all/ready/active/attention/in_review/closed/failed`。默认 `view=list` 支持 `page` 和可选 `verdict=reject/review/pass/pending`，返回任务、队列计数、总数及页数。 |
+| `GET /inbox?view=board` | 返回 `counts`、`total` 和四个 `lanes`。每组含完整命中数 `total` 和按所选顺序排在最前的至多三项 `cases`，来自同一数据库读事务。取某组的完整台账时沿用检索条件并设置 `view=list&verdict=组名`。 |
 | `GET /evidence` | `q`、`status=verified/pending/all`、`page`。返回本企业最新版本中命中的原文、证据编号、任务、文件、页码、核验状态及版本。需审计或管理权限 |
 
 版本引用可使用 `/w/{企业编号}/workpaper/{任务编号}?rev=版本&fact=证据编号`，本机使用 `/workpaper/{任务编号}`。浏览器会进入对应工作区和原页，服务端按登录账号核验资料访问权限。
