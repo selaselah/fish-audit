@@ -901,7 +901,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
     if version == FORMAT and register is not None and inspection_register.apply(accepted, register, graph):
         accepted_on = None
     if version == FORMAT and graph.get("reinspection_wait_sources"):
-        timing = reinspection_wait.assess(graph["reinspection_wait_sources"], accepted, contract.unit)
+        timing = reinspection_wait.assess(graph["reinspection_wait_sources"], accepted, contract.unit, graph)
         if timing and reinspection_wait.apply(accepted, timing):
             accepted_on = None
     if payment_change and not scoped_change:

@@ -41,7 +41,7 @@ def materials(seed, mode):
     return folder, records
 
 
-def review_printed(cid, folder, records, case_title, extra_fields):
+def review_printed(cid, folder, records, case_title, extra_fields, *, exact_fields=()):
     case = get("/api/cases/" + cid)
     assert case["title"] == "合成演练 · " + case_title and not case["decisions"]
     report = wait(cid)
@@ -52,7 +52,7 @@ def review_printed(cid, folder, records, case_title, extra_fields):
         page, = prepare(source, 1, save_images=False)
         assert nodes[doc["id"] + "/p1"]["sha256"] == page["sha256"] and normalize(WATERMARK) in normalize(page["text"])
     # Preserve the distinct additional rows as printed observations. The procedure reads the whole page independently.
-    reconcile_training_pages(cid, folder, records, case_titles=[case_title], row_spacing=25, field_labels=extra_fields)
+    reconcile_training_pages(cid, folder, records, case_titles=[case_title], row_spacing=25, field_labels=extra_fields, exact_fields=exact_fields)
     return check_training_watermark(cid, folder, records, confirm_printed_records(cid, folder, records))
 
 

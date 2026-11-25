@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## 设备试运行
+
+规则 `2026.11.26.09` 使用 `policy.reinspection_wait=contract-reinspection-wait-v2`。归档的 v1 继续按原版本核验。v2 在有明确连续试运行条款时同时读取初验原页。设备、数量、复验签认、区间口径及运行原行通过已有的 `reinspection_time_basis` 边定位。原页有字而模型漏录的日志行仍进入核查。
+
+H02 的 `reinspection.timing.operation` 记录合同设备 `serial`、日志设备 `log_serial`、依据 `sources`、逐段 `intervals` 和最长连续无异常时长 `longest_seconds`。信息不足时数值为 null。区间按北京时间表达，每个区间有原行 `ref`、`start`、`end`、`seconds` 和 `normal` 或 `fault` 状态。计算所得 `gaps` 分别引用两端的 `before_ref` 和 `after_ref`。试运行达到要求、缺段、故障分别为 `run_met`、`run_gap`、`run_fault`。其他待核原因包括 `run_device`、`run_record`、`run_short`、`run_overlap` 和 `run_window`。只有已建立归属和时间基础的程序才给出连续时长。固定版本入口为 `/workpaper/<case_id>?rev=<rev>&view=trial`，企业空间使用原有企业前缀和鉴权。
+
 ## 合同复验间隔
 
 规则 `2026.11.26.08` 以 `policy.reinspection_wait=contract-reinspection-wait-v1` 标记本项程序。`graph.reinspection_wait_sources` 记录合同、变更、整改、复验的审查页和引文，包括文件及页图摘要、物理行号、事实引用和记时精度。页节点通过 `reinspection_time_basis` 连接到 `reinspection_time_line`。模型漏录的印刷行也能生成可定位的引文。未触发本项核对时，页和引文集合为空。

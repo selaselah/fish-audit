@@ -6,11 +6,14 @@ import unicodedata
 from collections import defaultdict
 from datetime import datetime, timedelta
 
+import trial_run
 from delegation import is_page_marker
 
 
-FORMAT = "contract-reinspection-wait-v1"
+LEGACY = "contract-reinspection-wait-v1"
+FORMAT = "contract-reinspection-wait-v2"
 SINCE = "2026.11.26.08"
+LOG_SINCE = "2026.11.26.09"
 HEADINGS = {"整改复验条件", "复验间隔", "最低复验间隔", "复验前提", "复验时间要求", "复验条件", "试运行要求"}
 HINT = re.compile(r"复验.{0,28}(?:间隔|小时|试运行)|(?:间隔|小时|试运行).{0,28}复验|等待期")
 MINIMUM = re.compile(
@@ -125,7 +128,7 @@ def standard_contract_line(raw, facts):
     return False
 
 
-def sources(graph, read_text):
+def sources(graph, read_text, version=FORMAT):
     roles = {
         unit: kind
         for kind in ("contract", "contract_addendum", "remediation", "reinspection")
@@ -138,12 +141,15 @@ def sources(graph, read_text):
         unit = f.get("unit", f["doc"])
         if unit in receipts and f["field"] in ("original_acceptance", "repair_number", "defect_closure"):
             roles[unit] = "reinspection"
-    empty = {"format": FORMAT, "pages": [], "lines": []}
+    empty = {"format": version, "pages": [], "lines": []}
     if not {"remediation", "reinspection"}.intersection(roles.values()):
         return empty
+    if version == FORMAT:
+        for unit in receipts:
+            roles.setdefault(unit, "original")
     sections = {(d["source"], d["page"]): d["id"] for d in graph.get("audit_documents", []) if "source" in d}
     docs = {d["id"]: d for d in graph["documents"]}
-    pages, lines, extra = [], [], []
+    pages, lines, extra, operating = [], [], [], []
     for page in graph["nodes"]:
         if page["type"] != "page":
             continue
@@ -169,9 +175,15 @@ def sources(graph, read_text):
         def observe(raw, line, observations):
             if is_page_marker(raw):
                 return
-            detail = classify(role, raw)
-            if not detail and (role != "contract" or standard_contract_line(raw, observations)):
-                return
+            detail = classify(role, raw) if role != "original" else None
+            target = lines
+            if not detail:
+                if role == "contract" and not standard_contract_line(raw, observations):
+                    detail, target = {"kind": "qualification"}, extra
+                elif version == FORMAT:
+                    detail, target = trial_run.classify(role, *parts(raw)), operating
+                if not detail:
+                    return
             refs = [f["id"] for f in observations]
             address = f"{page['id']}/l{line}" if line else refs[0]
             entry = {
@@ -187,9 +199,9 @@ def sources(graph, read_text):
                     and page.get("clause_text_only") is True
                     and all(f["status"] != "disputed" for f in observations)
                 ),
-                **(detail or {"kind": "qualification"}),
+                **detail,
             }
-            (lines if detail else extra).append(entry)
+            target.append(entry)
 
         for f in facts[doc, number]:
             loc = f.get("source_line") or {}
@@ -202,8 +214,11 @@ def sources(graph, read_text):
                 and loc["text"] == physical[n - 1]
             ):
                 located[n].append(f)
-                if unicodedata.normalize("NFKC", f["quote"]) == unicodedata.normalize(
-                    "NFKC", physical[n - 1]
+                if (
+                    unicodedata.normalize("NFKC", f["quote"])
+                    == unicodedata.normalize("NFKC", physical[n - 1])
+                    or version == FORMAT
+                    and trial_run.same_printed_subject(f, physical[n - 1])
                 ):
                     continue
             if f["quote"] not in physical or f["status"] == "disputed":
@@ -215,7 +230,12 @@ def sources(graph, read_text):
     )
     if not opaque and not any(r["kind"] in ("minimum", "operation", "term_unclear") for r in lines):
         return empty
-    return {"format": FORMAT, "pages": pages, "lines": [*lines, *extra]}
+    operation = any(r["kind"] == "operation" for r in lines)
+    return {
+        "format": version,
+        "pages": [p for p in pages if operation or p["role"] != "original"],
+        "lines": [*lines, *extra, *(operating if operation else [])],
+    }
 
 
 def source_graph(ledger):
@@ -246,14 +266,20 @@ def event_lines(ledger, unit, kind):
     }
 
 
-def assess(ledger, finding, contract):
+def assess(ledger, finding, contract, graph=None):
     chain = finding.get("reinspection")
     if not chain or not ledger["pages"]:
         return None
-    terms = [r for r in ledger["lines"] if r["role"] in ("contract", "contract_addendum")]
+    terms = [
+        r
+        for r in ledger["lines"]
+        if r["role"] in ("contract", "contract_addendum") and not r["kind"].startswith("run_")
+    ]
     steps = chain["steps"]
     units = {s["unit"] for s in steps}
-    lines = [r for r in ledger["lines"] if r in terms or r["unit"] in units]
+    lines = [
+        r for r in ledger["lines"] if r["role"] in ("contract", "contract_addendum") or r["unit"] in units
+    ]
     refs = list(
         dict.fromkeys(ref for r in lines for ref in [r["id"], f"{r['doc']}/p{r['page']}", *r["facts"]])
     )
@@ -359,6 +385,12 @@ def assess(ledger, finding, contract):
             )
         )
     if term["kind"] == "operation":
+        if graph is not None and ledger["format"] == FORMAT:
+            run = trial_run.assess(
+                lines, steps, contract, graph, fix, start[0] if start else None, term["hours"]
+            )
+            if run:
+                return {**result, **run}
         return outcome(
             "operation_pending", "missing", "合同要求连续试运行并无异常，须取得覆盖该时段的运行记录和结果。"
         )
@@ -407,14 +439,17 @@ def verify(report, read_text, *, signing=False):
                 if f["rule"] == "H02" and f["status"] == "ok" and f.get("reinspection"):
                     contracts = graph["documents_by_kind"].get("contract", [])
                     check = assess(
-                        sources(graph, read_text), f, contracts[0] if len(contracts) == 1 else None
+                        sources(graph, read_text, LEGACY), f, contracts[0] if len(contracts) == 1 else None
                     )
                     if check and check["status"] != "ok":
                         raise ValueError("旧版复验结论尚未核清合同等待期或试运行条件，请重新审计后签收。")
         return
-    ledger = sources(graph, read_text)
+    expected = FORMAT if policy.get("version", "") >= LOG_SINCE else LEGACY
+    ledger = sources(graph, read_text, expected)
     if (
-        marker != FORMAT
+        marker != expected
+        or marker == LEGACY
+        and "trial_run.py" in policy.get("code_sha256", {})
         or policy.get("version", "") < SINCE
         or graph.get("reinspection_wait_sources") != ledger
         or (nodes, edges) != source_graph(ledger)

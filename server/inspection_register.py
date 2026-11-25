@@ -11,6 +11,7 @@ from delivery_batches import identifier, serials
 from equipment_models import valid_code
 from reinspection import FINAL, LINK_KEYS
 from reinspection_wait import event_lines
+from trial_run import log_positions
 
 
 SINCE = "2026.11.26.07"
@@ -115,6 +116,7 @@ def assess(finding, register, graph):
     pages = [p for p in register["pages"] if p["unit"] in final_units]
     waiting = graph.get("reinspection_wait_sources", {})
     delegated = set().union(*(event_lines(waiting, unit, "started") for unit in final_units))
+    delegated.update(log_positions(waiting, final_units))
     lines = [dict(row) for row in register["lines"] if row["unit"] in final_units and
              not (row["kind"] == "unreviewed" and (row["doc"], row["page"], row["line"], row["quote"]) in delegated)]
     # Only the defect in the already substantiated chain can explain a second printed closure entry.
