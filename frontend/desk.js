@@ -1,5 +1,6 @@
 const Desk = {
   page: 1, libraryPage: 1, search: '', status: 'verified', fingerprint: '', debounce: 0,
+  previewRequest: null,
   tenantPath(resource) { return (Team.current ? '/api/w/'+Team.current.id : '/api')+'/'+resource; },
   reset() {
     this.page = 1; this.libraryPage = 1; this.search = ''; this.status = 'verified'; this.fingerprint = '';
@@ -7,6 +8,9 @@ const Desk = {
     state.filter = 'all';
     for (const id of ['case-search','library-query','desk-profile']) $('#'+id).value = '';
     $('#desk-sort').value='updated'; $('#library-status').value='verified';
+    $('#desk-filters').open = false;
+    this.updateFilterBadge();
+    if ($('#case-preview').open) $('#case-preview').close();
     for (const id of ['library-results','library-pager','desk-pager','case-list']) $('#'+id).replaceChildren();
     for (const n of document.querySelectorAll('[data-metric] strong')) n.textContent = '—';
     $('#queue-count').textContent = '';
@@ -24,6 +28,99 @@ const Desk = {
     }
   },
   filter(status) { state.filter = status; this.page=1; this.fingerprint=''; refresh(); },
+  updateFilterBadge() {
+    const count = Number(Boolean($('#desk-profile').value)) + Number($('#desk-sort').value!=='updated');
+    $('#filter-count').hidden = count===0;
+    $('#filter-count').textContent = String(count);
+  },
+  async peek(row) {
+    const dialog = $('#case-preview');
+    const content = $('#preview-body');
+    const footer = $('#preview-action');
+    this.previewRequest?.abort();
+    const request = new AbortController();
+    this.previewRequest = request;
+    const path = Team.cases()+'/'+row.id;
+    const current = () => !request.signal.aborted && dialog.open && path===Team.cases()+'/'+row.id;
+    dialog.dataset.caseId = row.id;
+    $('#preview-title').textContent = row.title;
+    content.replaceChildren(el('p','正在读取任务…','muted'));
+    footer.replaceChildren(); dialog.showModal();
+    try {
+      let task = await api(path,{signal:request.signal});
+      if (!current()) return;
+      const open = Team.paperLink('打开任务',task.id,'button preview-open');
+      footer.replaceChildren(open);
+      const meta = box('preview-meta',tag(task.status),el('span',profileName(task.profile)),el('span',time(task.updated)));
+      const files = el('ul','','preview-files');
+      const pageCounts = new Map();
+      for (const doc of task.documents) {
+        const pages=el('small');
+        pageCounts.set(doc.id,pages);
+        const file=el('li');
+        file.append(glyph('file-earmark-text'),el('span',doc.name),pages); files.append(file);
+      }
+      function updatePages() {
+        for (const doc of task.documents) {
+          const count=doc.pages ? doc.pages+' 页' : '待分页';
+          const label=pageCounts.get(doc.id);
+          if (label && label.textContent!==count) label.textContent=count;
+        }
+      }
+      updatePages();
+      const sources = box('preview-section',el('h3','原始资料 · '+task.documents.length+' 份'),files);
+      content.replaceChildren(meta,sources);
+      const processing = () => ['queued','running'].includes(task.status);
+      if (processing()) {
+        const meter=el('progress'); meter.max=100; meter.setAttribute('aria-label','审计任务进度');
+        const heading=el('h3'), message=el('p','','muted');
+        const progress=box('preview-section',heading,meter,message);
+        content.insertBefore(progress,sources);
+        while (processing()) {
+          const text=statusName(task.stage)+' · '+task.progress+'%';
+          if (heading.textContent!==text) heading.textContent=text;
+          if (message.textContent!==task.message) message.textContent=task.message;
+          if (!meter.hasAttribute('value') || meter.value!==task.progress) meter.value=task.progress;
+          await new Promise(resolve=>setTimeout(resolve,1600));
+          if (!current()) return;
+          task=await api(path,{signal:request.signal});
+          if (!current()) return;
+          updatePages();
+          if (meta.firstChild.dataset.state!==task.status) meta.firstChild.replaceWith(tag(task.status));
+          const updated=time(task.updated);
+          if (meta.lastChild.textContent!==updated) meta.lastChild.textContent=updated;
+        }
+        progress.remove();
+      }
+      if (!(task.can_review && task.rev>0)) {
+        content.insertBefore(el('p',task.message,'muted'),sources); return;
+      }
+      const pinned=Team.paperLink('打开 R'+task.rev+' 底稿',task.id,'button preview-open',new URLSearchParams({rev:String(task.rev)}));
+      const hadFocus=document.activeElement===open;
+      footer.replaceChildren(pinned);
+      if (hadFocus) pinned.focus();
+      const loading=el('p','正在读取 R'+task.rev+' 审计建议…','muted');
+      content.insertBefore(loading,sources);
+      const {report} = await api(path+'/reports/'+task.rev,{signal:request.signal});
+      if (!current()) return;
+      loading.remove();
+      const result=box('preview-section',el('h3','审计建议'),box('preview-verdict',tag(report.result.verdict),el('span',humanReviewLabel(report.result),'small')));
+      const signed=task.decisions.find(d=>d.rev===task.rev);
+      if (signed) result.append(el('p','人工决定 · '+statusName(signed.decision),'small'));
+      const priorities=priorityFindings(report.findings);
+      for (const item of priorities.slice(0,3)) {
+        const target=Team.paperLink(item.stage ? item.stage.name+' · '+item.title : item.title,task.id,'preview-finding',
+          new URLSearchParams({rev:String(task.rev),finding:item.id}));
+        target.append(tag(item.status)); result.append(target);
+      }
+      content.insertBefore(result,sources);
+    } catch (error) {
+      if (!current()) return;
+      const message=el('p',error.message,'note'); message.setAttribute('role','alert');
+      content.replaceChildren(message);
+      if ([401,403,404].includes(error.status)) footer.replaceChildren();
+    }
+  },
   async load(epoch) {
     const params = new URLSearchParams({q:$('#case-search').value.trim(), profile:$('#desk-profile').value,
       sort:$('#desk-sort').value, page:String(this.page), status:state.filter});
@@ -65,10 +162,36 @@ const Desk = {
     this.pager('library-pager',data,page=>{this.libraryPage=page; refresh();},'条引文');
   },
   bind() {
+    const icons = {all:'inboxes',active:'clock-history',ready:'clipboard-check',attention:'exclamation-diamond',
+      in_review:'layers',closed:'folder2-open',failed:'exclamation-triangle'};
+    for (const button of document.querySelectorAll('[data-metric]')) button.querySelector('span').prepend(glyph(icons[button.dataset.metric]));
+    const options=$('#desk-filters');
+    const update=()=>{this.page=1; this.updateFilterBadge(); refresh();};
+    $('#reset-filters').addEventListener('click',()=>{
+      $('#desk-profile').value=''; $('#desk-sort').value='updated'; update();
+      options.open=false; options.querySelector('summary').focus();
+    });
+    document.addEventListener('pointerdown',event=>{if (options.open && !options.contains(event.target)) options.open=false;});
+    document.addEventListener('keydown',event=>{
+      if ($('#desk').hidden || document.querySelector('dialog[open]') || event.isComposing) return;
+      if (event.key==='Escape' && options.open) { options.open=false; options.querySelector('summary').focus(); return; }
+      if (event.key==='/' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.target.closest('input,select,textarea,[contenteditable=true]')) {
+        event.preventDefault(); $('#case-search').focus();
+      }
+    });
+    $('#case-preview').addEventListener('close',()=>{
+      if ($('#case-preview').open) return;
+      this.previewRequest?.abort();
+      $('#preview-title').textContent=''; $('#preview-body').replaceChildren(); $('#preview-action').replaceChildren();
+      if (!$('#desk').hidden && Team.route().page==='desk' && document.activeElement===document.body) {
+        const key=$('#case-preview').dataset.caseId;
+        (document.querySelector('[data-preview-case="'+CSS.escape(key)+'"]') || $('#case-search')).focus();
+      }
+    });
     $('#case-search').addEventListener('input',()=>{
       clearTimeout(this.debounce); this.debounce=setTimeout(()=>{this.page=1;refresh();},200);
     });
-    for (const id of ['desk-sort','desk-profile']) $('#'+id).addEventListener('change',()=>{this.page=1;refresh();});
+    for (const id of ['desk-sort','desk-profile']) $('#'+id).addEventListener('change',update);
     for (const button of document.querySelectorAll('[data-metric],[data-filter]')) {
       button.addEventListener('click',()=>this.filter(button.dataset.filter || button.dataset.metric));
     }

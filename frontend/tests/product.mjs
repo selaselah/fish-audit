@@ -43,6 +43,13 @@ export async function checkProduct({root,call,evaluate,wait}) {
   assert.equal(await evaluate('performance.getEntriesByType("resource").some(r=>new URL(r.name).pathname.startsWith("/api/"))'),false);
   assert.equal((await fetch(root+'/showcase/other.pdf')).status,404);
   const primary = await checkTextContrast(evaluate,'.hero-actions .button');
+  const readingSwitch = '.reading-switch';
+  assert.ok(await evaluate('!document.querySelector(".reading-switch").hidden && !document.querySelector("#temperature-readings").hidden'));
+  assert.deepEqual(await evaluate('[...document.querySelectorAll("#temperature-readings dd a")].map(a=>[a.textContent.trim(),a.pathname])'),
+    [['≤ 4 ℃','/showcase/contract.pdf'],['8 ℃','/showcase/acceptance.pdf']]);
+  await evaluate(select(readingSwitch+' [aria-controls=acceptance-excerpt]')+'.click()');
+  assert.ok(await evaluate('!document.querySelector("#acceptance-excerpt").hidden && document.querySelector("#temperature-readings").hidden'));
+  assert.equal(await evaluate(select(readingSwitch+' [aria-controls=acceptance-excerpt]')+'.getAttribute("aria-pressed")'),'true');
   const findingInks = new Set();
   for (const [name,expected] of Object.entries(digests)) {
     await evaluate(select('#tab-'+name)+'.click()');
@@ -52,7 +59,7 @@ export async function checkProduct({root,call,evaluate,wait}) {
     const marked='#sheet-'+name+' .marked';
     findingInks.add((await checkTextContrast(evaluate,marked+' dd',marked)).ink);
     await checkTextContrast(evaluate,'#tab-'+name);
-    const source = await evaluate(panel+'.querySelector("a").href');
+    const source = await evaluate(panel+'.querySelector(".evidence-note a").href');
     const pdf = await fetch(source);
     assert.equal(pdf.status,200); assert.match(pdf.headers.get('content-type'),/application\/pdf/);
     assert.equal(createHash('sha256').update(Buffer.from(await pdf.arrayBuffer())).digest('hex'),expected);
@@ -62,6 +69,8 @@ export async function checkProduct({root,call,evaluate,wait}) {
   await call('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowRight',code:'ArrowRight'});
   assert.equal(await evaluate('document.activeElement.id'),'tab-acceptance');
   assert.equal(await evaluate(select('#tab-acceptance')+'.getAttribute("aria-selected")'),'true');
+  assert.ok(await evaluate('!document.querySelector("#acceptance-excerpt").hidden'),'changing documents preserves the excerpt view');
+  await evaluate(select(readingSwitch+' [aria-controls=temperature-readings]')+'.click()');
   await call('Input.dispatchKeyEvent',{type:'keyUp',key:'ArrowRight',code:'ArrowRight'});
   await call('Emulation.setEmulatedMedia',{features:[{name:'forced-colors',value:'active'}]});
   assert.equal(await evaluate('getComputedStyle(document.activeElement).textDecorationStyle'),'double');
@@ -116,16 +125,26 @@ export async function checkProduct({root,call,evaluate,wait}) {
 }
 
 export async function checkReviewDesign({root,call,evaluate,wait}, caseId) {
-  const report = (await (await fetch(root+'/api/cases/'+caseId+'/reports/7')).json()).report;
+  const endpoint = root+'/api/cases/'+caseId;
+  const task = await (await fetch(endpoint)).json();
+  const report = (await (await fetch(endpoint+'/reports/7')).json()).report;
   const doc = report.graph.documents.find(d => d.sha256===digests.acceptance);
   assert.ok(doc,'the showcase must use the published watermarked acceptance sheet');
   const fact = report.graph.facts.find(f => f.doc===doc.id && f.field==='measured_result');
   assert.ok(fact.source_line.rects.length);
   await wait('!!document.querySelector(".case-link")','local desk');
+  await call('Input.dispatchKeyEvent',{type:'keyDown',key:'/',code:'Slash'});
+  assert.equal(await evaluate('document.activeElement.id'),'case-search');
+  await call('Input.dispatchKeyEvent',{type:'keyUp',key:'/',code:'Slash'});
+  await evaluate('document.querySelector("#desk-filters summary").click();document.querySelector("#desk-sort").value="created";document.querySelector("#desk-sort").dispatchEvent(new Event("change"))');
+  assert.equal(await evaluate('document.querySelector("#filter-count").innerText'),'1');
+  await evaluate('document.querySelector("#reset-filters").click()');
+  assert.ok(await evaluate('document.querySelector("#filter-count").hidden && !document.querySelector("#desk-filters").open && document.querySelector("#desk-sort").value==="updated"'));
   await evaluate('document.querySelector("#case-search").value="合成演练";document.querySelector("#case-search").dispatchEvent(new Event("input"))');
   const subset = await (await fetch(root+'/api/inbox?'+new URLSearchParams({q:'合成演练',status:'all'}))).json();
   await wait('document.querySelector("[data-metric=all] strong").textContent==='+JSON.stringify(subset.total.toLocaleString('zh-CN')),'synthetic-only queue');
   assert.ok(await evaluate('[...document.querySelectorAll(".case-link")].every(a=>a.getAttribute("aria-label")?.startsWith("合成演练 · "))'));
+  await evaluate('document.activeElement.blur()');
   await evaluate('Promise.all(document.getAnimations().filter(a=>a.effect.getTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{}))).then(()=>true)');
   for (const width of [1440,390]) {
     await call('Emulation.setDeviceMetricsOverride',{width,height:width===390?844:900,deviceScaleFactor:1,mobile:width<600});
@@ -134,6 +153,61 @@ export async function checkReviewDesign({root,call,evaluate,wait}, caseId) {
   }
   await evaluate('document.querySelector("[data-metric=attention]").click()');
   await wait('document.querySelector("#queue-title").textContent==="有疑点待验收" && document.querySelector("[data-metric=attention]").getAttribute("aria-pressed")==="true"','scoped attention queue');
+  await evaluate('document.querySelector("[data-metric=all]").click();document.querySelector("#case-search").value='+JSON.stringify(task.title)+';document.querySelector("#case-search").dispatchEvent(new Event("input"))');
+  const peek = 'document.querySelector('+JSON.stringify('[data-preview-case="'+caseId+'"]')+')';
+  await wait('document.querySelectorAll("[data-preview-case]").length===1 && '+peek,'exact case in inbox');
+  await evaluate(peek+'.focus();'+peek+'.click()');
+  await wait('document.querySelector("#case-preview").open && !!document.querySelector(".preview-finding")','pinned findings in preview');
+  assert.equal(await evaluate('document.querySelector("#preview-title").textContent'),task.title);
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".preview-files li span")].map(n=>n.textContent)'),task.documents.map(d=>d.name));
+  assert.equal(await evaluate('new URL(document.querySelector(".preview-open").href).searchParams.get("rev")'),String(task.rev));
+  const latest = task.rev===7 ? report : (await (await fetch(endpoint+'/reports/'+task.rev)).json()).report;
+  assert.equal(await evaluate('document.querySelector(".preview-verdict .tag").dataset.state'),latest.result.verdict);
+  assert.equal(await evaluate('document.querySelector(".preview-verdict .small").textContent'),latest.result.human_required?'需人工校验':'无专项待核项');
+  const priority = ['issue','risk','missing'].flatMap(s=>latest.findings.filter(f=>f.status===s)).slice(0,3);
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".preview-finding")].map(a=>Array.from(new URL(a.href).searchParams.values()))'),
+    priority.map(f=>[String(task.rev),f.id]));
+  if (process.env.AUDIT_UI_SHOTS) {
+    await call('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
+    await evaluate('Promise.all(document.getAnimations().filter(a=>a.effect.getTiming().iterations!==Infinity).map(a=>a.finished.catch(()=>{}))).then(()=>true)');
+    await capture(call,'preview-drawer-1440');
+    await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+  }
+  await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+  await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+  await wait('!document.querySelector("#case-preview").open && !document.querySelector("#preview-body").childElementCount','dismiss and clear preview');
+  assert.equal(await evaluate('document.activeElement.dataset.previewCase'),caseId);
+  await evaluate(peek+'.click()');
+  await wait('!!document.querySelector(".preview-finding")','reopen preview');
+  await evaluate('document.querySelector(".preview-finding").click()');
+  await wait('!document.querySelector("#case-preview").open && !document.querySelector("#case").hidden && !!document.querySelector("#trace-select")','preview to evidence trail');
+  assert.equal(await evaluate('document.querySelector("#trace-select").value'),priority[0].id);
+  await call('Page.navigate',{url:root+'/workpaper/'+caseId+'?rev=7'});
+  await wait('!!document.querySelector(".finding-disclosure")','condensed R7 workpaper');
+  assert.equal(await evaluate('document.querySelectorAll(".finding-disclosure[open]").length'),0);
+  for (const key of ['all','issue','risk','missing','ok']) {
+    const filtered = key==='all' ? report.findings : report.findings.filter(f=>f.status===key);
+    const control = 'document.querySelector('+JSON.stringify('[data-finding-filter="'+key+'"]')+')';
+    assert.equal(await evaluate(control+'.querySelector("strong").textContent'),String(filtered.length));
+    if (!filtered.length) { assert.equal(await evaluate(control+'.disabled'),true); continue; }
+    await evaluate(control+'.click()');
+    assert.deepEqual(await evaluate('[...document.querySelectorAll(".finding:not([hidden])")].map(r=>r.dataset.finding)'),filtered.map(f=>f.id));
+  }
+  const issue = report.findings.find(f=>f.status==='issue');
+  await evaluate('document.querySelector(".priority-findings button").click()');
+  assert.equal(await evaluate('document.activeElement.dataset.finding'),issue.id);
+  assert.equal(await evaluate('document.activeElement.querySelector(".finding-disclosure[open] .finding-detail").innerText'),issue.detail);
+  assert.equal(await evaluate('document.querySelector("[data-finding-filter=all]").getAttribute("aria-pressed")'),'true');
+  const phases = report.findings.filter(f=>f.rule==='H04' && f.stage);
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".share-strip span")].map(s=>Number(getComputedStyle(s).flexGrow))'),phases.map(f=>Number(f.stage.share)));
+  assert.equal(await evaluate('document.querySelector(".phase-choice[aria-selected=true]").dataset.phaseChoice'),phases.find(f=>f.status!=='ok').id);
+  await evaluate('document.querySelector(".phase-choice[aria-selected=true]").focus()');
+  await call('Input.dispatchKeyEvent',{type:'keyDown',key:'End',code:'End'});
+  await call('Input.dispatchKeyEvent',{type:'keyUp',key:'End',code:'End'});
+  assert.equal(await evaluate('document.activeElement.dataset.phaseChoice'),phases.at(-1).id);
+  assert.deepEqual(await evaluate('[...document.querySelectorAll(".phase-summary li:not([hidden])")].map(row=>row.dataset.phaseFinding)'),[phases.at(-1).id]);
+  await evaluate('document.querySelector(".phase-summary li:not([hidden]) .phase-source").click()');
+  await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(phases.at(-1).stage.clause_ref),'original for selected phase');
   const target = '/workpaper/'+caseId+'?'+new URLSearchParams({rev:7,fact:fact.id});
   for (const width of [1440,390,320]) {
     await call('Emulation.setDeviceMetricsOverride',{width,height:width<600?844:900,deviceScaleFactor:1,mobile:width<600});
@@ -153,6 +227,21 @@ export async function checkReviewDesign({root,call,evaluate,wait}, caseId) {
       assert.equal(await evaluate('document.activeElement.id'),'viewer-facts');
       if (width===390) await capture(call,'viewer-mobile');
     }
+    const other = report.graph.facts.find(f=>f.id!==fact.id && f.doc===doc.id && f.page===fact.page && f.source_line?.rects.length);
+    await evaluate('document.querySelector("[aria-label=放大原页]").click();document.querySelector("[aria-label=放大原页]").click()');
+    assert.equal(await evaluate('document.querySelector(".zoom-scale").textContent'),'150%');
+    assert.ok(await evaluate('const canvas=document.querySelector(".source-scroll");Math.abs(canvas.scrollWidth/canvas.clientWidth-1.5)<.02'),'original zoom width at '+width);
+    await evaluate('const picker=document.querySelector("[aria-label=定位本页引文]");picker.value='+JSON.stringify(other.id)+';picker.dispatchEvent(new Event("change"))');
+    assert.equal(await evaluate('document.activeElement.dataset.fact'),other.id);
+    assert.equal(await evaluate('document.querySelectorAll(".evidence-row.located").length'),1);
+    assert.equal(await evaluate('document.querySelectorAll(".evidence-row[data-fact]:not([hidden])").length'),1);
+    assert.equal(await evaluate('document.querySelectorAll(".image-sheet rect").length'),other.source_line.rects.length);
+    await evaluate('picker.value="";picker.dispatchEvent(new Event("change"))');
+    assert.equal(await evaluate('document.querySelectorAll(".evidence-row[data-fact]:not([hidden])").length'),
+      report.graph.facts.filter(f=>f.doc===doc.id && f.page===fact.page).length);
+    await evaluate('document.querySelector(".zoom-fit").click()');
+    assert.equal(await evaluate('document.querySelector(".zoom-scale").textContent'),'100%');
+    assert.equal(await evaluate('document.querySelector("[aria-label=缩小原页]").disabled'),true);
   }
-  console.log('PASS · synthetic queue, actual counts, desktop source alignment and mobile evidence navigation');
+  console.log('PASS · scoped drawer and exact revision, procedure filters, keyboard-selected installments, original-image zoom and cited fact navigation');
 }

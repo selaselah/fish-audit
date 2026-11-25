@@ -44,7 +44,7 @@
     <section id="team" hidden><div class="heading"><h1>企业成员</h1></div><div id="team-panel"></div></section>
     <section id="desk" hidden>
       <div class="heading"><div><p class="eyebrow" id="workspace-name"></p><h1>审计工作台</h1></div>
-        <button class="primary" id="new-case"><span aria-hidden="true">＋</span> 新建审计</button></div>
+        <button class="primary" id="new-case"><i aria-hidden="true" class="ui-glyph ic-plus-lg"></i> 新建审计</button></div>
       <div class="desk-layout">
       <aside class="queue-column" aria-label="工作队列">
         <div id="desk-metrics" class="queue-menu" role="group" aria-label="当前检索范围内的任务概况">
@@ -60,10 +60,11 @@
       </aside>
       <section class="board" aria-labelledby="queue-title">
         <div class="board-head"><div class="queue-heading"><h2 id="queue-title">任务台账</h2><span id="queue-count"></span></div>
-          <label class="search-field"><span class="visually-hidden">搜索任务、提交人或编号</span><input type="search" id="case-search" maxlength="100" placeholder="搜索任务、提交人或编号"></label>
-        </div>
-        <div class="toolbar"><div class="selects"><label>审计范围<select id="desk-profile" aria-label="审计范围"><option value="">全部范围</option><option value="cn-procurement-full-settlement/v1">采购与付款</option><option value="cn-contract-performance/v1">合同履约与分期</option><option value="cn-travel-reimbursement/v1">差旅报销</option><option value="cn-bank-contract-payment/v1">付款回单核对</option></select></label>
-          <label>排序<select id="desk-sort" aria-label="排序"><option value="updated">最近更新</option><option value="created">最近提交</option></select></label></div>
+          <div class="desk-actions"><label class="search-field"><i aria-hidden="true" class="ui-glyph ic-search"></i><span class="visually-hidden">搜索任务、提交人或编号</span><input type="search" id="case-search" maxlength="100" placeholder="搜索任务、提交人或编号" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd></label>
+            <details class="desk-filters" id="desk-filters"><summary><i aria-hidden="true" class="ui-glyph ic-sliders2"></i>筛选<span id="filter-count" hidden></span></summary>
+              <div class="selects"><label>审计范围<select id="desk-profile" aria-label="审计范围"><option value="">全部范围</option><option value="cn-procurement-full-settlement/v1">采购与付款</option><option value="cn-contract-performance/v1">合同履约与分期</option><option value="cn-travel-reimbursement/v1">差旅报销</option><option value="cn-bank-contract-payment/v1">付款回单核对</option></select></label>
+              <label>排序<select id="desk-sort" aria-label="排序"><option value="updated">最近更新</option><option value="created">最近提交</option></select></label><button type="button" id="reset-filters">恢复默认</button></div>
+            </details></div>
         </div>
         <div id="case-list" aria-live="polite"></div>
         <div class="pager" id="desk-pager"></div>
@@ -87,16 +88,20 @@
       <div class="heading"><div><p class="eyebrow" id="case-meta"></p><h1 id="case-title"></h1></div><span id="case-status"></span></div>
       <div id="progress-panel" class="board progress-panel" aria-live="polite"></div>
       <details id="file-progress" class="panel file-progress" hidden>
-        <summary><strong>逐份资料进度</strong><span id="checkpoint-totals"></span></summary>
+        <summary><strong>逐份资料进度</strong><span class="checkpoint-count"></span><span id="checkpoint-totals"></span></summary>
         <div id="checkpoint-files"></div>
       </details>
       <section id="supplement-family" class="panel" aria-label="补件往来" hidden></section>
       <div id="report-tools" hidden><nav class="tabs" aria-label="底稿视图" id="tabs"></nav>
-        <label class="version">底稿版本 <select id="version"></select></label></div>
+        <label class="version"><span>底稿版本</span> <select id="version"></select></label></div>
       <div id="case-panel"></div>
     </section>
     <p id="network-error" role="alert" hidden></p>
   </main>
+  <dialog id="case-preview" aria-labelledby="preview-title">
+    <div class="preview-head"><span><i aria-hidden="true" class="ui-glyph ic-layout-sidebar-inset-reverse"></i> 任务速览</span><button type="button" data-close aria-label="关闭速览" class="icon-button"><i aria-hidden="true" class="ui-glyph ic-x-lg"></i></button></div>
+    <h2 id="preview-title"></h2><div id="preview-body" aria-live="polite"></div><div id="preview-action"></div>
+  </dialog>
   <dialog id="upload-dialog">
     <form id="upload-form">
       <div class="dialog-head"><h2 id="upload-heading">新建审计</h2><button class="plain" type="button" data-close>关闭</button></div>

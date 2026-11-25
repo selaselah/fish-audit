@@ -38,11 +38,7 @@ function lazyFold(title, build) {
 }
 
 function performanceJump(item,label) {
-  const button = action('', () => {
-    const target = document.querySelector('[data-finding="'+CSS.escape(item.id)+'"]');
-    target?.focus({preventScroll:true});
-    target?.scrollIntoView({block:'start'});
-  }, 'performance-jump');
+  const button = action('', () => revealPaperTarget(document.querySelector('[data-finding="'+CSS.escape(item.id)+'"]')), 'performance-jump');
   button.dataset.jumpFinding = item.id;
   button.setAttribute('aria-label',label+' · '+statusName(item.status)+'，查看依据');
   button.append(el('span',label),tag(item.status));
@@ -69,6 +65,9 @@ function performanceOverview(findings, graph) {
   overview.setAttribute('aria-label','履约结论与期次');
   overview.append(summary);
   const list = el('ol','','phase-summary');
+  list.setAttribute('role','presentation');
+  const choices = box('phase-choices');
+  choices.setAttribute('role','tablist'); choices.setAttribute('aria-label','查看合同各期款项');
   const payments = findings.filter(f=>f.rule==='H05');
   const index = graphIndex(graph);
   const paymentLabel = f => {
@@ -84,18 +83,61 @@ function performanceOverview(findings, graph) {
     const source = fact ? action(heading,()=>openPage(fact.doc,fact.page,fact.id),'phase-source') : el('strong',heading);
     if (fact) source.setAttribute('aria-label',heading+'，查看合同原文');
     const results = box('phase-results',performanceJump(phase,'付款条件'));
-    const matched = payments.filter(f=>f.stage && ['name','clause_ref','clause','share'].every(k=>f.stage[k]===stage[k]));
+    const sameStage = f=>f.stage && ['name','clause_ref','clause','share'].every(k=>f.stage[k]===stage[k]);
+    const matched = payments.filter(sameStage);
     if (matched.length) {
       for (const item of matched) results.append(performanceJump(item,matched.length===1?'实付时点':paymentLabel(item)));
     } else {
       results.append(el('span','未关联回单','phase-unlinked'));
     }
-    const sum=findings.find(f=>f.stage_payments && f.stage?.clause_ref===stage.clause_ref && f.stage?.name===stage.name);
+    const sum=findings.find(f=>f.stage_payments && sameStage(f));
     if (sum) results.append(performanceJump(sum,'本期回单合计'));
     row.append(box('phase-contract',source,el('q',stage.clause)),results);
+    row.id = 'phase-record-'+phase.id;
+    row.setAttribute('role','tabpanel');
+    const choice = el('button','','phase-choice');
+    choice.type = 'button';
+    choice.id = 'phase-choice-'+phase.id;
+    choice.dataset.phaseChoice = phase.id;
+    choice.dataset.state = phase.status;
+    choice.setAttribute('role','tab'); choice.setAttribute('aria-controls',row.id);
+    choice.setAttribute('aria-label',heading+'，'+statusName(phase.status));
+    choice.append(el('span',stage.name),el('strong',stage.share ? stage.share+'%' : '比例待核'),tag(phase.status));
+    row.setAttribute('aria-labelledby',choice.id);
+    choices.append(choice);
     list.append(row);
   }
-  if (phases.length) overview.append(list);
+  if (phases.length) {
+    const buttons = [...choices.children];
+    function select(index) {
+      buttons.forEach((button,i)=>{
+        button.setAttribute('aria-selected',String(i===index));
+        button.tabIndex = i===index ? 0 : -1;
+        list.children[i].hidden = i!==index;
+      });
+    }
+    buttons.forEach((button,i)=>{
+      button.addEventListener('click',()=>select(i));
+      button.addEventListener('keydown',event=>{
+        const to = {ArrowRight:(i+1)%buttons.length,ArrowLeft:(i+buttons.length-1)%buttons.length,Home:0,End:buttons.length-1}[event.key];
+        if (to===undefined) return;
+        event.preventDefault(); select(to); buttons[to].focus();
+      });
+    });
+    select(Math.max(0,phases.findIndex(phase=>phase.status!=='ok')));
+    const shares = phases.map(f=>Number(f.stage.share));
+    if (plan?.status==='ok' && shares.every(n=>Number.isFinite(n) && n>0) && Math.abs(shares.reduce((a,b)=>a+b,0)-100)<.000001) {
+      const bar=box('share-strip');
+      bar.setAttribute('aria-hidden','true');
+      for (const [i,share] of shares.entries()) {
+        const segment=el('span'); segment.dataset.state=phases[i].status;
+        segment.style.flexGrow=String(share);
+        bar.append(segment);
+      }
+      overview.append(bar);
+    }
+    overview.append(choices,list);
+  }
   for (const item of payments.filter(f=>!f.stage)) overview.append(performanceJump(item,'回单期次待核 · '+paymentLabel(item)));
   for (const item of findings.filter(f=>f.stage_payments && !f.stage)) overview.append(performanceJump(item,'分笔款项归属待核'));
   if (payments.length>1 && !graph.stage_payment_sources) overview.append(el('p','此版记录了每张回单的实付时点，尚无本期累计金额的核查结果。','small'));

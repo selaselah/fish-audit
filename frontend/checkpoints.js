@@ -34,6 +34,10 @@ const PageProgress = {
     }
     const counts = progress.counts;
     const recomputing = ['queued','running','failed'].includes(detail.status);
+    const completed = viewedRevision === detail.rev && ['ready','in_review','closed'].includes(detail.status);
+    panel.classList.toggle('completed-progress',completed);
+    panel.querySelector('summary strong').textContent = completed ? '资料处理记录' : '逐份资料进度';
+    panel.querySelector('.checkpoint-count').textContent = detail.documents.length + ' 份资料';
     const scope = viewedRevision && (viewedRevision<detail.rev || recomputing) ? '当前任务进度 · 正在查看 R'+viewedRevision+' · ' : '';
     const expert = progress.expert ? ' · R'+progress.expert.target_rev+' 专家响应已保存' : '';
     const total = scope+'已分页 '+counts.prepared+' 页 · 已提取 '+counts.read+' 页 · 有复检记录 '+counts.checked+' 页'+expert;

@@ -43,6 +43,10 @@
 
 本轮桌面及手机浏览器回归另用 axe-core 4.14.1 检查首页、台账、提交资料、原件核图与登录页。检测工具在开发机执行。[axe-core 官方项目](https://github.com/dequelabs/axe-core)
 
+### 操作图标
+
+工作台和首页的操作图标取自 Bootstrap Icons v1.13.1。所用 25 个字形按该版本的官方码点从 WOFF2 字体裁出，随本站加载。图标按钮具备独立文字或无障碍名称。[官方版本](https://github.com/twbs/icons/tree/v1.13.1) · [官方码点表](https://github.com/twbs/icons/blob/v1.13.1/font/bootstrap-icons.json) · [MIT 许可](licenses/bootstrap-icons-MIT.txt) · [本地字体](../frontend/assets/audit-icons.woff2)
+
 ### 首页字体
 
 两份首页子集的许可证均为 SIL Open Font License 1.1。下表摘要来自本轮实际使用的 WOFF2 文件。

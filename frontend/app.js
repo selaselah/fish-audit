@@ -19,6 +19,14 @@ const profileName = profile => ({[travelProfile]:'差旅报销',[bankProfile]:'�
 const tone = {ready: 'risk', in_review: 'risk', closed: 'ok', failed: 'issue', pass: 'ok', review: 'risk', reject: 'issue',
   visual: 'risk', unsupported: 'issue', disputed: 'issue', confirmed: 'ok', anchored: 'ok'};
 const statusName = value => labels[value] || value;
+function humanReviewLabel(result) {
+  if (result.human_required === true) return '需人工校验';
+  if (result.human_required === false) return '无专项待核项';
+  return '人工校验要求待核';
+}
+function priorityFindings(findings) {
+  return ['issue','risk','missing'].flatMap(status=>findings.filter(item=>item.status===status));
+}
 const base = () => Team.cases() + '/' + state.detail.id;
 const workpaperSource = (doc,path) => base()+'/documents/'+doc+'/'+path+(state.bundle ? '?rev='+state.bundle.rev : '');
 const time = value => new Date(value).toLocaleString('zh-CN', {hour12: false, month: '2-digit',
@@ -34,6 +42,11 @@ function box(className, ...children) {
   const node = el('div', '', className);
   node.append(...children);
   return node;
+}
+function glyph(name) {
+  const icon = el('i', '', 'ui-glyph ic-' + name);
+  icon.setAttribute('aria-hidden', 'true');
+  return icon;
 }
 function tag(value) {
   const badge = el('span', statusName(value), 'tag ' + (tone[value] || value));
@@ -65,7 +78,8 @@ async function api(url, options = {}) {
   const headers = new Headers(options.headers || {});
   if (options.method && options.method !== 'GET' && Team.session?.csrf) headers.set('X-CSRF-Token', Team.session.csrf);
   try { response = await fetch(url, {cache: 'no-store', ...options, headers}); }
-  catch {
+  catch (error) {
+    if (options.signal?.aborted) throw error;
     $('#connection').textContent = '连接中断'; $('#connection').dataset.offline='true';
     throw new Error('暂时无法连接本机审计服务。服务恢复后可查看已提交任务。');
   }
@@ -86,15 +100,14 @@ function post(url, body) {
 function renderList() {
   const list = $('#case-list');
   const visible = state.cases;
-  const header = box('ledger-header ledger-row', ...['任务名称','处理状态','审计建议', $('#desk-sort').value === 'updated' ? '最近更新' : '提交时间'].map(label => el('span', label)));
+  const header = box('ledger-header ledger-row', ...['任务名称','处理状态','审计结果', $('#desk-sort').value === 'updated' ? '最近更新' : '提交时间',''].map(label => el('span', label)));
   list.replaceChildren(header);
   for (const row of visible) {
     const trainingPrefix = '合成演练 · ';
     const training = row.title.startsWith(trainingPrefix) && row.title.length > trainingPrefix.length;
     const title = Team.paperLink(training ? row.title.slice(trainingPrefix.length) : row.title, row.id, 'case-link');
     if (training) title.setAttribute('aria-label', row.title);
-    const metadata = el('span', [training ? '合成演练' : '', profileName(row.profile), row.files+' 份资料',
-      row.rev ? 'R'+row.rev : ''].filter(Boolean).join(' · '), 'small case-meta');
+    const metadata = el('span', [training ? '合成演练' : '', profileName(row.profile)].filter(Boolean).join(' · '), 'small case-meta');
     const status = box('', tag(row.status));
     if (row.status === 'running') status.append(el('small', row.progress + '%', 'small'));
     const result = row.decision ? '人工' + statusName(row.decision) :
@@ -103,10 +116,13 @@ function renderList() {
     verdict.dataset.verdict = row.decision || row.verdict || '';
     if (row.issues || row.risks) verdict.append(el('small',
       [row.issues ? row.issues+' 项问题' : '', row.risks ? row.risks+' 项风险' : ''].filter(Boolean).join(' · '),'small'));
-    const icon = el('span', '', 'doc-icon');
-    icon.dataset.kind = row.profile; icon.setAttribute('aria-hidden','true');
+    const icon = box('case-glyph',glyph(row.profile===bankProfile || row.profile===travelProfile ? 'receipt' : 'journal-text'));
+    const preview = action('',()=>Desk.peek(row),'icon-button case-peek');
+    preview.append(glyph('layout-sidebar-inset-reverse'));
+    preview.dataset.previewCase = row.id; preview.title='速览任务';
+    preview.setAttribute('aria-label','速览 '+row.title); preview.setAttribute('aria-haspopup','dialog');
     list.append(box('ledger-row', box('case-name',icon,box('',title,metadata)), status, verdict,
-      el('span', time($('#desk-sort').value==='updated' ? row.updated : row.created), 'small row-date')));
+      el('span', time($('#desk-sort').value==='updated' ? row.updated : row.created), 'small row-date'),preview));
   }
   if (!visible.length) list.append(el('p', state.filter === 'all' && !$('#case-search').value && !$('#desk-profile').value ? '还没有任务，选择「新建审计」上传资料。' : '当前筛选条件下没有任务。', 'empty'));
   for (const button of document.querySelectorAll('[data-filter]')) {
@@ -150,28 +166,54 @@ function openPage(docId, pageNumber, highlight, lineHint) {
   const image = el('img', '', 'page-image');
   image.alt = item.name + ' 第 ' + pageNumber + ' 页';
   const enlarged = link('单独打开页图', pageUrl); enlarged.target = '_blank'; enlarged.rel = 'noopener';
+  enlarged.prepend(glyph('arrows-angle-expand'));
   const overlay = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   overlay.setAttribute('viewBox', '0 0 1000 1000');
   overlay.setAttribute('preserveAspectRatio', 'none');
   overlay.setAttribute('aria-hidden', 'true');
-  const left = box('viewer-original', box('image-sheet', image, overlay), enlarged);
+  const sheet = box('image-sheet',image,overlay);
+  const canvas = box('source-scroll',sheet);
+  canvas.tabIndex=0; canvas.setAttribute('role','region'); canvas.setAttribute('aria-label','可滚动的原件页图');
+  const levels = [100,125,150,200];
+  let zoom = 0;
+  const decrease = action('',()=>setZoom(zoom-1),'icon-button');
+  const increase = action('',()=>setZoom(zoom+1),'icon-button');
+  const fit = action('适宽',()=>setZoom(0),'zoom-fit');
+  decrease.append(glyph('zoom-out')); increase.append(glyph('zoom-in'));
+  decrease.setAttribute('aria-label','缩小原页'); increase.setAttribute('aria-label','放大原页');
+  const scale = el('output','100%','zoom-scale'); scale.setAttribute('aria-label','相对适宽比例');
+  const tools = box('source-tools',box('zoom-group',decrease,scale,increase,fit),enlarged);
+  const left = box('viewer-original',tools,canvas);
   const right = box('viewer-facts', el('h3', '本页引文'));
   left.id = 'viewer-original'; right.id = 'viewer-facts';
   left.tabIndex = right.tabIndex = -1;
   const pageFacts = (state.bundle?.report.graph.facts || []).filter(fact => fact.doc === docId && fact.page === pageNumber);
+  let showAllFacts = !pageFacts.some(f=>f.id===highlight);
   const coverage = state.bundle?.report.graph.delegation_coverage;
   const nameHolds = new Map([...(coverage?.agent_holds || []),...(coverage?.signer_holds || [])]
     .filter(h=>h.doc===docId && h.page===pageNumber && h.lines?.length).map(h=>[h.fact,h]));
   const editable = state.bundle?.rev === state.detail.rev && state.detail.status === 'ready';
   const selected = new Set();
   let focusRow;
+  function setZoom(index) {
+    zoom = Math.max(0,Math.min(index,levels.length-1));
+    sheet.style.width=levels[zoom]+'%';
+    scale.textContent=levels[zoom]+'%';
+    decrease.disabled=zoom===0;
+    increase.disabled=zoom===levels.length-1;
+    if (!zoom) canvas.scrollLeft=0;
+    revealPageMark();
+  }
+  decrease.disabled = true;
   function revealPageMark() {
-    if (!matchMedia('(min-width:761px)').matches || !left.isConnected || !image.naturalWidth) return;
+    if (!left.isConnected || !image.naturalWidth) return;
     const rect = overlay.firstElementChild?.getBoundingClientRect();
     if (!rect) return;
-    const pane = left.getBoundingClientRect();
+    const pane = canvas.getBoundingClientRect();
     if (rect.top < pane.top + 8 || rect.bottom > pane.bottom - 8)
-      left.scrollTop += (rect.top + rect.bottom - pane.top - pane.bottom) / 2;
+      canvas.scrollTop += (rect.top + rect.bottom - pane.top - pane.bottom) / 2;
+    if (rect.left < pane.left + 8 || rect.right > pane.right - 8)
+      canvas.scrollLeft += (rect.left + rect.right - pane.left - pane.right) / 2;
   }
   function locate(fact) {
     overlay.replaceChildren();
@@ -181,7 +223,11 @@ function openPage(docId, pageNumber, highlight, lineHint) {
         rect.setAttribute(name,String(1000*value));
       overlay.append(rect);
     }
-    for (const row of right.querySelectorAll('[data-fact]')) row.classList.toggle('located', row.dataset.fact === fact.id);
+    for (const row of right.querySelectorAll('.evidence-row')) {
+      row.classList.toggle('located', row.dataset.fact === fact.id);
+      if (row.dataset.fact) row.hidden = !showAllFacts && row.dataset.fact!==fact.id;
+    }
+    if (fieldPicker) fieldPicker.value=showAllFacts ? '' : fact.id;
     revealPageMark();
   }
   function focusObservation(source) {
@@ -191,6 +237,20 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     target.focus({preventScroll:true});
     target.scrollIntoView({block:'nearest'});
   }
+  let fieldPicker;
+  if (pageFacts.length) {
+    fieldPicker=el('select'); fieldPicker.setAttribute('aria-label','定位本页引文');
+    fieldPicker.add(new Option('全部引文 · '+pageFacts.length+' 项',''));
+    for (const fact of pageFacts) fieldPicker.add(new Option(fact.label+' · '+fact.value,fact.id));
+    fieldPicker.addEventListener('change',()=>{
+      const source=pageFacts.find(f=>f.id===fieldPicker.value);
+      showAllFacts=!source;
+      if (source) focusObservation(source);
+      else for (const row of right.querySelectorAll('[data-fact]')) row.hidden=false;
+    });
+    right.prepend(box('field-navigator',right.querySelector('h3'),fieldPicker));
+  }
+  const selectionCount = el('span','','small');
   for (const fact of pageFacts) {
     const row = box('evidence-row');
     row.dataset.fact = fact.id;
@@ -200,6 +260,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
       check.addEventListener('change', () => {
         if (check.checked) selected.add(fact.id); else selected.delete(fact.id);
         submit.disabled = selected.size === 0;
+        selectionCount.textContent = selected.size ? '已选 '+selected.size+' 项引文' : '';
       });
       label.append(check);
     }
@@ -381,8 +442,12 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     $('#page-dialog').close(); openReview([...selected]);
   }, 'primary');
   submit.disabled = true;
-  if (editable && pageFacts.length) right.append(submit);
-  if (editable) right.append(action('补录本页字段', () => openAmend(docId, pageNumber, null)));
+  if (editable) {
+    const reviewActions=box('review-selection');
+    if (pageFacts.length) reviewActions.append(submit);
+    reviewActions.append(action('补录本页字段', () => openAmend(docId, pageNumber, null)),selectionCount);
+    right.append(reviewActions);
+  }
   const controls = editable ? [...right.querySelectorAll('button:enabled,input:enabled')] : [];
   for (const control of controls) control.disabled = true;
   loadReviewImage(image,pageUrl).then(()=>{
@@ -390,6 +455,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     revealPageMark();
   },()=>{
     image.hidden=true; overlay.setAttribute('hidden','');
+    decrease.disabled=increase.disabled=fit.disabled=true;
     const notice=el('p','原页加载失败，可单独打开页图查看原因。','note');
     notice.setAttribute('role','alert'); left.prepend(notice);
   });
@@ -535,13 +601,19 @@ function installmentDetails(history) {
   });
 }
 
+function revealPaperTarget(target) {
+  if (!target) return;
+  const entry = target.closest('[data-finding]');
+  if (entry) {
+    if (entry.hidden) entry.dispatchEvent(new Event('reveal-finding', {bubbles:true}));
+    entry.querySelector('.finding-disclosure').open = true;
+  }
+  for (let fold = target.closest('details'); fold; fold = fold.parentElement?.closest('details')) fold.open = true;
+  target.focus({preventScroll:true});
+  target.scrollIntoView({block:'start'});
+}
 function evidenceJump(label, targetId) {
-  const jump=action(label,()=>{
-    const target=document.getElementById(targetId);
-    for (let fold=target?.closest('details');fold;fold=fold.parentElement?.closest('details')) fold.open=true;
-    target?.focus({preventScroll:true});
-    target?.scrollIntoView({block:'start'});
-  },'text-button');
+  const jump=action(label,()=>revealPaperTarget(document.getElementById(targetId)),'text-button');
   jump.setAttribute('aria-controls',targetId);
   return jump;
 }
@@ -549,11 +621,8 @@ function evidenceJump(label, targetId) {
 function finding(item) {
   const heading = item.stage ? item.stage.name + (item.stage.share ? ' · ' + item.stage.share + '%' : '') +
     (item.rule === 'H05' ? ' 实付时点' : item.rule==='H06'?' 回单合计':' 付款条件') : item.title;
-  const node = box('finding', box('flow', tag(item.status), el('h3', heading), el('span', item.rule, 'mono')),
-    el('p', item.detail), el('p', '执行依据 · ' + item.basis, 'muted'));
-  node.dataset.finding = item.id;
-  node.tabIndex = -1;
-  if (item.stage) node.insertBefore(box('clause-source',el('q',item.stage.clause), citation(item.stage.clause_ref)),node.children[1]);
+  const node = box('finding-body',el('p', item.detail, 'finding-detail'),el('p', '执行依据 · ' + item.basis, 'muted'));
+  if (item.stage) node.prepend(box('clause-source',el('q',item.stage.clause), citation(item.stage.clause_ref)));
   if (item.date_checks) {
     const dates = dateEvidencePanel(item,state.bundle.report.graph);
     if (dates) node.append(dates);
@@ -637,30 +706,57 @@ function finding(item) {
   const policy = state.bundle.report.policy;
   const refs = policy.rule_sources?.[item.rule] || [];
   if (refs.length) node.append(fold('核对制度出处与适用范围', ...refs.map(id => sourceEntry(policy.sources[id]))));
-  return node;
+  const row = box('finding');
+  row.dataset.finding = item.id;
+  row.dataset.findingStatus = item.status;
+  row.tabIndex = -1;
+  const foldout = el('details','','finding-disclosure');
+  const summary = el('summary');
+  summary.append(el('span',item.rule,'mono procedure-code'), el('span',heading,'procedure-title'), tag(item.status), glyph('chevron-down'));
+  foldout.append(summary,node);
+  row.append(foldout);
+  return row;
+}
+function findingsLedger(report) {
+  const panel = box('panel findings-ledger',el('h2','检查明细'));
+  const filters = box('finding-filters');
+  filters.setAttribute('role','group'); filters.setAttribute('aria-label','按检查结果筛选');
+  const rows = report.findings.map(finding);
+  const keys = ['all','issue','risk','missing','ok'];
+  function select(key) {
+    filters.querySelectorAll('button').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.findingFilter===key)));
+    for (const row of rows) row.hidden = key!=='all' && row.dataset.findingStatus!==key;
+  }
+  for (const key of keys) {
+    const count = key==='all' ? rows.length : rows.filter(row=>row.dataset.findingStatus===key).length;
+    const label = key==='all' ? '全部' : statusName(key);
+    const button = action('',()=>select(key));
+    button.dataset.findingFilter = key;
+    button.append(el('span',label),el('strong',String(count)));
+    button.setAttribute('aria-label',label+'，'+count+' 项检查');
+    button.disabled = !count;
+    filters.append(button);
+  }
+  panel.addEventListener('reveal-finding',()=>select('all'));
+  panel.append(filters,...rows);
+  select('all');
+  return panel;
 }
 function reportPanel() {
   const report = state.bundle.report;
   const performance = report.findings.filter(item => /^H0[1-6]$/.test(item.rule));
-  const other = report.findings.filter(item => !performance.includes(item));
-  const passed = other.filter(item => item.status === 'ok');
-  const exceptions = other.filter(item => item.status !== 'ok');
-  const conclusion = box('panel conclusion-panel', box('panel-head', el('h2', '审计建议'), tag(report.result.verdict)),
-    el('p', '专项人工校验：' + (report.result.human_required ? '需要' : '无待核项') + ' · 最终决定由审计人员验收。'),
-    el('p', report.result.counts.issue + ' 项问题 · ' + report.result.counts.risk + ' 项风险 · ' +
-      report.result.counts.missing + ' 项证据不足', 'muted'));
+  const verdict = report.result.verdict;
+  const mark = box('verdict-symbol',glyph(({pass:'shield-check',reject:'exclamation-diamond',review:'clipboard-check'})[verdict] || 'question-circle'));
+  const conclusion = box('panel conclusion-panel',box('verdict-line',mark,
+    box('verdict-name',el('h2','审计建议'),el('strong',statusName(verdict))),
+    el('span',humanReviewLabel(report.result),'human-required')));
   conclusion.dataset.verdict = report.result.verdict;
-  const priorities = ['issue','risk','missing'].flatMap(status => report.findings.filter(item => item.status === status));
+  const priorities = priorityFindings(report.findings);
   if (priorities.length) {
-    const links = box('priority-findings', el('strong','优先核对'));
-    for (const item of priorities.slice(0,3))
-      links.append(performanceJump(item, item.stage ? item.stage.name+' · '+item.title : item.title));
-    conclusion.append(links);
+    const first = priorities[0];
+    const label = first.stage ? first.stage.name+' · '+first.title : first.title;
+    conclusion.append(box('priority-findings',el('strong','优先核对'),performanceJump(first,label)));
   }
-  const findings = box('panel', el('h2', performance.length ? '其他检查程序' : '风险与问题'));
-  if (exceptions.length) findings.append(...exceptions.map(finding));
-  else if (!performance.length) findings.append(el('p', '本次已执行的检查程序均相符。'));
-  if (passed.length) findings.append(fold('展开相符的检查程序（' + passed.length + '）', ...passed.map(finding)));
   const human = box('panel', el('h2', report.peer_review ? '复核签收决定' : '审计人员验收'));
   const decision = state.detail.decisions.find(item => item.rev === state.bundle.rev);
   if (decision) {
@@ -669,8 +765,7 @@ function reportPanel() {
     if (state.bundle.invoice_approval && decision.invoice_check_hash)
       human.append(invoiceApproval(state.bundle.invoice_approval,decision.invoice_check_hash));
   } else if (state.detail.status === 'ready' && state.detail.rev === state.bundle.rev) {
-    human.append(el('p', '查看原页与引用后，记录验收决定及依据。', 'muted'),
-      action('填写验收意见', () => openReview(null), 'primary'));
+    human.append(action('填写验收意见', () => openReview(null), 'primary'));
   } else human.append(el('p', '此为历史底稿，保留当时的审计建议。', 'muted'));
   const working = box('panel', el('h3', '底稿留存'), el('p', 'R' + state.bundle.rev + ' · ' + time(state.bundle.created), 'muted'),
     link('下载底稿及证据包', base() + '/reports/' + state.bundle.rev + '/bundle', 'button'),
@@ -680,15 +775,14 @@ function reportPanel() {
   if (performance.length) {
     const conditions = box('panel performance-panel',el('h2','合同履约审查'));
     conditions.append(performanceOverview(performance,report.graph));
-    for (const entry of performance) conditions.append(finding(entry));
     review.append(conditions);
   }
-  review.append(findings);
+  review.append(findingsLedger(report));
   const side = box('paper-side', human);
   const peer = PeerReview.panel(state.detail,state.bundle);
   if (peer) side.append(peer);
   side.append(working);
-  return box('grid', review, side);
+  return box('grid workpaper-grid', review, side);
 }
 function graphPanel() {
   const graph = state.bundle.report.graph;
@@ -921,6 +1015,7 @@ function renderCase(forcePanel = false) {
   $('#case-meta').textContent = profileName(data.profile) + ' · ' + time(data.created) + ' 提交';
   $('#case-status').replaceChildren(tag(data.status));
   const progress = $('#progress-panel');
+  progress.hidden = !!state.bundle && ['ready','closed','in_review'].includes(data.status) && !data.error && !data.waiting_for_database;
   progress.replaceChildren(box('panel-head', el('strong', statusName(data.stage)), el('span', data.progress + '%', 'mono')));
   const meter = el('progress'); meter.max = 100; meter.value = data.progress; meter.setAttribute('aria-label','审计任务进度');
   progress.append(meter, el('p', data.message, 'muted'));
@@ -956,8 +1051,10 @@ function renderCase(forcePanel = false) {
   }
   const nav = $('#tabs');
   if (!nav.childElementCount) {
+    const icons = {report:'card-checklist', evidence:'file-earmark-text', graph:'diagram-3', activity:'clock-history'};
     for (const [id, label] of Object.entries(tabs)) {
       const button = action(label, () => { state.tab = id; renderCase(); });
+      button.prepend(glyph(icons[id]));
       button.dataset.tab = id; nav.append(button);
     }
   }
@@ -1038,8 +1135,8 @@ async function refresh() {
       renderCase(Boolean(focusFinding));
       if (focusFinding) {
         const target = $(focusFinding);
-        for (let p=target?.parentElement;p;p=p.parentElement) if (p.tagName==='DETAILS') p.open=true;
-        target?.focus();
+        if (target?.dataset.finding) revealPaperTarget(target);
+        else target?.focus();
       }
       const target = route.params.get('fact');
       if (target && state.openedCitation !== location.hash && state.bundle) {

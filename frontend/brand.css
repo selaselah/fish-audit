@@ -58,3 +58,43 @@
     text-underline-offset: .25em;
   }
 }
+
+@font-face {
+  font-family: "Audit Icons";
+  src: url("/assets/audit-icons.woff2") format("woff2");
+  font-display: block;
+}
+.ui-glyph {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 1.15em;
+  height: 1.15em;
+  font: normal 1em/1 "Audit Icons";
+  vertical-align: -.12em;
+}
+.ic-inboxes::before { content: "\f42f"; }
+.ic-clock-history::before { content: "\f292"; }
+.ic-clipboard-check::before { content: "\f28b"; }
+.ic-exclamation-diamond::before { content: "\f335"; }
+.ic-layers::before { content: "\f45b"; }
+.ic-folder2-open::before { content: "\f3d8"; }
+.ic-exclamation-triangle::before { content: "\f33b"; }
+.ic-search::before { content: "\f52a"; }
+.ic-sliders2::before { content: "\f789"; }
+.ic-layout-sidebar-inset-reverse::before { content: "\f45c"; }
+.ic-file-earmark-text::before { content: "\f38b"; }
+.ic-shield-check::before { content: "\f52f"; }
+.ic-question-circle::before { content: "\f505"; }
+.ic-chevron-down::before { content: "\f282"; }
+.ic-plus-lg::before { content: "\f64d"; }
+.ic-x-lg::before { content: "\f659"; }
+.ic-journal-text::before { content: "\f444"; }
+.ic-diagram-3::before { content: "\f2ee"; }
+.ic-zoom-in::before { content: "\f62c"; }
+.ic-zoom-out::before { content: "\f62d"; }
+.ic-arrows-angle-expand::before { content: "\f14a"; }
+.ic-receipt::before { content: "\f50f"; }
+.ic-card-checklist::before { content: "\f224"; }
+.ic-paperclip::before { content: "\f4b3"; }
+.ic-eye::before { content: "\f341"; }

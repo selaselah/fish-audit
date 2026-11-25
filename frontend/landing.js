@@ -41,4 +41,16 @@ if (!restoreWorkspaceLink()) {
       next.focus();
     });
   });
+  const readingSwitch = document.querySelector('.reading-switch');
+  const readings = [...readingSwitch.querySelectorAll('button')];
+  function selectReading(button) {
+    for (const option of readings) {
+      const selected = option === button;
+      option.setAttribute('aria-pressed', String(selected));
+      document.getElementById(option.getAttribute('aria-controls')).hidden = !selected;
+    }
+  }
+  for (const button of readings) button.addEventListener('click', () => selectReading(button));
+  selectReading(readings[0]);
+  readingSwitch.hidden = false;
 }

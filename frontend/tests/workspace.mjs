@@ -127,6 +127,7 @@ try {
     assert.ok(gap);
     await call('Page.navigate',{url:root+'/workpaper/'+reinspectionGap+'?rev=1'});
     await wait('document.querySelector(".reinspection-trail")?.textContent.includes('+JSON.stringify(gap.quote)+')','unassigned reinspection page');
+    await evaluate('document.querySelector(".reinspection-trail").closest(".finding-disclosure").open=true');
     await click('核对原页第 '+gap.line+' 行','document.querySelector(".reinspection-trail")');
     await wait('document.querySelector("#page-dialog").open && document.querySelector(".located[data-gap-line] blockquote")?.textContent==='+JSON.stringify(gap.quote),'missing heading line');
     assert.equal(await evaluate('document.querySelector(".located[data-gap-line]").dataset.gapLine'),String(gap.line));
@@ -199,6 +200,8 @@ try {
     assert.equal(await evaluate(summary+'.querySelectorAll(".phase-summary li").length'),phases.length);
     for (const phase of phases) {
       const row=summary+'.querySelector('+JSON.stringify('[data-phase-finding="'+phase.id+'"]')+')';
+      await evaluate(summary+'.querySelector('+JSON.stringify('[data-phase-choice="'+phase.id+'"]')+').click()');
+      assert.ok(await evaluate('!'+row+'.hidden'));
       assert.equal(await evaluate(row+'.querySelector(".phase-source").textContent'),
         phase.stage.name+(phase.stage.share?' · '+phase.stage.share+'%':''));
       assert.equal(await evaluate(row+'.querySelector("q").textContent'),phase.stage.clause);
@@ -210,6 +213,7 @@ try {
       assert.equal(await evaluate(row+'.querySelectorAll(".phase-unlinked").length'),matched.length ? 0 : 1);
       for (const payment of matched) await jump(row,payment);
     }
+    await evaluate('for(const d of document.querySelectorAll(".finding-disclosure:not([open])")) d.querySelector("summary").click()');
     for (const payment of report.findings.filter(f=>f.rule==='H05' && !f.stage)) {
       await jump(summary,payment);
       const panel='document.querySelector('+JSON.stringify('[data-finding="'+payment.id+'"] .performance-comparison')+')';
@@ -797,7 +801,7 @@ try {
       const selector='[data-finding="'+phase.id+'"]';
       const node='document.querySelector('+JSON.stringify(selector)+')';
       assert.ok(await evaluate(node+'.innerText.includes('+JSON.stringify(phase.detail)+')'));
-      assert.ok(await evaluate(node+'.querySelector("h3").innerText.includes('+JSON.stringify(phase.stage.share+'%')+')'));
+      assert.ok(await evaluate(node+'.querySelector(".procedure-title").innerText.includes('+JSON.stringify(phase.stage.share+'%')+')'));
       await evaluate(node+'.querySelector(".clause-source button").click()');
       const fact=report.graph.facts.find(f=>f.id===phase.stage.clause_ref);
       await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.textContent.includes('+JSON.stringify(fact.quote)+')','pinned contract clause');
@@ -906,7 +910,9 @@ try {
           await writeFile(join(process.env.AUDIT_UI_SHOTS,'equipment-'+performanceCase+'-'+width+'.png'),Buffer.from(capture.data,'base64'));
         }
       }
-      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll(".phase-summary li,.phase-results,.clause-source,.mandate-dates,.mandate-side,.quality-change,.change-comparison,.change-source,.acceptance-authority,.signature-record,.signer-source,.contract-date-evidence,.delivery-batches,.batch-source,.batch-record,.batch-receipt,.receipt-packets,.packet-file,.packet-page")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'performance layout at '+width);
+      assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),'workpaper viewport at '+width);
+      const overflow = await evaluate('[...document.querySelectorAll(".phase-summary li,.phase-results,.clause-source,.mandate-dates,.mandate-side,.quality-change,.change-comparison,.change-source,.acceptance-authority,.signature-record,.signer-source,.contract-date-evidence,.delivery-batches,.batch-source,.batch-record,.batch-receipt,.receipt-packets,.packet-file,.packet-page")].filter(e=>e.scrollWidth>e.clientWidth+1).map(e=>[e.className,e.clientWidth,e.scrollWidth])');
+      assert.deepEqual(overflow,[],'performance layout at '+width);
       if (settlements.length) {
         assert.ok(await evaluate('[...document.querySelectorAll(".stage-payments,.stage-balances,.stage-transfer")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'stage payment totals at '+width);
         if (process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
@@ -1881,6 +1887,13 @@ try {
       await call('DOM.setFileInputFiles',{nodeId,files:[file]});
       await evaluate('document.querySelector("#upload-title").value="合成演练 · 三单合订"; document.querySelector("#upload-form").requestSubmit()');
       await wait('location.hash.includes("/case/") && !!document.querySelector("#progress-panel progress")','submitted');
+      const activePath = await evaluate('Team.cases()+"/"+state.detail.id');
+      await evaluate('document.querySelector("#nav-desk").click()');
+      await wait('!document.querySelector("#desk").hidden && !!document.querySelector("[data-preview-case]")','active task queue');
+      await evaluate('performance.clearResourceTimings();document.querySelector("[data-preview-case]").click()');
+      await wait('document.querySelector("#case-preview").open && !!document.querySelector("#preview-body progress")','active job in preview');
+      await wait('performance.getEntriesByType("resource").filter(r=>new URL(r.name).pathname==='+JSON.stringify(activePath)+').length>=2','automatic progress refresh');
+      await evaluate('document.querySelector(".preview-open").click()');
       await wait('document.querySelector("#checkpoint-totals")?.textContent.includes("已分页 3 页") && !!document.querySelector(".checkpoint-active")','saved pagination and active model page',120000);
       await evaluate('window.trainingProgressRow=document.querySelector(".checkpoint-document");window.trainingProgressRow.open=true');
       const range = await evaluate('fetch(document.querySelector(".checkpoint-pages a").href,{headers:{Range:"bytes=0-7"}}).then(async r=>[r.status,(await r.arrayBuffer()).byteLength,!!r.headers.get("ETag")])');
@@ -1896,6 +1909,13 @@ try {
       console.log('PASS · Saved per-page extraction and visual checks, verified live preview and preserved expanded document');
       assert.ok(await evaluate('document.querySelector("#report-tools").hidden'),'employee scope');
       const detail = await evaluate('location.hash');
+      await evaluate('document.querySelector("#nav-desk").click()');
+      await wait('!document.querySelector("#desk").hidden && !!document.querySelector("[data-preview-case]")','employee task queue');
+      await evaluate('performance.clearResourceTimings();document.querySelector("[data-preview-case]").click()');
+      await wait('document.querySelector("#case-preview").open && !!document.querySelector(".preview-open")','employee task preview');
+      assert.equal(await evaluate('document.querySelector(".preview-open").textContent'),'打开任务');
+      assert.ok(await evaluate('!document.querySelector(".preview-finding") && !performance.getEntriesByType("resource").some(r=>new URL(r.name).pathname.includes("/reports/"))'));
+      await evaluate('document.querySelector("#case-preview [data-close]").click()');
       await evaluate('document.querySelector("#nav-account").click()');
       await wait('!!document.querySelector("#account-panel details")','account');
       await click('退出登录');
@@ -1925,7 +1945,7 @@ try {
       assert.ok(calcCount >= (termVerified ? 3 : 1), 'operand-linked audit');
       await evaluate('const detailEl = document.querySelector("#case-panel .formula .ref"); for (let a=detailEl.parentElement; a; a=a.parentElement) if(a.tagName==="DETAILS") a.open=true; detailEl.click()');
       await wait('document.querySelector("#page-dialog").open && !!document.querySelector(".evidence-row.located")','operand citation');
-      const sourceUrl = await wait('document.querySelector("#page-dialog img")?.naturalWidth && document.querySelector("#page-dialog .image-sheet + a").href','verified source image loaded');
+      const sourceUrl = await wait('document.querySelector("#page-dialog img")?.naturalWidth && document.querySelector("#page-dialog .source-tools > a").href','verified source image loaded');
       assert.equal(new URL(sourceUrl).searchParams.get('rev'),'1');
       const page = /\/documents\/(d[0-9]+)\/pages\/([0-9]+)$/.exec(new URL(sourceUrl).pathname);
       assert.ok(page);
