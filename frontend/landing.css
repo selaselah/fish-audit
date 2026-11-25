@@ -299,7 +299,7 @@ body:has(#sample-review[open]) { overflow:hidden; }
   .process-list h3 { font-size:.94rem; }
   .reading-switch button { min-height:44px; }
   .temperature-readings dl { margin:8px 0 10px; }
-  .footer-row { gap: 10px; min-height: 70px; }
+  .footer-row { min-height: 70px; }
 }
 @media (max-width:360px) {
   .wrap { width: calc(100% - 28px); }
@@ -362,8 +362,8 @@ body:has(#sample-review[open]) { overflow:hidden; }
   .settlement-summary .total strong { font-size:clamp(1.65rem,7vw,2.25rem); }
 }
 @media (min-width:721px) and (max-width:940px) and (orientation:portrait) {
-  .hero-inner { min-height:min(780px,calc(100svh - var(--nav-h) - 1px)); }
-  .section-inner { min-height:min(850px,100svh); }
+  .payments .section-inner { grid-template-columns:minmax(0,1fr); gap:32px; }
+  .payments .phase-ledger { width:100%; }
 }
 .ledger-switch { display:flex; width:fit-content; margin:12px clamp(18px,2.4vw,34px) 0; padding:3px; border:1px solid var(--line); border-radius:7px; background:var(--canvas); }
 .ledger-switch button { min-height:34px; padding:3px 13px; border:1px solid transparent; border-radius:4px; background:transparent; color:var(--muted); font:550 .84rem var(--font-ui); cursor:pointer; }

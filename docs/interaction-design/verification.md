@@ -8,6 +8,8 @@
 
 检查明细默认展示本版待处理项。同类专家追加建议折叠为一个入口，展开后按凭证、页码与行号定位。演练验证了从其他入口跳转时可以展开相应建议，并保留完整底稿、证据与状态计数。[检查明细实拍](inspection-findings.webp)
 
+首页另做了独立布局检查，320、390、768、820、1024 和 1440 像素宽度均通过。320 像素手机上的三个文件标签保持单行，竖屏平板用整行展示分期金额、依据和对应原件。[竖屏平板的分期控件](landing-payments-tablet.webp)
+
 ```sh
 node frontend/tests/workspace.mjs --inspection-case 08fdfa388dce4718a4cd46dada1385d8
 AUDIT_INSPECTION_REV=10 node frontend/tests/workspace.mjs --inspection-case 08fdfa388dce4718a4cd46dada1385d8
