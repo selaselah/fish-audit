@@ -142,6 +142,11 @@ const EvidenceCompare = (() => {
     query.addEventListener('input',render);
     query.addEventListener('keydown',event => {
       if (event.isComposing || event.keyCode === 229) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        dialog.close();
+        return;
+      }
       const first = list.querySelector('button');
       if (first && ['ArrowDown','Enter'].includes(event.key)) {
         event.preventDefault();
@@ -202,8 +207,8 @@ const EvidenceCompare = (() => {
     function paint(i) {
       const {side,pick,name,sheet,node} = sides[i];
       const fact = selection[i];
-      pick.replaceChildren(glyph('search'),el('span',fact?'换引文':'选引文'));
-      pick.setAttribute('aria-label','选择'+side+'引文'+(fact?'，当前为'+fact.label:''));
+      pick.replaceChildren(glyph('search'),el('span',fact?'换引文':'选引文'),
+        el('span','，'+side+(fact?'，当前为'+fact.label:''),'visually-hidden'));
       node.dataset.fact = fact?.id || '';
       if (!fact) {
         name.textContent = '选择原件';
@@ -218,8 +223,8 @@ const EvidenceCompare = (() => {
       frame.dataset.located = String(Boolean(rects.length));
       const origin = '第 ' + fact.page + ' 页' + (rects.length ? ' · 第 ' + fact.source_line.number + ' 行' : ' · 整页影像');
       const open = action('', () => openPage(fact.doc, fact.page, fact.id), 'compare-original');
-      open.setAttribute('aria-label','打开' + nameText + '第 ' + fact.page + ' 页，核对' + fact.label);
-      open.append(frame,box('compare-source-foot',el('span',origin),box('compare-open-label',el('span','查看原页'),glyph('arrows-angle-expand'))));
+      open.append(frame,box('compare-source-foot',el('span',origin),box('compare-open-label',el('span','查看原页'),glyph('arrows-angle-expand'))),
+        el('span','，'+nameText+'，核对'+fact.label,'visually-hidden'));
       sheet.replaceChildren(box('compare-quote',tag(fact.status),el('blockquote',fact.quote)),open);
       pageImage(fact).then(image => {
         frame.replaceChildren(drawExcerpt(image, rects));

@@ -50,11 +50,15 @@
             <div class="paper-sheet"><div class="paper-meta"><span>验收记录</span><span>第 1 页</span></div>
             <p class="paper-title">四门冷藏柜验收报告</p>
             <p class="paper-id">YL-LY-32EED203</p>
-            <div class="reading-switch" role="group" aria-label="验收证据展示方式" hidden><button type="button" aria-controls="temperature-readings" aria-pressed="true">读数对照</button><button type="button" aria-controls="acceptance-excerpt" aria-pressed="false">原文摘录</button></div>
+            <div class="reading-switch" role="group" aria-label="验收证据展示方式" hidden><button type="button" aria-controls="temperature-readings" aria-pressed="true">读数对照</button><button type="button" aria-controls="source-strips" aria-pressed="false">看原行</button><button type="button" aria-controls="acceptance-excerpt" aria-pressed="false">原文摘录</button></div>
             <div class="temperature-readings" id="temperature-readings" hidden>
               <dl><div><dt>合同上限</dt><dd><a href="/showcase/contract.pdf" target="_blank" rel="noopener" aria-label="合同上限 4℃，打开采购合同原件">≤ 4 <small>℃</small></a></dd></div><div><dt>实测柜温</dt><dd><a href="/showcase/acceptance.pdf" target="_blank" rel="noopener" aria-label="实测柜温 8℃，打开验收报告原件">8 <small>℃</small></a></dd></div></dl>
               <div class="temperature-track" aria-hidden="true"><i></i><b></b></div>
               <div class="temperature-ticks" aria-hidden="true"><span>0℃</span><span>4℃</span><span>8℃</span></div>
+            </div>
+            <div class="source-strips" id="source-strips" hidden>
+              <a href="/showcase/contract.pdf" target="_blank" rel="noopener"><span>合同 · 第 1 页第 14 行<i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i></span><img src="/assets/showcase-contract-line.png" width="540" height="47" loading="lazy" alt="约定验收标准：柜温不高于4℃"></a>
+              <a href="/showcase/acceptance.pdf" target="_blank" rel="noopener"><span>验收 · 第 1 页第 12 行<i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i></span><img src="/assets/showcase-acceptance-line.png" width="344" height="47" loading="lazy" alt="实测结果：柜温8℃"></a>
             </div>
             <dl class="paper-lines" id="acceptance-excerpt"><div><dt>验收日期</dt><dd>2026 年 9 月 20 日</dd></div><div><dt>实际验收数量</dt><dd>4 台</dd></div><div><dt>验收结论</dt><dd>合格</dd></div><div class="marked"><dt>实测结果</dt><dd>柜温 <strong>8°C</strong></dd></div></dl></div>
             <div class="evidence-note"><div><span class="finding-dot issue"></span>实测超出合同上限</div><p>第二期验收款需复核。</p><a href="/showcase/acceptance.pdf" target="_blank" rel="noopener">查看验收原件<span class="sr-only">，在新标签页打开 PDF</span></a></div>

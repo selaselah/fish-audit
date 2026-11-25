@@ -9,6 +9,21 @@
 | `GET /showcase/{filename}` | 首页的三份合成原件，文件名为 `contract.pdf`、`acceptance.pdf`、`transfer.pdf`。可按资料索引复核 R7 案例的文件摘要。 |
 | `GET /workpaper/{id}`、`GET /w/{wid}/workpaper/{id}` | 校验版本及引文、发现参数，转入 `/app` 的相应底稿。旧的根路径片段书签和邀请链接在浏览器中转入相同工作区。 |
 
+## 每批验收所据的标准版本
+
+`policy.delivery_batches` 为 `contract-delivery-batches-v7` 的底稿支持逐批选用标准。H02 的 `quality_change.state = by_batch` 表示已有一份范围明确且按约生效的前瞻性质量协议。各次验收的判断分别在 `batch_acceptance.records[].standard` 中。
+
+| 字段 | 含义 |
+| --- | --- |
+| `state` | `original` 按原合同，`applied` 按补充协议，`pending` 需核实该批适用版本。 |
+| `effective_on`、`date_ref` | 经核对的协议生效日和本批验收日期的事实编号。原件不足时相应值可以为空。 |
+| `criterion`、`criterion_ref`、`reading_ref` | 适用标准全文、标准原件引文、本批实测引文。待核版本没有已选标准。 |
+| `evidence` | 版本和读数所据引文。与本批挂钩的 H04 保留这些引文及协议所属资料。 |
+
+图谱关系 `batch_quality_comparison` 从标准引文指向本批的实测引文。关系含批次、所用版本、原件依据。验收是否合格及期款条件分别读取 H02 与 H04。原页查看和双栏对照均通过原有带 `rev` 的页图端点取数。
+
+`policy.quality_addenda = acceptance-addendum-v3` 增加了标准变更所据日期的原行核对。原字段、引文或日期数字无法对应时，相关日期返回 `null`，原始观察仍在 `graph.facts` 中可审查。
+
 ## 分批验收备注与付款意见
 
 自规则 `2026.11.25.18` 起，`policy.delivery_batches` 为 `contract-delivery-batches-v6`。`graph.delivery_batch_sources.remarks` 保留范围明确的数量暂收记录、涉及全部付款的原文及付款栏指向的影像或附件。每条含文档、页、原文、文字层行号及原始观察编号。影像引文的 `line` 为 null。

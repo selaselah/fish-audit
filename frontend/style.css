@@ -508,9 +508,8 @@ input,select,textarea { border-color:var(--field-line); }
 #upload-dialog { width:min(620px,94vw); }
 .intake-fields { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); gap:14px; }
 .intake-fields input,.intake-fields select { width:100%; min-height:44px; }
-.intake-doc-heading { display:grid; align-items:start; margin-top:16px; }
-.intake-doc-heading > strong,.intake-doc-heading > details { grid-area:1/1; }
-.intake-doc-heading > strong { justify-self:start; padding:9px 0; pointer-events:none; }
+.intake-doc-heading { display:grid; grid-template-columns:max-content minmax(0,1fr); align-items:start; gap:12px; margin-top:16px; }
+.intake-doc-heading > strong { padding:9px 0; }
 .intake-requirements { margin:0; }
 .intake-requirements > summary { width:fit-content; min-height:40px; margin-inline-start:auto; padding:9px 0 6px 6px; color:var(--accent); font-size:.85rem; }
 .intake-requirements p { font-size:.86rem; margin:3px 0 8px; color:var(--secondary); }

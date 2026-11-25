@@ -51,6 +51,15 @@ export async function checkProduct({root,call,evaluate,wait}) {
   assert.ok(await evaluate('!document.querySelector("#acceptance-excerpt").hidden && document.querySelector("#temperature-readings").hidden'));
   assert.equal(await evaluate(select(readingSwitch+' [aria-controls=acceptance-excerpt]')+'.getAttribute("aria-pressed")'),'true');
   const findingInks = new Set();
+  await evaluate(select(readingSwitch+' [aria-controls=source-strips]')+'.click()');
+  await wait('Array.from(document.querySelectorAll("#source-strips img")).every(i=>i.naturalWidth>0)','both published original lines');
+  const strips=await evaluate('Array.from(document.querySelectorAll("#source-strips a"),a=>[a.pathname,a.querySelector("img").src])');
+  for (const [i,[path,image]] of strips.entries()) {
+    assert.equal(path,'/showcase/'+['contract','acceptance'][i]+'.pdf');
+    const digest=createHash('sha256').update(Buffer.from(await (await fetch(image)).arrayBuffer())).digest('hex');
+    assert.equal(digest,['71ac6d8b21360c348a3ae65715115a14bc396f18205936a51629ff4d6b9c28a0','44a6d7766ddb789b087869c4b1b941ea90188962115fec193a3f2b4f934c4f47'][i]);
+  }
+  await evaluate(select(readingSwitch+' [aria-controls=acceptance-excerpt]')+'.click()');
   for (const [name,expected] of Object.entries(digests)) {
     await evaluate(select('#tab-'+name)+'.click()');
     const panel = select('#sheet-'+name);
@@ -80,6 +89,10 @@ export async function checkProduct({root,call,evaluate,wait}) {
     await call('Emulation.setDeviceMetricsOverride',{width,height:width<600?844:900,deviceScaleFactor:1,mobile:width<600});
     await evaluate('scrollTo({top:0,behavior:"instant"})');
     assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),'product width '+width);
+    await evaluate(select(readingSwitch+' [aria-controls=source-strips]')+'.click()');
+    const stripsFit=await evaluate('Array.from(document.querySelectorAll("#source-strips a"),n=>n.getBoundingClientRect()).every(r=>r.height>=44 && r.left>=0 && r.right<=innerWidth)');
+    assert.ok(stripsFit,'published line links at '+width);
+    await evaluate(select(readingSwitch+' [aria-controls=temperature-readings]')+'.click()');
     for (const selector of ['#hero-title','.file-tabs','.evidence-note a','.button']) {
       const bounds = await evaluate(select(selector)+'.getBoundingClientRect().toJSON()');
       assert.ok(bounds.width>0 && bounds.left>=0 && bounds.right<=width+1,selector+' at '+width);

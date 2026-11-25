@@ -14,7 +14,7 @@ export async function checkEvidenceCompare({root,call,evaluate,wait},caseId,requ
   const byId=new Map(facts.map(f=>[f.id,f]));
   const $=s=>'document.querySelector('+JSON.stringify(s)+')';
   const ids=()=>evaluate('[...document.querySelectorAll(".compare-leaf")].map(n=>n.dataset.fact)');
-  const opens=()=>evaluate('[...document.querySelectorAll(".compare-original")].map(e=>e.getAttribute("aria-label"))');
+  const opens=()=>evaluate('[...document.querySelectorAll(".compare-original")].map(e=>e.textContent)');
   async function key(name,code) {
     await call('Input.dispatchKeyEvent',{type:'keyDown',key:name,code:name,windowsVirtualKeyCode:code,...(name==='Enter'?{text:'\r',unmodifiedText:'\r'}:{})});
     await call('Input.dispatchKeyEvent',{type:'keyUp',key:name,code:name,windowsVirtualKeyCode:code});
@@ -92,7 +92,13 @@ export async function checkEvidenceCompare({root,call,evaluate,wait},caseId,requ
     const leaves=await evaluate('[...document.querySelectorAll(".compare-leaf")].map(n=>n.getBoundingClientRect().toJSON())');
     if (width>700) assert.equal(leaves[0].top,leaves[1].top);
     else assert.ok(leaves[1].top>=leaves[0].bottom);
+    await picker(0);
+    await search(initial[0]);
+    assert.ok(await evaluate('Array.from(document.querySelectorAll(".finder-choice")).some(b=>b.dataset.ref==='+JSON.stringify(initial[0])+' && b.getBoundingClientRect().right<=innerWidth+1)'));
+    await key('Escape',27);
+    await wait('!document.querySelector(".citation-finder").open && document.activeElement===document.querySelector(".compare-pick")','filled search closed and focus restored at '+width);
     if (process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
+      await evaluate('new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done)))');
       const clip=await evaluate('(()=>{const r=document.querySelector(".trace-panel").getBoundingClientRect();return {x:r.left+scrollX,y:r.top+scrollY,width:r.width,height:r.height,scale:1}})()');
       const capture=await call('Page.captureScreenshot',{format:'png',clip,captureBeyondViewport:true});
       await writeFile(join(process.env.AUDIT_UI_SHOTS,'compare-'+caseId+'-'+width+'.png'), Buffer.from(capture.data,'base64'));
@@ -118,6 +124,20 @@ export async function checkEvidenceCompare({root,call,evaluate,wait},caseId,requ
   assert.equal(await evaluate($('.trace-result p')+'.textContent'),h.detail);
   await evaluate($('[data-mode="compare"]')+'.click()');
   if (alternative) assert.equal((await ids())[0],alternative.id);
+  if (h.batch_acceptance?.records.some(r=>r.standard)) {
+    for (const batch of h.batch_acceptance.batches) {
+      if (!pairs.includes('batch-'+batch.index)) continue;
+      const phase=report.findings.find(f=>f.rule==='H04' && f.stage?.batch_index===batch.index);
+      if (!phase) continue;
+      await evaluate($('[data-tab="report"]')+'.click()');
+      await evaluate($('[data-phase-choice="'+phase.id+'"]')+'.click()');
+      await evaluate($('[data-phase-finding="'+phase.id+'"] .compare-jump')+'.click()');
+      assert.equal(await evaluate('document.querySelector("[data-pair][aria-pressed=true]")?.dataset.pair'),'batch-'+batch.index);
+      const record=h.batch_acceptance.records.find(r=>r.unit===batch.records[0]);
+      assert.equal(await evaluate($('.compare-version')+'.dataset.state'),record.standard.state);
+      if (record.standard.criterion_ref) assert.deepEqual(await ids(),[record.standard.criterion_ref,record.standard.reading_ref]);
+    }
+  }
   const images=await evaluate('performance.getEntriesByType("resource").map(r=>r.name).filter(s=>s.includes("/documents/") && s.includes("/pages/"))');
   assert.ok(images.length && images.every(url=>url.startsWith(base+'/documents/') && new URL(url).searchParams.get('rev')===String(rev)));
   console.log('PASS · R'+rev+' · '+facts.length+' supported observations · '+pairs.join(', ')+' · pinned originals, keyboard and six widths');
