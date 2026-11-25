@@ -4,15 +4,18 @@ import hashlib
 import re
 import unicodedata
 from collections import defaultdict
+from decimal import Decimal
 
-from calculations import normalized
+from calculations import AMOUNT, normalized
 from performance_versions import NATIVE_FORMATS
 from quality_references import incomplete_number
 
 
 LEGACY_FORMAT = "written-contract-mandate-v1"
 NAME_FORMAT = "written-contract-mandate-v2"
-FORMAT = "written-contract-mandate-v3"
+NATIVE_NAME_FORMAT = "written-contract-mandate-v3"
+FORMAT = "written-contract-mandate-v4"
+TERMS_SINCE = "2026.11.25.22"
 TITLES = ("授权委托书", "签约授权委托书", "合同签署授权委托书", "采购合同授权委托书")
 LABELS = {
     "buyer_agent_signature": ("甲方代理人签字", "甲方授权代理人签字", "采购方委托代理人签字"),
@@ -53,6 +56,10 @@ IDENTITY_NOTES = {
 }
 SIGNING_SCOPE = re.compile(r"(?:仅限)?(?:代表委托(?:单位|人))?(?:签署|签订)本(?:采购)?合同")
 NON_SIGNING = {"仅限收货验收", "仅限收货", "仅限验收", "仅办理收货和验收", "不得签署本合同", "无签约权限"}
+CLEAR_TERMS = {"无","无附加限制","无其他限制","无附加条件"}
+TOTAL_CAP = re.compile(r"本合同含税总价不得超过人民币("+AMOUNT.pattern+r")元")
+YUAN_TOTAL = re.compile(r"人民币("+AMOUNT.pattern+r")元")
+ADVANCE = re.compile(r"(?:本)?合同生效后支付(?:合同总价的)?([0-9]{1,3}(?:\.[0-9]{1,4})?)%(?:预付款)?")
 SIDES = {"buyer":"甲方", "seller":"乙方"}
 PARTY_SIGNATURES = {"buyer_signature":("甲方签署","甲方签章","采购方签署","买方签章"),
                     "seller_signature":("乙方签署","乙方签章","供应方签署","卖方签章")}
@@ -148,9 +155,14 @@ def identity_holds(graph, read_text):
     return agents,signers
 
 
-def rows_for_grants(graph, read_text):
+def rows_for_grants(graph, read_text, *, check_images=False):
     units = set(graph["documents_by_kind"].get("power_of_attorney", []))
-    return covered_rows(graph, read_text, units, GRANT_FIELDS, printed_value, "授权委托书")
+    pages = covered_rows(graph, read_text, units, GRANT_FIELDS, printed_value, "授权委托书")
+    if check_images:
+        nodes = {n["id"]:n for n in graph["nodes"] if n["type"]=="page"}
+        for p in pages:
+            p["text_only"] = nodes[f"{p['doc']}/p{p['page']}"].get("clause_text_only") is True
+    return pages
 
 
 def is_page_marker(text):
@@ -198,7 +210,7 @@ def coverage_gaps(pages):
 
 
 def attach(graph, read_text):
-    pages = rows_for_grants(graph, read_text)
+    pages = rows_for_grants(graph, read_text, check_images=True)
     holds,signers = identity_holds(graph, read_text)
     graph["delegation_coverage"] = {"format":FORMAT, "pages":pages, "agent_holds":holds, "signer_holds":signers}
     graph["gaps"].extend(coverage_gaps(pages))
@@ -221,13 +233,15 @@ def attach(graph, read_text):
 def verify_sources(report, read_text, *, signing=False):
     policy, graph = report["policy"], report["graph"]
     marker = policy.get("delegation_checks")
+    if policy.get("version","")>=TERMS_SINCE and marker!=FORMAT:
+        raise ValueError("缺少逐项核对书面授权限制的程序")
     if not marker:
         if "delegation.py" in policy.get("code_sha256", {}) or "delegation_coverage" in graph:
             raise ValueError("缺少书面代理授权核对程序")
         return
-    pages = rows_for_grants(graph, read_text)
+    pages = rows_for_grants(graph, read_text, check_images=marker==FORMAT)
     coverage = {"format":marker, "pages":pages}
-    if marker==FORMAT:
+    if marker in (NATIVE_NAME_FORMAT,FORMAT):
         holds,signers = identity_holds(graph,read_text)
         coverage["signer_holds"] = signers
     elif marker==NAME_FORMAT:
@@ -235,11 +249,11 @@ def verify_sources(report, read_text, *, signing=False):
     else:
         holds = []
     withheld = set()
-    if marker in (NAME_FORMAT,FORMAT):
+    if marker in (NAME_FORMAT,NATIVE_NAME_FORMAT,FORMAT):
         coverage["agent_holds"] = holds
         withheld = {h["fact"] for h in holds}
     versions = {LEGACY_FORMAT:("contract-performance-v4",), NAME_FORMAT:("contract-performance-v5",),
-                FORMAT:NATIVE_FORMATS}
+                NATIVE_NAME_FORMAT:NATIVE_FORMATS, FORMAT:NATIVE_FORMATS}
     if (policy.get("performance_checks") not in versions.get(marker,()) or graph.get("delegation_coverage")!=coverage
             or coverage_gaps(pages) != [g for g in graph["gaps"] if g["quality"]=="mandate_clause"]):
         raise ValueError("授权委托书的已核页面或未覆盖条款与原页不符")
@@ -266,20 +280,32 @@ def verify_sources(report, read_text, *, signing=False):
               if e["type"] in ENTITY_TYPES or e["type"]=="unresolved_grant_agent" or nodes.get(e["to"],{}).get("type")=="mandatary"]
     if sorted(actual)!=sorted(expected) or marker!=LEGACY_FORMAT and persons!={n["id"] for n in nodes.values() if n["type"]=="mandatary"}:
         raise ValueError("代理授权图谱关系与原件归属不符")
-    if marker==FORMAT:
+    if marker in (NATIVE_NAME_FORMAT,FORMAT):
         located = {(h["field"],h["fact"]):h["unit"] for h in signers}
         expected_signers = [(unit,ref,field,(ref,)) for (field,ref),unit in located.items()]
         actual_signers = [(e["from"],e["to"],e["type"],tuple(e["evidence"])) for e in graph["edges"]
                           if any((e["type"],ref) in located for ref in e["evidence"])]
         if sorted(actual_signers)!=sorted(expected_signers):
             raise ValueError("待核签署栏应指向其所在原页的签字记录")
-    if signing and marker!=FORMAT:
+    if signing and marker not in (NATIVE_NAME_FORMAT,FORMAT):
         approved = [entry for f in report["findings"] for entry in f.get("delegations",[]) if entry["status"]=="ok"]
         if approved:
             agents,signers = identity_holds(graph,read_text)
             ambiguous = {h["fact"] for h in agents+signers}
             if any(agent_kind(e["agent"] or "")!="named" or ambiguous.intersection(e["evidence"]) for e in approved):
                 raise ValueError("旧版签约授权所据姓名仅列岗位、多人或不完整，请按现行程序重审。")
+    if signing and marker!=FORMAT:
+        approved = [d for f in report["findings"] for d in f.get("delegations",[]) if d["status"]=="ok"]
+        for entry in approved:
+            refs = set(entry["evidence"])
+            fields = [f for f in graph["facts"] if f["id"] in refs]
+            states = {native_value(f,LABELS["grant_state"]) for f in fields if f["field"]=="grant_state"}
+            dates = {"signed_on","grant_from","grant_until","granted_on"}
+            if (any(native_value(f,LABELS["grant_conditions"]) not in CLEAR_TERMS for f in fields if f["field"]=="grant_conditions")
+                    or states - {"有效","已生效"}
+                    or any(re.search(r"\d\s+\d",(f.get("source_line") or {}).get("text",f["quote"])) for f in fields if f["field"] in dates)
+                    or any(not p["text_only"] for p in rows_for_grants(graph,read_text,check_images=True) if p["unit"] in entry["units"])):
+                raise ValueError("旧版签约授权所据限制、状态、日期或附注需要按现行程序重审。")
 
 
 def present(doc, field):
@@ -291,7 +317,59 @@ def complete_id(value):
                 and re.fullmatch(r"[A-Za-z0-9\u3400-\u9fff][A-Za-z0-9\u3400-\u9fff._-]{0,79}", value))
 
 
-def decision(contract, side, signature, grants, *, strict_names):
+def native_value(fact, labels):
+    source = fact.get("source_line") or {}
+    raw = unicodedata.normalize("NFKC",source.get("text","")).strip()
+    label, sep, value = raw.partition(":")
+    permitted = {normalized(raw),normalized(value)}
+    amount = YUAN_TOTAL.fullmatch(value.strip()) if fact["field"]=="total" else None
+    if amount:
+        permitted.update((amount[1],amount[1].replace(",","")))
+    if (not source.get("rects") or not sep or label.strip() not in labels
+            or normalized(raw)!=normalized(fact["quote"]) or normalized(fact["value"]) not in permitted):
+        return ""
+    return value.strip()
+
+
+def check_limits(contract, grant):
+    checks = []
+    for fact in grant.fields["grant_conditions"]:
+        value = native_value(fact,LABELS["grant_conditions"])
+        item = {"field_ref":fact["id"], "kind":"condition", "status":"missing", "comparison_ref":None}
+        if value in CLEAR_TERMS:
+            item["status"]="ok"
+        elif value=="不得约定预付款":
+            item["kind"]="prepayment"
+            for term in contract.fields["payment_stage"]:
+                label = unicodedata.normalize("NFKC",term["quote"]).partition(":")[0].strip()
+                if not re.fullmatch(r"第[一二两三四五六七八九十0-9]+期|预付款|首付款",label):
+                    continue
+                advance = ADVANCE.fullmatch(native_value(term,(label,)))
+                if advance and 0 < Decimal(advance[1]) <= 100:
+                    checks.append({**item, "status":"risk", "comparison_ref":term["id"]})
+            if any(c["field_ref"]==fact["id"] for c in checks):
+                continue
+        elif (cap:=TOTAL_CAP.fullmatch(value)) and Decimal(cap[1].replace(",",""))>0:
+            item["kind"]="total_cap"
+            totals = contract.fields["total"]
+            if (len(totals)==1 and not contract.incomplete("total","currency","unit")
+                    and all(normalized(f["value"]).upper() in {"人民币","人民币元","CNY","RMB"} for f in contract.fields["currency"])
+                    and all(normalized(f["value"]) in {"元","人民币元"} for f in contract.fields["unit"])):
+                total = YUAN_TOTAL.fullmatch(native_value(totals[0],("含税总额","合同含税总价")))
+                if total and Decimal(total[1].replace(",",""))>0:
+                    item["comparison_ref"]=totals[0]["id"]
+                    if Decimal(total[1].replace(",",""))>Decimal(cap[1].replace(",","")):
+                        item["status"]="risk"
+        checks.append(item)
+    caps = {native_value(f,LABELS["grant_conditions"]) for f in grant.fields["grant_conditions"]}
+    if sum(bool(TOTAL_CAP.fullmatch(value)) for value in caps)>1:
+        for item in checks:
+            if item["kind"]=="total_cap":
+                item["status"]="missing"
+    return checks
+
+
+def decision(contract, side, signature, grants, *, strict_names, read_date=None):
     label = SIDES[side]
     reference = side+"_grant_ref"
     counterparty = "seller" if side=="buyer" else "buyer"
@@ -315,12 +393,12 @@ def decision(contract, side, signature, grants, *, strict_names):
         printed_signer = next((h for h in contract.signer_holds if h["field"]==signature),None)
         if printed_signer:
             entry["agent_kind"] = printed_signer["kind"]
-    signed = contract.date("signed_on")
+    signed = read_date(contract,"signed_on") if read_date else contract.date("signed_on")
     entry["signed_on"] = signed.isoformat() if signed else None
     if len(grants) != 1:
         return outcome("missing", label+"需核对一份适用于该次签约的委托书及其替代关系。")
     grant, = grants
-    issued, start, end = (grant.date(key) for key in ("granted_on", "grant_from", "grant_until"))
+    issued, start, end = ((read_date(grant,key) if read_date else grant.date(key)) for key in ("granted_on", "grant_from", "grant_until"))
     entry.update(issued_on=issued.isoformat() if issued else None, valid_from=start.isoformat() if start else None,
                  valid_until=end.isoformat() if end else None)
     principal = contract.body(side)
@@ -332,6 +410,9 @@ def decision(contract, side, signature, grants, *, strict_names):
         value = contract.body(reference)
         if not complete_id(value) or value != grant.body("grant_number"):
             return outcome("missing", label+"签署栏所引的委托书编号与提交的委托书尚未对应。")
+    if read_date and grant.fields["grant_conditions"]:
+        entry["limits"] = check_limits(contract,grant)
+        entry["evidence"] = list(dict.fromkeys([*entry["evidence"],*(c["comparison_ref"] for c in entry["limits"] if c["comparison_ref"])]))
     agent = grant.body("grant_agent")
     if strict_names and (grant.agent_holds or entry["agent_kind"]!="named"):
         if grant.agent_holds:
@@ -365,17 +446,22 @@ def decision(contract, side, signature, grants, *, strict_names):
     state = grant.body("grant_state")
     if state and state not in {"有效","已生效"}:
         return outcome("risk", label+"委托书记载授权状态“"+state+"”，请核对撤销、变更或追认发生的时间。")
+    if read_date and present(grant,"grant_state") and not state:
+        return outcome("missing", label+"委托书的状态记录不一致或尚待核对，请核实签约当日适用的授权。")
     if present(grant, "grant_task") and grant.body("grant_task") not in {"本合同采购","办理本合同采购","签署本合同","签署本采购合同"}:
         return outcome("missing", label+"委托事项与本合同签署的适用范围待核。")
     conditions = grant.body("grant_conditions")
-    if (conditions and conditions not in {"无","无附加限制","无其他限制","无附加条件"}
+    if read_date and any(c["status"]=="risk" for c in entry.get("limits",())):
+        return outcome("risk",label+"所签条款与委托书限制不一致，请核对签约时的补充授权或事后追认。")
+    if (conditions and conditions not in CLEAR_TERMS
+            or read_date and any(c["status"]!="ok" for c in entry.get("limits",()))
             or grant.incomplete(*GRANT_FIELDS) or not grant.mandate_pages
-            or any(not p["native"] or p["uncovered"] for p in grant.mandate_pages)):
+            or any(not p["native"] or p["uncovered"] or read_date and not p.get("text_only") for p in grant.mandate_pages)):
         return outcome("missing", label+"授权委托书还有待核的限制、原页文字或影像范围，请核对完整委托书。")
     return outcome("ok", f"{label}代理人{agent}的签字与受托人一致，签约日 {signed} 在已核授权期间内，委托书明确允许签署本合同。")
 
 
-def checks(contract, grants, *, strict_names=True):
+def checks(contract, grants, *, strict_names=True, read_date=None):
     active = {}
     for side in SIDES:
         dedicated, ordinary = side+"_agent_signature", side+"_signature"
@@ -394,7 +480,7 @@ def checks(contract, grants, *, strict_names=True):
         if not matches and len(active)==1 and len(grants)==1:
             matches = list(grants)
         used.update(g.unit for g in matches)
-        entries.append(decision(contract, side, signature, matches, strict_names=strict_names))
+        entries.append(decision(contract, side, signature, matches, strict_names=strict_names,read_date=read_date))
     if (len(entries)==2 and entries[0]["agent"] and entries[0]["agent"]==entries[1]["agent"]
             and (not strict_names or all(e["agent_kind"]=="named" for e in entries))):
         for entry in entries:

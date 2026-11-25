@@ -6,7 +6,7 @@ from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 from reinspection import LABELS as REINSPECTION_FIELDS, LINK_KEYS, assess as assess_reinspection, linked as same_contract, verify_number_links
-from delegation import LABELS as DELEGATION_FIELDS, PARTY_SIGNATURES, checks as check_delegations, complete_id
+from delegation import FORMAT as MANDATE_TERMS_FORMAT, LABELS as DELEGATION_FIELDS, PARTY_SIGNATURES, checks as check_delegations, complete_id
 from contract_changes import LABELS as ADDENDUM_FIELDS, LIMIT, SOURCE_LABELS, candidates as change_candidates, labelled_sources, resolve as resolve_change
 from acceptance_authority import LABELS as AUTHORITY_FIELDS, SIGN_LABELS, check as check_acceptance_authority
 import delivery_batches
@@ -126,6 +126,7 @@ def complete_line(field, value, quote):
 class Material:
     def __init__(self, graph, unit):
         self.unit = unit
+        self.mandate_format = graph.get("delegation_coverage", {}).get("format")
         self.mandate_pages = [p for p in graph.get("delegation_coverage", {}).get("pages", []) if p["unit"]==unit]
         self.agent_holds = [h for h in graph.get("delegation_coverage", {}).get("agent_holds", []) if h["unit"]==unit]
         self.signer_holds = [h for h in graph.get("delegation_coverage", {}).get("signer_holds", []) if h["unit"]==unit]
@@ -194,6 +195,7 @@ def result(rule, status, detail, refs, units, stage=None):
 
 
 DATE_LABELS = {**SOURCE_LABELS, "accepted_on":("验收日期","验收时间","复验日期","复验时间"),
+               **{key:DELEGATION_FIELDS[key] for key in ("granted_on","grant_from","grant_until")},
                "repaired_on":REINSPECTION_FIELDS["repaired_on"],
                "paid_on":("付款日期","转账日期","交易日期","支付日期")}
 
@@ -317,7 +319,8 @@ def effect(contract, approvals=(), version=FORMAT, grants=()):
     if not board and not EFFECT.fullmatch(terms):
         missing.append("生效约定及其中每项条件的证明")
     mode = "seal" if "盖章" in terms and "或" not in terms else "sign" if ("签字" in terms or "签名" in terms) and "或" not in terms else None
-    delegations = check_delegations(contract, grants, strict_names=version!=DELEGATION_FORMAT) if version in MANDATE_FORMATS else []
+    read_date = printed_day if version==FORMAT and contract.mandate_format==MANDATE_TERMS_FORMAT else None
+    delegations = check_delegations(contract, grants, strict_names=version!=DELEGATION_FORMAT,read_date=read_date) if version in MANDATE_FORMATS else []
     for field, party, name in (("buyer_signature",buyer,"甲方"),("seller_signature",seller,"乙方")):
         side = field.removesuffix("_signature")
         delegate = next((item for item in delegations if item["side"]==side), None)

@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from config import BANK, PERFORMANCE
 from controls import VERSION, conclusion, execute
-from delegation import LEGACY_FORMAT, NAME_FORMAT, coverage_gaps, rows_for_grants, unresolved_agents, verify_sources
+from delegation import LEGACY_FORMAT, NAME_FORMAT, NATIVE_NAME_FORMAT, coverage_gaps, rows_for_grants, unresolved_agents, verify_sources
 from graph import build_graph
 from performance import DELEGATION_FORMAT, IDENTITY_FORMAT, REINSPECTION_FORMAT, compute, verify_findings
 from test_performance import BANK_DOC, CONTRACT, RECEIPT, WARRANTY, material, rows
@@ -46,6 +46,62 @@ def fixture_text(edit=None):
 
 
 class DelegationTests(unittest.TestCase):
+    def test_all_restrictions_stay_bound_to_each_written_clause_and_affected_stages(self):
+        grant=[r for r in GRANT if r[0]!="grant_conditions"]
+        approval=("grant_conditions","授权限制","签约前须经负责人书面批准")
+        prepay=("grant_conditions","附加限制","不得约定预付款")
+        cap=("grant_conditions","授权条件","本合同含税总价不得超过人民币80,000.00元")
+        contract=[*CONTRACT_BY_AGENT,("total","含税总额","人民币100,000.00元")]
+        for limits,status in (([prepay,approval],"risk"),([approval,prepay],"risk"),([cap,approval],"risk"),
+                              ([approval,("grant_conditions","授权条件","须经采购经理确认")],"missing"),
+                              ([cap,("grant_conditions","授权金额上限","本合同含税总价不得超过人民币120,000.00元")],"missing")):
+            with self.subTest(limits=limits):
+                def numeric_amount(docs,pages,*args):
+                    pages[0]["extraction"]["output"]["facts"][-1]["value"]="100,000.00"
+                    return build_graph(docs,pages,*args)
+                with patch("test_performance.build_graph",side_effect=numeric_amount):
+                    g=material([contract,[*grant,*limits],RECEIPT,WARRANTY,BANK_DOC])
+                signed,=rows(g,"H01")
+                entry,=signed["delegations"]
+                self.assertEqual(entry["status"],status)
+                self.assertEqual(len(entry["limits"]),2)
+                facts={f["id"]:f for f in g["facts"]}
+                self.assertEqual([facts[c["field_ref"]]["value"] for c in entry["limits"]],[v for _,_,v in limits])
+                for c in entry["limits"]:
+                    self.assertIn(c["field_ref"],signed["evidence"])
+                    if c["comparison_ref"]:
+                        self.assertIn(c["comparison_ref"],signed["evidence"])
+                        self.assertIn(facts[c["comparison_ref"]]["field"],("payment_stage","total"))
+                self.assertEqual(rows(g,"H02")[0]["status"],"ok")
+                self.assertTrue(all(f["status"]=="missing" for f in rows(g,"H04")))
+        for raw in ("100,000.00","人民币1 00,000.00元","人民币10,00.00元","美元100,000.00元"):
+            g=material([[*CONTRACT_BY_AGENT,("total","含税总额",raw)],[*grant,cap]])
+            self.assertEqual(rows(g,"H01")[0]["delegations"][0]["limits"][0]["comparison_ref"],None)
+
+    def test_ambiguous_states_broken_dates_and_mixed_pages_need_review(self):
+        mixed=sample()
+        mixed["delegation_coverage"]["pages"][0]["text_only"]=False
+        broken=sample(lambda i,f,l,v:"2026年9月3 0日" if f=="grant_until" else v)
+        conflict=sample(grants=[[*GRANT,("grant_state","授权状态","有效"),("grant_state","委托状态","已撤销")]])
+        for graph in (mixed,broken,conflict):
+            self.assertEqual(rows(graph,"H01")[0]["status"],"missing")
+        self.assertIsNone(rows(broken,"H01")[0]["delegations"][0]["valid_until"])
+
+    def test_past_positive_with_two_limits_replays_but_cannot_be_signed_as_clear(self):
+        grant=[*GRANT,("grant_conditions","授权限制","不得约定预付款")]
+        g=sample(grants=[grant])
+        coverage=g["delegation_coverage"]
+        coverage["format"]=NATIVE_NAME_FORMAT
+        for p in coverage["pages"]: p.pop("text_only")
+        findings=compute(g)
+        self.assertEqual(next(f["status"] for f in findings if f["rule"]=="H01"),"ok")
+        paper={"policy":dict(VERSION,version="2026.11.25.21",delegation_checks=NATIVE_NAME_FORMAT),"graph":g,"findings":findings}
+        read=fixture_text()
+        def source(d,p):
+            return read(d,p)+("\n授权限制：不得约定预付款" if d=="d02" else "")
+        verify_sources(paper,source)
+        with self.assertRaisesRegex(ValueError,"按现行程序重审"): verify_sources(paper,source,signing=True)
+
     def test_role_joint_and_redacted_names_remain_observations_with_all_phases_pending(self):
         for observed, kind in (("采购负责人","role"),("法定代表人","role"),("采购部","role"),("演练林岚及演练方程","joint"),
                                ("张三、李四","joint"),("张三 李四","joint"),("王某","redacted"),("张＊","redacted"),
