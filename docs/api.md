@@ -1,5 +1,20 @@
 # 本机审计接口
 
+## 同一次提交的分期回单
+
+规则 `2026.11.25.12` 在报告中保存 `policy.stage_payments=submitted-stage-transfers-v1`。当合同履约程序识别到多份回单或同页有多组交易栏位时，`graph.stage_payment_sources` 列出银行单据 `banks`、所核原页 `pages`、原文附注 `notes`、待归属单据 `unknown_units` 及单笔边界待核的单据 `ambiguous_units`。附注保留原件、页、行号、引文以及能与原文相连的观察 ID。
+
+每个涉及实付的期次生成一项 H06。未能唯一归期的回单另列一项。每项的 `stage_payments` 包含以下字段。
+
+| 字段 | 内容 |
+| --- | --- |
+| `state` | `balanced` 表示本次合计与约定相符，`partial` 表示少于约定，`over` 表示超过约定，`unresolved` 表示计算或归属依据待核。 |
+| `expected`、`seen`、`difference` | 原约定金额、本次所见成功流水去重合计、合计减去原约定。人民币元金额用两位小数字符串表示。无法支持某项数值时为 `null`。 |
+| `base`、`records[]` | 合同原值、逐笔回单。`inputs` 中每个可核字段含观察 ID `ref` 和原行值 `value`。副本的 `duplicate_of` 指向已计入的单据，两张回单的原页均保留。 |
+| `condition`、`timing[]`、`reasons[]` | 本期 H04 条件状态、每笔 H05 的单据与实付时点状态、影响复算的原因。即使 `state=balanced`，H06 仍可能报告履约证据缺失或提前付款。 |
+
+当 `seen` 有数值时，`graph.edges` 为每笔计入交易保存 `stage_transfer_operand`，其证据引用依次为合同分期条款、合同总额、完整银行流水和付款金额。历史底稿按各自规则快照重放。旧版对多份回单只审了付款时点，且已有肯定判断时，申请通过签收会收到 HTTP 409，并提示先重审该期款。
+
 ## 验收合订件的原页归属
 
 规则 `2026.11.25.11` 保存 `policy.receipt_packets=numbered-acceptance-pages-v2`。版本 v2 按原页栏目区分验收单号、复验单号和引用号。同一本册只有一张初验单、另两页分别是已识别的整改与复验材料时，`packets` 为空，H02 的 `reinspection.steps` 保存三种角色及各自原页。规则 `2026.11.25.10` 的 v1 底稿按其原版复算。报告的 `graph.receipt_packet_sources.packets[]` 按上传原件列出审查过的验收页。每条含原件 `doc`、`status` 和 `pages[]`。页记录有物理页 `page`、原文编号 `number`、文字版式标记 `text_only`、待核原因 `reasons[]`、原行 `rows[]`。原行记录字段、页、行号、引文和能与原行逐字对应的观察 ID。

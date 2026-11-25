@@ -17,6 +17,7 @@ from delegation import ENTITY_TYPES as DELEGATION_ENTITIES, TITLES as MANDATE_TI
 from contract_changes import NUMBER_TYPES as ADDENDUM_NUMBERS, TITLES as ADDENDUM_TITLES, attach as record_addenda, number_target
 import delivery_batches
 import receipt_packets
+import stage_payments
 import contract_effect
 import warranty_terms
 import payment_windows
@@ -318,6 +319,7 @@ def build_graph(docs, pages, attestations, amendments=()):
     record_signatories(graph, lambda doc, number: texts[doc, number])
     record_quality_references(graph, lambda doc, number: texts[doc, number])
     attach_payment_references(graph, lambda doc, number: texts[doc,number])
+    graph["stage_payment_sources"]=stage_payments.sources(graph,lambda doc,number:texts[doc,number])
     graph["invoice_identity"] = IDENTITY_FORMAT
     graph["invoice_lookup"] = INVOICE_LOOKUP
     identities,links = identity_relations(graph)
@@ -392,6 +394,7 @@ def link_procedures(graph, findings, calls):
     edges = graph["edges"]
     edges.extend(witness_edges(findings))
     edges.extend(delivery_batches.evidence_edges(findings))
+    edges.extend(stage_payments.edges(findings))
     edges.extend(warranty_terms.edges(findings))
     edges.extend(payment_windows.edges(findings))
     expert_id = "model/expert"

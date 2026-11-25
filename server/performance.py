@@ -10,6 +10,7 @@ from delegation import LABELS as DELEGATION_FIELDS, PARTY_SIGNATURES, checks as 
 from contract_changes import LABELS as ADDENDUM_FIELDS, LIMIT, SOURCE_LABELS, candidates as change_candidates, labelled_sources, resolve as resolve_change
 from acceptance_authority import LABELS as AUTHORITY_FIELDS, SIGN_LABELS, check as check_acceptance_authority
 import delivery_batches
+import stage_payments
 import contract_effect
 import warranty_terms
 import payment_windows
@@ -26,6 +27,7 @@ RULES = {
     "H02": ("交付范围与验收质量", "按合同编号、标的和采购方关联验收资料，核对日期、验收范围、结论、签认和遗留事项。"),
     "H03": ("付款安排与期次完整性", "从合同原文提取期次及付款条件，按约定核对期序、期数及比例合计。"),
     "H04": ("本期付款条件", "逐期核对合同写明的付款前提与履约证据，分别列示预付款、验收款和质保金等约定。"),
+    "H06": stage_payments.RULE,
     "H05": ("实付日期与合同前提", "按同一合同、回单明列期次及付款日期，核对付款时点已有的履约证据。"),
 }
 LABELS = {
@@ -592,6 +594,13 @@ def receipts_without_schedule(graph, contracts, plan_evidence, plan_units):
 
 
 def compute(graph, version=FORMAT, *, include_unassigned_receipts=True):
+    results = performance_findings(graph,version,include_unassigned_receipts=include_unassigned_receipts)
+    if version==FORMAT:
+        results.extend(stage_payments.findings(graph,results))
+    return results
+
+
+def performance_findings(graph, version, *, include_unassigned_receipts):
     kinds = graph["documents_by_kind"]
     def materials(kind):
         return [Material(graph, unit) for unit in kinds.get(kind, ())]
@@ -950,6 +959,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("batch_acceptance") != entry.get("batch_acceptance")
                 or saved.get("effect_review") != entry.get("effect_review")
                 or saved.get("warranty_check") != entry.get("warranty_check")
+                or saved.get("stage_payments") != entry.get("stage_payments")
                 or saved.get("payment_window") != entry.get("payment_window")
                 or saved.get("acceptance_reservations") != entry.get("acceptance_reservations")
                 or (saved.get("id"),saved.get("version"),saved.get("title"),saved.get("basis")) !=

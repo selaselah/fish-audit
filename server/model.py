@@ -109,7 +109,7 @@ methods 列出规则参考文献中的位置及适用范围；不能把内部程
 facts 数组仅填 evidence 中原样的 id，如 d01/p1/f2。你只能建议有事实触发的追加程序，编号和触发证据必须对应。installments 只用于明确分期/预付/质保金；
 amendment 只用于明确变更或红冲；qualification 只用于有保留的验收；subject_scope 只用于可辨认的标的不一致，此时引两份资料；
 unclear_clause 只用于确有其他可疑记载。在核验无发现、常规条款、全额一次结算或没有触发证据时返回空列表。
-effect_approval、acceptance_defect、stage_condition 分别核对有原文触发的生效条件、验收遗留事项和本期付款附加条件。查看 H01 至 H05 的已执行结果和期次，不重复提出已有充分证据的条件。
+effect_approval、acceptance_defect、stage_condition 分别核对有原文触发的生效条件、验收遗留事项和本期付款附加条件。银行回单逐页保留完整的交易流水号、付款用途、金额、币种、单位、日期及冲正说明。查看 H01 至 H06 的已执行结果和期次，不重复提出已有充分证据的条件。
 不要编造事实、制度、条文或结论。只输出规定的结构。"""
 
 

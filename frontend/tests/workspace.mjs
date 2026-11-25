@@ -263,6 +263,38 @@ try {
       }
     };
     const packets=report.graph.receipt_packet_sources?.packets || [];
+    const settlements=report.findings.filter(f=>f.stage_payments);
+    for (const f of settlements) {
+      await jump(summary,f);
+      const item=f.stage_payments;
+      const panel='document.querySelector('+JSON.stringify('[data-finding="'+f.id+'"] .stage-payments')+')';
+      assert.equal(await evaluate(panel+'.dataset.stageBalance'),item.state);
+      const displayed=await evaluate('[...'+panel+'.querySelectorAll("dd")].map(e=>e.textContent.replaceAll(",",""))');
+      assert.deepEqual(displayed,[item.expected,item.seen,item.difference?.replace(/^-/,'')].map(v=>v==null?'待核':v+' 元'));
+      if (item.base.total && item.expected!=null) {
+        await evaluate(panel+'.querySelector("details").open=true');
+        const formula=item.base.total.value+' × '+f.stage.share+'% = '+item.expected+' 元';
+        await wait(panel+'.querySelector("details p")?.textContent.replaceAll(",","")==='+JSON.stringify(formula.replaceAll(',','')),'printed gross times stage share');
+        await evaluate(panel+'.querySelector("details").open=false');
+      }
+      assert.equal(await evaluate(panel+'.querySelectorAll(".stage-transfer").length'),item.records.length);
+      const phase=phases.find(p=>p.stage.clause_ref===f.stage?.clause_ref && p.stage.name===f.stage?.name);
+      if (phase) await jump(panel,phase);
+      for (const r of item.records) {
+        const row=panel+'.querySelector('+JSON.stringify('[data-transfer-unit="'+r.unit+'"]')+')';
+        for (const value of [r.inputs.transfer_amount,r.inputs.transfer_ref].filter(Boolean)) {
+          const proof=row+'.querySelector('+JSON.stringify('[data-stage-operand="'+value.ref+'"]')+')';
+          await evaluate(proof+'.querySelector("button").click()');
+          await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(value.ref)
+            +' && document.querySelector("#page-dialog img")?.naturalWidth>0','specific transfer field on original');
+          await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+        }
+        const timing=item.timing.find(t=>t.unit===r.unit);
+        const payment=report.findings.find(p=>p.rule==='H05' && p.evidence.includes(timing.receipt_ref));
+        if (payment) await jump(row,payment);
+      }
+      await verifyRemarks(panel,report.graph.stage_payment_sources.notes);
+    }
     assert.equal(await evaluate('document.querySelectorAll(".packet-file").length'),packets.length);
     for (const packet of packets) {
       for (const page of packet.pages) {
@@ -737,6 +769,14 @@ try {
     for (const width of [1440,1024,820,768,390,320]) {
       await call('Emulation.setDeviceMetricsOverride',{width,height:880,deviceScaleFactor:1,mobile:false});
       assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1 && [...document.querySelectorAll(".phase-summary li,.phase-results,.clause-source,.mandate-dates,.mandate-side,.quality-change,.change-comparison,.change-source,.acceptance-authority,.signature-record,.signer-source,.contract-date-evidence,.delivery-batches,.batch-source,.batch-record,.batch-receipt,.receipt-packets,.packet-file,.packet-page")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'performance layout at '+width);
+      if (settlements.length) {
+        assert.ok(await evaluate('[...document.querySelectorAll(".stage-payments,.stage-balances,.stage-transfer")].every(e=>e.scrollWidth<=e.clientWidth+1)'),'stage payment totals at '+width);
+        if (process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
+          await evaluate('document.querySelector(".stage-payments").scrollIntoView({block:"start"});window.scrollBy(0,-48)');
+          const shot=await call('Page.captureScreenshot',{format:'png'});
+          await writeFile(join(process.env.AUDIT_UI_SHOTS,'stage-transfers-'+performanceCase+'-'+width+'.png'),Buffer.from(shot.data,'base64'));
+        }
+      }
       if (packets.length && process.env.AUDIT_UI_SHOTS && [1440,390].includes(width)) {
         await evaluate('document.querySelectorAll(".packet-page details").forEach(d=>d.open=false);document.querySelector(".receipt-packets").scrollIntoView({block:"start"});window.scrollBy(0,-40)');
         const shot=await call('Page.captureScreenshot',{format:'png'});
@@ -876,6 +916,18 @@ try {
       }
     }
     const pageIdentities=report.graph.edges.filter(e=>e.type==='acceptance_page_identity');
+    const transferOperands=report.graph.edges.filter(e=>e.type==='stage_transfer_operand');
+    assert.equal(await evaluate('!!document.querySelector(".stage-transfer-relations")'),Boolean(transferOperands.length));
+    if (transferOperands.length) await evaluate('document.querySelector(".stage-transfer-relations").open=true');
+    for (const edge of transferOperands) {
+      const row='document.querySelector('+JSON.stringify('[data-stage-transfer="'+edge.to+'"]')+')';
+      await wait(row+'?.querySelectorAll("button").length===4','contract and transfer operands');
+      for (const [i,ref] of edge.evidence.entries()) {
+        await evaluate(row+'.querySelectorAll("button")['+i+'].click()');
+        await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(ref),'contract share and counted transfer');
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+      }
+    }
     assert.equal(await evaluate('!!document.querySelector(".packet-relations")'),Boolean(pageIdentities.length));
     if (pageIdentities.length) await evaluate('document.querySelector(".packet-relations").open=true');
     for (const edge of pageIdentities) {

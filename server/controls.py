@@ -21,6 +21,7 @@ from reinspection import closed_steps
 from quality_labels import FORMAT as QUALITY_NUMBER_FORMAT
 from quality_references import FORMAT as QUALITY_REFERENCE_FORMAT
 from acceptance_authority import FORMAT as ACCEPTANCE_AUTHORITY
+from stage_payments import FORMAT as STAGE_PAYMENTS
 from receipt_packets import FORMAT as RECEIPT_PACKETS
 from delivery_batches import FORMAT as DELIVERY_BATCHES
 from contract_effect import FORMAT as CONTRACT_EFFECT
@@ -58,7 +59,7 @@ CATALOG = {
 VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING, "performance_checks":PERFORMANCE_FORMAT,
            "acceptance_reservations":RESERVATIONS,
            "quality_number_classification":QUALITY_NUMBER_FORMAT, "quality_references":QUALITY_REFERENCE_FORMAT,
-           "delegation_checks":DELEGATION_FORMAT, "quality_addenda":ADDENDUM_FORMAT, "acceptance_authority":ACCEPTANCE_AUTHORITY,"delivery_batches":DELIVERY_BATCHES,"receipt_packets":RECEIPT_PACKETS,
+           "delegation_checks":DELEGATION_FORMAT, "quality_addenda":ADDENDUM_FORMAT, "acceptance_authority":ACCEPTANCE_AUTHORITY,"delivery_batches":DELIVERY_BATCHES,"receipt_packets":RECEIPT_PACKETS,"stage_payments":STAGE_PAYMENTS,
            "contract_effect":CONTRACT_EFFECT,"warranty_checks":WARRANTY_CHECKS,"payment_windows":PAYMENT_WINDOWS,"sources": SOURCES, "rule_sources": MAPPING, "invoice_sources": INVOICE_SOURCE_FORMAT,
            "invoice_approval": INVOICE_APPROVAL_FORMAT,"invoice_identity":INVOICE_IDENTITY_FORMAT,"invoice_lookup":INVOICE_LOOKUP,
            "invoice_number_masks":MASK_FORMAT,"payment_references":PAYMENT_REFERENCE_FORMAT,"payment_checks":PAYMENT_CHECKS}
@@ -131,7 +132,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
     def with_performance():
         for item in performance:
             record(item["rule"],item["status"],item["detail"],item["evidence"],item["scope"])
-            for key in ("stage","reinspection","delegations","quality_change","acceptance_authority","date_checks","batch_acceptance","effect_review","warranty_check","payment_window","acceptance_reservations"):
+            for key in ("stage","reinspection","delegations","quality_change","acceptance_authority","date_checks","batch_acceptance","effect_review","warranty_check","payment_window","acceptance_reservations","stage_payments"):
                 if key in item:
                     findings[-1][key] = item[key]
         return findings

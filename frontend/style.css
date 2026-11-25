@@ -127,6 +127,13 @@ textarea { width: 100%; resize: vertical; }
 .warranty-date dd { margin:2px 0 0; font-weight:600; font-variant-numeric:tabular-nums; }
 .warranty-conflict { margin:9px 0; padding-inline-start:10px; border-inline-start:2px solid #aa7939; }
 .warranty-review details { max-width:100%; }
+.stage-payments { min-width:0; margin:14px 0; padding:12px 14px; border-inline-start:3px solid var(--green); background:var(--soft); }
+.stage-payments[data-stage-balance="over"],.stage-payments[data-stage-balance="unresolved"] { border-inline-start-color:#946421; background:#fbf7ed; }
+.stage-payments h4 { margin:0 0 8px; }
+.stage-balances { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,9rem),1fr)); gap:8px 12px; margin:0 0 10px; }
+.stage-balances dd,.stage-transfer { overflow-wrap:anywhere; }
+.stage-transfer { margin-top:12px; padding-top:10px; border-top:1px solid var(--line); min-width:0; }
+.stage-payments .performance-jump { margin-top:6px; }
 .payment-window { margin:14px 0; padding:12px 14px; border-inline-start:3px solid var(--green); background:var(--soft); min-width:0; }
 .payment-window:is([data-status="risk"],[data-status="missing"]) { border-inline-start-color:#946421; background:#fbf7ed; }
 .payment-window[data-status="issue"] { border-inline-start-color:#903a30; background:#fbf2ef; }

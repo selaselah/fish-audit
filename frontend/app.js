@@ -290,6 +290,13 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     if (source) gaps.push({...source,quality:'signer_reference'});
   }
   const batches=state.bundle?.report.graph.delivery_batch_sources;
+  const monetary=state.bundle?.report.graph.stage_payment_sources;
+  if (monetary && lineHint && !gaps.some(g=>g.line===lineHint)) {
+    const note=monetary.notes.find(r=>r.doc===docId && r.page===pageNumber && r.line===lineHint);
+    const raw=monetary.pages.find(p=>p.doc===docId && p.page===pageNumber)?.uncovered.find(r=>r.line===lineHint);
+    const row=note || raw;
+    if (row) gaps.push({...row,quality:'stage_transfer_reference'});
+  }
   const packets=state.bundle?.report.graph.receipt_packet_sources?.packets;
   if (packets && lineHint && !gaps.some(g=>g.line===lineHint)) {
     const page=packets.find(p=>p.doc===docId)?.pages.find(p=>p.page===pageNumber);
@@ -321,7 +328,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     if (source) gaps.push({...source,quality:['seller','delivery_note'].includes(source.kind)?'supplier_reference':'reservation_reference'});
   }
   for (const gap of gaps) {
-    const label = {receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
+    const label = {stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
     const section = box('evidence-row',el('h4',label+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
     section.dataset.gapLine = String(gap.line);
     if (gap.line===lineHint) {
@@ -502,7 +509,7 @@ function evidenceJump(label, targetId) {
 
 function finding(item) {
   const heading = item.stage ? item.stage.name + (item.stage.share ? ' · ' + item.stage.share + '%' : '') +
-    (item.rule === 'H05' ? ' 实付时点' : ' 付款条件') : item.title;
+    (item.rule === 'H05' ? ' 实付时点' : item.rule==='H06'?' 回单合计':' 付款条件') : item.title;
   const node = box('finding', box('flow', tag(item.status), el('h3', heading), el('span', item.rule, 'mono')),
     el('p', item.detail), el('p', '执行依据 · ' + item.basis, 'muted'));
   node.dataset.finding = item.id;
@@ -539,7 +546,8 @@ function finding(item) {
     const {graph,findings}=state.bundle.report;
     node.append(deliveryBatchPanel(item.batch_acceptance,graph,findings.filter(f=>f.rule==='H04')));
   }
-  if (item.stage?.batch_index) {
+  if (item.stage_payments) node.append(stagePaymentsPanel(item,state.bundle.report.graph,state.bundle.report.findings));
+  if (item.stage?.batch_index && !item.stage_payments) {
     const {findings}=state.bundle.report;
     const batch=findings.find(f=>f.batch_acceptance)?.batch_acceptance;
     const record=batch?.batches.find(b=>b.index===item.stage.batch_index);
@@ -583,7 +591,7 @@ function finding(item) {
 }
 function reportPanel() {
   const report = state.bundle.report;
-  const performance = report.findings.filter(item => /^H0[1-5]$/.test(item.rule));
+  const performance = report.findings.filter(item => /^H0[1-6]$/.test(item.rule));
   const other = report.findings.filter(item => !performance.includes(item));
   const passed = other.filter(item => item.status === 'ok');
   const exceptions = other.filter(item => item.status !== 'ok');
@@ -645,6 +653,17 @@ function graphPanel() {
     panel.append(list);
   }
   const comparisons=graph.edges.filter(e=>e.type==='payment_window_comparison');
+  const operands=graph.edges.filter(e=>e.type==='stage_transfer_operand');
+  if (operands.length) {
+    const list=lazyFold('本期约定与计入的流水（'+operands.length+'）',()=>operands.map(edge=>{
+      const row=box('line');
+      row.dataset.stageTransfer=edge.to;
+      for (const ref of edge.evidence) row.append(box('batch-source',el('q',facts.get(ref).quote),citation(ref)));
+      return row;
+    }));
+    list.classList.add('stage-transfer-relations');
+    panel.append(list);
+  }
   const countLines=graph.quality_addenda?.quantities?.lines;
   if (countLines?.length) {
     const list=lazyFold('交付数量变更与验收原行（'+countLines.length+'）',()=>countLines.map(line=>reservationSource(line,graph)));

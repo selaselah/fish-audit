@@ -37,24 +37,25 @@ function lazyFold(title, build) {
   return details;
 }
 
+function performanceJump(item,label) {
+  const button = action('', () => {
+    const target = document.querySelector('[data-finding="'+CSS.escape(item.id)+'"]');
+    target?.focus({preventScroll:true});
+    target?.scrollIntoView({block:'start'});
+  }, 'performance-jump');
+  button.dataset.jumpFinding = item.id;
+  button.setAttribute('aria-label',label+' · '+statusName(item.status)+'，查看依据');
+  button.append(el('span',label),tag(item.status));
+  return button;
+}
+
 function performanceOverview(findings, graph) {
   const overview = el('section','','performance-overview');
   const summary = box('performance-statuses');
   const phases = findings.filter(f=>f.rule==='H04' && f.stage);
-  const inspect = (item, label) => {
-    const button = action('', () => {
-      const target = document.querySelector('[data-finding="'+CSS.escape(item.id)+'"]');
-      target?.focus({preventScroll:true});
-      target?.scrollIntoView({block:'start'});
-    }, 'performance-jump');
-    button.dataset.jumpFinding = item.id;
-    button.setAttribute('aria-label',label+' · '+statusName(item.status)+'，查看依据');
-    button.append(el('span',label),tag(item.status));
-    return button;
-  };
   for (const [rule,label] of [['H01','签署与生效'],['H02','交付验收']]) {
     const item = findings.find(f=>f.rule===rule);
-    if (item) summary.append(inspect(item,label));
+    if (item) summary.append(performanceJump(item,label));
   }
   const plan = findings.find(f=>f.rule==='H03');
   if (plan) {
@@ -63,7 +64,7 @@ function performanceOverview(findings, graph) {
       if (phases.length>1) label = '分 '+phases.length+' 期付款';
       else if (phases.length===1 && Number(phases[0].stage.share)===100) label = '单期全额付款';
     }
-    summary.append(inspect(plan,label));
+    summary.append(performanceJump(plan,label));
   }
   overview.setAttribute('aria-label','履约结论与期次');
   overview.append(summary);
@@ -82,19 +83,90 @@ function performanceOverview(findings, graph) {
     const fact = index.facts.get(stage.clause_ref);
     const source = fact ? action(heading,()=>openPage(fact.doc,fact.page,fact.id),'phase-source') : el('strong',heading);
     if (fact) source.setAttribute('aria-label',heading+'，查看合同原文');
-    const results = box('phase-results',inspect(phase,'付款条件'));
+    const results = box('phase-results',performanceJump(phase,'付款条件'));
     const matched = payments.filter(f=>f.stage && ['name','clause_ref','clause','share'].every(k=>f.stage[k]===stage[k]));
     if (matched.length) {
-      for (const item of matched) results.append(inspect(item,matched.length===1?'实付时点':paymentLabel(item)));
+      for (const item of matched) results.append(performanceJump(item,matched.length===1?'实付时点':paymentLabel(item)));
     } else {
       results.append(el('span','未关联回单','phase-unlinked'));
     }
+    const sum=findings.find(f=>f.stage_payments && f.stage?.clause_ref===stage.clause_ref && f.stage?.name===stage.name);
+    if (sum) results.append(performanceJump(sum,'本期回单合计'));
     row.append(box('phase-contract',source,el('q',stage.clause)),results);
     list.append(row);
   }
   if (phases.length) overview.append(list);
-  for (const item of payments.filter(f=>!f.stage)) overview.append(inspect(item,'回单期次待核 · '+paymentLabel(item)));
+  for (const item of payments.filter(f=>!f.stage)) overview.append(performanceJump(item,'回单期次待核 · '+paymentLabel(item)));
+  for (const item of findings.filter(f=>f.stage_payments && !f.stage)) overview.append(performanceJump(item,'分笔款项归属待核'));
+  if (payments.length>1 && !graph.stage_payment_sources) overview.append(el('p','此版记录了每张回单的实付时点，尚无本期累计金额的核查结果。','small'));
   return overview;
+}
+
+function stagePaymentsPanel(finding,graph,findings) {
+  const check=finding.stage_payments;
+  const {facts,documents,nodes}=graphIndex(graph);
+  const panel=el('section','','stage-payments');
+  panel.dataset.stageBalance=check.state;
+  panel.setAttribute('aria-label','分笔付款与本期约定');
+  panel.append(el('h4','分笔付款与本期约定'));
+  const money=v=>v==null?'待核':v.replace(/\B(?=(\d{3})+\.)/g,',')+' 元';
+  const values=el('dl','','stage-balances');
+  const negative=check.difference?.startsWith('-');
+  const diffLabel=negative?'距本期约定':check.state==='over'?'超出本期约定':'与约定差额';
+  for (const [label,value] of [['按原条款计算',check.expected],['已见回单合计',check.seen],[diffLabel,check.difference?.replace(/^-/,'')]]) {
+    values.append(box('warranty-date',el('dt',label),el('dd',money(value))));
+  }
+  panel.append(values);
+  const operand=(ref,withinReceipt=false)=>{
+    const f=facts.get(ref);
+    const button=withinReceipt && f.source_line ? action('核对第 '+f.source_line.number+' 行',()=>openPage(f.doc,f.page,ref),'ref'):citation(ref);
+    if (withinReceipt) button.setAttribute('aria-label',f.name+'，第 '+f.page+' 页，'+f.label);
+    const row=box('batch-source',el('q',f.source_line?.text || f.quote),button);
+    row.dataset.stageOperand=ref;
+    return row;
+  };
+  const basis=[check.base.total,check.base.currency,check.base.unit].filter(Boolean);
+  if (basis.length) panel.append(lazyFold('核对合同总额、币种与单位',()=>{
+    const rows=basis.map(v=>operand(v.ref));
+    if (check.expected!=null && finding.stage) rows.unshift(el('p',check.base.total.value+' × '+finding.stage.share+'% = '+money(check.expected)));
+    return rows;
+  }));
+  const phase=findings.find(f=>f.rule==='H04' && f.stage && f.stage.clause_ref===finding.stage?.clause_ref && f.stage.name===finding.stage?.name);
+  if (phase) panel.append(performanceJump(phase,'核对本期履约条件'));
+  for (const r of check.records) {
+    const label=nodes.get(r.unit)?.label || documents.get(r.unit)?.name || r.unit;
+    const section=el('section','','stage-transfer');
+    section.dataset.transferUnit=r.unit;
+    section.append(box('flow',el('strong',label),el('span',r.date || '日期待核','small')));
+    if (r.duplicate_of) section.append(el('p','流水与《'+(nodes.get(r.duplicate_of)?.label || r.duplicate_of)+'》重复，'+
+      (check.seen==null?'计入口径待核。':'累计时只计一笔。'),'signer-pending'));
+    for (const key of ['transfer_amount','transfer_ref']) {
+      if (r.inputs[key]) section.append(operand(r.inputs[key].ref,true));
+      else section.append(el('p',key==='transfer_ref'?'流水号待核':'金额原行待核','signer-pending'));
+    }
+    const rest=['payer','payee','contract_id','payment_designation','paid_on','transfer_status','currency','unit','payee_account']
+      .map(k=>r.inputs[k]).filter(Boolean);
+    if (rest.length) section.append(lazyFold('核对户名、用途和回单原行',()=>rest.map(v=>operand(v.ref,true))));
+    const timing=check.timing.find(t=>t.unit===r.unit);
+    const payment=timing?.receipt_ref && findings.find(f=>f.rule==='H05' && f.evidence.includes(timing.receipt_ref));
+    if (payment) section.append(performanceJump(payment,'核对这笔实付时点'));
+    panel.append(section);
+  }
+  const ledger=graph.stage_payment_sources;
+  const originalRows=[...ledger.notes];
+  for (const p of ledger.pages) {
+    for (const r of p.uncovered) {
+      if (!originalRows.some(s=>s.doc===p.doc && s.page===p.page && s.line===r.line))
+        originalRows.push({...r,doc:p.doc,page:p.page,facts:[]});
+    }
+    if (!p.text_only || p.partial) panel.append(box('flow',el('span','需核对整页及批注'),citation(p.doc+'/p'+p.page)));
+  }
+  if (originalRows.length) {
+    const notes=fold('核对影响累计口径的原行',...originalRows.map(r=>reservationSource(r,graph)));
+    notes.open=true;
+    panel.append(notes);
+  }
+  return panel;
 }
 
 function performanceComparison(finding, graph) {

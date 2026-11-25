@@ -1,5 +1,17 @@
 # 合成财会审计演练
 
+## 分期款分几笔支付
+
+在仓库根目录运行以下命令，生成并上传 11 组水印采购资料。每组有合同、验收报告、质保确认单和两张银行回单。本机工作台需已启动。去掉 `--run` 可只生成文件，追加 `--cases approval quality early` 可只运行三个指定情形。
+
+```sh
+server/.venv/bin/python docs/samples/stage_transfers.py --run --run-id synthetic-stage-transfers-v1
+```
+
+`balanced`、`partial`、`excess` 分别验证本次回单合计等于、少于和超过第二期约定金额。`repeat` 提交同一流水的两份副本，`conflict` 用相同流水列出不同金额，`reversal` 在回单上注明冲正。`allocation` 的一张回单同时写了两个期次，`separate` 的两笔则分属预付款和验收款。`approval` 缺合同要求的董事会批准，`quality` 的实测柜温超过合同上限，`early` 的第一笔付款早于验收。这三组的两张回单均合计 6 万元。
+
+运行时经上传接口调用实际模型，按生成件摘要和印刷原行校对演练资料并留存修订，再断言各项结果。工作台保留最初读图、后续更正及待审计人员签收的最终版本。
+
 ## 验收单合成一份 PDF
 
 运行 `server/.venv/bin/python docs/samples/receipt_packets.py` 生成中文水印资料。加 `--run --run-id 本次演练编号` 可走本机上传、逐页多模态识别、合成原件校对与审计流程。`--cases ordered borrowed quality duplicate continuation masked` 分别覆盖倒序装订、只在其他页签名、实测超限、重复单号、归属不清的续页和不完整编号。另有 `retest`、`wrong_defect` 和 `approval`，分别演练同一册内的整改闭环、复验引用错误缺陷号，以及合同约定的董事会决议缺件但验收单均已签齐。每个案例仍保留独立的合同、质保确认与银行回单。脚本按原件摘要、物理页和生成时印刷的文字进行补正和签认，演练不会替审计员签收业务结论。
