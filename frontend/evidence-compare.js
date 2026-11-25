@@ -20,6 +20,19 @@ const EvidenceCompare = (() => {
       add('payment', '付款条款与回单', clause, unique('paid_on', kinds.bank_receipt));
     }
     if (finding.rule !== 'H02') return result;
+    const chain = finding.reinspection;
+    if (chain) {
+      function stepField(role, field) {
+        const steps = chain.steps.filter(s => s.role === role);
+        if (steps.length !== 1) return null;
+        const fact = unique(field,[steps[0].unit]);
+        return fact && steps[0].evidence.includes(fact.id) ? fact : null;
+      }
+      add('retest-readings','初验与复验读数',stepField('original','measured_result'),stepField('final','measured_result'));
+      add('retest-repair','整改与关闭结论',stepField('repair','repair_result'),stepField('final','defect_closure'));
+      add('retest-dates','整改与复验日期',stepField('repair','repaired_on'),stepField('final','accepted_on'));
+      add('retest-defect','初验与复验缺陷号',stepField('original','defect_number'),stepField('final','defect_number'));
+    }
     const change = finding.quality_change;
     const original = unique('acceptance_criteria', contract);
     const revised = unique('revised_criterion', change?.units);
@@ -70,6 +83,32 @@ const EvidenceCompare = (() => {
       if (seal) add('dates', '签章与验收日期', unique(seal, change.units), unique('accepted_on', kinds.acceptance));
     }
     return result;
+  }
+
+  function repairNotice(chain, index) {
+    const checks = chain.steps.filter(step => step.completion?.status && step.completion.status !== 'ok');
+    if (!checks.length) return null;
+    const notice = box('repair-notice');
+    for (const {completion} of checks) {
+      const rows = ['qualification',...(!completion.date?['date']:[]),'unreviewed'].flatMap(kind=>completion.lines.filter(r=>r.kind===kind));
+      const title = rows[0]?.kind==='qualification' ? '整改记录另有说明' : !completion.date ? '整改完成日待核' : '整改原页待核';
+      const block = box('repair-notice-item',box('repair-notice-title',glyph('exclamation-triangle'),el('strong',title)));
+      const sources = rows.map(row=>{
+        const fact = row.facts.map(ref=>index.facts.get(ref)).find(f=>f?.quote===row.quote);
+        const button = action(row.line ? '查看原件第 '+row.line+' 行' : '查看原件',
+          ()=>openPage(row.doc,row.page,fact?.id,fact?null:row.line),'text-button');
+        button.dataset.repairSource = fact?.id || row.doc+'/p'+row.page+(row.line?'/l'+row.line:'');
+        return box('repair-notice-line',el('q',row.quote),button);
+      });
+      if (!rows.length) block.append(el('span',completion.detail));
+      for (const page of completion.mixed_pages) {
+        sources.push(action('核对第 '+page.page+' 页影像',()=>openPage(page.doc,page.page),'text-button'));
+      }
+      if (sources.length) block.append(sources[0]);
+      if (sources.length>1) block.append(fold('另有 '+(sources.length-1)+' 处依据',...sources.slice(1)));
+      notice.append(block);
+    }
+    return notice;
   }
 
   function drawExcerpt(image, rects) {
@@ -225,7 +264,15 @@ const EvidenceCompare = (() => {
       const open = action('', () => openPage(fact.doc, fact.page, fact.id), 'compare-original');
       open.append(frame,box('compare-source-foot',el('span',origin),box('compare-open-label',el('span','查看原页'),glyph('arrows-angle-expand'))),
         el('span','，'+nameText+'，核对'+fact.label,'visually-hidden'));
-      sheet.replaceChildren(box('compare-quote',tag(fact.status),el('blockquote',fact.quote)),open);
+      const printed = rects.length && fact.source_line.text || fact.quote;
+      const differs = printed !== fact.quote;
+      const stateTag = differs && fact.status==='anchored' ? el('span','抄录与原行有差异','tag transcription-difference') : tag(fact.status);
+      const quote = box('compare-quote',stateTag,el('blockquote',printed));
+      if (differs) {
+        const transcript = fold('对照字段抄录',el('p',fact.quote));
+        transcript.classList.add('compare-transcript'); quote.append(transcript);
+      }
+      sheet.replaceChildren(quote,open);
       pageImage(fact).then(image => {
         frame.replaceChildren(drawExcerpt(image, rects));
       }).catch(() => {
@@ -258,12 +305,20 @@ const EvidenceCompare = (() => {
     const bar = box('compare-bar');
     if (pairs.length) bar.append(shortcuts);
     if (finding.quality_change) bar.append(versionNote);
+    if (finding.reinspection) {
+      const closed = finding.reinspection.state === 'closed';
+      const state = box('compare-version',glyph(closed?'clipboard-check':'clock-history'),el('span',closed?'缺陷已关闭':'缺陷待核'));
+      state.dataset.state = closed?'closed':'pending'; bar.append(state);
+    }
     if (bar.childElementCount) root.append(bar);
+    const note = finding.reinspection && repairNotice(finding.reinspection,index);
+    if (note) root.append(note);
     root.append(box('compare-spread',...sides.map(s => s.node)),announcement,finder.dialog);
     const batches=finding.batch_acceptance?.batches || [];
     const changed=batches.filter(b=>finding.batch_acceptance.records.some(r=>b.records.includes(r.unit) && r.standard?.state==='applied'));
     const initial=[...priorityFindings(batches),...changed].map(b=>pairs.find(p=>p.key==='batch-'+b.index)).find(Boolean);
-    use(initial || pairs[0]);
+    const focus = pairs.find(p=>p.key==='retest-'+finding.reinspection?.focus);
+    use(focus || initial || pairs[0]);
     return root;
   }
   return {presets, panel};

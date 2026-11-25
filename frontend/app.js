@@ -189,8 +189,10 @@ function openPage(docId, pageNumber, highlight, lineHint) {
   left.tabIndex = right.tabIndex = -1;
   const pageFacts = (state.bundle?.report.graph.facts || []).filter(fact => fact.doc === docId && fact.page === pageNumber);
   const boardRefs = boardPageReferences(state.bundle?.report.graph, docId, pageNumber, pageFacts);
-  const rawBoardLines = boardRefs.filter(source => source.rawLine);
-  const initialRaw = rawBoardLines.find(source => source.rawLine === lineHint);
+  const repairRefs = repairPageReferences(state.bundle?.report.graph, docId, pageNumber, pageFacts);
+  const pageRefs = [...boardRefs, ...repairRefs];
+  const rawLines = pageRefs.filter(source => source.rawLine);
+  const initialRaw = rawLines.find(source => source.rawLine === lineHint);
   let showAllFacts = !initialRaw && !pageFacts.some(f=>f.id===highlight);
   const coverage = state.bundle?.report.graph.delegation_coverage;
   const nameHolds = new Map([...(coverage?.agent_holds || []),...(coverage?.signer_holds || [])]
@@ -221,20 +223,20 @@ function openPage(docId, pageNumber, highlight, lineHint) {
   function locate(fact, raw) {
     const ref = fact?.id || raw?.ref || '';
     overlay.replaceChildren();
-    for (const [left, top, right, bottom] of fact?.source_line?.rects || []) {
+    for (const [left, top, right, bottom] of fact?.source_line?.rects || raw?.rects || []) {
       const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
       for (const [name, value] of Object.entries({x:left,y:top,width:right-left,height:bottom-top}))
         rect.setAttribute(name,String(1000*value));
       overlay.append(rect);
     }
     for (const row of right.querySelectorAll('.evidence-row')) {
-      const rowRef = row.dataset.fact || row.dataset.boardRef;
+      const rowRef = row.dataset.fact || row.dataset.sourceRef;
       row.classList.toggle('located', Boolean(ref) && rowRef === ref);
       if (rowRef) row.hidden = !showAllFacts && rowRef !== ref;
     }
     if (fieldPicker) fieldPicker.value=showAllFacts ? '' : ref;
     if (compareButton) {
-      const next = boardRefs[(boardRefs.findIndex(source => source.ref === ref) + 1) % boardRefs.length];
+      const next = pageRefs[(pageRefs.findIndex(source => source.ref === ref) + 1) % pageRefs.length];
       compareButton.textContent = '对照' + next.label;
       compareButton.dataset.nextRef = next.ref;
     }
@@ -250,37 +252,38 @@ function openPage(docId, pageNumber, highlight, lineHint) {
   }
   function selectReference(ref, moveFocus) {
     const fact = pageFacts.find(f => f.id === ref);
-    const raw = rawBoardLines.find(source => source.ref === ref);
+    const raw = rawLines.find(source => source.ref === ref);
     showAllFacts = !fact && !raw;
     if (showAllFacts) {
-      for (const row of right.querySelectorAll('[data-fact],[data-board-ref]')) row.hidden = false;
+      for (const row of right.querySelectorAll('[data-fact],[data-source-ref]')) row.hidden = false;
       return;
     }
     focusObservation(fact, raw, moveFocus);
   }
   let fieldPicker, compareButton;
-  if (pageFacts.length || rawBoardLines.length) {
+  if (pageFacts.length || rawLines.length) {
     fieldPicker=el('select'); fieldPicker.setAttribute('aria-label','定位本页引文');
-    fieldPicker.add(new Option('全部引文 · '+(pageFacts.length + rawBoardLines.length)+' 项',''));
-    if (boardRefs.length) {
+    fieldPicker.add(new Option('全部引文 · '+(pageFacts.length + rawLines.length)+' 项',''));
+    for (const [label,refs] of [['审批决定与待核原文',boardRefs],['整改状态与原行',repairRefs]]) {
+      if (!refs.length) continue;
       const group = el('optgroup');
-      group.label = '审批决定与待核原文';
-      for (const source of boardRefs) group.append(new Option(source.option, source.ref));
+      group.label = label;
+      for (const source of refs) group.append(new Option(source.option, source.ref));
       fieldPicker.append(group);
     }
     for (const fact of pageFacts) {
-      if (!boardRefs.some(source => source.ref === fact.id)) fieldPicker.add(new Option(fact.label+' · '+fact.value,fact.id));
+      if (!pageRefs.some(source => source.ref === fact.id)) fieldPicker.add(new Option(fact.label+' · '+fact.value,fact.id));
     }
     fieldPicker.addEventListener('change',() => selectReference(fieldPicker.value, true));
     const navigator = box('field-navigator',right.querySelector('h3'),fieldPicker);
-    if (boardRefs.length > 1) {
+    if (pageRefs.length > 1) {
       const announcement = el('output','','visually-hidden');
-      compareButton = action('对照'+boardRefs[0].label,() => {
-        const next = boardRefs.find(source => source.ref === compareButton.dataset.nextRef);
+      compareButton = action('对照'+pageRefs[0].label,() => {
+        const next = pageRefs.find(source => source.ref === compareButton.dataset.nextRef);
         selectReference(next.ref, false);
         announcement.textContent = next.label+' · '+next.quote;
       },'approval-switch');
-      compareButton.dataset.nextRef = boardRefs[0].ref;
+      compareButton.dataset.nextRef = pageRefs[0].ref;
       fieldPicker.before(compareButton);
       navigator.append(announcement);
     }
@@ -437,9 +440,9 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     if (source) gaps.push({...source,quality:'delivery_batch_clause'});
   }
   const effect=state.bundle?.report.graph.contract_effect_sources;
-  for (const source of rawBoardLines) {
+  for (const source of rawLines) {
     if (!gaps.some(g => g.line === source.rawLine))
-      gaps.push({line:source.rawLine,quote:source.quote,quality:'approval_reference'});
+      gaps.push({line:source.rawLine,quote:source.quote,quality:source.quality || 'approval_reference'});
   }
   if (effect && lineHint && !gaps.some(g=>g.line===lineHint)) {
     const source=effect.conditions.find(s=>s.doc===docId && s.page===pageNumber && s.line===lineHint);
@@ -461,11 +464,14 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     if (source) gaps.push({...source,quality:['seller','delivery_note'].includes(source.kind)?'supplier_reference':'reservation_reference'});
   }
   for (const gap of gaps) {
-    const label = {equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',approval_reference:'董事会审批记录原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
+    const label = {repair_completion_reference:'整改记录原行',equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',approval_reference:'董事会审批记录原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
     const section = box('evidence-row',el('h4',label+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
     section.dataset.gapLine = String(gap.line);
-    const boardLine = rawBoardLines.find(source => source.rawLine === gap.line);
-    if (boardLine) section.dataset.boardRef = boardLine.ref;
+    const raw = rawLines.find(source => source.rawLine === gap.line);
+    if (raw) {
+      section.dataset.sourceRef = raw.ref;
+      if (boardRefs.includes(raw)) section.dataset.boardRef = raw.ref;
+    }
     if (gap.line===lineHint) {
       section.classList.add('located');
       focusRow=section;
@@ -481,7 +487,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     }
     right.append(section);
   }
-  if (!pageFacts.length && !rawBoardLines.length) right.append(el('p', '本页尚无可展示的提取记录。', 'muted'));
+  if (!pageFacts.length && !rawLines.length) right.append(el('p', '本页尚无可展示的提取记录。', 'muted'));
   const submit = action('记录所选引文的核图意见', () => {
     $('#page-dialog').close(); openReview([...selected]);
   }, 'primary');

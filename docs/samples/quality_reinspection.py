@@ -12,7 +12,8 @@ from run import BASE, get, post, submit, wait
 
 CASES = {"closed":"整改复验后支付第二期","early":"整改期间提前支付验收款","mismatch":"复验缺陷号与原件不符",
          "partial":"整改三份记录仅列同一缺陷尾号","noted":"复验报告单独注明仅列缺陷尾号",
-         "short":"完整缺陷编号恰为四位"}
+         "short":"完整缺陷编号恰为四位","temporary":"整改状态已完成但附注只做了临时校准",
+         "split_repair_date":"整改完成日期的日数断字，复验单已签认"}
 DEFECT = "柜温控制探头失准"
 TITLES = {"复验报告":"reinspection","整改记录单":"remediation","验收报告":"acceptance","质保期满确认单":"warranty",
           "采购合同":"contract","银行付款回单":"bank_receipt"}
@@ -38,6 +39,10 @@ def reinspection_records(code,mode):
     links=[("原验收单编号",original),("整改记录编号",repair),("缺陷编号",defect)]
     records["整改记录单"]=[*template[:4],*links,("整改对象",DEFECT),("实际整改措施","已更换并校准控制探头"),
                         ("整改状态","已完成"),("整改完成日期","2026年9月16日"),("整改签认","演练林岚（已签字）")]
+    if mode=="temporary":
+        records["整改记录单"].append(("整改备注","控制探头仅临时校准，正式更换尚未完成"))
+    if mode=="split_repair_date":
+        records["整改记录单"]=[(k,"2026年9月1 6日" if k=="整改完成日期" else v) for k,v in records["整改记录单"]]
     labels={"验收日期":"复验日期","验收范围":"复验范围","验收结论":"复验结论","验收签认":"复验签认"}
     records["复验报告"]=[(labels.get(label,label),value) for label,value in template]
     records["复验报告"] += [("复验单编号","FY-"+code),("原验收单编号",original),("整改记录编号",repair),
@@ -67,8 +72,21 @@ def verify_report(report, mode):
         mode, ("open","issue","missing","reject"))
     actual=check["reinspection"]["state"],check["status"],by_rule["H05"]["status"],report["result"]["verdict"]
     assert actual==expected, (actual,expected,[(f["rule"],f["detail"]) for f in report["findings"] if f["status"]!="ok"])
-    assert [s["date"] for s in check["reinspection"]["steps"]]==["2026-09-10","2026-09-16","2026-09-20"]
+    steps=check["reinspection"]["steps"]
+    assert [s["date"] for s in steps]==["2026-09-10",None if mode=="split_repair_date" else "2026-09-16","2026-09-20"]
     assert all(s["evidence"] and set(s["evidence"])<=set(check["evidence"]) for s in check["reinspection"]["steps"])
+    if mode in ("temporary","split_repair_date"):
+        completion=next(s["completion"] for s in steps if s["role"]=="repair")
+        status,kind,quote=(
+            ("risk","qualification","整改备注：控制探头仅临时校准，正式更换尚未完成") if mode=="temporary" else
+            ("missing","date","整改完成日期：2026年9月1 6日"))
+        assert completion["status"]==status
+        line=next(s for s in completion["lines"] if s["kind"]==kind and s["quote"]==quote)
+        evidence=f"{line['doc']}/p{line['page']}"
+        assert any(e["type"]=="repair_completion_basis" and e["to"]==evidence and e["line"]==line["line"] for e in report["graph"]["edges"])
+        phases=[f for f in report["findings"] if f["rule"]=="H04"]
+        assert [f["status"] for f in phases]==["ok","risk","risk"]
+        assert evidence not in phases[0]["evidence"] and all(evidence in f["evidence"] for f in phases[1:])
     assert any(s["status"]==("risk" if expected[0]=="open" else "ok") for s in report["findings"]
                if s["rule"]=="H04" and s["stage"]["share"]=="60")
     if mode in ("partial", "noted"):

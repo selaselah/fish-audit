@@ -2176,10 +2176,24 @@ try {
       console.log(execFileSync(process.env.AUDIT_PYTHON || 'server/.venv/bin/python',['server/verify.py','--rules',zip],{encoding:'utf8'}).trim());
       await evaluate('document.querySelector("#nav-library").click()');
       await wait('!document.querySelector("#library").hidden','evidence library');
-      await evaluate('document.querySelector("#library-query").value="YL-FP-071";document.querySelector("#library-form").requestSubmit()');
-      const indexed = await wait('document.querySelector("#library-results .source-jump")?.href','indexed invoice number');
+      const signedFacts=await evaluate('fetch('+JSON.stringify('/api/w/'+path[1]+'/cases/'+path[3]+'/reports/'+revision)+').then(r=>r.json()).then(b=>b.report.graph.facts)');
+      const invoiceNumber='YL-FP-071';
+      const verified=f=>['anchored','confirmed'].includes(f.status);
+      const numbers=signedFacts.filter(f=>[f.quote,f.value].some(t=>t.normalize('NFKC').includes(invoiceNumber)));
+      const searchLibrary=(query,group)=>evaluate('document.querySelector("#library-query").value='+JSON.stringify(query)+
+        ';document.querySelector("#library-status").value='+JSON.stringify(group)+';document.querySelector("#library-form").requestSubmit()');
+      await searchLibrary(invoiceNumber,'verified');
+      let candidates=numbers.filter(verified);
+      if (!candidates.length) {
+        await wait('document.querySelector("#library-results").textContent.includes("没有匹配引文")','unverified invoice excluded from verified results');
+        candidates=numbers.length?numbers:signedFacts.filter(f=>f.field==='contract_id' && verified(f));
+        assert.ok(candidates.length,'the signed fixture contains an indexed source');
+        await searchLibrary(numbers.length?invoiceNumber:candidates[0].value,numbers.length?'pending':'verified');
+      }
+      const allowed=candidates.map(f=>f.id);
+      const indexed = await wait('Array.from(document.querySelectorAll("#library-results .source-jump"),a=>a.href).find(url=>'+JSON.stringify(allowed)+'.includes(new URL(url).searchParams.get("fact")))','source indexed with its signed evidence status');
       assert.equal(new URL(indexed).searchParams.get('rev'),String(revision));
-      await evaluate('document.querySelector("#library-results .source-jump").click()');
+      await evaluate('Array.from(document.querySelectorAll("#library-results .source-jump")).find(a=>a.href==='+JSON.stringify(indexed)+').click()');
       await wait('document.querySelector("#page-dialog").open && !!document.querySelector(".evidence-row.located") && location.hash.includes("rev='+revision+'")','source opened on its indexed revision');
       await evaluate('document.querySelector("#page-dialog").close()');
       await evaluate('document.querySelector("#nav-account").click()');

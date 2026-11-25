@@ -171,6 +171,12 @@ PYTHONPATH=server server/.venv/bin/python -m unittest discover -s server/tests -
 
 ### 缺陷整改及最终复验
 
+以下四组资料可复核整改附注、日期断字、缺陷关闭及复验错号。带 `--run` 时从本机提交水印文件，按原件核对模型观察及模拟签章。各案的审计员最终决定留空。[四案原件和固定底稿](../acceptance.md)
+
+```sh
+server/.venv/bin/python docs/samples/quality_reinspection.py --run --cases temporary split_repair_date closed mismatch --run-id synthetic-repair-completion-20261125-21
+```
+
 运行 `server/.venv/bin/python docs/samples/quality_reinspection.py --run` 生成并核验三组水印件。9 月 10 日交付的冷藏柜实测 8℃，高于合同上限 4℃。9 月 16 日完成整改，9 月 20 日复验实测 3℃。三案分别核查复验后的第二期付款、复验前已付的验收款以及缺陷号不同的复验报告。每一组均保留首次失败记录。
 
 ### 合同指定验收人和共同签字

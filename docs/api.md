@@ -9,6 +9,12 @@
 | `GET /showcase/{filename}` | 首页的三份合成原件，文件名为 `contract.pdf`、`acceptance.pdf`、`transfer.pdf`。可按资料索引复核 R7 案例的文件摘要。 |
 | `GET /workpaper/{id}`、`GET /w/{wid}/workpaper/{id}` | 校验版本及引文、发现参数，转入 `/app` 的相应底稿。旧的根路径片段书签和邀请链接在浏览器中转入相同工作区。 |
 
+## 整改完成依据
+
+`policy.repair_completion = repair-completion-v1` 的底稿在 `graph.repair_completion_sources` 留存整改原页、可定位行和影像观察。每行保存 `unit`、`doc`、`page`、`line`、`kind`、`quote` 和 `facts`。原件有文字、模型漏提时，行号和完整原文仍在，`facts` 可为空。影像观察的 `line` 为 null。`repair_completion_basis` 关系从整改资料指向原页，记录该行及可用的观察编号。
+
+H02 的 `reinspection.steps` 中，`role = repair` 的步骤含 `completion`。其中 `status` 表示对完成日和原页附注的核对结果，`date` 只在日期原行唯一且可复核时给出。`mixed_pages` 保留需通读的影像页。整项缺陷能否关闭看 `reinspection.state`，最终审计建议看 `result.verdict`。历史底稿可能没有 `completion`。四种演练均可通过固定版本的发现链接打开。[本机验收记录](acceptance.md)
+
 ## 每批验收所据的标准版本
 
 `policy.delivery_batches` 为 `contract-delivery-batches-v7` 的底稿支持逐批选用标准。H02 的 `quality_change.state = by_batch` 表示已有一份范围明确且按约生效的前瞻性质量协议。各次验收的判断分别在 `batch_acceptance.records[].standard` 中。

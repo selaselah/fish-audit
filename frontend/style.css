@@ -764,6 +764,14 @@ button.icon-button:hover,button.icon-button:focus-visible { color:var(--accent);
 .compare-presets { flex-wrap:wrap; gap:3px 6px; }
 .compare-presets button { min-height:38px; padding:4px 9px; border-color:transparent; background:transparent; color:var(--muted); font-size:.85rem; }
 .compare-presets button[aria-pressed=true] { color:var(--accent); background:var(--accent-soft); border-color:var(--accent-line); }
+.repair-notice { margin:0 0 12px; border:1px solid var(--line); border-inline-start:3px solid var(--attention-line); border-radius:6px; background:var(--attention-soft); }
+.repair-notice-item { display:grid; gap:3px; padding:9px 13px; color:var(--ink); font-size:.88rem; }
+.repair-notice-title,.repair-notice-line { display:flex; align-items:center; flex-wrap:wrap; gap:4px 8px; }
+.repair-notice-title { color:var(--attention); }
+.repair-notice-line { justify-content:space-between; }
+.repair-notice-line q { overflow-wrap:anywhere; }
+.repair-notice .text-button { width:fit-content; min-height:36px; padding:4px 2px; }
+@media (max-width:700px) { .repair-notice .text-button { min-height:44px; } }
 .compare-version { gap:6px; font-size:.83rem; color:var(--secondary); }
 .compare-version[data-state=pending] { color:var(--attention); }
 .compare-spread { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:clamp(10px,1.5vw,22px); }
@@ -775,6 +783,10 @@ button.icon-button:hover,button.icon-button:focus-visible { color:var(--accent);
 .compare-pick { display:inline-flex; flex:none; align-items:center; gap:5px; min-height:36px; padding:3px 8px; color:var(--accent); font-size:.82rem; }
 .compare-quote { display:flex; flex-direction:column; align-items:flex-start; gap:7px; padding:17px 0 15px; }
 .compare-quote .tag { padding:2px 7px; font-size:.73rem; }
+.tag.transcription-difference { color:var(--attention); background:var(--attention-soft); }
+.compare-transcript { font-size:.85rem; color:var(--secondary); }
+.compare-transcript summary { color:var(--accent); cursor:pointer; }
+.compare-transcript p { margin:4px 0 0; white-space:pre-wrap; }
 .compare-quote blockquote { margin:0; padding:0; border:0; background:transparent; color:var(--ink); font-size:clamp(1rem,1.4vw,1.24rem); line-height:1.48; font-weight:570; white-space:pre-wrap; overflow-wrap:anywhere; }
 .compare-original { display:block; width:100%; min-width:0; padding:0; overflow:hidden; border-color:var(--line); color:var(--ink); }
 .compare-original:hover,.compare-original:focus-visible { border-color:var(--accent); }

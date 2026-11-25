@@ -72,7 +72,7 @@ function performanceOverview(findings, graph) {
   const batches = findings.find(f => f.batch_acceptance)?.batch_acceptance;
   const index = graphIndex(graph);
   const acceptance=findings.find(f=>f.rule==='H02');
-  const batchPairs=batches?.records.some(r=>r.standard) ? EvidenceCompare.presets(acceptance,
+  const pairs=acceptance && (acceptance.reinspection || batches?.records.some(r=>r.standard)) ? EvidenceCompare.presets(acceptance,
     traceReferences(graph,acceptance).map(id=>index.facts.get(id)).filter(Boolean),graph) : [];
   const paymentLabel = f => {
     const document = f.evidence.map(ref=>index.facts.get(ref)).find(fact=>fact?.field==='bank_receipt');
@@ -102,10 +102,15 @@ function performanceOverview(findings, graph) {
     if (record?.standard) {
       const version={original:'按原合同',applied:'按补充协议',pending:'适用版本待核'}[record.standard.state];
       const review=box('flow',el('strong',version),el('span',record.standard.criterion || record.date || '验收日期待核','small'));
-      const pair=batchPairs.find(p=>p.key==='batch-'+batch.index);
+      const pair=pairs.find(p=>p.key==='batch-'+batch.index);
       if (pair) review.append(action('对照本批原件',()=>showFindingPath(acceptance,true,pair.key),'compare-jump'));
       else if (record.scope_ref) review.append(citation(record.scope_ref));
       row.append(review);
+    }
+    if (acceptance?.reinspection) {
+      const candidates=pairs.filter(p=>p.key.startsWith('retest-') && [p.left.id,p.right.id].every(ref=>phase.evidence.includes(ref)));
+      const selected=candidates.find(p=>p.key==='retest-'+acceptance.reinspection.focus) || candidates[0];
+      if (selected) row.append(action('对照整改与复验',()=>showFindingPath(acceptance,true,selected.key),'compare-jump'));
     }
     const remarks = phaseRemarks(phase, batches, graph);
     if (remarks) row.append(remarks);
@@ -521,6 +526,25 @@ function boardPageReferences(graph, doc, page, facts) {
     references.set(ref, {ref, label, option:printedLabel+' · '+label, quote:note.quote, rawLine:fact ? null : note.line});
   }
   return [...references.values()];
+}
+
+function repairPageReferences(graph, doc, page, facts) {
+  const rows = graph?.repair_completion_sources?.lines.filter(r=>r.doc===doc && r.page===page) || [];
+  const labels = {state:'完成状态',qualification:'整改附注',unreviewed:'待核原行',date:'完成日期',action:'实际措施'};
+  const refs = new Map();
+  for (const kind of Object.keys(labels)) {
+    for (const row of rows.filter(r=>r.kind===kind)) {
+      const candidates = facts.filter(f=>row.facts.includes(f.id));
+      const fact = candidates.find(f=>f.quote===row.quote);
+      if (!fact && !row.line) continue;
+      const label = labels[kind];
+      const ref = fact?.id || 'repair-line/'+row.line;
+      const source = candidates.find(f=>f.source_line?.number===row.line && f.source_line.text===row.quote);
+      refs.set(ref,{ref,label,quote:row.quote,option:label+' · '+(row.line?'第 '+row.line+' 行':'影像引文'),
+        rawLine:fact?null:row.line,quality:'repair_completion_reference',rects:source?.source_line.rects || []});
+    }
+  }
+  return [...refs.values()];
 }
 
 function contractEffectPanel(finding,graph) {
