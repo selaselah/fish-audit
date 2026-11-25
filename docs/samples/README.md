@@ -181,6 +181,12 @@ PYTHONPATH=server server/.venv/bin/python -m unittest discover -s server/tests -
 server/.venv/bin/python docs/samples/delivery_batches.py --run --run-id synthetic-delivery-batches-v1
 ```
 
+以下四案分别在第二批原件登记数量暂收、单列全合同暂缓付款、同时出现两种意见，以及付款栏指向页末扫描批注。每案的银行回单都指向第一批对应的第二期，便于核对已有独立依据的付款和仍需复核的支付时点。
+
+```sh
+server/.venv/bin/python docs/samples/delivery_batches.py --run --run-id synthetic-batch-scope-20261125-18 --cases batch_count_only payment_hold both_remarks hold_image
+```
+
 `--cases` 可选 `complete`（两批合格）、`missing`（缺第二批原件）、`quality`（报告称合格但第二批实测 8℃ 超出合同 4℃ 上限）、`duplicate`（两批登记相同设备）、`early`（9 月 15 日支付的第三期早于 9 月 20 日第二批验收）、`separate`（另行终验）及 `image`（原页附有影像暂收说明）。省略 `--run` 可仅生成资料。
 
 核对具名分批验收可另行运行下列命令。各案均使用一张 35,000 元回单，合同明确第二期对应第一批、第三期对应第二批。样本依次为各批签齐、缺第二批原件、第二批缺一人共同签字、由其他人签字、签齐后实测超限、各批共用同一组签认人员、签字页内嵌代签说明、合同末行另约监理会签。

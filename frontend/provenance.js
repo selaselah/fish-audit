@@ -69,6 +69,7 @@ function performanceOverview(findings, graph) {
   const choices = box('phase-choices');
   choices.setAttribute('role','tablist'); choices.setAttribute('aria-label','查看合同各期款项');
   const payments = findings.filter(f=>f.rule==='H05');
+  const batches = findings.find(f => f.batch_acceptance)?.batch_acceptance;
   const index = graphIndex(graph);
   const paymentLabel = f => {
     const document = f.evidence.map(ref=>index.facts.get(ref)).find(fact=>fact?.field==='bank_receipt');
@@ -93,6 +94,8 @@ function performanceOverview(findings, graph) {
     const sum=findings.find(f=>f.stage_payments && sameStage(f));
     if (sum) results.append(performanceJump(sum,'本期回单合计'));
     row.append(box('phase-contract',source,el('q',stage.clause)),results);
+    const remarks = phaseRemarks(phase, batches, graph);
+    if (remarks) row.append(remarks);
     row.id = 'phase-record-'+phase.id;
     row.setAttribute('role','tabpanel');
     const choice = el('button','','phase-choice');
@@ -308,6 +311,21 @@ function receiptPacketPanel(packets, graph) {
     panel.append(file);
   }
   return panel;
+}
+
+function phaseRemarks(finding, batches, graph) {
+  if (!batches || !finding.stage) return null;
+  const stage = finding.stage;
+  const records = batches.records.filter(r => stage.batch_index ? r.index===stage.batch_index : /验收|质保|保修/u.test(stage.clause));
+  const notes = [...(batches.payment_holds || []), ...records.flatMap(r => r.inspection_notes || [])]
+    .filter(note => finding.evidence.includes(note.doc+'/p'+note.page));
+  if (!notes.length) return null;
+  const hasCash = notes.some(r => r.kind!=='limited_inspection');
+  const hasInspection = notes.some(r => r.kind==='limited_inspection');
+  const label = hasCash && hasInspection ? '付款意见与验收备注' : hasCash ? '付款意见' : '验收备注';
+  const group = fold(label+' · '+notes.length+' 条原文',...notes.map(note => reservationSource(note,graph)));
+  group.classList.add('phase-remarks');
+  return group;
 }
 
 function deliveryBatchPanel(entry, graph, phases) {

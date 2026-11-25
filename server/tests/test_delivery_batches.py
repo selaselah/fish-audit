@@ -2,7 +2,7 @@ import copy
 import unittest
 
 from controls import VERSION, execute
-from delivery_batches import LEGACY, evidence_edges, gaps, page_sources, verify_sources
+from delivery_batches import LEGACY, PRINTED_SIGNERS, evidence_edges, gaps, page_sources, verify_sources
 from performance import BATCH_FORMAT, DATE_FORMAT, compute, verify_findings
 from test_performance import CONTRACT, RECEIPT, WARRANTY, BANK_DOC, material
 
@@ -13,6 +13,8 @@ PLAN=[("payment_term","付款条款","分四期付款"),("payment_stage","第一
       ("payment_stage","第四期","质保期满后支付10%")]
 ORIGINAL={1:"第一批",2:"第二批"}
 NAMED=["第一批验收须由周宁签字确认","第二批验收须由林岚、何平共同签字确认"]
+BATCH_NOTE="验收备注：本批仅核对到货数量，性能测试另行办理"
+CASH_NOTE="付款意见：本合同项下全部付款暂缓"
 
 
 def named_receipt(index,names):
@@ -51,6 +53,100 @@ def states(graph):
 
 
 class DeliveryBatchTests(unittest.TestCase):
+    def test_count_only_remark_keeps_the_independent_first_batch(self):
+        for raw in (BATCH_NOTE, BATCH_NOTE.replace("本批","第二批")):
+            g=sample(omissions=[(3,raw)])
+            h,phases,paid=states(g)
+            self.assertEqual([p["status"] for p in phases],["ok","ok","missing","missing"])
+            self.assertEqual((h["status"],paid["status"]),("missing","ok"))
+            batch=h["batch_acceptance"]
+            record=next(r for r in batch["records"] if r["index"]==2)
+            note,=record["inspection_notes"]
+            self.assertEqual((note["doc"],note["line"],note["quote"],note["facts"]),("d03",16,raw,[]))
+            self.assertFalse(record["scope_unclear"])
+            self.assertNotIn("d03/p1",phases[1]["evidence"])
+            edges=evidence_edges([h,*phases])
+            self.assertEqual([e["line"] for e in edges if e["type"]=="batch_inspection_note"],[16])
+            self.assertEqual(len([e for e in edges if e["type"]=="batch_payment_basis"]),1)
+        for raw in (BATCH_NOTE.replace("本批","第一批"), BATCH_NOTE+"，第一批验收记录还须复核"):
+            h,phases,_=states(sample(omissions=[(3,raw)]))
+            self.assertTrue(h["batch_acceptance"]["records"][1]["scope_unclear"])
+            self.assertEqual(phases[1]["status"],"missing")
+
+    def test_cash_opinion_keeps_delivery_facts_and_withholds_all_payments(self):
+        for raw in (CASH_NOTE,"付款意见：暂缓支付本合同项下全部款项"):
+            fs=compute(sample(omissions=[(3,raw)]))
+            self.assertEqual([f["status"] for f in fs],["ok","ok","ok",*(["missing"]*5)])
+            batch=fs[1]["batch_acceptance"]
+            self.assertEqual(batch["completion_on"],"2026-09-20")
+            self.assertTrue(all("d03/p1" in f["evidence"] for f in fs[3:]))
+            edges=evidence_edges(fs)
+            holds=[e for e in edges if e["type"]=="batch_payment_hold"]
+            self.assertEqual(len(holds),4)
+            self.assertTrue(all(e["to"]=="d03/p1" and e["line"]==16 for e in holds))
+            self.assertFalse(any(e["type"]=="batch_payment_basis" for e in edges))
+        fs=compute(sample(omissions=[(3,BATCH_NOTE),(3,CASH_NOTE)]))
+        self.assertEqual([b["status"] for b in fs[1]["batch_acceptance"]["batches"]],["ok","missing"])
+        self.assertEqual([f["status"] for f in fs[3:]],["missing"]*5)
+        fs=compute(sample(omissions=[(3,"验收备注：本批暂收，合同项下全部付款暂缓")]))
+        self.assertFalse(fs[1]["batch_acceptance"]["payment_holds"][0]["payment_only"])
+        self.assertTrue(all(f["status"]!="ok" for f in fs[3:]))
+        fs=compute(sample(omissions=[(3,CASH_NOTE)],edit=lambda i,k,l,v:"柜温8℃" if i==3 and k=="measured_result" else v))
+        self.assertEqual((fs[1]["status"],fs[5]["status"]),("issue","risk"))
+
+    def test_payment_reference_without_an_image_observation_never_invents_the_instruction(self):
+        pointer="付款意见：详见本页影像批注"
+        g=sample(omissions=[(3,pointer)])
+        texts={d["id"]:"\n".join(f["quote"] for f in g["facts"] if f["doc"]==d["id"]) for d in g["documents"]}
+        texts["d03"]+="\n"+pointer
+        next(n for n in g["nodes"] if n["id"]=="d03/p1")["clause_text_only"]=False
+        g["delivery_batch_sources"]=page_sources(g,lambda d,p:texts[d])
+        fs=compute(g)
+        hold,=fs[1]["batch_acceptance"]["payment_holds"]
+        self.assertEqual((hold["kind"],hold["quote"],hold["facts"]),("payment_reference",pointer,[]))
+        self.assertTrue(all(f["status"]!="ok" for f in fs[3:]))
+
+    def test_issued_legacy_positive_replays_but_requires_reaudit_to_sign(self):
+        for notes in ([],[(3,CASH_NOTE)]):
+            g=sample(omissions=notes)
+            texts={d["id"]:"\n".join(f["quote"] for f in g["facts"] if f["doc"]==d["id"]) for d in g["documents"]}
+            for _,line in notes:
+                texts["d03"]+="\n"+line
+            read=lambda d,p:texts[d]
+            g["delivery_batch_sources"]=page_sources(g,read,PRINTED_SIGNERS)
+            fs=execute(g,g["profile"])
+            for f in fs:
+                f["version"]="2026.11.25.17"
+            g["edges"].extend(evidence_edges(fs))
+            policy={**VERSION,"version":"2026.11.25.17","profile":g["profile"],"delivery_batches":PRINTED_SIGNERS}
+            report={"graph":g,"policy":policy,"findings":fs}
+            self.assertEqual(next(f["status"] for f in fs if f["rule"]=="H04"),"ok")
+            verify_sources(report,read)
+            verify_findings(report)
+            if notes:
+                with self.assertRaisesRegex(ValueError,"待核的付款意见"):
+                    verify_sources(report,read,signing=True)
+            else:
+                verify_sources(report,read,signing=True)
+
+    def test_replay_rejects_an_altered_payment_scope_or_source_line(self):
+        g=sample(omissions=[(3,CASH_NOTE)])
+        texts={d["id"]:"\n".join(f["quote"] for f in g["facts"] if f["doc"]==d["id"]) for d in g["documents"]}
+        texts["d03"]+="\n"+CASH_NOTE
+        read=lambda d,p:texts[d]
+        fs=execute(g,g["profile"])
+        g["edges"].extend(evidence_edges(fs))
+        report={"graph":g,"policy":{**VERSION,"profile":g["profile"]},"findings":fs}
+        verify_sources(report,read)
+        for part in ("scope","edge","page"):
+            changed=copy.deepcopy(report)
+            if part=="scope":
+                changed["graph"]["delivery_batch_sources"]["remarks"][0]["payment_only"]=False
+            elif part=="edge":
+                next(e for e in changed["graph"]["edges"] if e["type"]=="batch_payment_hold")["line"]-=1
+            with self.assertRaises(ValueError):
+                verify_sources(changed,(lambda d,p:texts[d]+"变动") if part=="page" else read)
+
     def test_named_and_joint_signatures_are_compared_with_only_their_own_batch(self):
         for names,overall,third,last,edges in ((("林岚","何平"),"ok","ok","ok",3),(("林岚",),"missing","missing","missing",1),
                 (("林岚","吴松"),"risk","risk","risk",1),(("林岚","何平","何平"),"missing","missing","missing",1),

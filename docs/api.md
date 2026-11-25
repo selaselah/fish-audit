@@ -9,6 +9,12 @@
 | `GET /showcase/{filename}` | 首页的三份合成原件，文件名为 `contract.pdf`、`acceptance.pdf`、`transfer.pdf`。可按资料索引复核 R7 案例的文件摘要。 |
 | `GET /workpaper/{id}`、`GET /w/{wid}/workpaper/{id}` | 校验版本及引文、发现参数，转入 `/app` 的相应底稿。旧的根路径片段书签和邀请链接在浏览器中转入相同工作区。 |
 
+## 分批验收备注与付款意见
+
+自规则 `2026.11.25.18` 起，`policy.delivery_batches` 为 `contract-delivery-batches-v6`。`graph.delivery_batch_sources.remarks` 保留范围明确的数量暂收记录、涉及全部付款的原文及付款栏指向的影像或附件。每条含文档、页、原文、文字层行号及原始观察编号。影像引文的 `line` 为 null。
+
+H02 的 `batch_acceptance.records[].inspection_notes` 保存已归属本批的数量核对备注，`batch_acceptance.payment_holds` 列出需核实适用范围和日期的付款意见。图谱的 `batch_inspection_note` 从交付批次条款连到原页，`batch_payment_hold` 从受影响的付款条款连到原页。两种关系都保留行号和证据。历史底稿仍按发布程序复算，旧版相符期款若有待核付款意见，申请通过签收时需先重审。
+
 ## 董事会审批范围及原页
 
 规则 `2026.11.25.17` 的 `policy.contract_effect` 为 `contract-effect-sources-v3`。归属于董事会审批记录的页加入 `graph.contract_effect_sources.pages`，带有 `kind=board_approval`。需复查的原文进入同一结构的 `conditions`，带有 `kind=approval_note`、`doc`、`page`、`line`、`quote` 及 `facts`。原生文字层行号自 1 起，漏提行可有空的事实列表，纯读图引文的行号为 `null`。

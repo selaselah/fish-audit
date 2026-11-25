@@ -273,6 +273,25 @@ try {
         await evaluate('document.querySelector("#page-dialog [data-close]").click()');
       }
     };
+    if (batches && report.graph.delivery_batch_sources?.remarks?.length) {
+      for (const phase of phases) {
+        const stage=phase.stage;
+        const records=batches.records.filter(r=>stage.batch_index ? r.index===stage.batch_index : /验收|质保|保修/u.test(stage.clause));
+        const sources=[...(batches.payment_holds || []),...records.flatMap(r=>r.inspection_notes || [])]
+          .filter(s=>phase.evidence.includes(s.doc+'/p'+s.page));
+        await evaluate('document.querySelector('+JSON.stringify('[data-phase-choice="'+phase.id+'"]')+').click()');
+        const row='document.querySelector('+JSON.stringify('[data-phase-finding="'+phase.id+'"]')+')';
+        const group=row+'.querySelector(".phase-remarks")';
+        assert.equal(await evaluate('Boolean('+group+')'),Boolean(sources.length));
+        if (!sources.length) continue;
+        await evaluate(group+'.querySelector("summary").click()');
+        assert.equal(await evaluate(group+'.querySelectorAll("q").length'),sources.length);
+        await verifyRemarks(group,sources);
+        await evaluate(group+'.querySelector("summary").click()');
+        const paper='document.querySelector('+JSON.stringify('[data-finding="'+phase.id+'"] .phase-remarks')+')';
+        assert.equal(await evaluate(paper+'.querySelectorAll("q").length'),sources.length);
+      }
+    }
     const packets=report.graph.receipt_packet_sources?.packets || [];
     const equipment=inspection?.equipment_models;
     const modelLines=report.graph.equipment_model_sources?.lines || [];
@@ -1176,6 +1195,20 @@ try {
           await evaluate(row+'.querySelectorAll("button")['+i+'].click()');
           await wait('document.querySelector("#page-dialog").open && document.querySelector(".located")?.dataset.fact==='+JSON.stringify(id),'linked batch original');
           await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+        }
+      }
+      const remarkEdges=report.graph.edges.filter(e=>['batch_inspection_note','batch_payment_hold'].includes(e.type));
+      assert.equal(await evaluate('Boolean(document.querySelector(".batch-remark-relations"))'),Boolean(remarkEdges.length));
+      if (remarkEdges.length) {
+        await evaluate('document.querySelector(".batch-remark-relations").open=true');
+        await wait('document.querySelectorAll("[data-batch-remark]").length==='+remarkEdges.length,'remark links from each clause');
+        for (const [i,edge] of remarkEdges.entries()) {
+          const row='document.querySelectorAll("[data-batch-remark]")['+i+']';
+          const note=report.graph.delivery_batch_sources.remarks.find(r=>r.doc+'/p'+r.page===edge.to && r.line===edge.line && r.facts.every(id=>edge.evidence.includes(id)));
+          await evaluate(row+'.querySelector("button").click()');
+          await wait('document.querySelector(".located")?.dataset.fact==='+JSON.stringify(edge.from),'contract clause of restricted payment or batch');
+          await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+          await verifyRemarks(row,[note]);
         }
       }
     }

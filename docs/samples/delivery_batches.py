@@ -17,6 +17,14 @@ SIGNING_CASES = {
     "signed_quality":"第二批签字齐全但实测超限","common":"各批均由同两位指定人员签认",
     "sign_image":"第二批签字旁另有代签影像","sign_rider":"合同另有第二批监理会签条款",
 }
+REMARK_CASES = {
+    "batch_count_only":"第二批仅清点到货数量，性能测试另办",
+    "payment_hold":"两批验收相符，原件另载合同项下全部付款暂缓",
+    "both_remarks":"第二批仅清点数量，另有全合同暂缓付款意见",
+    "hold_image":"第二批验收单影像批注涉及全部合同款",
+}
+COUNT_ONLY = "本批仅核对到货数量，性能测试另行办理"
+HOLD = "本合同项下全部付款暂缓"
 CASES = {
     "complete":"两批各两台均完成验收",
     "missing":"第一批已验收而第二批缺单",
@@ -26,6 +34,7 @@ CASES = {
     "separate":"两批均合格且合同仍约定另行终验",
     "image":"第二批验收单另有影像附注",
     **SIGNING_CASES,
+    **REMARK_CASES,
 }
 TITLES={"第一批验收报告":"验收报告","第二批验收报告":"验收报告"}
 FIELD_LABELS={**FIELDS,"第四期":"payment_stage","分批交付":"delivery_batch","分批验收约定":"batch_clause",
@@ -63,6 +72,12 @@ def batch_documents(code,mode):
             if n==2 and mode in ("cosign","substitute"):
                 names=["林岚"] if mode=="cosign" else ["林岚","吴松"]
             rows[:]=[(k,v) for k,v in rows if k!="验收签认"]+[("验收签认",n+"（已签字）") for n in names]
+    if mode in ("batch_count_only","both_remarks"):
+        records["第二批验收报告"].append(("验收备注",COUNT_ONLY))
+    if mode in ("payment_hold","both_remarks"):
+        records["第二批验收报告"].append(("付款意见",HOLD))
+    if mode=="hold_image":
+        records["第二批验收报告"].append(("付款意见","详见本页影像批注"))
     values={"款项用途":"第三期" if mode=="early" else "第二期","付款金额":"35,000.00","付款日期":"2026年9月15日"}
     if mode in SIGNING_CASES:
         values.update({"款项用途":"第二期" if mode in ("undelivered","sign_rider") else "第三期","付款日期":"2026年9月21日"})
@@ -79,7 +94,9 @@ def generate(seed,mode):
     for name,rows in records.items():
         path=folder/(name+".pdf")
         title=TITLES.get(name,name)
-        if name=="第二批验收报告" and mode in ("image","sign_image"):
+        if name=="第二批验收报告" and mode=="hold_image":
+            pdf_with_note(path,title,rows,font,"付款意见："+HOLD,spacing=SPACING,note_y=95)
+        elif name=="第二批验收报告" and mode in ("image","sign_image"):
             note="签认附注：第二批何平一栏为代签，授权待核" if mode=="sign_image" else "附注：第二批暂收，须复核现场情况"
             pdf_with_note(path,title,rows,font,note,spacing=SPACING,note_y=110)
         else:
@@ -106,6 +123,10 @@ def validate(report,mode):
         "common":("ok",["ok"]*4,"ok","pass"),
         "sign_image":("missing",["ok","missing","missing","missing"],"missing","review"),
         "sign_rider":("missing",["missing"]*4,"missing","review"),
+        "batch_count_only":("missing",["ok","ok","missing","missing"],"ok","review"),
+        "payment_hold":("ok",["missing"]*4,"missing","review"),
+        "both_remarks":("missing",["missing"]*4,"missing","review"),
+        "hold_image":("missing",["missing"]*4,"missing","review"),
     }
     assert [f["stage"]["share"] for f in phases]==["20","35","35","10"]
     verdict=report["result"]["verdict"]
@@ -121,9 +142,22 @@ def validate(report,mode):
     batch=h["batch_acceptance"]
     assert [(b["index"],b["count"],b["unit_name"]) for b in batch["batches"]]==[(1,2,"台"),(2,2,"台")]
     assert [f["stage"]["batch_index"] for f in phases[1:3]]==[1,2]
-    assert batch["completion_on"]==("2026-09-20" if mode in {"complete","early","named","common"} else None)
+    assert batch["completion_on"]==("2026-09-20" if mode in {"complete","early","named","common","payment_hold"} else None)
     edges=report["graph"]["edges"]
     assert sum(e["type"]=="batch_payment_basis" for e in edges)==sum(f["status"]=="ok" for f in phases[1:3])
+    if mode in REMARK_CASES:
+        assert next(f for f in report["findings"] if f["rule"]=="H01")["status"]=="ok"
+        if mode!="hold_image":
+            assert next(f for f in report["findings"] if f["rule"]=="H03")["status"]=="ok"
+        if mode!="batch_count_only":
+            holds=batch["payment_holds"]
+            assert holds and any(s["kind"]=="payment_reference" if mode=="hold_image" else s["quote"]=="付款意见："+HOLD for s in holds)
+            assert all(any(f"{s['doc']}/p{s['page']}" in f["evidence"] for s in holds) for f in [*phases,actual])
+            assert sum(e["type"]=="batch_payment_hold" for e in edges)==len(phases)*len(holds)
+        if mode in ("batch_count_only","both_remarks"):
+            notes=[s for r in batch["records"] for s in r.get("inspection_notes",[])]
+            assert any(s["line"] and s["quote"]=="验收备注："+COUNT_ONLY for s in notes)
+            assert batch["batches"][0]["status"]=="ok"
     if mode in ("image","sign_image"):
         assert any(not p["text_only"] for p in report["graph"]["delivery_batch_sources"]["pages"])
     if mode in SIGNING_CASES and mode not in ("sign_rider","sign_image"):
@@ -141,7 +175,7 @@ if __name__=="__main__":
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run",action="store_true")
     parser.add_argument("--run-id",default="synthetic-delivery-batches-v1")
-    parser.add_argument("--cases",nargs="+",choices=CASES,default=[mode for mode in CASES if mode not in SIGNING_CASES])
+    parser.add_argument("--cases",nargs="+",choices=CASES,default=[mode for mode in CASES if mode not in SIGNING_CASES and mode not in REMARK_CASES])
     args=parser.parse_args()
     queued=[]
     for mode in args.cases:
@@ -156,7 +190,7 @@ if __name__=="__main__":
         reconcile_training_pages(cid,folder,records,case_titles=CASES.values(),field_labels=FIELD_LABELS,
                                  printed_titles=TITLES,row_spacing=SPACING,exact_fields=("delivery_batch","delivered_serials","acceptance_signing_clause"))
         report=confirm_printed_records(cid,folder,records)
-        if mode in SIGNING_CASES:
+        if mode in SIGNING_CASES or mode in REMARK_CASES:
             report=check_training_watermark(cid,folder,records,report)
         validate(report,mode)
         print(mode,"R"+str(get("/api/cases/"+cid)["rev"]),report["result"]["verdict"],flush=True)

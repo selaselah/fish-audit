@@ -3,6 +3,7 @@
 import hashlib
 import re
 from collections import defaultdict
+from functools import cache
 from unicodedata import normalize
 
 import equipment_models
@@ -18,8 +19,10 @@ LEGACY = "contract-delivery-batches-v1"
 SIGNING_FORMAT = "contract-delivery-batches-v2"
 FINAL_FORMAT = "contract-delivery-batches-v3"
 FINAL_SIGNING_FORMAT = "contract-delivery-batches-v4"
-FORMAT = "contract-delivery-batches-v5"
-FINAL_SIGNING_FORMATS = (FINAL_SIGNING_FORMAT,FORMAT)
+PRINTED_SIGNERS = "contract-delivery-batches-v5"
+FORMAT = "contract-delivery-batches-v6"
+PRINTED_SIGNER_FORMATS = (PRINTED_SIGNERS, FORMAT)
+FINAL_SIGNING_FORMATS = (FINAL_SIGNING_FORMAT,*PRINTED_SIGNER_FORMATS)
 FINAL_FORMS = (FINAL_FORMAT,*FINAL_SIGNING_FORMATS)
 BATCH_SIGNING_FORMATS = (SIGNING_FORMAT,*FINAL_FORMS)
 FINAL_REFS = "batch_receipt_refs"
@@ -40,6 +43,13 @@ COMPLETION = {"全部批次验收合格视为终验合格","各批全部验收�
 SEPARATE_FINAL = {"另行组织最终验收","另行终验"}
 FINAL_SCOPES = {"全部交付终验","全部交付最终验收","全部标的最终验收"}
 LOCAL_NOTES = {"附注:本次为暂收,质量待验","附注:本批为暂收,质量待验","备注:本批质量待验"}
+INSPECTION_NOTES = {"验收备注","验收附注","验收保留意见","签收说明","备注","附注","保留意见"}
+LOCAL_INSPECTION = re.compile(r"(本批(?:次)?|第"+NUM+r"批(?:次)?)仅核对(?:到货)?数量[,，](?:整机)?性能测试(?:另行办理|尚未完成)")
+CASH_SCOPE = r"(?:(?:本)?合同项下)?(?:全部|所有|各期)(?:合同)?(?:付款|款项|货款|期款)"
+CASH_PAUSE = r"(?:暂缓|暂停|停止|冻结)(?:办理|支付|付款)?"
+PAYMENT_HOLD = re.compile(CASH_SCOPE+r"(?:均|一律)?"+CASH_PAUSE+r"|"+CASH_PAUSE+CASH_SCOPE)
+PAYMENT_NOTE_LABELS = {"付款意见","付款说明","付款备注"}
+PAYMENT_REMARKS = {"payment_hold","payment_reference"}
 PAYMENT_RIDER = re.compile(r"预付款|首付款|第"+NUM+r"期.{0,16}(?:付款|支付|付前)|各期付款|暂停(?:全部)?付款|履约保函")
 CONTRACT_RIDER = re.compile(r"(?:原合同|本合同|合同效力).{0,12}(?:作废|撤销|解除|终止|中止|无效)|补充协议")
 DIGITS = dict(zip("一二两三四五六七八九", (1,2,2,3,4,5,6,7,8,9)))
@@ -143,7 +153,47 @@ def literal_value(fact):
     return bool(body and normalize("NFKC",fact["value"]).strip() in (body,normalize("NFKC",fact["source_line"]["text"]).strip()))
 
 
+def remark_scope(quote):
+    label, body = parts(quote)
+    body = body.rstrip("。")
+    if PAYMENT_HOLD.search(normalized(quote)):
+        only_payment = label in PAYMENT_NOTE_LABELS and bool(PAYMENT_HOLD.fullmatch(body))
+        return {"kind":"payment_hold","payment_only":only_payment}
+    if label in PAYMENT_NOTE_LABELS and re.fullmatch(r"(?:详见|另见|见)(?:本页|附页)?(?:影像批注|扫描批注|付款附件)",body):
+        return {"kind":"payment_reference","payment_only":True}
+    match = LOCAL_INSPECTION.fullmatch(body) if label in INSPECTION_NOTES else None
+    if match:
+        batch = match[1]
+        index = ordinal(batch[1:batch.index("批")]) if batch.startswith("第") else None
+        if index or batch.startswith("本"):
+            return {"kind":"limited_inspection","index":index}
+    return None
+
+
+def receipt_remarks(pages, facts_by_page, contract_units, read_text):
+    remarks = []
+    for page in pages:
+        if page["unit"] in contract_units:
+            continue
+        doc, number = page["doc"], page["page"]
+        place = {"unit":page["unit"], "doc":doc, "page":number}
+        anchored = defaultdict(list)
+        for fact in facts_by_page[doc,number]:
+            line = fact.get("source_line") or {}
+            if page["native"] and line.get("rects") and line["text"] == fact["quote"]:
+                anchored[line["number"],line["text"]].append(fact["id"])
+            elif kind := remark_scope(fact["quote"]):
+                remarks.append({**place,**kind,"line":None,"quote":fact["quote"],"facts":[fact["id"]]})
+        if page["native"]:
+            # covered_rows has checked this same page's complete native text against the archived digest.
+            for index, raw in enumerate(read_text(doc,number).splitlines(),1):
+                if kind := remark_scope(raw):
+                    remarks.append({**place,**kind,"line":index,"quote":raw,"facts":anchored[index,raw]})
+    return remarks
+
+
 def page_sources(graph,read_text,version=FORMAT):
+    read_text = cache(read_text)
     contracts=set(graph["documents_by_kind"].get("contract",[]))
     receipts=set(graph["documents_by_kind"].get("acceptance",[]))
     units={(d["source"],d["page"]):d["id"] for d in graph.get("audit_documents",[]) if "source" in d}
@@ -240,20 +290,24 @@ def page_sources(graph,read_text,version=FORMAT):
                 mixed.add((p["doc"],p["page"]))
         notes=[{"doc":f["doc"],"page":f["page"],"unit":f.get("unit",f["doc"]),"fact":f["id"],"quote":f["quote"]}
                for f in graph["facts"] if (f["doc"],f["page"]) in mixed and not (f.get("source_line") or {}).get("rects")]
-    return {"format":version,"signals":signals,"pages":coverage,"visual_notes":notes}
+    result = {"format":version,"signals":signals,"pages":coverage,"visual_notes":notes}
+    if version == FORMAT:
+        result["remarks"] = receipt_remarks(coverage,facts_by_page,contracts,read_text)
+    return result
 
 
 def external_riders(graph,source,contract_unit):
     rows=[(p["unit"],f"{p['doc']}/p{p['page']}",l["quote"]) for p in source["pages"] for l in p["uncovered"]]
     covered_units={p["unit"] for p in source["pages"]}
     rows.extend((f.get("unit",f["doc"]),f["id"],f["quote"]) for f in graph["facts"] if f.get("unit",f["doc"]) in covered_units)
+    exact_cash = {(r["unit"],r["quote"]) for r in source.get("remarks",[]) if r.get("payment_only") and r["line"]}
     riders=[]
     for unit,ref,quote in rows:
         if unit==contract_unit:
             continue
         line=normalized(quote)
         kind="contract" if CONTRACT_RIDER.search(line) else "payment" if PAYMENT_RIDER.search(line) else None
-        if kind:
+        if kind and not (kind=="payment" and (unit,quote) in exact_cash):
             riders.append({"unit":unit,"ref":ref,"quote":quote,"kind":kind})
     return riders
 
@@ -401,6 +455,16 @@ def record(contract,doc,source,native_spacing,requirements,signatures,separate,f
     related=(linked(contract,doc) and complete_id(contract.body("contract_id")) and all(labelled_sources(m,LINK_KEYS) for m in (contract,doc))
              and all(body(contract,k) and body(contract,k)==body(doc,k) for k in LINK_KEYS))
     is_final=bool(separate and related and scope and raw_body(scope) in FINAL_SCOPES)
+    remarks = [r for r in source.get("remarks",[]) if r["unit"]==doc.unit]
+    disputed = {f["id"] for f in doc.refs if f["status"]=="disputed"}
+    backed = [r for r in remarks if r["line"] and disputed.isdisjoint(r["facts"]) and related]
+    own_notes = [r for r in backed if r["kind"]=="limited_inspection" and index and r["index"] in (None,index)]
+    cash_lines = {(r["page"],r["line"],r["quote"]) for r in backed if r.get("payment_only")}
+    own_lines = {(r["page"],r["line"],r["quote"]) for r in own_notes}
+    fields.extend(ref for r in remarks for ref in r["facts"])
+    unassigned_note = any(r["kind"]=="limited_inspection" and r not in own_notes for r in remarks)
+    unaccounted = [(p,l) for p in pages for l in p["uncovered"] if (p["page"],l["line"],l["quote"]) not in cash_lines]
+    whole_pages = bool(pages) and all(p["native"] and p["text_only"] for p in pages)
     requirement=final_requirement if is_final else requirements.get(index)
     ref_fact=one(doc,FINAL_REFS) if is_final else None
     unexpected_refs=source.get("format") in FINAL_FORMS and not is_final and bool(doc.fields[FINAL_REFS] or FINAL_REFS in doc.uncertain)
@@ -410,11 +474,13 @@ def record(contract,doc,source,native_spacing,requirements,signatures,separate,f
         if is_final and parts(line)[0] in LABELS[FINAL_REFS]:
             return bool(receipt_numbers(parts(line)[1]))
         return normalized(line).rstrip("。") in LOCAL_NOTES or (requirement and related and signed_name(line))
-    open_scope=unexpected_refs or not pages or any(not p["text_only"] or not p["native"] or
-               any(not local_line(l["quote"]) for l in p["uncovered"]) for p in pages)
+    open_scope=unexpected_refs or unassigned_note or not whole_pages or any(
+        (p["page"],l["line"],l["quote"]) not in own_lines and not local_line(l["quote"]) for p,l in unaccounted)
     result={"unit":doc.unit,"index":index,"scope_ref":scope["id"] if scope else None,"number":number or None,"scope_unclear":open_scope,
             "date":day.isoformat() if day else None,"count":qty,"unit_name":unit,"serials":ids or [],
             "evidence":list(dict.fromkeys(fields))}
+    if own_notes:
+        result["inspection_notes"] = own_notes
     if separate:
         numbered=one(doc,"acceptance_number")
         result["number_ref"]=numbered["id"] if numbered else None
@@ -428,11 +494,11 @@ def record(contract,doc,source,native_spacing,requirements,signatures,separate,f
         if is_final:
             owned={f["id"]:f for f in doc.fields["acceptance_signer"]}
             rows=[{**s,"confirmed":bool(s["confirmed"] and literal_value(owned.get(s["fact"])))} for s in rows]
-            uncovered=[line for p in pages for line in p["uncovered"]]
+            uncovered=[line for _,line in unaccounted]
             raw_signatures_only=bool(uncovered and not open_scope and all(signed_name(l["quote"]) for l in uncovered))
         signing=check_batch_signatures(requirement,rows,
                     applicable=bool(related and day and effective and day>effective and (not until or day<=until)),
-                    complete=readable(source,doc.unit) or raw_signatures_only,scope="终验" if is_final else "本批")
+                    complete=whole_pages and all((p["page"],l["line"],l["quote"]) in own_lines for p,l in unaccounted) or raw_signatures_only,scope="终验" if is_final else "本批")
         result["signing"]=signing
         result["evidence"]=list(dict.fromkeys([*fields,signing["clause_ref"],
             *(ref for s in signing["signed"] for ref in (s["facts"] or [f"{s['doc']}/p{s['page']}"]))]))
@@ -456,9 +522,11 @@ def record(contract,doc,source,native_spacing,requirements,signatures,separate,f
         status,reason="issue",detail if qc=="issue" else "原验收记录明确记载“"+outcome+"”。"
     elif raw_signatures_only and signing["status"]!="ok":
         status,reason=signing["status"],signing["detail"]
-    elif is_final and not open_scope and any(p["uncovered"] for p in pages):
+    elif own_notes:
+        status,reason="missing","本批原件仅核对到货数量，性能测试尚待正式验收记录。"
+    elif is_final and not open_scope and unaccounted:
         status,reason="missing","终验原页尚有未经逐行核对的引用或附注，须核对所附批次验收单号。"
-    elif not readable(source,doc.unit) or doc.incomplete(*RECEIPT_FIELDS) or not identifier(number):
+    elif not whole_pages or unaccounted or unassigned_note or doc.incomplete(*RECEIPT_FIELDS) or not identifier(number):
         status,reason="missing","需核对完整验收单编号、本批原页及附注。"
     elif not day or not effective or day==effective:
         status,reason="missing","需核对本批验收时合同已生效的日期或同日时分。"
@@ -641,7 +709,9 @@ def inspect(graph,contract,receipts,*,other_terms,native_spacing=False,requireme
         detail+=f" 各批均有合格记录，按合同约定于 {complete} 达到终验条件。"
     elif not final:
         detail+=" 全部交付的最终验收依据仍待核实。"
+    payment_holds = [r for r in source.get("remarks",[]) if r["kind"] in PAYMENT_REMARKS]
     return {"status":status,"detail":detail,"independent":independent,"deemed_final":final,"completion_on":complete,
+            **({"payment_holds":payment_holds} if payment_holds else {}),
             **({"separate_final":final_check} if final_check else {}),
             "contract_clear":contract_clear,"riders":riders,"rule_ref":rule_fact["id"] if rule_fact else None,"records":records,"batches":results,
             "scope":list(dict.fromkeys([contract.unit,*(r["unit"] for r in records)])),
@@ -665,7 +735,13 @@ def evidence_edges(findings):
     if not entry:
         return result
     records={r["unit"]:r for r in entry["records"]}
+    def link_note(relation, clause, note):
+        page = f"{note['doc']}/p{note['page']}"
+        return {"type":relation,"from":clause,"to":page,"line":note["line"],"evidence":[clause,page,*note["facts"]]}
     for batch in entry["batches"]:
+        for unit in batch["records"]:
+            for note in records[unit].get("inspection_notes",[]):
+                result.append(link_note("batch_inspection_note",batch["clause_ref"],note))
         if batch["status"]=="ok":
             record=records[batch["records"][0]]
             result.append({"from":batch["clause_ref"],"to":record["scope_ref"],"type":"delivery_batch_acceptance","evidence":batch["evidence"]})
@@ -677,6 +753,11 @@ def evidence_edges(findings):
             for f in findings:
                 if f["rule"]=="H04" and f["status"]=="ok" and f.get("stage",{}).get("batch_index")==batch["index"]:
                     result.append({"from":f["stage"]["clause_ref"],"to":record["scope_ref"],"type":"batch_payment_basis","evidence":f["evidence"]})
+    for item in findings:
+        if item["rule"]=="H04" and item.get("stage"):
+            for note in entry.get("payment_holds",[]):
+                if f"{note['doc']}/p{note['page']}" in item["evidence"]:
+                    result.append(link_note("batch_payment_hold",item["stage"]["clause_ref"],note))
     final=entry.get("separate_final")
     if final and final["status"]=="ok":
         receipt=records[final["records"][0]]
@@ -692,6 +773,9 @@ def evidence_edges(findings):
 
 def verify_sources(report,read_text,*,signing=False):
     policy,graph=report["policy"],report["graph"]
+    if signing and policy.get("delivery_batches")!=FORMAT and any(f["rule"] in ("H04","H05") and f["status"]=="ok" for f in report["findings"]):
+        if any(r["kind"] in PAYMENT_REMARKS for r in page_sources(graph,read_text)["remarks"]):
+            raise ValueError("旧版分期结论尚有待核的付款意见，请核实适用范围并按现行程序重审后签收。")
     if not policy.get("delivery_batches"):
         if "delivery_batches.py" in policy.get("code_sha256",{}) or "delivery_batch_sources" in graph or policy.get("performance_checks") in BATCH_FORMATS:
             raise ValueError("分批验收程序标记缺失")
@@ -703,11 +787,12 @@ def verify_sources(report,read_text,*,signing=False):
     version=policy.get("version","")
     if (marker not in (LEGACY,*BATCH_SIGNING_FORMATS) or "2026.11.25.07"<=version<"2026.11.25.08" and marker!=SIGNING_FORMAT or
         "2026.11.25.08"<=version<"2026.11.25.09" and marker!=FINAL_FORMAT or
-        "2026.11.25.09"<=version<"2026.11.25.11" and marker!=FINAL_SIGNING_FORMAT or version>="2026.11.25.11" and marker!=FORMAT or
+        "2026.11.25.09"<=version<"2026.11.25.11" and marker!=FINAL_SIGNING_FORMAT or
+        "2026.11.25.11"<=version<"2026.11.25.18" and marker!=PRINTED_SIGNERS or version>="2026.11.25.18" and marker!=FORMAT or
         policy.get("performance_checks") not in BATCH_FORMATS or
         graph.get("delivery_batch_sources")!=source or gaps(source)!=[g for g in graph["gaps"] if g["quality"]=="delivery_batch_clause"]):
         raise ValueError("分批条款原文、资料归属或页内覆盖与归档不符")
-    edges=[e for e in graph["edges"] if e["type"] in ("delivery_batch_acceptance","batch_payment_basis","batch_named_signature","batch_final_basis","final_named_signature")]
+    edges=[e for e in graph["edges"] if e["type"] in ("delivery_batch_acceptance","batch_payment_basis","batch_named_signature","batch_final_basis","final_named_signature","batch_inspection_note","batch_payment_hold")]
     if evidence_edges(report["findings"])!=edges:
         raise ValueError("分批验收或分期付款的证据关系不符")
     expected=sorted((f.get("unit",f["doc"]),f["id"],f["field"],(f["id"],)) for f in graph["facts"]

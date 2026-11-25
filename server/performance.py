@@ -647,7 +647,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
         change["evidence"] = list(dict.fromkeys(change["evidence"]+signed["evidence"]))
     authority = None
     batch_signers = {}
-    compare_printed_names = signed["status"]=="ok" or graph.get("delivery_batch_sources",{}).get("format")==delivery_batches.FORMAT
+    compare_printed_names = signed["status"]=="ok" or graph.get("delivery_batch_sources",{}).get("format") in delivery_batches.PRINTED_SIGNER_FORMATS
     if version in BATCH_FORMATS and compare_printed_names and not (extra_units or change or repairs or retests):
         batch_signers=delivery_batches.signing_plan(graph,contract)
     if version in SIGNATORY_FORMATS and not batch_signers:
@@ -828,6 +828,8 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
         if batch and (len(releases)!=1 or not same_contract(contract,releases[0]) or
                       not labelled_sources(releases[0],LINK_KEYS) or not delivery_batches.readable(graph["delivery_batch_sources"],releases[0].unit)):
             expiry=None
+    holds = (batch or {}).get("payment_holds",[])
+    hold_refs = [ref for note in holds for ref in (f"{note['doc']}/p{note['page']}",*note["facts"])]
     stages = []
     for idx, row in enumerate(rows, 1):
         kind = row["kind"]
@@ -877,6 +879,13 @@ def performance_findings(graph, version, *, include_unassigned_receipts):
             status, detail = "missing","缺少同一合同已签认的质保期满记录，请核对届满时间和放款前提。"
         else:
             status, detail = "ok","已提交资料支持本期所列的“" + row["condition"] + "”条件。"
+        if holds:
+            if status=="ok":
+                status,detail="missing","另有付款意见，请核实签发权限、涉及期款、适用时间及后续处理。"
+            else:
+                detail+=" 另须核对付款意见、涉及的期款及其适用时间。"
+            refs += hold_refs
+            scope += [note["unit"] for note in holds]
         check = result("H04",status,detail,refs,scope,stage)
         if kind=="warranty" and release_check:
             check["warranty_check"]=release_check

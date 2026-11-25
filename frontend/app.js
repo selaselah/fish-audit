@@ -412,6 +412,8 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     if (source) gaps.push({...source,quality:'signer_reference'});
   }
   const batches=state.bundle?.report.graph.delivery_batch_sources;
+  const batchNote = lineHint && batches?.remarks?.find(row => row.doc===docId && row.page===pageNumber && row.line===lineHint);
+  if (batchNote && !gaps.some(g=>g.line===lineHint)) gaps.push({...batchNote,quality:'delivery_batch_clause'});
   const monetary=state.bundle?.report.graph.stage_payment_sources;
   const modelLines=state.bundle?.report.graph.equipment_model_sources?.lines;
   if (lineHint && modelLines && !gaps.some(g=>g.line===lineHint)) {
@@ -688,6 +690,9 @@ function finding(item) {
   }
   if (item.payment_window) node.append(paymentWindowPanel(item,state.bundle.report.graph));
   if (item.stage && ['H04','H05'].includes(item.rule)) {
+    const batch = state.bundle.report.findings.find(f => f.batch_acceptance)?.batch_acceptance;
+    const remarks = phaseRemarks(item, batch, state.bundle.report.graph);
+    if (remarks) node.append(remarks);
     const approvals=state.bundle.report.findings.find(f=>f.rule==='H01')?.effect_review?.approval_pages;
     if (approvals?.some(p=>item.evidence.includes(p.doc+'/p'+p.page)))
       node.append(evidenceJump('核对本期所据董事会决议','board-approval-evidence'));
@@ -954,6 +959,18 @@ function graphPanel() {
       return row;
     }));
     list.classList.add('batch-relations');
+    panel.append(list);
+  }
+  const remarkEdges=graph.edges.filter(e => ['batch_payment_hold','batch_inspection_note'].includes(e.type));
+  if (remarkEdges.length) {
+    const list=lazyFold('期款与验收备注（'+remarkEdges.length+'）',()=>remarkEdges.map(edge=>{
+      const source=graph.delivery_batch_sources.remarks.find(r=>r.doc+'/p'+r.page===edge.to && r.line===edge.line && r.facts.every(ref=>edge.evidence.includes(ref)));
+      const row=box('line',el('strong',edge.type==='batch_payment_hold'?'期款所据付款意见':'本批验收范围'),
+        box('batch-source',el('q',facts.get(edge.from).quote),citation(edge.from)),reservationSource(source,graph));
+      row.dataset.batchRemark=edge.from;
+      return row;
+    }));
+    list.classList.add('batch-remark-relations');
     panel.append(list);
   }
   const signers = graph.edges.filter(edge=>edge.type==='named_acceptance_signature');
