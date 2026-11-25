@@ -20,6 +20,7 @@ import invoice_conditions
 import payment_amendments
 import acceptance_reservations
 import acceptance_payments
+import payment_releases
 import repair_completion
 from performance_versions import (FIRST_FORMAT, BOARD_FORMAT, REINSPECTION_FORMAT, DELEGATION_FORMAT, IDENTITY_FORMAT,
                                   NATIVE_FORMAT, ADDENDUM_FORMAT, SIGNATORY_FORMAT, DATE_FORMAT, BATCH_FORMAT, FORMAT,
@@ -65,6 +66,7 @@ LABELS = {
     "approval_authority": ("审批机构", "决议机构"),
     "approval_result": ("审批决定", "决议结果"),
     "approved_on": ("审批日期", "决议日期"),
+    "release_signed_on": ("放行签字日期",),
     "approval_signer": ("审批签认", "决议签认"),
     "payment_designation": ("付款期次说明", "款项用途", "转账用途", "付款用途"),
 }
@@ -198,7 +200,7 @@ def result(rule, status, detail, refs, units, stage=None):
     return item
 
 
-DATE_LABELS = {**SOURCE_LABELS, "accepted_on":("验收日期","验收时间","复验日期","复验时间"),
+DATE_LABELS = {**SOURCE_LABELS, "accepted_on":("验收日期","验收时间","复验日期","复验时间"),"release_signed_on":("放行签字日期",),
                **{key:DELEGATION_FIELDS[key] for key in ("granted_on","grant_from","grant_until")},
                "repaired_on":REINSPECTION_FIELDS["repaired_on"],
                "issued_on":invoice_conditions.SOURCE["issued_on"], "invoice_received_on":invoice_conditions.LABELS["invoice_received_on"],
@@ -495,7 +497,7 @@ def stage_terms(text):
     return ratio[0] if len(ratio) == 1 else "", "", ""
 
 
-def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=()):
+def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=(),release_terms=()):
     fields = ("payment_term","payment_stage","adjustment")
     refs = contract.evidence("contract",*fields)
     rows, counts, issues = [], set(), []
@@ -563,6 +565,9 @@ def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=
     uncovered = [n for n in contract.notes if re.search(r"分期|分[两二三四五六七八九十\d]+期|预付|尾款|质保金|保留款|第.+期|补充协议|另附|另行约定",n["quote"])
                  and norm(n["quote"]) not in seen_lines and not (warranty_checks and warranty_terms.dedicated(n["quote"]))
                  and not (deadlines and payment_windows.scoped_row(n["quote"]))
+                 and not any(s["unit"]==contract.unit and s["role"]=="authority" and s["quote"]==n["quote"] and s["line"]==n["line"]
+                             and any(r["index"]==payment_releases.mandate(s["quote"])[0] and r["kind"]=="acceptance" for r in rows)
+                             for s in release_terms)
                  and not any(s["quote"]==n["quote"] and s["line"]==n["line"] and s["supported"] and
                              invoice_conditions.RIDER.fullmatch(invoice_conditions.text(s["quote"])) and
                              len(invoice_conditions.targets(s, rows))==1 for s in invoice_terms)]
@@ -656,6 +661,9 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
     if version in DATE_FORMATS:
         add_date_checks(signed,period_checks(contract))
     classified = {u for group in kinds.values() for u in group}
+    cash=graph.get("payment_release_sources",{})
+    classified.difference_update(kinds.get("payment_release",[]))
+    classified.update(payment_releases.recognized(cash))
     exchange_ledger = graph.get("equipment_model_sources",{}).get("exchange",{})
     classified.difference_update(equipment_exchanges.unscoped(exchange_ledger))
     extra_units = {d["id"] for d in graph.get("audit_documents",graph["documents"])} - classified
@@ -696,7 +704,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         accepted_on = day(receipts[0].single("accepted_on")) if accepted["status"]=="ok" else None
     ledger = graph.get("invoice_receipt_sources") if version==FORMAT else None
     invoice_terms = [s for s in ledger["lines"] if s["role"]=="clause"] if ledger else []
-    plan, rows = schedule(contract, warranty_checks=version in WARRANTY_FORMATS, deadlines=version in PAYMENT_WINDOW_FORMATS,
+    plan, rows = schedule(contract, warranty_checks=version in WARRANTY_FORMATS, deadlines=version in PAYMENT_WINDOW_FORMATS,release_terms=cash.get("lines",[]),
                           invoice_terms=[s for s in invoice_terms if s["unit"]==contract.unit])
     batch = None
     models = equipment_models.assess(graph, contract, [*receipts, *retests], effective=signed["status"] == "ok") if version == FORMAT else None
@@ -876,6 +884,9 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         opinions=acceptance_payments.for_stages(graph,contract,[*receipts,*retests],rows,plan)
     opinion_lines={(n["doc"],n["page"],n["line"],n["quote"]) for entry in opinions.values() for n in entry["notes"]
                    if n["scope"]!="unresolved" and n["line"] and n["stance"] in ("hold","assent")}
+    for s in cash.get("lines",[]):
+        if s["line"] and (s["role"]=="authority" or s["role"]=="decision" and payment_releases.RELEASE.fullmatch(payment_releases.literal(s["quote"]))):
+            opinion_lines.add((s["doc"],s["page"],s["line"],s["quote"]))
     holds=[s for s in (batch or {}).get("payment_holds",[]) if not s.get("payment_only")
            or (s["doc"],s["page"],s["line"],s["quote"]) not in opinion_lines]
     hold_refs = [ref for note in holds for ref in (f"{note['doc']}/p{note['page']}",*note["facts"])]
@@ -943,7 +954,14 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
             window=payment_windows.stage_window(graph,contract,rows,idx-1,[*receipts,*retests],signed,accepted,accepted_on,check,
                                                 separate_opinions=opinion_lines)
             payment_windows.attach_stage(check,window)
-        acceptance_payments.attach(check,opinions.get(row["ref"]))
+        opinion=opinions.get(row["ref"])
+        if opinion and cash and opinion["state"]=="hold":
+            record=next((r for r in [*receipts,*retests] if opinion["units"]==[r.unit]),None)
+            release=payment_releases.assess(graph,contract,record,opinion,row)
+            if release:
+                opinion={**opinion,"release":release,"units":list(dict.fromkeys([*opinion["units"],*release["units"]])),
+                         "evidence":list(dict.fromkeys([*opinion["evidence"],*release["evidence"]]))}
+        acceptance_payments.attach(check,opinion)
         if scoped_change and scoped_change["original_ref"]==row["ref"]:
             prior_checks[row["ref"]] = dict(check)
         if invoice_terms:
@@ -1032,7 +1050,10 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
             clean=pages and all(p["native"] and p["text_only"] for p in pages) and not any(s["unit"]==bank.unit for s in bank_sources["lines"])
             if clean:
                 payment.update(status="risk",detail=f"本笔回单付款日 {paid} 早于合同双方最后盖章日 {sealed}，须核实提前支付的授权、追认或其他履约依据。")
-        acceptance_payments.attach(payment,check.get("payment_opinion"))
+        opinion=check.get("payment_opinion")
+        if opinion and opinion.get("release"):
+            opinion=payment_releases.at_payment(opinion,contract,bank)
+        acceptance_payments.attach(payment,opinion)
         output.append(payment)
     return output
 

@@ -33,6 +33,7 @@ from contract_effect import verify as verify_contract_effect
 from warranty_terms import verify as verify_warranty
 from payment_windows import verify as verify_payment_windows
 from acceptance_reservations import verify as verify_reservations
+from payment_releases import verify as verify_payment_releases
 from invoice_conditions import verify as verify_invoice_conditions
 from repair_completion import verify as verify_repair_completion
 from contract_changes import verify_sources as verify_addendum_sources
@@ -236,7 +237,7 @@ def verify_transcription(fact, page_calls, nodes, subject, *, note_policy=None):
             require(decision.get("source_check"),subject+"缺少当时的人工核图回执")
 
 
-def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
+def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,submitted=None,signed=None):
     verify_performance(report)
     def page_text(doc, page):
         return bundle.read(f"{page_dir}/{doc}/{page}.txt").decode()
@@ -253,6 +254,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
     verify_warranty(report,page_text)
     verify_payment_windows(report,page_text)
     verify_reservations(report,page_text)
+    verify_payment_releases(report,page_text,submitted=submitted,signed=signed)
     verify_repair_completion(report,page_text)
     verify_invoice_conditions(report,page_text)
     if "conclusions.py" in report["policy"].get("code_sha256",{}):
@@ -268,6 +270,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None):
         page_node = nodes[f"{doc}/p{page}"]
         inspected = [*graph.get("quality_addenda",{}).get("pages",[]),*graph.get("acceptance_authority_sources",{}).get("pages",[]),*graph.get("delivery_batch_sources",{}).get("pages",[]),*graph.get("contract_effect_sources",{}).get("pages",[]),*graph.get("warranty_sources",{}).get("pages",[]),*graph.get("payment_window_sources",{}).get("pages",[]),*graph.get("acceptance_reservation_sources",{}).get("pages",[])]
         inspected.extend(graph.get("stage_payment_sources",{}).get("pages",[]))
+        inspected.extend(graph.get("payment_release_sources",{}).get("pages",[]))
         inspected.extend(graph.get("repair_completion_sources",{}).get("pages",[]))
         inspected.extend(graph.get("invoice_receipt_sources",{}).get("pages",[]))
         inspected.extend(graph.get("quality_addenda",{}).get("payments",{}).get("pages",[]))
@@ -386,7 +389,7 @@ def verify_returned_source(bundle, hashes, report, journal):
         old = doc["id"]
         prefix = "originals/" + retained[old] if old in retained else "supplement/originals/" + old
         originals[old] = prefix + doc["ext"]
-    verify_workpaper_sources(bundle, hashes, parent, "supplement/pages", originals)
+    verify_workpaper_sources(bundle, hashes, parent, "supplement/pages", originals,signed=signoff["time"])
     verify_field_sources(bundle,hashes,parent,snapshot["rev"],folder="supplement/",pages="supplement/pages/",originals=originals)
 
 
@@ -522,7 +525,7 @@ def verify(source, strict_rules=False, *, rule_checker=None, render_addenda=Fals
         if report["policy"].get("archived_methods"):
             for name, expected in report["policy"]["code_sha256"].items():
                 require(hashes.get("methods/" + name) == expected, "执行程序版本不符：" + name)
-        nodes = verify_workpaper_sources(bundle, hashes, report, "pages")
+        nodes = verify_workpaper_sources(bundle, hashes, report, "pages",submitted=journal["created"])
         if render_addenda:
             count = render_addendum_sources(bundle,report,nodes)
             print(f"已独立从提交原件重现 {count} 页，页图、文字、引文位置及页面版式一致。")

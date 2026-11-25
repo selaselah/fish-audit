@@ -59,7 +59,7 @@ def page_rows(place, text, facts, known_labels):
         else:
             value=normalize("NFKC",raw).strip()
             label,sep,_=value.partition(":")
-            if value not in PRINTED_TITLES and not (sep and label.strip() in known_labels):
+            if PRINTED_TITLES.get(value) in (None,"payment_release") and not (sep and label.strip() in known_labels):
                 qualifications.append({**row,"stance":"qualification","target":None,"index":None,"kind":None})
     return notes,qualifications
 
@@ -143,6 +143,10 @@ def attach(finding,opinion):
     finding["payment_opinion"]=opinion
     finding["scope"]=list(dict.fromkeys([*finding["scope"],*opinion["units"]]))
     finding["evidence"]=list(dict.fromkeys([*finding["evidence"],*opinion["evidence"]]))
+    if release:=opinion.get("release"):
+        from payment_releases import apply_release
+        apply_release(finding,release)
+        return
     detail={"hold":"验收原件的付款意见载明暂缓支付，须核对签发权限、适用时间及后续放行凭据。",
             "conflict":"同一验收文书对本期同时载有暂缓与同意支付，须核对最终审批依据。",
             "assent":"验收文书另列同意支付意见，付款仍应逐项核对合同前提。",

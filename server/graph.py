@@ -26,6 +26,7 @@ import payment_windows
 import invoice_conditions
 import payment_amendments
 import acceptance_reservations
+import payment_releases
 import repair_completion
 from acceptance_authority import CLAUSE as AUTHORITY_CLAUSE, SIGNER as ACCEPTANCE_SIGNATURE, attach as record_signatories, witness_edges
 
@@ -33,7 +34,7 @@ from acceptance_authority import CLAUSE as AUTHORITY_CLAUSE, SIGNER as ACCEPTANC
 KINDS = {"invoice": "发票", "contract": "合同", "acceptance": "验收单"}
 TITLE_FIELDS = {**KINDS, "claim": "报销", "bank_receipt":"回单", "warranty":"质保期满确认","contract_approval":"审批",
                 "remediation":"整改","reinspection":"复验","power_of_attorney":"委托书","contract_addendum":"补充协议",
-                equipment_exchanges.TITLE:"换货交接单"}
+                equipment_exchanges.TITLE:"换货交接单","payment_release":payment_releases.TITLE}
 PRINTED_TITLES = {label: field for field, labels in {
     "invoice": ("发票", "采购发票", "住宿服务发票", "增值税专用发票", "增值税普通发票", "增值税电子普通发票",
                 "电子发票(普通发票)", "电子发票(增值税专用发票)"),
@@ -41,6 +42,7 @@ PRINTED_TITLES = {label: field for field, labels in {
     "acceptance": ("验收单", "到货验收单", "验收报告", "采购验收单", "设备验收单"),
     "warranty": ("质保期满确认单", "质保期满确认书"),
     "contract_approval": ("合同审批单","合同审批记录","董事会合同审批记录"),
+    "payment_release": (payment_releases.TITLE,),
     "power_of_attorney": MANDATE_TITLES,
     "contract_addendum": ADDENDUM_TITLES,
     equipment_exchanges.TITLE: equipment_exchanges.TITLES,
@@ -319,6 +321,9 @@ def build_graph(docs, pages, attestations, amendments=()):
     reservations = acceptance_reservations.sources(graph,lambda doc,number:texts[doc,number])
     graph["acceptance_reservation_sources"] = reservations
     graph["edges"].extend(acceptance_reservations.edges(reservations))
+    cash=payment_releases.sources(graph,lambda doc,number:texts[doc,number])
+    graph["payment_release_sources"]=cash
+    graph["edges"].extend(payment_releases.relations(cash))
     invoice_sources = invoice_conditions.sources(graph, lambda doc, number: texts[doc, number])
     graph["invoice_receipt_sources"] = invoice_sources
     graph["edges"].extend(invoice_conditions.edges(invoice_sources))

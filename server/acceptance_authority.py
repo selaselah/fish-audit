@@ -124,6 +124,9 @@ def page_evidence(graph, read_text):
         def record(raw, line, facts, native):
             label,body = parts(raw)
             clause = mentions(raw) or any(f["field"]==CLAUSE for f in facts) or unit in contracts and label in SIGN_LABELS
+            if native and any(s["role"]=="authority" and (s["doc"],s["page"],s["line"],s["quote"])==(doc,number,line,raw)
+                              for s in graph.get("payment_release_sources",{}).get("lines",[])):
+                clause=False
             if unit in releases and label in SIGN_LABELS and not re.search(r"终验|复验|验收|合同",body):
                 clause=False
             signature = unit in receipts and (label in SIGN_LABELS or any(f["field"]==SIGNER for f in facts))

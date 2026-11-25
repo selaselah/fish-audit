@@ -58,7 +58,7 @@ def sources(graph, read_text, format=FORMAT):
     opinions,qualifications=[],[]
     if format==FORMAT:
         from graph import LABELS as fields
-        known={label for labels in fields.values() for label in labels} | LABELS | acceptance_payments.HEADINGS
+        known={label for key,labels in fields.items() if key!="release_signed_on" for label in labels} | LABELS | acceptance_payments.HEADINGS
     supplier_rows, supplier_pages = [], []
     pages, lines = [], []
     for node in graph["nodes"]:

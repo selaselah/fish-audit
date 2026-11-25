@@ -38,6 +38,7 @@ from contract_effect import verify as verify_contract_effect
 from warranty_terms import verify as verify_warranty
 from payment_windows import verify as verify_payment_windows
 from acceptance_reservations import verify as verify_reservations
+from payment_releases import verify as verify_payment_releases
 from invoice_conditions import verify as verify_invoice_conditions
 from repair_completion import verify as verify_repair_completion
 from contract_changes import verify_sources as verify_addendum_sources
@@ -824,7 +825,7 @@ class Store:
         event(db,case_id,"payment_sources",f"通过前核对 R{revision} 与 {len(sources)-1} 份历史签收底稿，共 {count} 个原件及页图文件。")
 
     def recheck_approval(self, db, case_id, revision, signoff, *, peer=False, payment_sources=None):
-        row = db.execute("SELECT content,hash FROM reports WHERE case_id=? AND rev=?",(case_id,revision)).fetchone()
+        row = db.execute("SELECT r.content,r.hash,c.created AS submitted FROM reports r JOIN cases c ON c.id=r.case_id WHERE r.case_id=? AND r.rev=?",(case_id,revision)).fetchone()
         if not row or hashlib.sha256(row["content"].encode()).hexdigest()!=row["hash"]:
             raise CaseError("待签收底稿与留存的版本摘要不符。",409)
         paper = json.loads(row["content"])
@@ -849,6 +850,7 @@ class Store:
                     verify_warranty(paper,page_text,signing=True)
                     verify_payment_windows(paper,page_text,signing=True)
                     verify_reservations(paper,page_text,signing=True)
+                    verify_payment_releases(paper,page_text,submitted=row["submitted"])
                     verify_repair_completion(paper,page_text,signing=True)
                     verify_invoice_conditions(paper,page_text,signing=True)
                     inspected = [*paper["graph"].get("quality_addenda",{}).get("pages",[]),
@@ -859,6 +861,7 @@ class Store:
                                  *paper["graph"].get("payment_window_sources",{}).get("pages",[]),
                                  *paper["graph"].get("acceptance_reservation_sources",{}).get("pages",[])]
                     inspected.extend(paper["graph"].get("stage_payment_sources",{}).get("pages",[]))
+                    inspected.extend(paper["graph"].get("payment_release_sources",{}).get("pages",[]))
                     inspected.extend(paper["graph"].get("repair_completion_sources",{}).get("pages",[]))
                     inspected.extend(paper["graph"].get("invoice_receipt_sources",{}).get("pages",[]))
                     inspected.extend(paper["graph"].get("quality_addenda",{}).get("payments",{}).get("pages",[]))

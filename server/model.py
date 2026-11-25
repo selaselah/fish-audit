@@ -17,7 +17,7 @@ from protocol import canonical, response_request
 
 FIELDS = {
     **PERFORMANCE_FIELDS, "contract_addendum":"合同补充协议标题", "warranty":"质保期满确认单标题", "contract_approval":"合同审批单标题",
-    "remediation":"整改记录单标题","reinspection":"整改复验报告标题","power_of_attorney":"授权委托书标题",
+    "remediation":"整改记录单标题","reinspection":"整改复验报告标题","power_of_attorney":"授权委托书标题","payment_release":"付款放行单标题",
     "invoice": "发票标题", "contract": "合同标题", "acceptance": "验收单标题",
     "contract_id": "合同编号", "invoice_id": "发票号码", "invoice_code":"发票代码", "buyer": "采购方",
     "seller": "供应方", "total": "含税总额", "net": "不含税合计", "tax": "税额合计",
@@ -79,6 +79,7 @@ buyer/seller 抄全称。total 是整张单据的含税总额，net/tax 是整�
 unit 单独抄明示的金额单位（如“金额单位：元”），value 抄“元”“万元”等，不从币种推断单位。每个有标签的字段应抄录整行，尤其保留否定、附加条件和金额尾数。
 日期区分签订、开票、验收；acceptance_result 抄原文验收结果。标的、付款条件、红冲、变更条款只在原文有相关记载时收录。
 合同逐项读取生效条件(effect_clause)、合同状态(contract_state)、实际生效日期(effect_on)、双方签署栏(buyer_signature/seller_signature)。逐字保留附审批、签字并盖章等限定。只抄可见姓名、签章等文字，不能把印章图案、空栏或印刷的公司名改写为“已盖章”或“已签字”。
+付款放行单标题用 payment_release。该单所据原验收单编号用 original_acceptance，放行签字日期用 release_signed_on，审批日期用 approved_on，审批签认用 approval_signer。放行约定、放行决定和验收单上的付款意见分别按印刷原文逐行记入 other，保留期次、姓名、限定及否定词。
 采购合同本身的甲方盖章日期和乙方盖章日期也分别用 buyer_sealed_on、seller_sealed_on，完整抄录对应一方及日期。
 补充协议有独立抬头，用 contract_addendum。逐行抄录补充协议编号 addendum_number、原合同编号 base_contract_ref、变更范围 change_scope、原验收标准 previous_criterion、变更后验收标准 revised_criterion、变更适用时点 change_timing、协议生效条款 change_effect_clause、补充协议状态 change_state。原交付数量用 previous_quantity，变更后交付数量用 revised_quantity，保留单位与原印数字间隔。验收单用 quantity_accepted 抄录实际数量。另行补交、欠交或待清点的附注单列 other。甲方和乙方盖章日期分别用 buyer_sealed_on、seller_sealed_on，各自的签章栏另抄为 buyer_signature、seller_signature。保留附加限制、其他变更以及页尾备注原文，其他未分类条件用 other。
 合同约定设备型号和实际验收、复验的实收型号分别逐行抄为 equipment_model。区分型号、品名与逐台序列号，完整保留大小写、分隔符、遮盖、替代型号及批准说明。
@@ -333,6 +334,11 @@ def audit_graph(graph, controls):
         reservations = finding.get("acceptance_reservations")
         if reservations and (reservations["lines"] or reservations["mixed_pages"]):
             procedure["acceptance_reservations"] = reservations
+        if opinion:=finding.get("payment_opinion"):
+            procedure["payment_opinion"]={"state":opinion["state"],"notes":opinion["notes"]}
+            if release:=opinion.get("release"):
+                procedure["payment_opinion"]["release"]={key:release.get(key) for key in
+                    ("state","required","signer","held_on","signed_on","as_of","timing","paid_on","evidence")}
     method_ids = {key for row in procedures for key in row["methods"]}
     packet = {"profile": graph.get("profile"), "document_types": graph["documents_by_kind"], "entities": entities,
               "relations": relations, "evidence": facts, "eligible_citations": references, "procedures": procedures,

@@ -11,6 +11,7 @@ from delivery_batches import HINT as BATCH_HINT
 from contract_changes import LABELS as ADDENDUM_FIELDS, SIGNAL as CHANGE_MENTION
 from documents import digest, prepare
 from graph import attach_prior_invoices, build_graph, heading_candidates, invoice_number_edges, link_procedures
+from payment_releases import submission_day
 from model import AUDIT, EXTRACT, VISUAL_CHECK, attach_check, audit_graph, extract_page
 from policy import link_sources
 from quality_labels import proposed as quality_candidates
@@ -18,7 +19,7 @@ from storage import encode
 
 
 METHODS = {name: (SERVER / name).read_bytes() for name in
-           ("acceptance_authority.py", "acceptance_payments.py", "acceptance_reservations.py", "calculations.py", "capacity.py", "cn_workdays.py", "conclusions.py", "config.py", "contract_changes.py", "contract_effect.py", "controls.py", "delegation.py", "delivery_batches.py", "documents.py", "equipment_exchanges.py", "equipment_models.py", "field_receipts.py", "field_sources.py", "graph.py", "installments.py", "invoice_approval.py", "invoice_comparison.py", "invoice_conditions.py", "invoice_history.py", "invoice_identity.py", "invoice_masks.py", "invoice_proof.py", "jobs.py", "model.py", "payment_amendments.py", "payment_checks.py", "payment_history.py", "payment_index.py", "payment_notes.py", "payment_reference.py", "payment_visibility.py", "payment_windows.py", "peer_review.py", "performance.py", "performance_versions.py", "policy.py", "protocol.py", "stage_payments.py", "quality_labels.py", "quality_references.py", "receipt_packets.py", "reinspection.py", "repair_completion.py", "storage.py", "supplements.py", "transfers.py", "warranty_terms.py", "work_progress.py")}
+           ("acceptance_authority.py", "acceptance_payments.py", "acceptance_reservations.py", "calculations.py", "capacity.py", "cn_workdays.py", "conclusions.py", "config.py", "contract_changes.py", "contract_effect.py", "controls.py", "delegation.py", "delivery_batches.py", "documents.py", "equipment_exchanges.py", "equipment_models.py", "field_receipts.py", "field_sources.py", "graph.py", "installments.py", "invoice_approval.py", "invoice_comparison.py", "invoice_conditions.py", "invoice_history.py", "invoice_identity.py", "invoice_masks.py", "invoice_proof.py", "jobs.py", "model.py", "payment_amendments.py", "payment_checks.py", "payment_history.py", "payment_index.py", "payment_notes.py", "payment_reference.py", "payment_releases.py", "payment_visibility.py", "payment_windows.py", "peer_review.py", "performance.py", "performance_versions.py", "policy.py", "protocol.py", "stage_payments.py", "quality_labels.py", "quality_references.py", "receipt_packets.py", "reinspection.py", "repair_completion.py", "storage.py", "supplements.py", "transfers.py", "warranty_terms.py", "work_progress.py")}
 CODE_DIGESTS = {name: digest(source) for name, source in METHODS.items()}
 
 
@@ -142,6 +143,8 @@ class Worker:
         store.progress(case_id, "graph", 74, f"已读取 {page_count} 页，正在校验引文并建立关系。")
         refresh_addendum_layout(store,case_id,docs,pages)
         graph = build_graph(docs, pages, store.attestations(case_id), store.amendments(case_id))
+        if graph["payment_release_sources"]["pages"]:
+            graph["payment_release_as_of"]=submission_day(case["created"])
         store.check_graph_field_history(case_id,case["rev"]+1,graph)
         graph["profile"] = profile
         keys = {edge["to"] for edge in invoice_number_edges(graph)}
