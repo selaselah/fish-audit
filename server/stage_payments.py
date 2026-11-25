@@ -75,7 +75,8 @@ def sources(graph,read_text):
         if (sum(literal(line) in BANK_TITLES for line in text.splitlines())>1 or
                 any(sum(k in LABELS[field] for k in columns)>1 for field in ("transfer_ref","transfer_amount"))):
             repeated.add(unit)
-    if len(bank_pages)<2 and not repeated:
+    prior_terms = graph.get("prior_installment_sources", {}).get("lines", [])
+    if len(bank_pages)<2 and not repeated and not prior_terms:
         return ledger
     banks = {unit_by_page.get((d,n),d) for d,n in bank_pages}
     ledger["banks"] = [u["id"] for u in units if u["id"] in banks]
@@ -86,6 +87,10 @@ def sources(graph,read_text):
     known=(known-ticket_units)|bounded_tickets
     ledger["unknown_units"]=[u["id"] for u in units if u["id"] not in known]
     coverage=covered_rows(graph,read_text,set(kinds.get("contract",[])),CONTRACT,is_printed,"分期合同")
+    covered_terms = {(r["doc"], r["page"], r["line"], r["quote"]) for r in prior_terms if r["supported"]}
+    for page in coverage:
+        page["uncovered"] = [r for r in page["uncovered"]
+                             if (page["doc"], page["page"], r["line"], r["quote"]) not in covered_terms]
     coverage+=covered_rows(graph,read_text,banks,BANK,is_printed,"分笔付款回单")
     bound={(p["doc"],p["page"]):p for p in coverage}
     partial={(g["doc"],g["page"]) for g in graph["gaps"] if g["quality"] in ("partial","unreadable")}
@@ -177,6 +182,22 @@ def fmt(number):
     return format(number,".2f") if number is not None else None
 
 
+def expected_amount(stage, facts, contracts, total):
+    clause = facts.get(stage.get("clause_ref"))
+    source = (clause or {}).get("source_line") or {}
+    label, body = parts(source.get("text", ""))
+    match = CLAUSE.fullmatch(body)
+    if (not match or not source.get("rects") or literal(clause["quote"]) != literal(source["text"])
+            or clause["status"] not in ("anchored", "confirmed") or clause.get("unit", clause["doc"]) not in contracts
+            or not same_stage(label, stage["name"]) or not stage["share"] or Decimal(match[1]) != Decimal(stage["share"])
+            or total is None):
+        return None, "未取得按固定合同总额和本期比例付款的完整原行"
+    value = total * Decimal(match[1]) / 100
+    if value != value.quantize(Decimal(".01")):
+        return None, "本期金额不足整分，需明确尾差约定"
+    return value, None
+
+
 def findings(graph,checks):
     from performance import Material, result
     ledger=graph.get("stage_payment_sources",{})
@@ -238,21 +259,11 @@ def findings(graph,checks):
             continue
         stage=phase["stage"] if phase else None
         issue=list(reasons)
-        clause=facts.get(stage["clause_ref"]) if stage else None
-        expected=None
+        expected = None
         if stage:
-            source=(clause or {}).get("source_line") or {}
-            label,body=parts(source.get("text",""))
-            match=CLAUSE.fullmatch(body)
-            if (match and source.get("rects") and literal(clause["quote"])==literal(source["text"]) and
-                    clause["status"] in ("anchored","confirmed") and clause.get("unit",clause["doc"]) in contracts and
-                    same_stage(label,stage["name"]) and stage["share"] and Decimal(match[1])==Decimal(stage["share"]) and total is not None):
-                expected=total*Decimal(match[1])/100
-                if expected!=expected.quantize(Decimal(".01")):
-                    expected=None
-                    issue.append("本期金额不足整分，需明确尾差约定")
-            else:
-                issue.append("未取得按固定合同总额和本期比例付款的完整原行")
+            expected, reason = expected_amount(stage, facts, contracts, total)
+            if reason:
+                issue.append(reason)
         for r in group:
             issue.extend(r["reasons"])
         issue=list(dict.fromkeys(issue))

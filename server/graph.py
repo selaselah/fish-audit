@@ -23,6 +23,7 @@ import stage_payments
 import contract_effect
 import signing_parties
 import inspection_coverage
+import prior_installment
 import warranty_terms
 import warranty_service
 import payment_windows
@@ -354,6 +355,11 @@ def build_graph(docs, pages, attestations, amendments=()):
     record_signatories(graph, lambda doc, number: texts[doc, number])
     record_quality_references(graph, lambda doc, number: texts[doc, number])
     attach_payment_references(graph, lambda doc, number: texts[doc,number])
+    prior = prior_installment.sources(graph, lambda doc, number: texts[doc, number])
+    graph["prior_installment_sources"] = prior
+    lines, links = prior_installment.source_graph(prior)
+    graph["nodes"].extend(lines)
+    graph["edges"].extend(links)
     graph["stage_payment_sources"]=stage_payments.sources(graph,lambda doc,number:texts[doc,number])
     graph["invoice_identity"] = IDENTITY_FORMAT
     graph["invoice_lookup"] = INVOICE_LOOKUP

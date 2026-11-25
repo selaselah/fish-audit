@@ -16,6 +16,7 @@ import equipment_exchanges
 import contract_effect
 import signing_parties
 import inspection_coverage
+import prior_installment
 import warranty_terms
 import warranty_service
 import payment_windows
@@ -51,6 +52,7 @@ LABELS = {
     **warranty_terms.LABELS,
     **signing_parties.IMPRINT_FIELDS,
     **inspection_coverage.LABELS,
+    **prior_installment.LABELS,
     **warranty_service.LABELS,
     **payment_windows.LABELS,
     **invoice_conditions.LABELS,
@@ -503,7 +505,7 @@ def stage_terms(text):
     return ratio[0] if len(ratio) == 1 else "", "", ""
 
 
-def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=(),release_terms=()):
+def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=(),release_terms=(),prior_terms=()):
     fields = ("payment_term","payment_stage","adjustment")
     refs = contract.evidence("contract",*fields)
     rows, counts, issues = [], set(), []
@@ -570,6 +572,9 @@ def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=
         issues.append("付款条款存在变更或原页覆盖缺口")
     uncovered = [n for n in contract.notes if re.search(r"分期|分[两二三四五六七八九十\d]+期|预付|尾款|质保金|保留款|第.+期|补充协议|另附|另行约定",n["quote"])
                  and norm(n["quote"]) not in seen_lines and not (warranty_checks and warranty_terms.dedicated(n["quote"]))
+                 and not any(s["supported"] and s["unit"]==contract.unit and s["quote"]==n["quote"] and
+                             s["doc"]==n["doc"] and s["line"]==n["line"] and n["page_id"]==f"{s['doc']}/p{s['page']}"
+                             and sum(row["kind"]=="acceptance" for row in rows)==1 for s in prior_terms)
                  and not (deadlines and payment_windows.scoped_row(n["quote"]))
                  and not any(s["unit"]==contract.unit and s["role"]=="authority" and s["quote"]==n["quote"] and s["line"]==n["line"]
                              and any(r["index"]==payment_releases.mandate(s["quote"])[0] and r["kind"]=="acceptance" for r in rows)
@@ -633,8 +638,16 @@ def receipts_without_schedule(graph, contracts, plan_evidence, plan_units):
 def compute(graph, version=FORMAT, *, include_unassigned_receipts=True, recheck_payment_opinions=False):
     results = performance_findings(graph,version,include_unassigned_receipts=include_unassigned_receipts,
                                   recheck_payment_opinions=recheck_payment_opinions)
-    if version==FORMAT:
-        results.extend(stage_payments.findings(graph,results))
+    if version == FORMAT:
+        grouped = stage_payments.findings(graph, results)
+        if graph.get("prior_installment_sources", {}).get("lines"):
+            prior_installment.condition(graph, results, grouped)
+            ledger = graph["stage_payment_sources"]
+            if len(ledger["banks"]) > 1 or ledger["ambiguous_units"]:
+                grouped = stage_payments.findings(graph, results)
+            else:
+                grouped = []
+        results.extend(grouped)
     return results
 
 
@@ -714,6 +727,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
     ledger = graph.get("invoice_receipt_sources") if version==FORMAT else None
     invoice_terms = [s for s in ledger["lines"] if s["role"]=="clause"] if ledger else []
     plan, rows = schedule(contract, warranty_checks=version in WARRANTY_FORMATS, deadlines=version in PAYMENT_WINDOW_FORMATS,release_terms=cash.get("lines",[]),
+                          prior_terms=graph.get("prior_installment_sources",{}).get("lines",[]) if version==FORMAT else (),
                           invoice_terms=[s for s in invoice_terms if s["unit"]==contract.unit])
     batch = None
     models = equipment_models.assess(graph, contract, [*receipts, *retests], effective=signed["status"] == "ok") if version == FORMAT else None
@@ -1121,6 +1135,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("effect_review") != entry.get("effect_review")
                 or saved.get("warranty_check") != entry.get("warranty_check")
                 or saved.get("warranty_payment") != entry.get("warranty_payment")
+                or saved.get("prior_installment") != entry.get("prior_installment")
                 or saved.get("inspection_coverage") != entry.get("inspection_coverage")
                 or saved.get("equipment_models") != entry.get("equipment_models")
                 or saved.get("stage_payments") != entry.get("stage_payments")
