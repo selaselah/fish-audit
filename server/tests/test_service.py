@@ -70,6 +70,8 @@ class WebReadinessTests(unittest.TestCase):
             root = Path(temp)
             frontend = root/"frontend"
             frontend.mkdir()
+            (frontend/"landing.html").write_text('<link rel="stylesheet" href="/style.css"><script src="/landing.js"></script>')
+            (frontend/"landing.js").write_text("void 1")
             (frontend/"index.html").write_text('<link rel="stylesheet" href="/style.css"><script src="/app.js?v=2"></script>')
             (frontend/"style.css").write_text("body{}")
             (frontend/"app.js").write_text("void 0")
@@ -107,11 +109,12 @@ class WebReadinessTests(unittest.TestCase):
                             patch.object(service,"trusted_host",return_value="audit.example"),contextlib.redirect_stdout(io.StringIO()):
                         service.wait_ready(True,previous=101,timeout=3)
                     self.assertTrue(all(c.args==(102,) for c in listeners.call_args_list))
-                    self.assertEqual(calls,["/api/ready","/api/ready","/","/style.css","/app.js"])
+                    self.assertEqual(calls,["/api/ready","/api/ready","/","/app","/style.css","/landing.js","/app.js"])
                     self.assertEqual(set(hosts),{"audit.example"})
-                    files["/app.js"]=b"stale script"
-                    with self.assertRaisesRegex(ValueError,"app.js"):
-                        service.probe(http.server_address,service.frontend_files(frontend),True,1)
+                    for path in ("/","/app","/landing.js","/app.js"):
+                        with self.subTest(path=path),patch.dict(files,{path:b"stale deployment"}):
+                            with self.assertRaisesRegex(ValueError,"当前部署不一致 "+path+"$"):
+                                service.probe(http.server_address,service.frontend_files(frontend),True,1)
                 finally:
                     http.shutdown()
 

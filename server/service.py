@@ -46,10 +46,14 @@ class FrontendAssets(HTMLParser):
 
 
 def frontend_files(folder):
-    index = (folder/"index.html").read_bytes()
-    parser = FrontendAssets()
-    parser.feed(index.decode())
-    return {"/":index, **{path:(folder/path.lstrip("/")).read_bytes() for path in parser.paths}}
+    files = {"/": (folder/"landing.html").read_bytes(), "/app": (folder/"index.html").read_bytes()}
+    for page in tuple(files.values()):
+        parser = FrontendAssets()
+        parser.feed(page.decode())
+        for path in parser.paths:
+            if path not in files:
+                files[path] = (folder/path.lstrip("/")).read_bytes()
+    return files
 
 
 def agent_pid():
