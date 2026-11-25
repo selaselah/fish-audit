@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from config import BANK, PERFORMANCE
 from controls import VERSION, conclusion, execute
-from delegation import LEGACY_FORMAT, NAME_FORMAT, NATIVE_NAME_FORMAT, coverage_gaps, rows_for_grants, unresolved_agents, verify_sources
+from delegation import LEGACY_FORMAT, NAME_FORMAT, NATIVE_NAME_FORMAT, TERMS_FORMAT, coverage_gaps, rows_for_grants, unresolved_agents, verify_sources
 from graph import build_graph
 from performance import DELEGATION_FORMAT, IDENTITY_FORMAT, REINSPECTION_FORMAT, compute, verify_findings
 from test_performance import BANK_DOC, CONTRACT, RECEIPT, WARRANTY, material, rows
@@ -46,6 +46,52 @@ def fixture_text(edit=None):
 
 
 class DelegationTests(unittest.TestCase):
+    def test_issue_date_is_bound_to_the_originals_and_not_an_intraday_sequence(self):
+        for issued,status,order in (("2026-08-31","ok","after"),("2026-09-01","missing","same_day"),("2026-09-02","risk","before")):
+            with self.subTest(issued=issued):
+                graph=sample(lambda i,f,l,v:issued if f=="granted_on" else v)
+                signed,=rows(graph,"H01")
+                entry,=signed["delegations"]
+                self.assertEqual((signed["status"],entry["status"],entry["issuance_order"]["state"]),(status,status,order))
+                for key,unit,field in (("signed_refs","d01","signed_on"),("issued_refs","d02","granted_on")):
+                    ref,=entry["issuance_order"][key]
+                    fact=next(f for f in graph["facts"] if f["id"]==ref)
+                    self.assertEqual((fact["doc"],fact["field"]),(unit,field))
+                    self.assertIn(ref,entry["evidence"]); self.assertIn(ref,signed["evidence"])
+                self.assertEqual(rows(graph,"H02")[0]["status"],"ok")
+                for rule in ("H04","H05"):
+                    self.assertTrue(all(f["status"]==("ok" if status=="ok" else "missing") for f in rows(graph,rule)))
+                if order=="same_day":
+                    self.assertIn("时分",entry["detail"])
+        for edit,reason in (({"grant_scope":"仅限收货验收"},"权限不足"),({"grant_until":"2026-08-31"},"授权期间")):
+            graph=sample(lambda i,f,l,v:{"granted_on":"2026-09-01",**edit}.get(f,v))
+            entry,=rows(graph,"H01")[0]["delegations"]
+            self.assertEqual(entry["status"],"risk")
+            self.assertIn(reason,entry["detail"]); self.assertIn("同一日期",entry["detail"])
+
+    def test_mismatched_instruments_and_unread_dates_do_not_acquire_an_issuance_order(self):
+        for graph in (sample(grants=[GRANT,GRANT]),sample(lambda i,f,l,v:"另一个单位" if f=="grant_principal" else v),
+                      sample(lambda i,f,l,v:"2026年9月0 1日" if f=="granted_on" else v)):
+            self.assertNotIn("issuance_order",rows(graph,"H01")[0]["delegations"][0])
+
+    def test_archived_same_day_clearance_replays_and_requires_new_review_to_sign(self):
+        edit=lambda i,f,l,v:"2026-09-01" if f=="granted_on" else v
+        graph=sample(edit)
+        policy={**VERSION,"profile":PERFORMANCE}
+        paper={"graph":graph,"policy":policy,"findings":execute(graph,PERFORMANCE)}
+        verify_sources(paper,fixture_text(edit)); verify_findings(paper)
+        entry=next(f for f in paper["findings"] if f["rule"]=="H01")["delegations"][0]
+        entry["issuance_order"]["issued_refs"]=entry["issuance_order"]["signed_refs"]
+        with self.assertRaises(ValueError): verify_findings(paper)
+        graph["delegation_coverage"]["format"]=TERMS_FORMAT
+        paper={"graph":graph,"policy":dict(policy,version="2026.11.25.26",delegation_checks=TERMS_FORMAT),"findings":execute(graph,PERFORMANCE)}
+        for finding in paper["findings"]:
+            finding["version"]=paper["policy"]["version"]
+        entry=next(f for f in paper["findings"] if f["rule"]=="H01")["delegations"][0]
+        self.assertEqual(entry["status"],"ok"); self.assertNotIn("issuance_order",entry)
+        verify_findings(paper); verify_sources(paper,fixture_text(edit))
+        with self.assertRaisesRegex(ValueError,"同日出具"): verify_sources(paper,fixture_text(edit),signing=True)
+
     def test_all_restrictions_stay_bound_to_each_written_clause_and_affected_stages(self):
         grant=[r for r in GRANT if r[0]!="grant_conditions"]
         approval=("grant_conditions","授权限制","签约前须经负责人书面批准")

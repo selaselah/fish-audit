@@ -6,7 +6,7 @@ from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 from reinspection import LABELS as REINSPECTION_FIELDS, LINK_KEYS, assess as assess_reinspection, linked as same_contract, verify_number_links
-from delegation import FORMAT as MANDATE_TERMS_FORMAT, LABELS as DELEGATION_FIELDS, PARTY_SIGNATURES, checks as check_delegations, complete_id
+from delegation import TERM_FORMATS as MANDATE_TERM_FORMATS, LABELS as DELEGATION_FIELDS, PARTY_SIGNATURES, checks as check_delegations, complete_id
 from contract_changes import LABELS as ADDENDUM_FIELDS, LIMIT, SOURCE_LABELS, candidates as change_candidates, labelled_sources, resolve as resolve_change
 from acceptance_authority import LABELS as AUTHORITY_FIELDS, SIGN_LABELS, check as check_acceptance_authority
 import delivery_batches
@@ -326,7 +326,7 @@ def effect(contract, approvals=(), version=FORMAT, grants=()):
     if not board and not EFFECT.fullmatch(terms):
         missing.append("生效约定及其中每项条件的证明")
     mode = "seal" if "盖章" in terms and "或" not in terms else "sign" if ("签字" in terms or "签名" in terms) and "或" not in terms else None
-    read_date = printed_day if version==FORMAT and contract.mandate_format==MANDATE_TERMS_FORMAT else None
+    read_date = printed_day if version==FORMAT and contract.mandate_format in MANDATE_TERM_FORMATS else None
     delegations = check_delegations(contract, grants, strict_names=version!=DELEGATION_FORMAT,read_date=read_date) if version in MANDATE_FORMATS else []
     for field, party, name in (("buyer_signature",buyer,"甲方"),("seller_signature",seller,"乙方")):
         side = field.removesuffix("_signature")

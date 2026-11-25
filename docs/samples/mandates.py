@@ -22,7 +22,9 @@ CASES = {"valid":"委托代理人在授权期内签约", "expired":"签约时书
          "prepay_limit":"委托书限制预付款并要求书面批准",
          "amount_limit":"签署总价超过委托上限且另需审批",
          "two_approvals":"委托书分别要求财务与采购批准",
-         "split_expiry":"委托书截止日期的日数断字"}
+         "split_expiry":"委托书截止日期的日数断字",
+         "last_day":"代理人在授权最后一天签约","before_start":"代理人在授权开始前一天签约",
+         "issued_later":"签约次日才出具委托书","same_issue":"出具委托书与代理签约同日"}
 IDENTITIES = {"role":"采购负责人", "joint":"演练林岚及演练方程", "redacted":"张某", "spaced":"周宁 方程", "compound":"欧阳明月"}
 HOLD_KIND = {"role":"role","joint":"joint","redacted":"redacted","spaced":"joint"}
 FIELDS = {name:field for field,names in LABELS.items() for name in names}
@@ -50,8 +52,9 @@ def generate(seed, mode):
     grant = [("委托书编号","WT-"+code),contract[0],("委托单位",BUYER),("受托人",agent),("交易相对方",SELLER),
              ("采购标的","四门冷藏柜"),("代理事项","办理本合同采购"),
              ("授权权限","仅限收货验收" if mode=="receipt" else "代表委托单位签署本采购合同"),
-             ("授权出具日期","2026年7月25日"),("授权起始日","2026年8月1日"),
-             ("授权截止日",{"expired":"2026年8月31日","split_expiry":"2026年9月3 0日"}.get(mode,"2026年9月30日")),
+             ("授权出具日期",{"issued_later":"2026年9月2日","same_issue":"2026年9月1日"}.get(mode,"2026年7月25日")),
+             ("授权起始日","2026年9月2日" if mode=="before_start" else "2026年8月1日"),
+             ("授权截止日",{"expired":"2026年8月31日","last_day":"2026年9月1日","split_expiry":"2026年9月3 0日"}.get(mode,"2026年9月30日")),
              ("委托单位签章",BUYER+"（已盖章）")]
     if mode=="restriction":
         grant.append(("备注","签约前须另经采购总监书面批准"))
@@ -71,8 +74,8 @@ def generate(seed, mode):
 def verify_case(report, mode):
     h01, = [f for f in report["findings"] if f["rule"]=="H01"]
     entry, = h01["delegations"]
-    positive = mode in ("valid","compound")
-    status = "ok" if positive else {"expired":"risk","receipt":"risk","prepay_limit":"risk","amount_limit":"risk"}.get(mode,"missing")
+    positive = mode in ("valid","compound","last_day")
+    status = "ok" if positive else ("risk" if mode in ("expired","receipt","prepay_limit","amount_limit","before_start","issued_later") else "missing")
     observed = IDENTITIES.get(mode,AGENT)
     assert (h01["status"],entry["status"],entry["agent"])==(status,status,"".join(observed.split())), h01
     if mode in HOLD_KIND:
@@ -89,7 +92,10 @@ def verify_case(report, mode):
     if mode=="compound":
         assert entry["agent_kind"]=="named"
         assert not any(report["graph"]["delegation_coverage"][k] for k in ("agent_holds","signer_holds"))
-    assert entry["signed_on"]=="2026-09-01" and entry["issued_on"]=="2026-07-25"
+    assert entry["signed_on"]=="2026-09-01"
+    assert entry["issued_on"]=={"issued_later":"2026-09-02","same_issue":"2026-09-01"}.get(mode,"2026-07-25")
+    if mode in ("last_day","before_start","issued_later","same_issue"):
+        assert entry["issuance_order"]["state"]=={"issued_later":"before","same_issue":"same_day"}.get(mode,"after")
     if mode=="split_expiry":
         assert entry["valid_until"] is None
     if mode in ("prepay_limit","amount_limit","two_approvals"):
