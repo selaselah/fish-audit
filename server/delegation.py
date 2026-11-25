@@ -153,6 +153,11 @@ def rows_for_grants(graph, read_text):
     return covered_rows(graph, read_text, units, GRANT_FIELDS, printed_value, "授权委托书")
 
 
+def is_page_marker(text):
+    plain = normalized(text)
+    return not plain or plain == "合成演练资料仅供系统测试无交易效力" or bool(PAGE_MARK.fullmatch(plain))
+
+
 def covered_rows(graph, read_text, units, fields, validate, subject):
     """Account for each native line of a bounded legal instrument, including unclassified riders."""
     if not units:
@@ -180,9 +185,7 @@ def covered_rows(graph, read_text, units, fields, validate, subject):
                 if not isinstance(source, str) or hashlib.sha256(source.encode()).hexdigest() != page.get("text_sha256"):
                     raise ValueError(subject+"的文字层摘要与归档不符")
                 for index, text in enumerate(source.splitlines(), 1):
-                    plain = normalized(text)
-                    if (not plain or plain=="合成演练资料仅供系统测试无交易效力" or PAGE_MARK.fullmatch(plain)
-                            or (index, text) in positions[unit["id"], number]):
+                    if is_page_marker(text) or (index, text) in positions[unit["id"], number]:
                         continue
                     missing.append({"line": index, "quote": text})
             result.append({"unit":unit["id"], "doc":doc, "page":number, "native":page.get("layer")=="text", "uncovered":missing})

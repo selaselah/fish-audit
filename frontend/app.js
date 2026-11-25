@@ -401,7 +401,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
   const effect=state.bundle?.report.graph.contract_effect_sources;
   if (effect && lineHint && !gaps.some(g=>g.line===lineHint)) {
     const source=effect.conditions.find(s=>s.doc===docId && s.page===pageNumber && s.line===lineHint);
-    if (source) gaps.push({...source,quality:'effect_reference'});
+    if (source) gaps.push({...source,quality:source.kind==='approval_note'?'approval_reference':'effect_reference'});
   }
   const warranty=state.bundle?.report.graph.warranty_sources;
   if (warranty && lineHint && !gaps.some(g=>g.line===lineHint)) {
@@ -419,7 +419,7 @@ function openPage(docId, pageNumber, highlight, lineHint) {
     if (source) gaps.push({...source,quality:['seller','delivery_note'].includes(source.kind)?'supplier_reference':'reservation_reference'});
   }
   for (const gap of gaps) {
-    const label = {equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
+    const label = {equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',approval_reference:'董事会审批记录原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
     const section = box('evidence-row',el('h4',label+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
     section.dataset.gapLine = String(gap.line);
     if (gap.line===lineHint) {
@@ -645,6 +645,11 @@ function finding(item) {
     }
   }
   if (item.payment_window) node.append(paymentWindowPanel(item,state.bundle.report.graph));
+  if (item.stage && ['H04','H05'].includes(item.rule)) {
+    const approvals=state.bundle.report.findings.find(f=>f.rule==='H01')?.effect_review?.approval_pages;
+    if (approvals?.some(p=>item.evidence.includes(p.doc+'/p'+p.page)))
+      node.append(evidenceJump('核对本期所据董事会决议','board-approval-evidence'));
+  }
   if (item.acceptance_reservations?.lines.length || item.acceptance_reservations?.mixed_pages.length)
     node.append(reservationPanel(item,state.bundle.report.graph));
   if (item.acceptance_reservations?.supplier) node.append(supplierPanel(item.acceptance_reservations.supplier,state.bundle.report.graph));

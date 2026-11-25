@@ -1,16 +1,21 @@
-"""Find additional effectiveness conditions on every page attributed to the contract."""
+"""Trace effectiveness conditions through the contract and its board approval originals."""
 
 import hashlib
 import re
 from collections import defaultdict
 
 from acceptance_authority import parts
+from delegation import is_page_marker
 from performance_versions import EFFECT_FORMATS
 from calculations import normalized
 
 
 LEGACY = "contract-effect-sources-v1"
-FORMAT = "contract-effect-sources-v2"
+SEAL_FORMAT = "contract-effect-sources-v2"
+FORMAT = "contract-effect-sources-v3"
+APPROVAL_SINCE = "2026.11.25.17"
+APPROVAL_FIELDS = {"contract_approval","contract_id","buyer","seller","approval_authority",
+                   "approval_result","approved_on","approval_signer"}
 SEAL_FIELDS = {"甲方盖章日期":"buyer_sealed_on","乙方盖章日期":"seller_sealed_on"}
 SEAL_LABEL = re.compile(r"(?:甲方|乙方|买方|卖方|采购方|供应方)(?:实际)?(?:盖章|签章|签署|签字)(?:日期|时间|日)|^(?:双方)?(?:实际)?(?:盖章|签章)(?:日期|时间)[:：]")
 SEAL_CLAUSES = {"本合同自双方盖章之日起生效","合同自双方盖章之日起生效","自双方盖章之日起生效"}
@@ -58,6 +63,27 @@ def recognized(raw,facts):
     return False
 
 
+def approval_field(raw, fact):
+    from graph import PRINTED_TITLES
+    from performance import LABELS, SOURCE_LABELS, day
+    field = fact["field"]
+    if field not in APPROVAL_FIELDS or normalized(raw) != normalized(fact["quote"]):
+        return False
+    value = normalized(fact["value"])
+    if field == "contract_approval":
+        return value == normalized(raw) and PRINTED_TITLES.get(value) == field
+    label, body = parts(raw)
+    if not body or label not in (LABELS.get(field) or SOURCE_LABELS.get(field, ())):
+        return False
+    if field == "approved_on" and (re.search(r"\d\s+\d", body) or not day(normalized(body))):
+        return False
+    if field == "contract_id" and re.search(r"[0-9A-Za-z]\s+[0-9A-Za-z]",body):
+        return False
+    if field == "approval_signer" and re.search(r"[;；,，:：。]|仅限|另行|另须|尚待|暂缓|不得",body):
+        return False
+    return value in (normalized(raw), normalized(body))
+
+
 def sources(graph,read_text,format=FORMAT):
     def effect_signal(raw):
         if not relevant(raw):
@@ -68,6 +94,7 @@ def sources(graph,read_text,format=FORMAT):
                 return False
         return True
     contracts=set(graph["documents_by_kind"].get("contract",[]))
+    approvals=set(graph["documents_by_kind"].get("contract_approval",[])) if format==FORMAT else set()
     sections={(d["source"],d["page"]):d["id"] for d in graph.get("audit_documents",[]) if "source" in d}
     observations=defaultdict(list)
     for fact in graph["facts"]:
@@ -79,18 +106,25 @@ def sources(graph,read_text,format=FORMAT):
         doc,suffix=node["id"].rsplit("/p",1)
         page=int(suffix)
         unit=sections.get((doc,page),doc)
-        if unit not in contracts:
+        board = unit in approvals
+        if unit not in contracts and not board:
             continue
         place={"unit":unit,"doc":doc,"page":page}
         native=node.get("layer")=="text"
-        pages.append({**place,"native":native,"text_only":node.get("clause_text_only") is True})
+        entry={**place,"native":native,"text_only":node.get("clause_text_only") is True}
+        if board:
+            entry["kind"]="board_approval"
+        pages.append(entry)
         facts=observations[doc,page]
         by_line=defaultdict(list)
         for fact in facts:
             line=fact.get("source_line")
             if native and line:
                 by_line[line["number"],line["text"]].append(fact)
-            elif format==FORMAT and SEAL_LABEL.search(normalized(fact["quote"])):
+            elif board:
+                if not is_page_marker(fact["quote"]) and not approval_field(fact["quote"],fact):
+                    conditions.append({**place,"line":None,"quote":fact["quote"],"facts":[fact["id"]],"kind":"approval_note"})
+            elif format!=LEGACY and SEAL_LABEL.search(normalized(fact["quote"])):
                 conditions.append({**place,"line":None,"quote":fact["quote"],"facts":[fact["id"]],"kind":"seal_date"})
             elif effect_signal(fact["quote"]):
                 conditions.append({**place,"line":None,"quote":fact["quote"],"facts":[fact["id"]]})
@@ -100,7 +134,12 @@ def sources(graph,read_text,format=FORMAT):
                 raise ValueError("合同生效条件所据的整页文字与底稿不符")
             for number,raw in enumerate(text.splitlines(),1):
                 matches=by_line[number,raw]
-                if format==FORMAT and SEAL_LABEL.search(normalized(raw)):
+                if board:
+                    if is_page_marker(raw) or any(f["status"] in ("anchored","confirmed")
+                            and f["source_line"].get("rects") and approval_field(raw,f) for f in matches):
+                        continue
+                    conditions.append({**place,"line":number,"quote":raw,"facts":[f["id"] for f in matches],"kind":"approval_note"})
+                elif format!=LEGACY and SEAL_LABEL.search(normalized(raw)):
                     conditions.append({**place,"line":number,"quote":raw,"facts":[f["id"] for f in matches],"kind":"seal_date"})
                 elif effect_signal(raw) and not recognized(raw,matches):
                     conditions.append({**place,"line":number,"quote":raw,"facts":[f["id"] for f in matches]})
@@ -133,10 +172,14 @@ def seal_check(contract,rows,clear):
 
 def review(finding,ledger,contract):
     unit=contract.unit
-    pages=[p for p in ledger.get("pages",[]) if p["unit"]==unit]
-    conditions=[s for s in ledger.get("conditions",[]) if s["unit"]==unit]
+    board_pages=[p for p in ledger.get("pages",[]) if p.get("kind")=="board_approval" and p["unit"] in finding["scope"]]
+    units={unit,*(p["unit"] for p in board_pages)}
+    pages=[p for p in ledger.get("pages",[]) if p["unit"] in units]
+    conditions=[s for s in ledger.get("conditions",[]) if s["unit"] in units]
     mixed=[p for p in pages if not p["text_only"] or not p["native"]]
     finding["effect_review"]={"conditions":conditions,"mixed_pages":mixed}
+    if board_pages:
+        finding["effect_review"]["approval_pages"]=board_pages
     refs=[f"{p['doc']}/p{p['page']}" for p in pages]
     refs.extend(ref for s in conditions for ref in s["facts"])
     finding["evidence"]=list(dict.fromkeys(finding["evidence"]+refs))
@@ -154,14 +197,27 @@ def review(finding,ledger,contract):
         return
     if finding["status"]=="ok":
         finding.update(status="missing",detail="双方签署栏有据，合同生效条件仍待核实。")
-    if conditions:
+    if any(s.get("kind")=="approval_note" for s in conditions):
+        finding["detail"]+=" 董事会审批记录另有待核原文，请核对批准范围、附加条件及后续决议。"
+    if any(s.get("kind")!="approval_note" for s in conditions):
         finding["detail"]+=" 请核对另列的生效约定或状态记载，以及所需批准、证明或确认的日期。"
-    if mixed or not pages:
+    if any(p.get("kind")=="board_approval" for p in mixed):
+        finding["detail"]+=" 须核对审批记录整页的影像及批注。"
+    if any(p.get("kind")!="board_approval" for p in mixed) or not pages:
         finding["detail"]+=" 需通读合同原页的影像、批注和附加条件。"
 
 
 def verify(report,read_text,*,signing=False):
     graph,policy=report["graph"],report["policy"]
+    marker=policy.get("contract_effect")
+    version=policy.get("version","")
+    positive=[f for f in report["findings"] if f["rule"]=="H01" and f["status"]=="ok"]
+    if signing and marker!=FORMAT and positive and graph["documents_by_kind"].get("contract_approval"):
+        scope={unit for finding in positive for unit in finding["scope"]}
+        current=sources(graph,read_text)
+        if (any(s.get("kind")=="approval_note" and s["unit"] in scope for s in current["conditions"])
+                or any(p.get("kind")=="board_approval" and p["unit"] in scope and not (p["native"] and p["text_only"]) for p in current["pages"])):
+            raise ValueError("旧版董事会批准依据另有待核原文或影像，请按现行程序重审后签收。")
     if not policy.get("contract_effect"):
         if ("contract_effect.py" in policy.get("code_sha256",{}) or "contract_effect_sources" in graph or
                 policy.get("performance_checks") in EFFECT_FORMATS):
@@ -171,7 +227,6 @@ def verify(report,read_text,*,signing=False):
             if ledger["conditions"] or any(not p["native"] or not p["text_only"] for p in ledger["pages"]):
                 raise ValueError("旧版合同尚有附加生效约定或待核的整页版式，请按现行程序重审后签收。")
         return
-    marker=policy["contract_effect"]
     if marker==LEGACY and signing and any(f["rule"]=="H01" and f["status"]=="ok" for f in report["findings"]):
         from performance import Material
         ledger=sources(graph,read_text)
@@ -179,6 +234,7 @@ def verify(report,read_text,*,signing=False):
             seals=[s for s in ledger["conditions"] if s["unit"]==unit and s.get("kind")=="seal_date"]
             if seals and seal_check(Material(graph,unit),seals,True)[1]!="ok":
                 raise ValueError("旧版未核清双方实际盖章日，请按现行规则重审后签收。")
-    if (marker not in (FORMAT,LEGACY) or policy.get("version","")>="2026.11.25.03" and marker!=FORMAT or policy.get("performance_checks") not in EFFECT_FORMATS or
+    if (marker not in (FORMAT,SEAL_FORMAT,LEGACY) or version>=APPROVAL_SINCE and marker!=FORMAT or
+            version>="2026.11.25.03" and marker==LEGACY or policy.get("performance_checks") not in EFFECT_FORMATS or
             graph.get("contract_effect_sources")!=sources(graph,read_text,marker)):
         raise ValueError("合同生效所据的整页记录、附加条件或引文与归档不符")

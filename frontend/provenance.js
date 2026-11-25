@@ -467,12 +467,13 @@ function deliveryBatchPanel(entry, graph, phases) {
 }
 
 function contractEffectPanel(finding,graph) {
-  const {conditions,mixed_pages}=finding.effect_review;
-  if (!conditions.length && !mixed_pages.length) return null;
+  const {conditions,mixed_pages,approval_pages=[]}=finding.effect_review;
+  if (!conditions.length && !mixed_pages.length && !approval_pages.length) return null;
   const {facts,documents}=graphIndex(graph);
   const seals=finding.effect_review.seals;
-  const panel=box('effect-review',el('h4',seals?'双方盖章与合同生效日':'需核对的生效条件'));
+  const panel=box('effect-review',el('h4',approval_pages.length?'董事会决议与合同生效':seals?'双方盖章与合同生效日':'需核对的生效条件'));
   panel.dataset.status=finding.status;
+  if (approval_pages.length) { panel.id='board-approval-evidence'; panel.tabIndex=-1; }
   if (seals) {
     const dates=el('dl','','warranty-dates');
     for (const [label,value] of [['甲方盖章日',seals.dates.buyer_sealed_on],['乙方盖章日',seals.dates.seller_sealed_on],['合同所列生效日',seals.declared_on]])
@@ -480,6 +481,18 @@ function contractEffectPanel(finding,graph) {
     panel.append(dates);
   }
   const cited=new Set(conditions.flatMap(s=>s.facts));
+  for (const page of approval_pages) {
+    const decision=finding.evidence.map(ref=>facts.get(ref)).find(f=>f?.doc===page.doc && f.page===page.page && f.field==='approval_result');
+    const title=(documents.get(page.doc)?.name || '审批记录')+' · 第 '+page.page+' 页';
+    const button=action(title,()=>openPage(page.doc,page.page,decision?.id),'ref');
+    button.dataset.approvalPage=page.doc+'/p'+page.page;
+    const row=box('batch-source');
+    if (decision) {
+      row.append(el('q',decision.quote));
+      if (!['anchored','confirmed'].includes(decision.status)) row.append(tag(decision.status));
+    }
+    row.append(button); panel.append(row);
+  }
   for (const ref of finding.evidence) {
     const fact=facts.get(ref);
     if ((fact?.field==='effect_clause' || seals && fact?.field==='effect_on') && !cited.has(ref))

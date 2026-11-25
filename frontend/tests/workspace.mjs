@@ -556,11 +556,23 @@ try {
     }
     if (effect) {
       const panel='document.querySelector(".effect-review")';
-      assert.equal(await evaluate('!!'+panel),Boolean(effect.conditions.length || effect.mixed_pages.length));
+      assert.equal(await evaluate('!!'+panel),Boolean(effect.conditions.length || effect.mixed_pages.length || effect.approval_pages?.length));
+      for (const p of effect.approval_pages || []) {
+        const pageId=p.doc+'/p'+p.page;
+        const decision=report.graph.facts.find(f=>f.doc===p.doc && f.page===p.page && f.field==='approval_result');
+        await evaluate(panel+'.querySelector('+JSON.stringify('[data-approval-page="'+pageId+'"]')+').click()');
+        await wait('document.querySelector("#page-dialog").open && document.querySelector(".page-image")?.naturalWidth>0','original board resolution');
+        if (decision) assert.equal(await evaluate('document.querySelector(".located")?.dataset.fact'),decision.id);
+        await evaluate('document.querySelector("#page-dialog [data-close]").click()');
+        for (const f of report.findings.filter(f=>f.stage && ['H04','H05'].includes(f.rule) && f.evidence.includes(pageId))) {
+          await evaluate('document.querySelector('+JSON.stringify('[data-finding="'+f.id+'"] [aria-controls="board-approval-evidence"]')+').click()');
+          assert.equal(await evaluate('document.activeElement.id'),'board-approval-evidence');
+        }
+      }
       if (effect.seals) {
         assert.deepEqual(await evaluate('[...'+panel+'.querySelectorAll("dd")].map(e=>e.textContent)'),
           [effect.seals.dates.buyer_sealed_on,effect.seals.dates.seller_sealed_on,effect.seals.declared_on].map(d=>d || '待核'));
-        assert.equal(await evaluate(panel+'.querySelector("h4").textContent'),'双方盖章与合同生效日');
+        assert.equal(await evaluate(panel+'.querySelector("h4").textContent'),effect.approval_pages?.length?'董事会决议与合同生效':'双方盖章与合同生效日');
       }
       for (const item of effect.conditions) {
         const fact=report.graph.facts.find(f=>item.facts.includes(f.id) && f.quote===item.quote);

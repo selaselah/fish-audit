@@ -9,6 +9,12 @@
 | `GET /showcase/{filename}` | 首页的三份合成原件，文件名为 `contract.pdf`、`acceptance.pdf`、`transfer.pdf`。可按资料索引复核 R7 案例的文件摘要。 |
 | `GET /workpaper/{id}`、`GET /w/{wid}/workpaper/{id}` | 校验版本及引文、发现参数，转入 `/app` 的相应底稿。旧的根路径片段书签和邀请链接在浏览器中转入相同工作区。 |
 
+## 董事会审批范围及原页
+
+规则 `2026.11.25.17` 的 `policy.contract_effect` 为 `contract-effect-sources-v3`。归属于董事会审批记录的页加入 `graph.contract_effect_sources.pages`，带有 `kind=board_approval`。需复查的原文进入同一结构的 `conditions`，带有 `kind=approval_note`、`doc`、`page`、`line`、`quote` 及 `facts`。原生文字层行号自 1 起，漏提行可有空的事实列表，纯读图引文的行号为 `null`。
+
+H01 的 `effect_review.approval_pages` 列出该发现所据的审批页。其 `conditions`、`mixed_pages` 与 `evidence` 可以定位原件、附注和需通读的影像。H04、H05 通过同版页引用关联到所据决议。旧底稿沿用出具时的规则回放。申请通过签收时，若旧版 H01 判为相符而现存审批原页还有未核的附加内容或影像，服务返回 409，请求保留旧版并重审。
+
 ## 设备型号的核图异议
 
 从规则 `2026.11.25.16` 起，`policy.equipment_models` 为 `printed-equipment-models-v4`。合同、验收或复验的型号引文仍有人工异议时，`graph.equipment_model_sources.review_holds[]` 指明对应的 `doc`、物理页 `page`、单据 `unit`、角色 `role`、原文 `quote` 与观察编号 `facts`。能逐字定位时附原行号 `line`。从观察的 `attestation` 可读取经办人、意见和操作版本。

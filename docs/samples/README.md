@@ -191,7 +191,7 @@ server/.venv/bin/python docs/samples/delivery_batches.py --run --run-id syntheti
 
 ### 双方盖章后仍有附加生效条件
 
-`server/.venv/bin/python docs/samples/contract_effect.py --run` 上传三笔水印采购案。`approved` 随合同提交约定的董事会批准决议，`written` 在合同页末印有另须取得书面批准的条件，`image` 把同一条件写在嵌入的影像框内。三案分别核对 H01 及履约付款条件。脚本仅对摘要一致的合成原件模拟字段补录、签认及人工核图。
+运行 `server/.venv/bin/python docs/samples/contract_effect.py --run` 可演练五笔水印采购。原有的 `approved`、`written`、`image` 分别展示董事会批准、合同文字附加条件和合同影像附加条件。新增 `board_note` 把「仅批准谈判，签约须另行表决」印在审批单的决定栏下方，`board_image` 将同一附注嵌入审批单影像。可用 `--cases approved board_note board_image` 单独比较三份董事会审批记录。各份采购的合同条款、实收资料和三期比例一致，演练按原件摘要核对并保存必要的字段补正和签认。
 
 ### 同一笔质保金在什么条件下可以释放
 
