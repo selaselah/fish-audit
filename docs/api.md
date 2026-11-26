@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## 多页合同的付款依据
+
+自规则版本 `2026.11.26.10` 起，`policy.contract_folios` 为 `contract-payment-folios-v1`。有付款约定的多页合同在 `graph.contract_folio_sources` 留存物理页、原行、文件和页图 SHA-256、对应观察及原文支持状态。证据边 `contract_folio_basis` 从原页指向条款行。`calls.pages[].contract_folio_rects` 留存相关行的原图坐标，可从原件重新分页校验。
+
+H03 的 `contract_folios` 包含各页的 `stages`、`issues`、默认定位 `focus` 和正文合同号 `root_ref`。状态包括普通续页 `continued`、编号不符 `foreign`、拟议条款 `provisional`、独立附表 `attachment` 和其他证据缺口。`standalone` 可指向正文中明确独立执行的首款。通过 `/workpaper/<case_id>?rev=<rev>&view=contract-pages` 打开指定版次。企业空间沿用工作区授权。旧底稿可按原规则回放，旧版相符结果引用未核清的付款续页时，签收会要求重新审计。
+
 ## 设备试运行
 
 规则 `2026.11.26.09` 使用 `policy.reinspection_wait=contract-reinspection-wait-v2`。归档的 v1 继续按原版本核验。v2 在有明确连续试运行条款时同时读取初验原页。设备、数量、复验签认、区间口径及运行原行通过已有的 `reinspection_time_basis` 边定位。原页有字而模型漏录的日志行仍进入核查。

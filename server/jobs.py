@@ -10,6 +10,7 @@ from acceptance_authority import CLAUSE as ACCEPTANCE_CLAUSE, mentions as mentio
 from delivery_batches import HINT as BATCH_HINT
 from contract_changes import LABELS as ADDENDUM_FIELDS, SIGNAL as CHANGE_MENTION
 from documents import digest, prepare
+import contract_folios
 from graph import attach_prior_invoices, build_graph, heading_candidates, invoice_number_edges, link_procedures
 from payment_releases import submission_day
 from model import AUDIT, EXTRACT, VISUAL_CHECK, attach_check, audit_graph, extract_page
@@ -19,7 +20,7 @@ from storage import encode
 
 
 METHODS = {name: (SERVER / name).read_bytes() for name in
-           ("acceptance_authority.py", "acceptance_payments.py", "acceptance_reservations.py", "calculations.py", "capacity.py", "cn_workdays.py", "conclusions.py", "config.py", "contract_changes.py", "contract_effect.py", "controls.py", "delegation.py", "delivery_batches.py", "documents.py", "equipment_exchanges.py", "equipment_models.py", "field_receipts.py", "field_sources.py", "graph.py", "inspection_coverage.py", "inspection_register.py", "installments.py", "invoice_approval.py", "invoice_comparison.py", "invoice_conditions.py", "invoice_history.py", "invoice_identity.py", "invoice_masks.py", "invoice_proof.py", "jobs.py", "model.py", "payment_amendments.py", "payment_checks.py", "payment_history.py", "payment_index.py", "payment_notes.py", "payment_reference.py", "payment_releases.py", "payment_visibility.py", "payment_windows.py", "peer_review.py", "performance.py", "performance_versions.py", "policy.py", "prior_installment.py", "protocol.py", "signing_parties.py", "stage_payments.py", "quality_labels.py", "quality_references.py", "receipt_packets.py", "reinspection.py", "reinspection_wait.py", "repair_completion.py", "storage.py", "supplements.py", "transfers.py", "trial_run.py", "warranty_service.py", "warranty_terms.py", "work_progress.py")}
+           ("acceptance_authority.py", "acceptance_payments.py", "acceptance_reservations.py", "calculations.py", "capacity.py", "cn_workdays.py", "conclusions.py", "config.py", "contract_changes.py", "contract_effect.py", "contract_folios.py", "controls.py", "delegation.py", "delivery_batches.py", "documents.py", "equipment_exchanges.py", "equipment_models.py", "field_receipts.py", "field_sources.py", "graph.py", "inspection_coverage.py", "inspection_register.py", "installments.py", "invoice_approval.py", "invoice_comparison.py", "invoice_conditions.py", "invoice_history.py", "invoice_identity.py", "invoice_masks.py", "invoice_proof.py", "jobs.py", "model.py", "payment_amendments.py", "payment_checks.py", "payment_history.py", "payment_index.py", "payment_notes.py", "payment_reference.py", "payment_releases.py", "payment_visibility.py", "payment_windows.py", "peer_review.py", "performance.py", "performance_versions.py", "policy.py", "prior_installment.py", "protocol.py", "signing_parties.py", "stage_payments.py", "quality_labels.py", "quality_references.py", "receipt_packets.py", "reinspection.py", "reinspection_wait.py", "repair_completion.py", "storage.py", "supplements.py", "transfers.py", "trial_run.py", "warranty_service.py", "warranty_terms.py", "work_progress.py")}
 CODE_DIGESTS = {name: digest(source) for name, source in METHODS.items()}
 
 
@@ -162,6 +163,11 @@ class Worker:
         traces = [{"doc": page["doc"], "page": page["number"], "page_sha256": page["sha256"],
                    "clause_text_only":(page.get("layer") or {}).get("clause_text_only") is True,
                    **page["extraction"]} for page in pages]
+        folio_lines = contract_folios.page_lines(graph["contract_folio_sources"])
+        for page, call in zip(pages, traces):
+            numbers = folio_lines.get((page["doc"], page["number"]))
+            if numbers:
+                call["contract_folio_rects"] = contract_folios.geometry(numbers, page["layer"])
         instructions = {digest(prompt.encode()): prompt for prompt in (EXTRACT, AUDIT, VISUAL_CHECK)}
         all_calls = [*traces, trace, *(item["check"] for item in traces if "check" in item)]
         for call in all_calls:

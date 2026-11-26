@@ -23,6 +23,7 @@ import stage_payments
 import contract_effect
 import signing_parties
 import inspection_coverage
+import contract_folios
 import prior_installment
 import warranty_terms
 import warranty_service
@@ -358,6 +359,11 @@ def build_graph(docs, pages, attestations, amendments=()):
     record_addenda(graph, lambda doc, number: texts[doc, number])
     graph["equipment_model_sources"] = equipment_models.sources(graph,lambda doc,number:texts[doc,number])
     delivery_batches.attach(graph, lambda doc, number: texts[doc,number])
+    folios = contract_folios.sources(graph, lambda doc, number: texts[doc, number])
+    graph["contract_folio_sources"] = folios
+    nodes, edges = contract_folios.source_graph(folios)
+    graph["nodes"].extend(nodes)
+    graph["edges"].extend(edges)
     prior = prior_installment.sources(graph, lambda doc, number: texts[doc, number])
     graph["prior_installment_sources"] = prior
     lines, links = prior_installment.source_graph(prior)

@@ -16,6 +16,7 @@ import equipment_exchanges
 import contract_effect
 import signing_parties
 import inspection_coverage
+import contract_folios
 import prior_installment
 import warranty_terms
 import warranty_service
@@ -906,6 +907,15 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
             accepted_on = None
     if payment_change and not scoped_change:
         payment_amendments.attach(plan,payment_change)
+    folios = contract_folios.assess(graph.get("contract_folio_sources", {}), contract.unit,
+                                   {r["ref"] for r in rows if r["kind"]}) if version == FORMAT else None
+    standalone = folios and folios["standalone"] if plan["status"] == "ok" and not (batch or changes or extra_units) else None
+    if folios:
+        plan["contract_folios"] = folios
+        contract_folios.attach(plan, folios)
+        if folios["whole"]:
+            contract_folios.attach(signed, {**folios, "status": "missing",
+                "detail": "合同原页载有整份协议待确认或草拟的说明，请取得最终签署版本。"})
     output = [signed, accepted, plan]
     if not rows:
         output.append(result("H04","missing","缺少可逐期核对的付款约定。",plan["evidence"],plan["scope"]))
@@ -943,6 +953,9 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         fallback_label = f"第{idx}期" if version == FIRST_FORMAT else f"条款 {idx}"
         stage = {"name":row["label"] or fallback_label,"share":row["share"],"clause":row["text"],"clause_ref":row["ref"]}
         refs = [row["ref"], *signed["evidence"]]
+        independent_first = bool(standalone and kind == "effect" and row["index"] == 1 and row["ref"] == standalone["clause_ref"])
+        if folios and (independent_first or plan["status"] == "ok"):
+            refs += folios["evidence"]
         scope = [contract.unit] if version == FIRST_FORMAT else signed["scope"].copy()
         this_batch = batch_rows.get(row.get("batch_index"))
         if kind=="batch":
@@ -961,7 +974,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
             scope += [r.unit for r in releases]
             if release_check:
                 scope += [r["unit"] for r in release_check.get("tickets",[])]
-        if plan["status"] != "ok":
+        if plan["status"] != "ok" and not independent_first:
             refs += plan["evidence"]
             if batch:
                 scope += plan["scope"]
@@ -1146,6 +1159,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("effect_review") != entry.get("effect_review")
                 or saved.get("warranty_check") != entry.get("warranty_check")
                 or saved.get("warranty_payment") != entry.get("warranty_payment")
+                or saved.get("contract_folios") != entry.get("contract_folios")
                 or saved.get("prior_installment") != entry.get("prior_installment")
                 or saved.get("inspection_coverage") != entry.get("inspection_coverage")
                 or saved.get("equipment_models") != entry.get("equipment_models")

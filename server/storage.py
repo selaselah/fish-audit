@@ -43,6 +43,7 @@ from prior_installment import verify as verify_prior_installment
 from payment_releases import verify as verify_payment_releases
 from invoice_conditions import verify as verify_invoice_conditions
 from repair_completion import verify as verify_repair_completion
+from contract_folios import verify as verify_contract_folios
 from reinspection_wait import verify as verify_reinspection_wait
 from contract_changes import verify_sources as verify_addendum_sources
 from delegation import verify_sources as verify_delegation_sources
@@ -734,9 +735,10 @@ class Store:
             paper = json.loads(row["content"])
             graph = paper["graph"]
             if row["profile"]!=BANK:
-                checks = [f for f in paper["findings"] if f.get("delegations") or f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("stage_payments") or f.get("invoice_receipt") or f.get("payment_change") or f.get("payment_opinion") or f.get("equipment_models") or f.get("inspection_coverage") or f.get("prior_installment")]
+                checks = [f for f in paper["findings"] if f.get("delegations") or f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("stage_payments") or f.get("invoice_receipt") or f.get("payment_change") or f.get("payment_opinion") or f.get("equipment_models") or f.get("inspection_coverage") or f.get("contract_folios") or f.get("prior_installment")]
                 packets = graph.get("receipt_packet_sources",{}).get("packets",[])
                 timing_pages = graph.get("reinspection_wait_sources", {}).get("pages", [])
+                folio_pages = graph.get("contract_folio_sources", {}).get("pages", [])
                 if packets or timing_pages:
                     checks.extend(f for f in paper["findings"] if f["rule"]=="H02" and f not in checks)
                 if any(f.get("batch_acceptance") for f in checks):
@@ -748,7 +750,8 @@ class Store:
                 originals = {units[unit] for finding in checks for unit in finding["scope"]}
                 originals.update(p["doc"] for p in packets)
                 originals.update(p["doc"] for p in timing_pages)
-                full_pages = bool(packets) or any(f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("stage_payments") or f.get("invoice_receipt") or f.get("payment_change") or f.get("payment_opinion") or f.get("equipment_models") or f.get("inspection_coverage") or f.get("prior_installment") for f in checks)
+                originals.update(p["doc"] for p in folio_pages)
+                full_pages = bool(packets) or any(f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("stage_payments") or f.get("invoice_receipt") or f.get("payment_change") or f.get("payment_opinion") or f.get("equipment_models") or f.get("inspection_coverage") or f.get("contract_folios") or f.get("prior_installment") for f in checks)
                 fields = [f["id"] for f in graph["facts"] if f["id"] in named or (full_pages or timing_pages) and f["doc"] in originals]
                 pages = {(p["doc"],p["page"]) for p in paper["calls"]["pages"] if p["doc"] in originals}
                 registered = {(r["doc"],r["number"]) for r in db.execute("SELECT doc,number FROM pages WHERE case_id=?",(case_id,))
@@ -860,6 +863,11 @@ class Store:
                     verify_payment_releases(paper,page_text,submitted=row["submitted"])
                     verify_repair_completion(paper,page_text,signing=True)
                     verify_reinspection_wait(paper,page_text,signing=True)
+                    def folio_layout(doc, page):
+                        saved = db.execute("SELECT layer FROM pages WHERE case_id=? AND doc=? AND number=?",
+                                           (case_id,doc,page)).fetchone()
+                        return json.loads(saved[0] or "{}") if saved else {}
+                    verify_contract_folios(paper,page_text,signing=True,read_layout=folio_layout)
                     verify_invoice_conditions(paper,page_text,signing=True)
                     inspected = [*paper["graph"].get("quality_addenda",{}).get("pages",[]),
                                  *paper["graph"].get("acceptance_authority_sources",{}).get("pages",[]),
@@ -871,6 +879,7 @@ class Store:
                     inspected.extend(paper["graph"].get("stage_payment_sources",{}).get("pages",[]))
                     inspected.extend(paper["graph"].get("payment_release_sources",{}).get("pages",[]))
                     inspected.extend(paper["graph"].get("repair_completion_sources",{}).get("pages",[]))
+                    inspected.extend(paper["graph"].get("contract_folio_sources",{}).get("pages",[]))
                     inspected.extend(paper["graph"].get("reinspection_wait_sources",{}).get("pages",[]))
                     inspected.extend(paper["graph"].get("invoice_receipt_sources",{}).get("pages",[]))
                     inspected.extend(paper["graph"].get("quality_addenda",{}).get("payments",{}).get("pages",[]))
@@ -898,9 +907,10 @@ class Store:
         chronology = any(f.get("date_checks") for f in paper["findings"])
         invoice_terms_checked = any(f.get("invoice_receipt") for f in paper["findings"])
         model_checked = any(f.get("equipment_models") for f in paper["findings"])
+        folios_checked = any(f.get("contract_folios") for f in paper["findings"])
         multi_transfers = any(f.get("stage_payments") for f in paper["findings"])
         packets_checked = bool(graph.get("receipt_packet_sources",{}).get("packets")) and any(f["rule"]=="H02" for f in paper["findings"])
-        if graph.get("profile")!=BANK and (changed or named_acceptance or chronology or batches or packets_checked or multi_transfers or invoice_terms_checked or model_checked or effect_checked or warranty_checked or windows_checked or reservations_checked or any(f.get("delegations") for f in paper["findings"])):
+        if graph.get("profile")!=BANK and (folios_checked or changed or named_acceptance or chronology or batches or packets_checked or multi_transfers or invoice_terms_checked or model_checked or effect_checked or warranty_checked or windows_checked or reservations_checked or any(f.get("delegations") for f in paper["findings"])):
             if not payment_sources or len(payment_sources)!=1:
                 raise CaseError("签收前需重新核对合同及所据履约附件原件。",409)
             source = payment_sources[0][0]
@@ -909,6 +919,8 @@ class Store:
             source.guard(db)
             if invoice_terms_checked:
                 event(db,case_id,"invoice_receipt_sources",f"签收前核对 R{revision} 的合同收票条款、发票原件、买方签收及付款回单。")
+            if folios_checked:
+                event(db,case_id,"contract_folio_sources",f"签收前核对 R{revision} 的合同正文、付款续页及逐行引文。")
             if model_checked:
                 event(db,case_id,"equipment_model_sources",f"签收前核对 R{revision} 的约定型号、实收型号及原件。")
             if multi_transfers:
@@ -931,7 +943,7 @@ class Store:
                 event(db,case_id,"acceptance_signature_sources",f"签收前核对 R{revision} 的具名条款、验收签字及相关页图，共 {len(source.files)} 个文件。")
             if changed:
                 event(db,case_id,"addendum_sources",f"签收前核对 R{revision} 合同、补充协议、验收原件和相关页图，共 {len(source.files)} 个文件。")
-            elif not named_acceptance and not chronology and not batches and not packets_checked and not multi_transfers and not effect_checked and not warranty_checked and not windows_checked and not reservations_checked and not invoice_terms_checked:
+            elif not folios_checked and not named_acceptance and not chronology and not batches and not packets_checked and not multi_transfers and not effect_checked and not warranty_checked and not windows_checked and not reservations_checked and not invoice_terms_checked:
                 event(db,case_id,"mandate_sources",f"签收前核对 R{revision} 的合同签字、委托书及相关页图，共 {len(source.files)} 个文件。")
         if graph.get("profile") == PERFORMANCE:
             return None
