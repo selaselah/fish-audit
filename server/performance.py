@@ -14,6 +14,7 @@ import stage_payments
 import equipment_models
 import equipment_exchanges
 import contract_effect
+import contract_calendar
 import signing_parties
 import inspection_coverage
 import contract_folios
@@ -143,6 +144,7 @@ def complete_line(field, value, quote):
 class Material:
     def __init__(self, graph, unit):
         self.unit = unit
+        self.calendar = contract_calendar.by_field(graph.get("contract_effect_sources", {}), unit)
         self.mandate_format = graph.get("delegation_coverage", {}).get("format")
         self.mandate_pages = [p for p in graph.get("delegation_coverage", {}).get("pages", []) if p["unit"]==unit]
         self.agent_holds = [h for h in graph.get("delegation_coverage", {}).get("agent_holds", []) if h["unit"]==unit]
@@ -172,6 +174,9 @@ class Material:
     def evidence(self, *fields):
         refs = [f["id"] for f in self.refs if f["field"] in fields]
         refs += [g["id"] for g in self.gaps if not g.get("field") or g["field"] in fields]
+        for field in fields:
+            for row in self.calendar.get(field, []):
+                refs.extend([row["id"], f"{row['doc']}/p{row['page']}", *row["facts"]])
         return list(dict.fromkeys(refs))
 
     def incomplete(self, *fields):
@@ -183,7 +188,13 @@ class Material:
         return next(iter(values)) if len(values) == 1 and not self.incomplete(field) else ""
 
     def date(self, field):
+        if field in self.calendar:
+            _, value = contract_calendar.reading(self.calendar[field], self)
+            return date.fromisoformat(value) if value else None
         return day(self.body(field))
+
+    def declared_date(self, field):
+        return self.date(field) if field in self.calendar else day(self.single(field))
 
     def body(self, field):
         rows = self.fields[field]
@@ -220,6 +231,8 @@ DATE_LABELS = {**SOURCE_LABELS, "accepted_on":("验收日期","验收时间","�
 
 def printed_day(material, field):
     parsed = material.date(field)
+    if field in material.calendar:
+        return parsed
     if not parsed:
         return None
     for fact in material.fields[field]:
@@ -311,7 +324,7 @@ def check_approval(contract, approvals, party):
     if decision not in ("批准","已批准","同意批准","批准本合同") or not approval.signed("approval_signer") or approval.incomplete(*fields):
         return "missing","待核对明确的批准决定和经原页核图的审批签认。",refs
     approved = day(approval.single("approved_on"))
-    effective = day(contract.single("effect_on"))
+    effective = contract.declared_date("effect_on")
     if not approved:
         return "missing","审批记录缺少可核的决定日期。",refs
     if effective and effective < approved:
@@ -332,7 +345,7 @@ def effect(contract, approvals=(), version=FORMAT, grants=()):
     buyer, seller = contract.single("buyer"), contract.single("seller")
     if not buyer or not seller or buyer == seller:
         missing.append("可区分的合同双方")
-    if not day(contract.single("signed_on")):
+    if not contract.declared_date("signed_on"):
         missing.append("可核的签订日期")
     if not board and not EFFECT.fullmatch(terms):
         missing.append("生效约定及其中每项条件的证明")
@@ -353,7 +366,7 @@ def effect(contract, approvals=(), version=FORMAT, grants=()):
             missing.append(name + "签署栏及与该方相符的核图签认")
     changes = [n for n in contract.notes if re.search(r"补充协议|解除|终止|待审批|待批准|授权委托",n["quote"])]
     refs += [n["page_id"] for n in changes]
-    effective, signed, expiry = (day(contract.single(k)) for k in ("effect_on","signed_on","valid_until"))
+    effective, signed, expiry = (contract.declared_date(k) for k in ("effect_on","signed_on","valid_until"))
     if (contract.fields["effect_on"] and (not effective or signed and effective < signed)) or (
             contract.fields["valid_until"] and (not expiry or signed and expiry < signed)):
         missing.append("合同有效期间及生效日期的依据")
@@ -449,10 +462,10 @@ def acceptance(contract, receipts, *, criterion=None, signature_ok=None, quantit
     if (outcome and outcome not in PASS) or (scope and scope not in FINAL_SCOPES) or (
         r.fields["acceptance_exception"] and r.body("acceptance_exception") not in CLEAN):
         return finding("risk","验收范围、质量结论或遗留事项存在限定，需核对分批交付、整改及复验记录。")
-    signed, accepted = day(contract.single("signed_on")), day(r.single("accepted_on"))
+    signed, accepted = contract.declared_date("signed_on"), day(r.single("accepted_on"))
     if signed and accepted and accepted < signed:
         return finding("risk","验收记录日期早于签约日期，需核实履行背景和实际时间。")
-    until = day(contract.single("valid_until"))
+    until = contract.declared_date("valid_until")
     if until and accepted and accepted > until:
         return finding("risk","验收日期在所列合同有效期之后，需核对延期、变更及继续履行依据。")
     missing = []

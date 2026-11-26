@@ -9,6 +9,7 @@ from delegation import is_page_marker
 from performance_versions import EFFECT_FORMATS
 from calculations import normalized
 import signing_parties
+import contract_calendar
 
 
 LEGACY = "contract-effect-sources-v1"
@@ -16,13 +17,15 @@ SEAL_FORMAT = "contract-effect-sources-v2"
 APPROVAL_FORMAT = "contract-effect-sources-v3"
 SIGNING_FORMAT = signing_parties.NATIVE_FORMAT
 IMAGE_FORMAT = signing_parties.IMAGE_FORMAT
-FORMAT = signing_parties.WORD_FORMAT
-SIGNING_FORMATS = (SIGNING_FORMAT, IMAGE_FORMAT, FORMAT)
+WORD_FORMAT = signing_parties.WORD_FORMAT
+FORMAT = signing_parties.CALENDAR_FORMAT
+SIGNING_FORMATS = (SIGNING_FORMAT, *signing_parties.IMAGE_FORMATS)
 BOARD_FORMATS = (APPROVAL_FORMAT, *SIGNING_FORMATS)
 APPROVAL_SINCE = "2026.11.25.17"
 PARTY_SINCE = "2026.11.26.02"
 IMAGE_SINCE = "2026.11.26.03"
 WORD_SINCE = "2026.11.26.12"
+CALENDAR_SINCE = "2026.11.26.13"
 APPROVAL_FIELDS = {"contract_approval","contract_id","buyer","seller","approval_authority",
                    "approval_result","approved_on","approval_signer"}
 SEAL_FIELDS = {"甲方盖章日期":"buyer_sealed_on","乙方盖章日期":"seller_sealed_on"}
@@ -93,7 +96,7 @@ def approval_field(raw, fact):
     return value in (normalized(raw), normalized(body))
 
 
-def sources(graph,read_text,format=FORMAT):
+def sources(graph,read_text,format=FORMAT,*,calls=None):
     def effect_signal(raw):
         if not relevant(raw):
             return False
@@ -108,7 +111,8 @@ def sources(graph,read_text,format=FORMAT):
     observations=defaultdict(list)
     for fact in graph["facts"]:
         observations[fact["doc"],fact["page"]].append(fact)
-    pages,conditions,signing_rows=[],[],[]
+    pages,conditions,signing_rows,date_rows=[],[],[],[]
+    original_hashes={d["id"]:d.get("sha256") for d in graph["documents"]}
     for node in graph["nodes"]:
         if node["type"]!="page":
             continue
@@ -147,6 +151,15 @@ def sources(graph,read_text,format=FORMAT):
                 raise ValueError("合同生效条件所据的整页文字与底稿不符")
             for number,raw in enumerate(text.splitlines(),1):
                 matches=by_line[number,raw]
+                if format == FORMAT and not board:
+                    date_row = contract_calendar.row(place,raw,number,matches,graph,node.get("sha256"),
+                                                     original_hashes.get(doc),(calls or {}).get((doc,page),{}))
+                    if date_row:
+                        date_rows.append(date_row)
+                        # Further stipulations on the same line still need a separate review.
+                        _, body = parts(raw)
+                        if not (relevant(body) or APPROVAL.search(body) or QUALIFIER.search(body)):
+                            continue
                 if format in SIGNING_FORMATS and not board:
                     signature=signing_parties.row(place,raw,number,matches)
                     if signature:
@@ -163,6 +176,8 @@ def sources(graph,read_text,format=FORMAT):
     ledger={"format":format,"pages":pages,"conditions":conditions}
     if format in SIGNING_FORMATS:
         ledger["signing_rows"]=signing_rows
+    if format == FORMAT:
+        ledger["date_rows"] = date_rows
     return ledger
 
 
@@ -215,8 +230,10 @@ def review(finding,ledger,contract,graph):
             finding["detail"]+=" "+detail
     if ledger.get("format") in SIGNING_FORMATS:
         signing_parties.review(finding,ledger,contract,graph)
-    if ledger.get("format") == FORMAT:
+    if ledger.get("format") in signing_parties.WORD_FORMATS:
         signing_parties.review_word(finding,ledger,contract,graph)
+    if ledger.get("format") == FORMAT:
+        contract_calendar.review(finding, contract)
     if not conditions and not mixed and pages:
         return
     if finding["status"]=="ok":
@@ -236,25 +253,35 @@ def verify(report,read_text,*,signing=False):
     marker=policy.get("contract_effect")
     version=policy.get("version","")
     positive=[f for f in report["findings"] if f["rule"]=="H01" and f["status"]=="ok"]
+    calls={(p["doc"],p["page"]):p for p in report.get("calls",{}).get("pages",[])}
     if signing and marker not in BOARD_FORMATS and positive and graph["documents_by_kind"].get("contract_approval"):
         scope={unit for finding in positive for unit in finding["scope"]}
         current=sources(graph,read_text)
         if (any(s.get("kind")=="approval_note" and s["unit"] in scope for s in current["conditions"])
                 or any(p.get("kind")=="board_approval" and p["unit"] in scope and not (p["native"] and p["text_only"]) for p in current["pages"])):
             raise ValueError("旧版董事会批准依据另有待核原文或影像，请按现行程序重审后签收。")
-    if signing and marker not in (IMAGE_FORMAT, FORMAT) and positive:
+    if signing and marker not in signing_parties.IMAGE_FORMATS and positive:
         from performance import Material
         scope={unit for finding in positive for unit in finding["scope"]}
         current=sources(graph,read_text)
         for unit in graph["documents_by_kind"].get("contract",[]):
             if unit in scope and any(r["status"]!="ok" for r in signing_parties.assess(current,Material(graph,unit),graph)):
                 raise ValueError("旧版合同的签章主体仍待核对，请按现行程序重审后签收。")
-    if signing and marker != FORMAT and positive:
+    if signing and marker not in signing_parties.WORD_FORMATS and positive:
         scope = {unit for finding in positive for unit in finding["scope"]}
         current = sources(graph, read_text)
         if any(signing_parties.word_signatures(current, graph, unit)
                for unit in graph["documents_by_kind"].get("contract", []) if unit in scope):
             raise ValueError("旧版以 Word 文字栏支持了合同签署，请核对签署凭证并重新审计后签收。")
+    if signing and marker != FORMAT and positive:
+        from performance import Material
+        scope = {unit for finding in positive for unit in finding["scope"]}
+        current = sources(graph, read_text, calls=calls)
+        for unit in scope.intersection(graph["documents_by_kind"].get("contract", [])):
+            material = Material(graph, unit)
+            if any(contract_calendar.reading(rows, material)[0] not in contract_calendar.READ
+                   for rows in contract_calendar.by_field(current, unit).values()):
+                raise ValueError("旧版采用的合同日期存在待核原行，请按现行程序重审后签收。")
     if signing and marker==SIGNING_FORMAT:
         from performance import Material
         mixed=[f for f in report["findings"] if f["rule"]=="H01" and f.get("effect_review",{}).get("mixed_pages")]
@@ -284,11 +311,12 @@ def verify(report,read_text,*,signing=False):
             seals=[s for s in ledger["conditions"] if s["unit"]==unit and s.get("kind")=="seal_date"]
             if seals and seal_check(Material(graph,unit),seals,True)[1]!="ok":
                 raise ValueError("旧版未核清双方实际盖章日，请按现行规则重审后签收。")
-    if (marker not in (*BOARD_FORMATS,SEAL_FORMAT,LEGACY) or version>=WORD_SINCE and marker!=FORMAT or
-            version>=IMAGE_SINCE and marker not in (IMAGE_FORMAT,FORMAT) or
+    if (marker not in (*BOARD_FORMATS,SEAL_FORMAT,LEGACY) or version>=CALENDAR_SINCE and marker!=FORMAT or
+            version>=WORD_SINCE and marker not in signing_parties.WORD_FORMATS or
+            version>=IMAGE_SINCE and marker not in signing_parties.IMAGE_FORMATS or
             version>=PARTY_SINCE and marker not in SIGNING_FORMATS or version>=APPROVAL_SINCE and marker not in BOARD_FORMATS or
             version>="2026.11.25.03" and marker==LEGACY or policy.get("performance_checks") not in EFFECT_FORMATS or
-            graph.get("contract_effect_sources")!=sources(graph,read_text,marker)):
+            graph.get("contract_effect_sources")!=sources(graph,read_text,marker,calls=calls)):
         raise ValueError("合同生效所据的整页记录、附加条件或引文与归档不符")
     if marker in SIGNING_FORMATS:
         nodes,edges=signing_parties.source_graph(graph["contract_effect_sources"])
@@ -296,3 +324,8 @@ def verify(report,read_text,*,signing=False):
                 [e for e in graph["edges"] if e["type"]=="contract_signing_source"]!=edges or
                 [e for e in graph["edges"] if e["type"]=="contract_seal_name_comparison"]!=signing_parties.comparisons(report["findings"])):
             raise ValueError("签章主体比较的图谱关系与原行或审计结果不符")
+    if marker == FORMAT:
+        nodes, edges = contract_calendar.source_graph(graph["contract_effect_sources"])
+        if ([n for n in graph["nodes"] if n["type"]=="contract_date_line"] != nodes or
+                [e for e in graph["edges"] if e["type"]=="contract_date_source"] != edges):
+            raise ValueError("合同日期的原行与证据图谱不符")

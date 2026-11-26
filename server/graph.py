@@ -21,6 +21,7 @@ import equipment_models
 import equipment_exchanges
 import stage_payments
 import contract_effect
+import contract_calendar
 import signing_parties
 import inspection_coverage
 import contract_folios
@@ -350,17 +351,20 @@ def build_graph(docs, pages, attestations, amendments=()):
     graph["nodes"].extend(nodes)
     graph["edges"].extend(edges)
     graph["payment_window_sources"]=payment_windows.sources(graph,lambda doc,number:texts[doc,number])
-    graph["contract_effect_sources"]=contract_effect.sources(graph,lambda doc,number:texts[doc,number])
+    calls = {(p["doc"], p["number"]): p["extraction"] for p in pages}
+    graph["contract_effect_sources"]=contract_effect.sources(graph,lambda doc,number:texts[doc,number],calls=calls)
     signing_nodes,signing_edges=signing_parties.source_graph(graph["contract_effect_sources"])
     graph["nodes"].extend(signing_nodes)
     graph["edges"].extend(signing_edges)
+    nodes, edges = contract_calendar.source_graph(graph["contract_effect_sources"])
+    graph["nodes"].extend(nodes)
+    graph["edges"].extend(edges)
     graph["warranty_sources"]=warranty_terms.sources(graph,lambda doc,number:texts[doc,number])
     record_mandate_pages(graph, lambda doc, number: texts[doc, number])
     record_addenda(graph, lambda doc, number: texts[doc, number])
     graph["equipment_model_sources"] = equipment_models.sources(graph,lambda doc,number:texts[doc,number])
     delivery_batches.attach(graph, lambda doc, number: texts[doc,number])
-    folios = contract_folios.sources(graph, lambda doc, number: texts[doc, number],
-                                     calls={(p["doc"], p["number"]): p["extraction"] for p in pages})
+    folios = contract_folios.sources(graph, lambda doc, number: texts[doc, number], calls=calls)
     graph["contract_folio_sources"] = folios
     nodes, edges = contract_folios.source_graph(folios)
     graph["nodes"].extend(nodes)

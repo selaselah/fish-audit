@@ -10,7 +10,9 @@ from delegation import PARTY_SIGNATURES
 NATIVE_FORMAT = "contract-effect-sources-v4"
 IMAGE_FORMAT = "contract-effect-sources-v5"
 WORD_FORMAT = "contract-effect-sources-v6"
-IMAGE_FORMATS = (IMAGE_FORMAT, WORD_FORMAT)
+CALENDAR_FORMAT = "contract-effect-sources-v7"
+WORD_FORMATS = (WORD_FORMAT, CALENDAR_FORMAT)
+IMAGE_FORMATS = (IMAGE_FORMAT, *WORD_FORMATS)
 IMPRINT_FIELDS={"buyer_seal_name":("甲方印章单位名称","采购方印章单位名称","买方印章单位名称"),
                 "seller_seal_name":("乙方印章单位名称","供应方印章单位名称","卖方印章单位名称")}
 SIDES={"buyer":"甲方","seller":"乙方"}
