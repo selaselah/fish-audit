@@ -2,7 +2,7 @@
 
 ## 验收 PDF 签署检查
 
-`policy.acceptance_pdf` 使用 `pdf-acceptance-execution-v1`。每个验收或复验单元在 `graph.acceptance_pdf_sources.records` 保存原件摘要、物理页、签字字段、签名校验结果及覆盖范围。H02 的 `acceptance_execution` 列出所据记录。由 `acceptance_pdf_source` 可回到该单的来源，由 `supports_result` 可查引用它的判断。工作台的「交付验收」可从签署状态进入对应 PDF 的署名栏。
+`policy.acceptance_pdf` 使用 `pdf-acceptance-execution-v1`。每个 PDF 验收或复验单元在 `graph.acceptance_pdf_sources.records` 保存原件摘要、物理页、签字字段、签名校验结果及覆盖范围。`2026.11.27.01` 起，H02 的 `acceptance_execution` 显式列出所据记录。首版 `2026.11.26.27` 将相同记录列在发现的 `evidence` 中。由 `acceptance_pdf_source` 可回到该单的来源，由 `supports_result` 可查引用它的判断。工作台的「交付验收」可从签署状态进入对应 PDF 的署名栏。
 
 `typeset` 表示原件仅见排印内容，`visual` 表示有图像或其他需核实的版面元素。电子签名区分 `current`、`earlier`、`mismatch` 和待查的 `review`。旧版肯定结论若依赖待核验收 PDF，批准前返回 HTTP 409 并提示重审。[审计方法](audit-method.md#验收-pdf-的实际签署依据)
 

@@ -776,7 +776,9 @@ class Store:
             except (KeyError, TypeError, ValueError) as error:
                 raise CaseError(f"签收前核对回单所据验收原件失败。{error}", 409) from error
             if row["profile"]!=BANK:
-                full_page_checks = [f for f in paper["findings"] if any(f.get(key) for key in FULL_PAGE_EVIDENCE)]
+                receipt_proofs = {r["id"] for r in graph.get("acceptance_pdf_sources", {}).get("records", [])}
+                full_page_checks = [f for f in paper["findings"] if any(f.get(key) for key in FULL_PAGE_EVIDENCE)
+                                    or receipt_proofs.intersection(f["evidence"])]
                 checks = list(full_page_checks)
                 checks.extend(f for f in paper["findings"] if f.get("delegations") and f not in full_page_checks)
                 packets = graph.get("receipt_packet_sources",{}).get("packets",[])

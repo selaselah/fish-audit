@@ -8,8 +8,9 @@ from reportlab.pdfbase.cidfonts import UnicodeCIDFont
 from reportlab.pdfgen import canvas
 
 import acceptance_execution as execution
-from controls import VERSION
-from performance import compute
+from config import PERFORMANCE
+from controls import VERSION, execute
+from performance import compute, verify_findings
 from test_delivery_batches import sample as batches
 from test_pdf_execution import signed_copy, later_copy
 from test_performance import BANK_DOC, CONTRACT, RECEIPT, WARRANTY, material
@@ -53,6 +54,30 @@ def by_rule(report, rule):
 class AcceptanceExecutionTests(unittest.TestCase):
     def base(self):
         return material([CONTRACT,RECEIPT,WARRANTY,BANK_DOC])
+
+    def test_issued_findings_preserve_receipt_references_across_versions(self):
+        graph = self.base()
+        report, _ = paper(graph, {"d02": printed(graph, "d02")})
+        report["policy"] = {**VERSION, "profile": PERFORMANCE}
+        report["findings"] = execute(graph, PERFORMANCE)
+        finding, = by_rule(report, "H02")
+        self.assertEqual(finding["acceptance_execution"], ["acceptance-pdf/d02"])
+        verify_findings(report)
+        for item in report["findings"]:
+            item.pop("acceptance_execution", None)
+        with self.assertRaises(ValueError):
+            verify_findings(report)
+
+        for item in report["findings"]:
+            item["version"] = "2026.11.26.27"
+        report["policy"].update(version="2026.11.26.27", code_sha256={"controls.py": "different"})
+        with self.assertRaises(ValueError):
+            verify_findings(report)
+        report["policy"]["code_sha256"]["controls.py"] = "eeff68cc20371bace1b158ebf70cc33885603b3913d8896f7b95236be19cd8a6"
+        verify_findings(report)
+        finding["evidence"].remove("acceptance-pdf/d02")
+        with self.assertRaises(ValueError):
+            verify_findings(report)
 
     def test_transcription_has_no_independent_execution_evidence(self):
         graph = self.base()
