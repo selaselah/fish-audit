@@ -1,6 +1,7 @@
 import copy
 import unittest
 
+import signer_timing
 from acceptance_authority import LEGACY_FORMAT, page_evidence, verify_sources, witness_edges
 from controls import VERSION, execute
 from performance import compute, verify_findings
@@ -77,6 +78,16 @@ class SignerTimingTests(unittest.TestCase):
         source["dates"][0]["disputed"] = False
         source["pages"][-1]["text_only"] = False
         self.assertEqual(payment(g)["signer_timing"]["state"], "scope")
+
+    def test_dates_misclassified_as_header_are_read_from_named_original_rows(self):
+        extra = [("accepted_on","周宁签认日期","2026年9月20日"), ("accepted_on","林岚签认日期","2026年9月25日")]
+        g = material([contract(JOINT), [*sign(RECEIPT,"周宁","林岚"), *extra], WARRANTY, BANK_DOC])
+        findings = compute(g)
+        authority = next(f for f in findings if f["rule"]=="H02")["acceptance_authority"]
+        self.assertIsNone(authority["records"][0]["date"])
+        self.assertEqual(payment(g)["signer_timing"]["state"],"before")
+        g["acceptance_authority_sources"]["format"] = signer_timing.FIRST_FORMAT
+        self.assertEqual(payment(g)["signer_timing"]["state"],"scope")
 
     def test_original_lines_conclusions_and_legacy_replay(self):
         g, read = example()

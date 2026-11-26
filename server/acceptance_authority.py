@@ -129,7 +129,7 @@ def page_evidence(graph, read_text, version=FORMAT):
         seen = set()
         def record(raw, line, facts, native):
             label,body = parts(raw)
-            if version == FORMAT and unit in receipts:
+            if version in signer_timing.FORMATS and unit in receipts:
                 dated = signer_timing.dated_line(unit, doc, number, line, raw, facts)
                 if dated:
                     dates.append(dated)
@@ -171,7 +171,7 @@ def page_evidence(graph, read_text, version=FORMAT):
                 record(f["quote"],None,[f],False)
     ambiguous = any(not s["name"] for s in signatures)
     timing = {}
-    if version == FORMAT:
+    if version in signer_timing.FORMATS:
         joint = any((instruction(s["quote"]) or (None,))[0] == "joint" for s in rules)
         timing = {"dates": dates if rules or ambiguous else [],
                   "bank_pages": signer_timing.bank_pages(graph, read_text, pages) if joint else []}
@@ -307,7 +307,9 @@ def verify_sources(report,read_text,*,signing=False):
     marker=policy.get("acceptance_authority")
     dated_nodes = [n for n in graph["nodes"] if n["type"] == "acceptance_signer_date"]
     dated_edges = [e for e in graph["edges"] if e["type"] == "signer_date_source"]
-    if marker != FORMAT and (policy.get("version","") >= signer_timing.SINCE or
+    if marker != FORMAT and policy.get("version","") >= signer_timing.INDEPENDENT_SINCE:
+        raise ValueError("底稿缺少逐人核对签认日期的程序")
+    if marker not in signer_timing.FORMATS and (policy.get("version","") >= signer_timing.SINCE or
             "signer_timing.py" in policy.get("code_sha256",{}) or dated_nodes or dated_edges or
             any("signer_timing" in f for f in report["findings"])):
         raise ValueError("底稿缺少共同签认时序程序或混入其他版本的原行")
@@ -320,7 +322,7 @@ def verify_sources(report,read_text,*,signing=False):
                 raise ValueError("旧版终验有具名签认约定或待辨签字栏，请按现行程序重审后签收。")
         return
     source=page_evidence(graph,read_text,marker)
-    if (marker not in (LEGACY_FORMAT,FORMAT) or policy.get("performance_checks") not in PERFORMANCE_FORMATS or graph.get("acceptance_authority_sources")!=source or
+    if (marker not in (LEGACY_FORMAT,*signer_timing.FORMATS) or policy.get("performance_checks") not in PERFORMANCE_FORMATS or graph.get("acceptance_authority_sources")!=source or
             coverage_gaps(source)!=[g for g in graph["gaps"] if g["quality"]=="acceptance_authority_clause"]):
         raise ValueError("验收签认条款、签字原行或版式覆盖与提交材料不符")
     expected=sorted((f.get("unit",f["doc"]),f["id"],f["field"],(f["id"],)) for f in graph["facts"] if f["field"] in (CLAUSE,SIGNER)
@@ -330,7 +332,7 @@ def verify_sources(report,read_text,*,signing=False):
         raise ValueError("验收签字的原件归属、具名约定或逐人证据关系不符")
     if (dated_nodes, dated_edges) != signer_timing.source_graph(source.get("dates", [])):
         raise ValueError("共同签认日期的原行或归属关系不符")
-    if signing and marker == LEGACY_FORMAT and source["clauses"] and any(f["rule"] == "H05" for f in report["findings"]):
+    if signing and marker != FORMAT and source["clauses"] and any(f["rule"] == "H05" for f in report["findings"]):
         from performance import compute
         current = compute({**graph, "acceptance_authority_sources": page_evidence(graph,read_text)})
         for entry in current:
@@ -338,5 +340,6 @@ def verify_sources(report,read_text,*,signing=False):
             if not timing:
                 continue
             old = [f for f in report["findings"] if f["rule"] == "H05" and timing["bank"] in f["scope"]]
-            if timing["state"] == "before" or (timing["state"] != "after" and any(f["status"] == "ok" for f in old)):
+            newly_early = timing["state"] == "before" and not any(f.get("signer_timing",{}).get("state") == "before" for f in old)
+            if newly_early or (timing["state"] != "after" and any(f["status"] == "ok" for f in old)):
                 raise ValueError("旧版付款时点尚未核对共同签认日期，请重新审计后签收。")

@@ -8,8 +8,11 @@ from unicodedata import normalize
 from delegation import covered_rows
 
 
-FORMAT = "named-acceptance-signatures-v2"
+FIRST_FORMAT = "named-acceptance-signatures-v2"
+FORMAT = "named-acceptance-signatures-v3"
+FORMATS = (FIRST_FORMAT, FORMAT)
 SINCE = "2026.11.26.21"
+INDEPENDENT_SINCE = "2026.11.26.22"
 HINT = re.compile(r"(?:签认|签字|签署|签名|会签).{0,9}(?:日期|时间|日[：:])")
 LABEL = re.compile(r"([\u3400-\u9fff]{2,8})(?:签认|签字|签署|签名)日期")
 CHINESE_DAY = re.compile(r"([0-9]{4})年([0-9]{1,2})月([0-9]{1,2})日")
@@ -64,7 +67,8 @@ def compare(payment, graph, contract, bank, paid, authority, receipts, *, other_
     from warranty_terms import bank_identity, identity
 
     source = graph.get("acceptance_authority_sources", {})
-    if source.get("format") != FORMAT or not authority or authority["mode"] != "joint":
+    version = source.get("format")
+    if version not in FORMATS or not authority or authority["mode"] != "joint":
         return
     records = authority["records"]
     if len(records) != 1 or records[0]["role"] != "acceptance" or len(receipts) != 1:
@@ -95,7 +99,7 @@ def compare(payment, graph, contract, bank, paid, authority, receipts, *, other_
               and identity(contract, receipt) and bank_identity(contract, bank)
               and all(body(contract, k) and not masked_value(body(contract, k)) and
                       body(contract, k) not in {"同上", "待核", "未知", "无", "见附件", "略", "甲方", "乙方", "采购方", "供应方"} for k in LINK_KEYS)
-              and body(receipt, "acceptance_scope") in FINAL_SCOPES and bool(record["date"])
+              and body(receipt, "acceptance_scope") in FINAL_SCOPES and (version == FORMAT or bool(record["date"]))
               and term and raw_body(term) == payment["stage"]["clause"] and purpose and purpose["value"] == payment["stage"]["name"] and day)
     complete = (len(signed) == len(names) and Counter(checked_names) == Counter(names)
                 and Counter(r["name"] for r in rows) == Counter(names)
@@ -118,7 +122,7 @@ def compare(payment, graph, contract, bank, paid, authority, receipts, *, other_
             clause, *(f"{p['doc']}/p{p['page']}" for p in [*covered, *banks])]
     for row in rows:
         refs.extend([row["id"], *row["facts"]])
-    payment["signer_timing"] = {"format": FORMAT, "state": state, "bank": bank.unit, "receipt": receipt.unit,
+    payment["signer_timing"] = {"format": version, "state": state, "bank": bank.unit, "receipt": receipt.unit,
         "required": names, "rows": [r["id"] for r in rows],
         "signed": {n: [s["fact"] for s in signed if s["name"] == n and s["confirmed"]] for n in names},
         "paid_on": paid.isoformat() if paid_ref else None, "paid_ref": paid_ref,
