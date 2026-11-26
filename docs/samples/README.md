@@ -1,5 +1,15 @@
 # 合成财会审计演练
 
+## 分期付款所引验收凭证
+
+在项目根目录运行以下命令，将四套带水印的 PDF 发给本机审计服务。各案例保留模型原始观察和后续按原页核对的版本。使用新的运行编号可创建独立演练。
+
+```sh
+server/.venv/bin/python docs/samples/delivery_batches.py --run --run-id local-bank-reference --cases bank_cross bank_match bank_absent bank_split
+```
+
+四个场景分别覆盖回单错引另一批、单号相符、缺少所引原件，以及同一期两笔回单一笔错批。拆款场景保留合同 35% 的约定和两笔人民币金额。[业务预期与可核对的底稿](../acceptance.md#分期回单引用的验收单号)
+
 ## 合同分期付款批注
 
 运行 `server/.venv/bin/python docs/samples/contract_comments.py --seed fish-contract-review-v1` 生成三套水印资料，可用 `--case second` 或 `--case third` 单独生成第二期或第三期有修订建议的版本。三个 Word 合同的打印页完全相同。附加 `--run` 会提交到本机，使用实际模型读页，由脚本对照水印原件、摘要和文字行模拟字段复核，随后断言付款安排及实际受批注影响的发现。已有同一批资料时按原件摘要复用。[本机验收记录](../acceptance.md#合同分期付款批注) · [试核第二期付款](http://127.0.0.1:8000/?scene=contract-comments#workflow)

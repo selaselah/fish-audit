@@ -37,3 +37,11 @@
 #case-list[data-density=compact] .card-foot { border-top:0; padding-top:0; }
 @media (prefers-reduced-motion:no-preference) { .density-choice input::before { transition:transform .14s ease; } }
 @media (forced-colors:active) { .density-choice input { appearance:auto; } .density-choice input::before { display:none; } }
+.preview-pager { margin-left:auto;display:inline-flex;align-items:center;gap:2px;padding:2px;border:1px solid var(--line);border-radius:7px;background:var(--surface); }
+.preview-pager[hidden] { display:none; }
+.preview-pager button { display:grid;place-items:center;width:36px;height:36px;min-height:0;padding:0;border:0;border-radius:4px;background:transparent;color:var(--accent-hover); }
+.preview-pager button:hover:enabled { background:var(--accent-soft); }
+.preview-pager button:disabled { opacity:.35; }
+#preview-prev i { transform:rotate(90deg); } #preview-next i { transform:rotate(-90deg); }
+.preview-pager output { min-width:3.2em;text-align:center;color:var(--secondary);font:600 .8rem var(--font-number);font-variant-numeric:tabular-nums; }
+@media (pointer:coarse) { .preview-pager button { width:44px;height:44px; } }

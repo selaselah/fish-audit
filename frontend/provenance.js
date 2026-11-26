@@ -84,7 +84,9 @@ function performanceOverview(findings, graph) {
   const inspection=InspectionCoverage.panel(acceptance,graph,findings);
   const dates=ContractCalendar.panel(effect,graph,findings,state.bundle?.report.calls.pages);
   const dateQuestion=effect?.effect_review?.calendar?.some(day=>!['exact','spacing'].includes(day.state));
+  const bankReferences=PaymentAcceptance.panel(state.bundle?.report);
   const sections=[
+    {key:'payment-acceptance',label:'回单所据',icon:'receipt',content:bankReferences,priority:bankReferences?.dataset.referenceState==='other_batch'},
     {key:'contract-comments',label:'期款批注',icon:'journal-text',content:contractNotes,priority:contractNotes && contractNotes.dataset.state!=='ok'},
     {key:'acceptance-comments',label:'验收批注',icon:'journal-text',content:comments,priority:comments && comments.dataset.state!=='ok'},
     {key:'suppliers',label:'供货主体',icon:'layers',content:supplier,priority:supplier && supplier.dataset.state!=='ok'},
@@ -142,6 +144,8 @@ function performanceOverview(findings, graph) {
     }
     const sum=findings.find(f=>f.stage_payments && sameStage(f));
     if (sum) results.append(performanceJump(sum,'本期回单合计'));
+    const cited=matched.filter(f=>f.payment_acceptance);
+    if (bankReferences && cited.length) results.append(PaymentAcceptance.jump(cited.find(f=>f.payment_acceptance.state==='other_batch') || cited[0]));
     row.append(box('phase-contract',source,el('q',revised?revised.quote:stage.clause)),results);
     const noteLink=AcceptanceComments.phaseLink(phase,commentSource);
     if (noteLink) row.append(noteLink);
@@ -214,6 +218,7 @@ function performanceOverview(findings, graph) {
         button.tabIndex = i===position ? 0 : -1;
         list.children[i].hidden = i!==position;
       });
+      bankReferences?.dispatchEvent(new CustomEvent('inspect-payment-stage',{detail:phases[position].stage}));
       contractNotes?.dispatchEvent(new CustomEvent('contract-stage-change',{detail:phases[position].stage.clause_ref}));
       list.children[position].querySelector('.proof-opinion:not([hidden])')?.dispatchEvent(new Event('show-opinion'));
       list.children[position].querySelector('.warranty-timeline:not([hidden])')?.dispatchEvent(new Event('show-warranty'));
@@ -224,6 +229,7 @@ function performanceOverview(findings, graph) {
       if (i>=0) select(i);
     }
     if (contractSource?.stages) contractNotes.addEventListener('select-contract-phase',event=>selectClause(event.detail));
+    bankReferences?.addEventListener('select-contract-phase',event=>selectClause(event.detail));
     inspection?.addEventListener('select-contract-phase',event=>selectClause(event.detail));
     inspection?.addEventListener('reveal-evidence',()=>{
       const linked=[...inspection.querySelectorAll('.inspection-phase')];

@@ -106,8 +106,8 @@ function caseName(row, pinRevision=false) {
   if (training) title.setAttribute('aria-label',row.title);
   return {title,training};
 }
-function peekButton(row) {
-  const button=action('',()=>Desk.peek(row),'icon-button case-peek');
+function peekButton(row,sequence) {
+  const button=action('',()=>Desk.peek(row,sequence),'icon-button case-peek');
   button.append(glyph('layout-sidebar-inset-reverse'));
   button.dataset.previewCase=row.id; button.title='速览任务';
   button.setAttribute('aria-label','速览 '+row.title); button.setAttribute('aria-haspopup','dialog');
@@ -131,7 +131,7 @@ function renderList() {
       [row.issues ? row.issues+' 项问题' : '', row.risks ? row.risks+' 项风险' : ''].filter(Boolean).join(' · '),'small'));
     const icon = box('case-glyph',glyph(row.profile===bankProfile || row.profile===travelProfile ? 'receipt' : 'journal-text'));
     list.append(box('ledger-row', box('case-name',icon,box('',title,metadata)), status, verdict,
-      el('span', time($('#desk-sort').value==='updated' ? row.updated : row.created), 'small row-date'),peekButton(row)));
+      el('span', time($('#desk-sort').value==='updated' ? row.updated : row.created), 'small row-date'),peekButton(row,visible)));
   }
   if (!visible.length) list.append(el('p', state.filter === 'all' && !$('#case-search').value && !$('#desk-profile').value ? '还没有任务，选择「新建审计」上传资料。' : '当前筛选条件下没有任务。', 'empty'));
   for (const button of document.querySelectorAll('[data-filter]')) {
@@ -624,6 +624,10 @@ function citation(ref) {
     if (original?.ext!=='.pdf' || original.sha256!==source.sha256) return el('span','PDF 签署来源待核','small');
     return evidenceJump(original.name+' · 签署凭证','pdf-signatures');
   }
+  if (source?.type==='payment_acceptance_line') {
+    const graph=state.bundle.report.graph,row=PaymentAcceptance.sources(graph).find(r=>r.id===ref);
+    return row ? action(row.quote,()=>PaymentAcceptance.open(row,graph),'ref') : el('span','回单引用来源待核','small');
+  }
   if (source?.type==='contract_date_line') return ContractCalendar.citation(ref);
   if (source?.type==='contract_folio_line') return ContractFolios.citation(ref);
   if (source?.type==='reinspection_time_line') {
@@ -819,6 +823,7 @@ function finding(item) {
     const dates = dateEvidencePanel(item,state.bundle.report.graph);
     if (dates) node.append(dates);
   }
+  if (item.payment_acceptance) node.append(PaymentAcceptance.jump(item));
   if (item.contract_comments) node.append(AcceptanceComments.current(state.bundle.report,'contract')?
     evidenceJump('按期核对合同付款批注','contract-comments'):el('span','合同批注来源待核','small'));
   if (item.acceptance_comments) node.append(AcceptanceComments.current(state.bundle.report)?
@@ -1454,6 +1459,9 @@ async function refresh() {
       } else if (route.params.get('view')==='inspection' && state.openedCitation!==location.hash &&
                  bundle?.report.findings.some(f=>f.rule==='H02' && f.inspection_coverage)) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#inspection-coverage';
+      } else if (route.params.get('view')==='payment-acceptance' && state.openedCitation!==location.hash &&
+                 bundle?.report.findings.some(f=>f.payment_acceptance)) {
+        state.openedCitation=location.hash; state.tab='report'; focusFinding='#payment-acceptance';
       } else if (route.params.get('view')==='contract-comments' && state.openedCitation!==location.hash && AcceptanceComments.current(bundle?.report,'contract')) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#contract-comments';
       } else if (route.params.get('view')==='acceptance-comments' && state.openedCitation!==location.hash && AcceptanceComments.current(bundle?.report)) {
@@ -1470,12 +1478,21 @@ async function refresh() {
       renderCase(Boolean(focusFinding));
       if (focusFinding) {
         const target = $(focusFinding);
-        if (target?.id==='equipment-reinspection-trail' && route.params.get('view')==='trial' &&
+        if (target?.id==='payment-acceptance' && route.params.has('receipt')) {
+          const receipt=route.params.get('receipt');
+          if (bundle.report.findings.some(f=>f.id===receipt && f.payment_acceptance)) {
+            target.dispatchEvent(new CustomEvent('select-reference',{detail:receipt}));
+          } else {
+            const message=el('p','该版未收录所选回单，请从本版回单中选择。','note');
+            message.setAttribute('role','status');target.prepend(message);
+          }
+          revealPaperTarget(target);
+        } else if (target?.id==='equipment-reinspection-trail' && route.params.get('view')==='trial' &&
             bundle.report.findings.some(f=>f.reinspection?.timing?.operation)) {
           target.open=true;
           $('#trail-tab-final')?.click();
           revealPaperTarget($('#reinspection-wait'));
-        } else if (target?.dataset.finding || ['equipment-reinspection-trail','inspection-coverage','case-entity-browser','contract-pages','word-signatures','pdf-signatures','contract-calendar','supplier-pages','acceptance-comments','contract-comments'].includes(target?.id)) revealPaperTarget(target);
+        } else if (target?.dataset.finding || ['equipment-reinspection-trail','inspection-coverage','case-entity-browser','contract-pages','word-signatures','pdf-signatures','contract-calendar','supplier-pages','acceptance-comments','contract-comments','payment-acceptance'].includes(target?.id)) revealPaperTarget(target);
         else target?.focus();
       }
       const target = route.params.get('fact');

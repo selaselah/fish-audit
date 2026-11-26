@@ -75,6 +75,8 @@ H02 的可选 `reinspection.timing` 含 `required_hours`、`term_ref`、`repair_
 
 ## 复验原件的逐行核对
 
+分期回单的验收依据支持固定版本链接 `/workpaper/{id}?rev={版本}&view=payment-acceptance`。附加 `&receipt=H05-9` 可直接定位该版实付检查的回单。企业实例使用相同的 `/w/{wid}` 前缀和底稿访问权限。
+
 固定版本的底稿入口支持 `/workpaper/<case_id>?rev=<rev>&view=reinspection`。有权限查看该版底稿且存在整改复验记录时，页面直接定位到履约时间线。企业入口在相同路径前加 `/w/<wid>`。
 
 规则 `2026.11.26.07` 使用 `acceptance-reservations-v4`。`graph.acceptance_reservation_sources.final_register` 保存纳入复验的页、文字层覆盖和另列原文。每条 `reinspection_register_line` 从该单据指向对应物理页，并携带原文、行号和已关联的事实 ID。读图引文的行号为空。

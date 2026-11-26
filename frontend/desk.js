@@ -5,8 +5,11 @@ function contractPreview(report, task) {
   if (!signing || !acceptance || !plan) return null;
   function jump(f,label,cls='preview-finding',view) {
     const query=new URLSearchParams({rev:String(task.rev),...(view?{view}:{finding:f.id})});
+    if (view==='payment-acceptance') query.set('receipt',f.id);
     const node=Team.paperLink(label,task.id,cls,query);
-    node.dataset.findingId=f.id; node.append(tag(f.status),glyph('arrows-angle-expand'));return node;
+    node.dataset.findingId=f.id;
+    if (view!=='payment-acceptance') node.append(tag(f.status));
+    node.append(glyph('arrows-angle-expand'));return node;
   }
   const panel=el('section','','preview-contract');
   panel.setAttribute('aria-label','合同履约速览');
@@ -40,6 +43,9 @@ function contractPreview(report, task) {
       const bank=payments.length>1 && r.rule==='H05' && traceReferences(graph,r).map(ref=>index.facts.get(ref)).find(v=>v?.field==='bank_receipt');
       content.append(jump(r,r.rule==='H06'?'本期回单合计':bank?.name || '实付时点'));
     }
+    const referenced=payments.filter(r=>r.payment_acceptance);
+    if (referenced.length) content.append(jump(referenced.find(r=>r.payment_acceptance.state==='other_batch') || referenced[0],
+      '核对验收单号','preview-finding','payment-acceptance'));
     if (!payments.length) content.append(el('span','本期未关联回单','preview-no-receipt'));
   }
   stages.forEach(({f},i)=>{
@@ -62,7 +68,7 @@ function contractPreview(report, task) {
 
 const Desk = {
   page: 1, libraryPage: 1, search: '', status: 'verified', fingerprint: '', debounce: 0,
-  previewRequest: null, view:'board', verdict:'', lane:'', queryKey:'',
+  previewRequest: null, previewSequence:[], view:'board', verdict:'', lane:'', queryKey:'',
   laneLabels:{reject:'建议不通过',review:'需要人工校验',pass:'建议通过',pending:'尚无建议'},
   tenantPath(resource) { return (Team.current ? '/api/w/'+Team.current.id : '/api')+'/'+resource; },
   reset() {
@@ -143,7 +149,7 @@ const Desk = {
         }
         const files=el('span',row.files+' 份','card-files'); files.prepend(glyph('paperclip'));
         const status=row.decision ? el('span','人工'+statusName(row.decision),'card-decision') : tag(row.status);
-        card.append(box('card-foot',status,stamp,files,peekButton(row))); col.append(card);
+        card.append(box('card-foot',status,stamp,files,peekButton(row,lane.cases))); col.append(card);
       }
       if (!lane.cases.length) col.append(el('p','暂无任务','lane-empty'));
       if (lane.total>lane.cases.length) {
@@ -160,7 +166,12 @@ const Desk = {
     $('#filter-count').hidden = count===0;
     $('#filter-count').textContent = String(count);
   },
-  async peek(row) {
+  movePreview(step) {
+    const index=this.previewSequence.findIndex(r=>r.id===$('#case-preview').dataset.caseId);
+    if (index<0 || !this.previewSequence[index+step]) return;
+    this.peek(this.previewSequence[index+step]);
+  },
+  async peek(row,sequence) {
     const dialog = $('#case-preview');
     const content = $('#preview-body');
     const footer = $('#preview-action');
@@ -169,10 +180,19 @@ const Desk = {
     this.previewRequest = request;
     const path = Team.cases()+'/'+row.id;
     const current = () => !request.signal.aborted && dialog.open && path===Team.cases()+'/'+row.id;
+    if (sequence) this.previewSequence=sequence.map(r=>({id:r.id,title:r.title}));
+    const position=this.previewSequence.findIndex(r=>r.id===row.id);
+    const pager=$('#preview-pager'),prev=$('#preview-prev'),next=$('#preview-next');
+    pager.hidden=this.previewSequence.length<2 || position<0;
+    prev.disabled=position<=0;next.disabled=position<0 || position===this.previewSequence.length-1;
+    $('#preview-position').value=(position+1)+' / '+this.previewSequence.length;
+    if (document.activeElement===prev && prev.disabled && !next.disabled) next.focus();
+    if (document.activeElement===next && next.disabled && !prev.disabled) prev.focus();
     dialog.dataset.caseId = row.id;
     $('#preview-title').textContent = row.title;
     content.replaceChildren(el('p','正在读取任务…','muted'));
-    footer.replaceChildren(); dialog.showModal();
+    footer.replaceChildren();content.scrollTop=0;
+    if (!dialog.open) dialog.showModal();
     try {
       let task = await api(path,{signal:request.signal});
       if (!current()) return;
@@ -357,11 +377,17 @@ const Desk = {
         event.preventDefault(); $('#case-search').focus();
       }
     });
+    $('#preview-prev').addEventListener('click',()=>this.movePreview(-1));
+    $('#preview-next').addEventListener('click',()=>this.movePreview(1));
+    $('#case-preview').addEventListener('keydown',event=>{
+      if (!event.altKey || event.metaKey || event.ctrlKey || event.shiftKey || event.isComposing || $('#preview-pager').hidden) return;
+      if (event.key==='ArrowUp' || event.key==='ArrowDown') {event.preventDefault();this.movePreview(event.key==='ArrowUp'?-1:1);}
+    });
     $('#case-preview').addEventListener('close',()=>{
       if ($('#case-preview').open) return;
-      this.previewRequest?.abort();
+      this.previewRequest?.abort();this.previewSequence=[];
       $('#preview-title').textContent=''; $('#preview-body').replaceChildren(); $('#preview-action').replaceChildren();
-      if (!$('#desk').hidden && Team.route().page==='desk' && document.activeElement===document.body) {
+      if (!$('#desk').hidden && Team.route().page==='desk' && (document.activeElement===document.body || document.activeElement.matches('[data-preview-case]'))) {
         const key=$('#case-preview').dataset.caseId;
         (document.querySelector('[data-preview-case="'+CSS.escape(key)+'"]') || $('#case-search')).focus();
       }

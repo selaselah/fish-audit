@@ -1,0 +1,331 @@
+{
+  "case_id": "e70bef644b2d407c96d1387c922213d5",
+  "rev": 9,
+  "report_sha256": "ccdfda06fe4e95e8b298e1436cd239824df7fa6417e7278d0b0989fa92d3afd4",
+  "documents": [
+    {
+      "title": "第一批验收报告",
+      "version": "合成采购 · R9",
+      "page": 1,
+      "image": "/assets/batch-acceptance-1-page.jpg",
+      "pdf": "/showcase/batch-acceptance-1.pdf",
+      "source_sha256": "b7591066a0f9ad04f6fe00ee735b0a92737da36d1e6e29af0a411d765492eae8",
+      "page_sha256": "3d7e5e6cc444ece79d406d05cb7a4b7b39c7a65b35ddd59447dfbfc495f0a0b1",
+      "lines": [
+        {
+          "ref": "d03/p1/f1",
+          "line": 15,
+          "label": "验收单编号",
+          "value": "YS-7FF926E7-1",
+          "rects": [
+            [
+              0.08145,
+              0.61324,
+              0.40918,
+              0.62968
+            ]
+          ],
+          "rect": "0.08145,0.61324,0.40918,0.62968",
+          "crop": "/assets/batch-acceptance-1-l15.webp"
+        },
+        {
+          "ref": "d03/p1/f2",
+          "line": 8,
+          "label": "验收范围",
+          "value": "第一批交付验收",
+          "rects": [
+            [
+              0.08145,
+              0.38037,
+              0.38203,
+              0.3968
+            ]
+          ],
+          "rect": "0.08145,0.38037,0.38203,0.3968"
+        },
+        {
+          "ref": "d03/p1/f9",
+          "line": 7,
+          "label": "验收日期",
+          "value": "2026年9月10日",
+          "rects": [
+            [
+              0.08145,
+              0.34703,
+              0.37492,
+              0.36347
+            ]
+          ],
+          "rect": "0.08145,0.34703,0.37492,0.36347"
+        }
+      ]
+    },
+    {
+      "title": "第二批验收报告",
+      "version": "合成采购 · R9",
+      "page": 1,
+      "image": "/assets/batch-acceptance-2-page.jpg",
+      "pdf": "/showcase/batch-acceptance-2.pdf",
+      "source_sha256": "4d01fcdcec3f27ec3456e8f62dfe77dc036fa0ed29ebf11f3213058773f3f2a0",
+      "page_sha256": "9ded0e54ff85e67ceae843ef7ecdefc281fd089e884a49c26e54da2f2433c5fc",
+      "lines": [
+        {
+          "ref": "d04/p1/f1",
+          "line": 15,
+          "label": "验收单编号",
+          "value": "YS-7FF926E7-2",
+          "rects": [
+            [
+              0.08145,
+              0.61324,
+              0.41241,
+              0.62968
+            ]
+          ],
+          "rect": "0.08145,0.61324,0.41241,0.62968",
+          "crop": "/assets/batch-acceptance-2-l15.webp"
+        },
+        {
+          "ref": "d04/p1/f7",
+          "line": 8,
+          "label": "验收范围",
+          "value": "第二批交付验收",
+          "rects": [
+            [
+              0.08145,
+              0.38037,
+              0.38203,
+              0.3968
+            ]
+          ],
+          "rect": "0.08145,0.38037,0.38203,0.3968"
+        },
+        {
+          "ref": "d04/p1/f6",
+          "line": 7,
+          "label": "验收日期",
+          "value": "2026年9月20日",
+          "rects": [
+            [
+              0.08145,
+              0.34703,
+              0.37492,
+              0.36347
+            ]
+          ],
+          "rect": "0.08145,0.34703,0.37492,0.36347"
+        }
+      ]
+    },
+    {
+      "title": "采购合同",
+      "version": "合成采购 · R9",
+      "page": 1,
+      "image": "/assets/batch-payment-contract-page.jpg",
+      "pdf": "/showcase/batch-payment-contract.pdf",
+      "source_sha256": "c5d019efe56ad81231b2d9e9075fdfcff4a8bcca7a62ca6b70615fe797a9d07f",
+      "page_sha256": "e403f88538d36fe2f1523ca1992b9061768ec855adb60881cc842ed79c78bfdd",
+      "lines": [
+        {
+          "ref": "d06/p1/f20",
+          "line": 21,
+          "label": "第三期",
+          "value": "第二批验收合格后支付35%",
+          "rects": [
+            [
+              0.08209,
+              0.81233,
+              0.48222,
+              0.82922
+            ]
+          ],
+          "rect": "0.08209,0.81233,0.48222,0.82922"
+        },
+        {
+          "ref": "d06/p1/f15",
+          "line": 16,
+          "label": "分批交付",
+          "value": "第二批2台，设备编号 E-21、E-22",
+          "rects": [
+            [
+              0.08209,
+              0.64658,
+              0.585,
+              0.66393
+            ]
+          ],
+          "rect": "0.08209,0.64658,0.585,0.66393"
+        },
+        {
+          "ref": "d06/p1/f16",
+          "line": 17,
+          "label": "分批验收约定",
+          "value": "各批独立验收付款，全部批次验收合格视为终验合格",
+          "rects": [
+            [
+              0.08209,
+              0.67945,
+              0.83646,
+              0.69726
+            ]
+          ],
+          "rect": "0.08209,0.67945,0.83646,0.69726"
+        }
+      ]
+    },
+    {
+      "title": "第1笔付款回单",
+      "version": "合成采购 · R9",
+      "page": 1,
+      "image": "/assets/batch-bank-1-page.jpg",
+      "pdf": "/showcase/batch-bank-1.pdf",
+      "source_sha256": "2f0feb90cffa1cb1da9ea104aa57778d623ada634f1c981665224af6285bad5b",
+      "page_sha256": "941c54ec950443263c69903d654691047dc37161d144d792b61e43b327ca2ab3",
+      "lines": [
+        {
+          "ref": "d01/p1/f12",
+          "line": 13,
+          "label": "付款依据验收单号",
+          "value": "YS-7FF926E7-1",
+          "rects": [
+            [
+              0.08209,
+              0.54658,
+              0.48481,
+              0.56301
+            ]
+          ],
+          "rect": "0.08209,0.54658,0.48481,0.56301",
+          "crop": "/assets/batch-bank-1-l13.webp"
+        },
+        {
+          "ref": "d01/p1/f6",
+          "line": 7,
+          "label": "款项用途",
+          "value": "第三期",
+          "rects": [
+            [
+              0.08209,
+              0.34703,
+              0.2799,
+              0.36347
+            ]
+          ],
+          "rect": "0.08209,0.34703,0.2799,0.36347"
+        },
+        {
+          "ref": "d01/p1/f5",
+          "line": 6,
+          "label": "付款金额",
+          "value": "15,000.00",
+          "rects": [
+            [
+              0.08209,
+              0.3137,
+              0.31739,
+              0.33151
+            ]
+          ],
+          "rect": "0.08209,0.3137,0.31739,0.33151"
+        }
+      ]
+    },
+    {
+      "title": "第2笔付款回单",
+      "version": "合成采购 · R9",
+      "page": 1,
+      "image": "/assets/batch-bank-2-page.jpg",
+      "pdf": "/showcase/batch-bank-2.pdf",
+      "source_sha256": "c7d50977079ec7faccc8892e15b8675fae17f2419c87cf9617fc0d6809694db5",
+      "page_sha256": "47390f52ae29452357e888e8277d19bc13a4ee6b9e8e19b91023e6fbae57db93",
+      "lines": [
+        {
+          "ref": "d02/p1/f12",
+          "line": 13,
+          "label": "付款依据验收单号",
+          "value": "YS-7FF926E7-2",
+          "rects": [
+            [
+              0.08209,
+              0.54658,
+              0.48804,
+              0.56301
+            ]
+          ],
+          "rect": "0.08209,0.54658,0.48804,0.56301",
+          "crop": "/assets/batch-bank-2-l13.webp"
+        },
+        {
+          "ref": "d02/p1/f6",
+          "line": 7,
+          "label": "款项用途",
+          "value": "第三期",
+          "rects": [
+            [
+              0.08209,
+              0.34703,
+              0.2799,
+              0.36347
+            ]
+          ],
+          "rect": "0.08209,0.34703,0.2799,0.36347"
+        },
+        {
+          "ref": "d02/p1/f5",
+          "line": 6,
+          "label": "付款金额",
+          "value": "20,000.00",
+          "rects": [
+            [
+              0.08209,
+              0.3137,
+              0.31739,
+              0.33151
+            ]
+          ],
+          "rect": "0.08209,0.3137,0.31739,0.33151"
+        }
+      ]
+    }
+  ],
+  "payments": [
+    {
+      "key": "H05-9",
+      "choice": "第 1 笔",
+      "amount": "15,000.00",
+      "stage": "第三期",
+      "batch": 2,
+      "state": "other_batch",
+      "detail": "本期对应第 2 批，回单所引单号属于第 1 批，需核实实际付款依据。",
+      "bank": "d01/p1/f12",
+      "expected": "d04/p1/f1",
+      "actual": "d03/p1/f1",
+      "actualBatch": 1,
+      "basis": [
+        "d06/p1/f20",
+        "d06/p1/f15",
+        "d01/p1/f6"
+      ],
+      "total": "35000.00"
+    },
+    {
+      "key": "H05-10",
+      "choice": "第 2 笔",
+      "amount": "20,000.00",
+      "stage": "第三期",
+      "batch": 2,
+      "state": "matched",
+      "detail": "回单引用的验收单号与合同第 2 批验收原件相符。",
+      "bank": "d02/p1/f12",
+      "expected": "d04/p1/f1",
+      "actual": "d04/p1/f1",
+      "actualBatch": 2,
+      "basis": [
+        "d06/p1/f20",
+        "d06/p1/f15",
+        "d02/p1/f6"
+      ],
+      "total": "35000.00"
+    }
+  ]
+}

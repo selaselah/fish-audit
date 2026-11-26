@@ -271,6 +271,11 @@ def create_app(store, worker):
             if view not in ("replay", "reinspection", "inspection", "entities", "trial", "contract-pages", "signatures", "calendar", "suppliers", "acceptance-comments", "contract-comments", "payment-acceptance") or set(args)!={"rev"}:
                 raise CaseError("请选择有效的底稿视图及版本。",400)
             args["view"] = view
+        if "receipt" in request.args:
+            receipt = request.args["receipt"]
+            if args.get("view") != "payment-acceptance" or not re.fullmatch(r"H05-[1-9][0-9]{0,7}", receipt):
+                raise CaseError("请选择本版的回单核对记录。",400)
+            args["receipt"] = receipt
         route = ("w/"+wid+"/" if wid else "")+"case/"+case_id
         return redirect("/app#"+route+("?" + urlencode(args) if args else ""))
 

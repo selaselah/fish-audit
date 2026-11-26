@@ -45,6 +45,10 @@ const PhaseEvidence = (() => {
       if (hasFact ?? facts.some(f=>s.facts.includes(f.id) && f.quote===s.quote)) return;
       sources.set(s.line,{ref:prefix+s.line,rawLine:s.line,label,quote:s.quote,option:label+' · 第 '+s.line+' 行',quality,rects});
     }
+    for (const row of PaymentAcceptance.sources(graph)) {
+      const fact=PaymentAcceptance.observation(row,graph);
+      add(row,'验收单号原行','payment_acceptance_reference','bank-acceptance-line/',Boolean(fact) && row.line!==lineHint,fact?.source_line?.rects);
+    }
     for (const row of PriorInstallment.sources(graph)) {
       const fact=PriorInstallment.observation(row,graph);
       add(row,'前款约定原行','prior_reference','prior-line/',row.line!==lineHint && Boolean(fact),fact?.source_line?.rects);

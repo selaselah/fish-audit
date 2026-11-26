@@ -52,6 +52,9 @@
   <script src="/assets/reinspection-trail.js" defer></script>
   <link rel="stylesheet" href="/assets/prior-installment.css">
   <script src="/assets/prior-installment.js" defer></script>
+  <link rel="stylesheet" href="/assets/payment-reference.css">
+  <script src="/assets/payment-reference-card.js" defer></script>
+  <script src="/assets/payment-acceptance.js" defer></script>
   <script src="/assets/phase-evidence.js" defer></script>
   <script src="/assets/mandate-calendar.js" defer></script>
   <script src="/provenance.js" defer></script>
@@ -155,7 +158,11 @@
     <footer class="quick-footer"><span id="quick-scope"></span><span aria-hidden="true"><kbd>↑</kbd><kbd>↓</kbd> 选择 <kbd>↵</kbd> 打开</span></footer>
   </dialog>
   <dialog id="case-preview" aria-labelledby="preview-title">
-    <div class="preview-head"><span><i aria-hidden="true" class="ui-glyph ic-layout-sidebar-inset-reverse"></i> 任务速览</span><button type="button" data-close aria-label="关闭速览" class="icon-button"><i aria-hidden="true" class="ui-glyph ic-x-lg"></i></button></div>
+    <div class="preview-head"><span><i aria-hidden="true" class="ui-glyph ic-layout-sidebar-inset-reverse"></i> 任务速览</span><div class="preview-pager" id="preview-pager" role="group" aria-label="当前队列的任务" hidden>
+      <button type="button" id="preview-prev" aria-label="上一项任务" title="上一项任务（Alt + ↑）" aria-keyshortcuts="Alt+ArrowUp"><i aria-hidden="true" class="ui-glyph ic-chevron-down"></i></button>
+      <output id="preview-position" aria-label="当前任务序号"></output>
+      <button type="button" id="preview-next" aria-label="下一项任务" title="下一项任务（Alt + ↓）" aria-keyshortcuts="Alt+ArrowDown"><i aria-hidden="true" class="ui-glyph ic-chevron-down"></i></button>
+      </div><button type="button" data-close aria-label="关闭速览" class="icon-button"><i aria-hidden="true" class="ui-glyph ic-x-lg"></i></button></div>
     <h2 id="preview-title"></h2><div id="preview-body" aria-live="polite"></div><div id="preview-action"></div>
   </dialog>
   <dialog id="upload-dialog" aria-labelledby="upload-heading">

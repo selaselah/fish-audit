@@ -4,6 +4,7 @@
 
 | 要核对什么 | 查阅入口 |
 | --- | --- |
+| 第三期回单引用了哪一批验收单 | [采购付款内控、Xero 与 DataSnipper](payment-acceptance.md) |
 | 怎样确定检验范围，以及怎样切换整批设备和合同指定的设备 | 财政部采购指引第十一条要求企业确定检验方式、核对采购项目并出具验收证明。演练中的必检编号和最低台数取自该案合同。界面采用 SAP Fiori 小范围视图切换的做法，旁列有记录台数。[财政部原文](https://kjs.mof.gov.cn/zhengcefabu/201005/P020230421440664863663.pdf) · [财政部会计司解读的验收环节](https://kjs.mof.gov.cn/zhengcejiedu/201006/t20100611_322435.htm) · [SAP Fiori 分段选择器](https://www.sap.com/design-system/fiori-design-web/v1-142/ui-elements/segmented-button) |
 | Word 验收原件的审阅选区、DataSnipper 证据定位，以及规则出处的逐项核对 | [Word 审阅与交互依据](word-acceptance-review.md) · [公开演练原件](showcase-provenance.md#word-验收批注与第二期回单) |
 | 七款软件的原始链接、可见操作和国内工作台用法，包括 Karbon 看板和 Fieldguide 侧栏 | [产品界面调研](product-research.md) |
