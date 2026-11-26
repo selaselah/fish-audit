@@ -1,5 +1,9 @@
 # PDF 签署核查的技术与交互资料
 
+委托书签发的审计检查依据《民法典》第一百六十五条确定书面委托的记载事项及被代理人的签名或盖章要求。证书签名覆盖文件的检查与电子签名法第十三条所述可靠条件分别取证。第十四条涉及可靠电子签名的法律效力。工作台保存可复算的文件和签名属性，审计人员可据此继续查证签署人身份、控制及授权。[国家市场监督管理总局公布的民法典](https://www.samr.gov.cn/zw/zfxxgk/fdzdgknr/bgt/art/2023/art_60fb3863b7364b759123a42d1df568ca.html) · [工业和信息化部云南省通信管理局公布的电子签名法](https://ynca.miit.gov.cn/zwgk/zcwj/flfg/art/2022/art_a6ec461de9174d6b87ef092d15615652.html)
+
+Acrobat 从签名面板选择一条签名后，可查看它所签的版本并与当前版本比较。DataSnipper 将底稿字段链接到支持文件的具体区域。本项目将这两步放在委托书审查中，先给出可点开的签章行，再展开签名覆盖范围及原件摘要。[Acrobat 签署版比较](https://helpx.adobe.com/acrobat/desktop/e-sign-documents/manage-digital-signatures/compare-versions.html) · [DataSnipper 原件区域引用](https://knowledge.datasnipper.com/en/articles/694306-how-to-add-a-text-snip-to-a-document)
+
 | 来源 | 项目中的用法 |
 | --- | --- |
 | pyHanko 0.38.2 | 从上传的原件枚举已填写的签名域，读取 CMS 容器，校验已签字节摘要和签名值，区分覆盖整份文件与覆盖较早修订。使用固定版本和本地计算。[版本发布](https://pypi.org/project/pyHanko/0.38.2/) · [PDF 签名结构](https://docs.pyhanko.eu/en/latest/lib-guide/signing.html) · [验证结果的各个维度](https://docs.pyhanko.eu/en/latest/lib-guide/validation/status.html) |

@@ -76,8 +76,15 @@ def verify_case(report, mode):
     entry, = h01["delegations"]
     positive = mode in ("valid","compound","last_day")
     status = "ok" if positive else ("risk" if mode in ("expired","receipt","prepay_limit","amount_limit","before_start","issued_later") else "missing")
+    if report["policy"].get("mandate_pdf"):
+        proof, = report["graph"]["mandate_pdf_sources"]["records"]
+        assert proof["state"] == "typeset" and entry["mandate_execution"] == [proof["id"]]
+        assert proof["id"] in entry["evidence"]
+        if status == "ok":
+            status = "missing"
+    contract_status = "missing" if status == "ok" and h01.get("effect_review", {}).get("pdf_execution") else status
     observed = IDENTITIES.get(mode,AGENT)
-    assert (h01["status"],entry["status"],entry["agent"])==(status,status,"".join(observed.split())), h01
+    assert (h01["status"],entry["status"],entry["agent"])==(contract_status,status,"".join(observed.split())), h01
     if mode in HOLD_KIND:
         hold, = report["graph"]["delegation_coverage"]["agent_holds"]
         assert (hold["kind"],entry["agent_kind"],hold["value"])==(HOLD_KIND[mode],HOLD_KIND[mode],observed)
@@ -105,12 +112,14 @@ def verify_case(report, mode):
             if limit["status"]=="risk":
                 assert limit["comparison_ref"] in h01["evidence"]
     assert set(entry["evidence"])<=set(h01["evidence"])
-    assert next(f for f in report["findings"] if f["rule"]=="H02")["status"]=="ok"
+    delivery_status = "missing" if report["policy"].get("acceptance_pdf") else "ok"
+    assert next(f for f in report["findings"] if f["rule"]=="H02")["status"]==delivery_status
     assert next(f for f in report["findings"] if f["rule"]=="H03")["status"]=="ok"
     phases = [f for f in report["findings"] if f["rule"]=="H04"]
     assert [f["stage"]["share"] for f in phases]==["30","60","10"]
-    assert all(f["status"]==("ok" if positive else "missing") and set(entry["units"])<=set(f["scope"]) for f in phases)
-    assert report["result"]["verdict"]==("pass" if positive else "review"), report["findings"]
+    cleared = positive and contract_status == delivery_status == "ok"
+    assert all(f["status"]==("ok" if cleared else "missing") and set(entry["units"])<=set(f["scope"]) for f in phases)
+    assert report["result"]["verdict"]==("pass" if cleared else "review"), report["findings"]
     page, = report["graph"]["delegation_coverage"]["pages"]
     assert page["native"] and page["unit"] in entry["units"]
     assert [l["quote"] for l in page["uncovered"]]==(["备注：签约前须另经采购总监书面批准"] if mode=="restriction" else [])

@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## 委托书签发凭证
+
+当 `policy.mandate_pdf` 为 `pdf-mandate-execution-v1` 时，`graph.mandate_pdf_sources.records[]` 逐份记录委托单元 `unit`、物理文件 `doc`、原件摘要 `original_sha256`、相关物理页 `pages`、委托人签章栏观察 `fields` 和嵌入式签名 `signatures`。状态 `typeset` 指仅见排印内容，`visual` 需看图核实，`current` 和 `earlier` 分别指所签的提交版和较早修订，`mismatch` 指签名校验不符，`review` 指未能完整核验。签名记录中的 `certificate_sha256` 用于辨认同一证书。
+
+H01 的 `delegations[].mandate_execution` 列出本侧委托的签发凭证 ID。`mandate_pdf_source` 从委托单元指向凭证，证据依次包含文件、物理页和该单元的签章字段。`supports_result` 可追到相应发现。履约及实付引用同一凭证时，可由本版 H04 或 H05 找回相同原件。旧版肯定判断依赖该 PDF 时，批准签收会返回 HTTP 409 并要求重审。[方法和法律来源](audit-method.md#谁签发了书面委托)
+
 ## 定位固定版付款条件
 
 `/workpaper/{case_id}?rev={rev}&view=payment-checks&stage=H04-7` 打开该版 H04-7。企业入口使用 `/w/{workspace_id}/workpaper/{case_id}`。省略 `stage` 时按原有顺序打开付款检查。版本号、视图或期款编号格式不符时返回 HTTP 400。格式有效且本版未收录的编号由界面提示，可在本版检查中重新选择。[合成底稿示例](http://127.0.0.1:8000/workpaper/00eef8bd06734c78bf73f10d85dd24a1?rev=4&view=payment-checks&stage=H04-7)
