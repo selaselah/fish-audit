@@ -269,3 +269,19 @@ class ContractChangeTests(unittest.TestCase):
             refresh_addendum_layout(store,"test",docs,[page])
             store.add_layers.assert_called_once_with("test","d01",[fresh])
             self.assertTrue(page["layer"]["clause_text_only"])
+
+    def test_legacy_mandate_layout_survives_a_missing_title_observation(self):
+        store = Mock(files=Path("/synthetic"))
+        docs = [{"id": "d01", "ext": ".pdf"}]
+        line = {"2": [[.1, .2, .45, .28]]}
+        page = {"doc": "d01", "text": "合成演练\n授权委托书", "number": 1, "sha256": "issued",
+                "layer": {"type": "text", "lines": line}, "extraction": {"output": {"facts": []}}}
+        fresh = {**page, "layer": {**page["layer"], "clause_text_only": True}}
+        with patch("jobs.prepare") as render:
+            render.return_value = [{**fresh, "layer": {**fresh["layer"], "lines": {}}}]
+            refresh_addendum_layout(store, "test", docs, [page])
+            store.add_layers.assert_not_called()
+            render.return_value = [fresh]
+            refresh_addendum_layout(store, "test", docs, [page])
+            store.add_layers.assert_called_once_with("test", "d01", [fresh])
+            self.assertTrue(page["layer"]["clause_text_only"])

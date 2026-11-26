@@ -13,7 +13,7 @@ from documents import digest, prepare
 import contract_folios
 import signer_clock
 import payment_execution
-from graph import attach_prior_invoices, build_graph, heading_candidates, invoice_number_edges, link_procedures
+from graph import PRINTED_TITLES, attach_prior_invoices, build_graph, compact, heading_candidates, invoice_number_edges, link_procedures
 from payment_releases import submission_day
 from model import AUDIT, EXTRACT, VISUAL_CHECK, attach_check, audit_graph, extract_page
 from policy import link_sources
@@ -26,13 +26,30 @@ METHODS = {name: (SERVER / name).read_bytes() for name in
 CODE_DIGESTS = {name: digest(source) for name, source in METHODS.items()}
 
 
+LAYOUT_TITLES = {"contract", "contract_addendum", "power_of_attorney", "acceptance", "reinspection", "warranty"}
+
+
+def needs_performance_layout(page):
+    text = normalized(page["text"])
+    if CHANGE_MENTION.search(text) or BATCH_HINT.search(text):
+        return True
+    if any(PRINTED_TITLES.get(compact(line)) in LAYOUT_TITLES or mentions_acceptance_clause(line)
+           for line in page["text"].splitlines()):
+        return True
+    for fact in page["extraction"]["output"]["facts"]:
+        if fact["field"] in LAYOUT_TITLES or fact["field"] in ADDENDUM_FIELDS or fact["field"] == ACCEPTANCE_CLAUSE:
+            return True
+        quote = normalized(fact["quote"])
+        if BATCH_HINT.search(quote) or CHANGE_MENTION.search(quote) or mentions_acceptance_clause(fact["quote"]):
+            return True
+    return False
+
+
 def refresh_addendum_layout(store, case_id, docs, pages):
     legacy = {p["doc"] for p in pages if (p.get("layer") or {}).get("type")=="text" and "clause_text_only" not in p["layer"]}
     if not legacy:
         return
-    if not any(any(f["field"] in ("contract","warranty") for f in p["extraction"]["output"]["facts"]) or CHANGE_MENTION.search(normalized(p["text"])) or BATCH_HINT.search(normalized(p["text"])) or any(mentions_acceptance_clause(line) for line in p["text"].splitlines()) or
-               any(f["field"] in ADDENDUM_FIELDS or f["field"] in ("contract_addendum",ACCEPTANCE_CLAUSE) or BATCH_HINT.search(normalized(f["quote"])) or mentions_acceptance_clause(f["quote"]) or CHANGE_MENTION.search(normalized(f["quote"]))
-                   for f in p["extraction"]["output"]["facts"]) for p in pages):
+    if not any(needs_performance_layout(page) for page in pages):
         return
     for doc in docs:
         if doc["id"] not in legacy:
