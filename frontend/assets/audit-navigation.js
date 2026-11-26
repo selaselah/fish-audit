@@ -24,6 +24,9 @@
         const panel=$('#file-progress'); panel.open=true; jump(panel.querySelector('summary'));
       }, '', '解析 页数 进度');
       if (paper) {
+        if (SupplierPages.current(paper.report)) add('底稿视图','核对供货主体','layers',()=>{
+          state.tab='report'; renderCase(true); jump($('#supplier-pages'));
+        },'R'+paper.rev,'合同 供应方 验收 原行 批注 签署原因');
         const signature=paper.report.findings.find(f=>f.rule==='H01')?.effect_review;
         if (signature?.pdf_execution || signature?.word_signatures) add('底稿视图','核对签署凭证','shield-check',()=>{
           state.tab='report'; renderCase(true); jump($(signature.pdf_execution?'#pdf-signatures':'#word-signatures'));

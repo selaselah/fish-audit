@@ -48,10 +48,12 @@ if (!restoreWorkspaceLink()) {
   const scenes = document.querySelector('.scene-tabs');
   const sceneTabs = [...scenes.querySelectorAll('[role="tab"]')];
   const contractExample=document.getElementById('signing-example');
+  const inspectionExample=document.getElementById('inspection-example');
   const examples={company:{scene:'signing',revision:9},word:{scene:'word-signing',revision:6},calendar:{scene:'contract-dates',revision:6},pdf:{scene:'pdf-signing'}};
   function sceneAddress(name) {
     const url=new URL(location.href);
-    url.searchParams.set('scene',name==='signing' ? examples[contractExample.value].scene : name);
+    const scene=name==='inspection' && inspectionExample.value==='supplier'?'suppliers':name;
+    url.searchParams.set('scene',name==='signing' ? examples[contractExample.value].scene : scene);
     if (url.searchParams.get('scene')==='pdf-signing') url.searchParams.set('pdf',PublicPdfSigning.selected());
     else url.searchParams.delete('pdf');
     url.hash='workflow';
@@ -76,8 +78,16 @@ if (!restoreWorkspaceLink()) {
   selectContractExample();
   document.getElementById('signing-example-choice').hidden=false;
   const inspectionScene=document.getElementById('scene-inspection');
+  if (requested==='suppliers') {
+    inspectionExample.value='supplier'; selectScene(document.getElementById('scene-tab-inspection'));
+  }
   let loadingInspection=false;
   async function showInspection() {
+    const supplier=inspectionExample.value==='supplier';
+    document.getElementById('inspection-equipment').hidden=supplier;
+    document.getElementById('inspection-supplier').hidden=!supplier;
+    document.getElementById('inspection-version').textContent=supplier?'合成案例 · R5':'合成案例 · R11';
+    if (supplier && !inspectionScene.hidden) {PublicSuppliers.open();return;}
     if (inspectionScene.hidden || loadingInspection) return;
     loadingInspection=true;
     const target=document.getElementById('inspection-demo');
@@ -100,13 +110,14 @@ if (!restoreWorkspaceLink()) {
         }
         return anchor;
       },{expanded:true,publicSample:true}));
-      observer.disconnect();
     } catch {
       loadingInspection=false;
     }
   }
   const observer=new MutationObserver(showInspection);
   observer.observe(inspectionScene,{attributes:true,attributeFilter:['hidden']});
+  inspectionExample.addEventListener('change',()=>{ showInspection(); sceneAddress('inspection'); });
+  document.getElementById('inspection-example-choice').hidden=false;
   showInspection();
   scenes.hidden = false;
   const readingSwitch = document.querySelector('.reading-switch');

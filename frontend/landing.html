@@ -24,6 +24,9 @@
   <link rel="stylesheet" href="/assets/pdf-signatures.css">
   <script src="/assets/pdf-signature-card.js" defer></script>
   <script src="/assets/public-pdf-signing.js" defer></script>
+  <link rel="stylesheet" href="/assets/supplier-pages.css">
+  <script src="/assets/supplier-card.js" defer></script>
+  <script src="/assets/public-suppliers.js" defer></script>
   <script src="/landing.js" defer></script>
   <script src="/assets/sample-review.js" defer></script>
 </head>
@@ -124,7 +127,7 @@
           <div class="scene-tabs" role="tablist" aria-label="选择核图案例" hidden>
             <button type="button" id="scene-tab-acceptance" role="tab" aria-selected="true" aria-controls="scene-acceptance">验收读数</button>
             <button type="button" id="scene-tab-signing" role="tab" aria-selected="false" aria-controls="scene-signing" tabindex="-1">合同生效</button>
-            <button type="button" id="scene-tab-inspection" role="tab" aria-selected="false" aria-controls="scene-inspection" tabindex="-1">设备抽检</button>
+            <button type="button" id="scene-tab-inspection" role="tab" aria-selected="false" aria-controls="scene-inspection" tabindex="-1">采购验收</button>
             <button type="button" id="scene-tab-folios" role="tab" aria-selected="false" aria-controls="scene-folios" tabindex="-1">付款续页</button>
           </div>
           <div id="scene-acceptance" role="tabpanel" aria-labelledby="scene-tab-acceptance">
@@ -183,9 +186,13 @@
             </div>
           </div>
           <div id="scene-inspection" class="inspection-sample" role="tabpanel" aria-labelledby="scene-tab-inspection" hidden>
-            <div class="signing-sample-header"><span><i class="ui-glyph ic-clipboard-check" aria-hidden="true"></i> 采购验收</span><small>合成案例 · R11</small></div>
-            <h3>冷藏柜采购 · 第二期验收款</h3>
-            <div id="inspection-demo"><a href="/showcase/inspection-acceptance.pdf" target="_blank" rel="noopener">查看演练验收单</a></div>
+            <div class="signing-sample-header"><span><i class="ui-glyph ic-clipboard-check" aria-hidden="true"></i> 采购验收</span>
+              <label id="inspection-example-choice" hidden><span class="sr-only">选择采购验收案例</span>
+                <select id="inspection-example"><option value="equipment">设备抽检</option><option value="supplier">供货主体</option></select></label>
+              <small id="inspection-version">合成案例 · R11</small></div>
+            <div id="inspection-equipment"><h3>冷藏柜采购 · 第二期验收款</h3>
+              <div id="inspection-demo"><a href="/showcase/inspection-acceptance.pdf" target="_blank" rel="noopener">查看演练验收单</a></div></div>
+            <div id="inspection-supplier" hidden><a href="/showcase/supplier-contract.pdf" target="_blank" rel="noopener">查看含签署原因的演练合同</a></div>
           </div>
           <div id="scene-folios" class="signing-sample public-folios" role="tabpanel" aria-labelledby="scene-tab-folios" hidden>
             <div class="signing-sample-header"><span><i class="ui-glyph ic-journal-text" aria-hidden="true"></i> 采购合同</span><small>合成案例 · R10</small></div>

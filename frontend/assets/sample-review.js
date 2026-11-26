@@ -103,9 +103,9 @@
     row.focus({preventScroll:true});
   }
   document.addEventListener('inspect-sample-line',event=>{
-    const {doc,ref,opener}=event.detail;
+    const {doc,ref,opener,scale}=event.detail;
     if (!doc.lines.some(l=>l.ref===ref) || doc.lines.length!==rows.length) return;
-    event.preventDefault(); present(doc,ref,opener);
+    event.preventDefault(); present(doc,ref,opener,scale==='page'?'page':'line');
   });
   for (const link of document.querySelectorAll('.open-sample-review')) {
     link.setAttribute('aria-haspopup','dialog'); link.setAttribute('aria-controls',dialog.id);

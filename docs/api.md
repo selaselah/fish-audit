@@ -1,5 +1,17 @@
 # 本机审计接口
 
+## PDF 供应方原页
+
+在存在合同和验收单的审查范围内，`graph.supplier_page_sources.pages` 逐页记载需进一步核对的 PDF。每条记录绑定物理原件、页码、审查单元、原件与页图 SHA-256，以及实际存在的 PDF 签署检查。图谱从原页以 `supplier_page_source` 边指向 `supplier_page_inspection` 节点。H02 的 `acceptance_reservations.supplier` 同时公开原行、已定位名称、`page_inspections` 及可支持合同排印内容的 `matching_print`。
+
+| 原页状态 | 可复核内容 |
+| --- | --- |
+| `same_print` | 签名前首版的字节终点与摘要、两版的页图和文字摘要、行框一致性、供应方原行及坐标。用于 H02 还须核实原行字段与引用范围。 |
+| `annotations` | 已检查项目的序号、PDF 类型、可读取批注及签署原因。最多收录前 64 项，每项文字最多 512 字符，截短标记与总项数一并保留。完整内容见原始 PDF。 |
+| `review` | 资料或版式尚不足以复算两版，支持的程序维持人工复核。 |
+
+规则 `2026.11.26.15` 使用 `pdf-supplier-pages-v1`，自 `2026.11.26.16` 起，`policy.supplier_page_inspection` 与图谱标记均为 `pdf-supplier-pages-v2`。该版区分签名控件、签署原因、其余待核签名属性和普通批注。其中 `signing_reason` 留存 PDF 中的原文。审计员或复核人确认通过时，系统都会重新读取原件。旧版相符的验收若引用了另有签名属性的原页，须重审后签收。网页入口为 `/workpaper/<case_id>?rev=<rev>&view=suppliers`。[检查程序](../server/supplier_pages.py) · [固定案例](acceptance.md#验收供货主体批注和签署原因)
+
 ## PDF 合同签署凭证
 
 从规则 `2026.11.26.14` 起，`policy.pdf_execution` 为 `pdf-execution-v1`。图谱按已识别的合同资料匹配物理 PDF 原件。每份原件在 `graph.pdf_execution_sources.documents` 中记录原件摘要、字节数、所属审查单元和已填写的签名记录。支持范围内的记录带有 PDF 修订序号、已签范围终点、摘要算法、签名覆盖范围和证书指纹。归档校验会重新读取原件并复算这些字段。

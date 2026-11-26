@@ -658,6 +658,7 @@ button.icon-button:hover,button.icon-button:focus-visible { color:var(--accent);
 .human-required { margin-left:auto; font-size:.85rem; color:var(--secondary); }
 .priority-findings { margin-top:12px; padding-top:6px; }
 .paper-side .primary { margin-top:9px; }
+.paper-side h3 { font-size:.95rem; }
 .performance-overview { margin:10px 0 0; }
 .performance-statuses { display:flex; gap:6px; flex-wrap:wrap; }
 .performance-statuses .performance-jump { min-height:44px; padding:3px 8px; border:1px solid var(--line); border-radius:5px; }
@@ -962,6 +963,8 @@ button.icon-button:hover,button.icon-button:focus-visible { color:var(--accent);
 .proof-check > i { font-size:1.03rem; color:var(--confirmed); }
 .proof-check strong { font-size:.85rem; }
 .proof-check .tag { grid-column:2; justify-self:start; }
+.proof-check:only-child { display:flex; align-items:center; min-height:44px; gap:8px; }
+.proof-check:only-child .tag { margin-left:auto; }
 .proof-check:is([data-state=missing],[data-state=risk]) { border-color:#ddbd8b; }
 .proof-check:is([data-state=missing],[data-state=risk]) > i { color:var(--attention); }
 .proof-rail { display:flex; max-width:100%; align-items:stretch; overflow:auto; padding:4px 2px 2px; margin-top:5px; }

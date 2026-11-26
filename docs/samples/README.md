@@ -1,5 +1,9 @@
 # 合成财会审计演练
 
+## 供货主体与 PDF 签署意见
+
+运行 `server/.venv/bin/python docs/samples/supplier_annotations.py --seed supplier-demo` 可生成三套带水印的合同、验收单和付款回单。分别模拟签后附注要求取得送货单、终验供货方与合同不同、签署人仅确认到货数量。`--case reason` 可单独生成第三案。加 `--run` 后会上传本机服务，在核实每份文件的摘要和水印后模拟字段核验，并检查 H01、H02 和各期付款结论。[本机演练结果](../acceptance.md#验收供货主体批注和签署原因)
+
 ## 排印稿、电子签署版与签后修订版
 
 运行 `server/.venv/bin/python docs/samples/pdf_signing.py --seed pdf-demo`，生成目录会打印到终端。加 `--run` 将这三套水印资料提交到本机审计服务，并在核对原件与页图摘要后模拟审计人员核验。每次生成都会创建新的虚构自签证书，签名文件的摘要随之变化。[固定底稿及实测结果](../acceptance.md#pdf-签名覆盖与付款条件)

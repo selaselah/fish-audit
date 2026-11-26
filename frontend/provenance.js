@@ -76,10 +76,12 @@ function performanceOverview(findings, graph) {
   const folios=ContractFolios.panel(plan,graph,state.bundle?.report.calls.pages,state.bundle?.report.findings.find(f=>f.rule==='E01'));
   const parties=SigningParties.panel(effect,graph,phases);
   const acceptance=findings.find(f=>f.rule==='H02');
+  const supplier=acceptance && SupplierPages.panel(state.bundle.report);
   const inspection=InspectionCoverage.panel(acceptance,graph);
   const dates=ContractCalendar.panel(effect,graph,findings,state.bundle?.report.calls.pages);
   const dateQuestion=effect?.effect_review?.calendar?.some(day=>!['exact','spacing'].includes(day.state));
   const sections=[
+    {key:'suppliers',label:'供货主体',icon:'layers',content:supplier,priority:supplier && supplier.dataset.state!=='ok'},
     {key:'signatures',label:'签署凭证',icon:'journal-text',content:signatures,priority:!dateQuestion && Boolean(signatures)},
     {key:'contract-dates',label:'合同日期',icon:'clock-history',content:dates,priority:dateQuestion},
     {key:'contract-pages',label:'分期条款',icon:'layers',content:folios,priority:plan?.status!=='ok'},

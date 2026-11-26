@@ -632,6 +632,10 @@ function citation(ref) {
     return Team.paperLink(label,prior.case_id,'button ref',new URLSearchParams({rev:String(prior.rev),fact:prior.fact}));
   }
   const source = index?.nodes.get(ref);
+  if (source?.type==='supplier_page_inspection') {
+    const page=SupplierPages.current(state.bundle.report)?.pages.find(p=>p.id===ref);
+    return page ? evidenceJump(page.filename+' · 第 '+page.page+' 页供货主体','supplier-pages') : el('span','供货主体证据关系待核','small');
+  }
   if (source?.type==='pdf_signature_inspection') {
     const original=index.documents.get(source.doc);
     if (original?.ext!=='.pdf' || original.sha256!==source.sha256) return el('span','PDF 签署来源待核','small');
@@ -866,7 +870,14 @@ function finding(item) {
   }
   if (item.acceptance_reservations?.lines.length || item.acceptance_reservations?.mixed_pages.length)
     node.append(reservationPanel(item,state.bundle.report.graph));
-  if (item.acceptance_reservations?.supplier) node.append(supplierPanel(item.acceptance_reservations.supplier,state.bundle.report.graph));
+  const supplier=item.acceptance_reservations?.supplier;
+  if (supplier) {
+    const report=state.bundle.report;
+    if (supplier.page_inspections?.length && report.findings.find(f=>f.rule==='H02')?.id===item.id) {
+      node.append(SupplierPages.current(report) ? evidenceJump('对照供货主体与原页记录','supplier-pages') :
+        el('span','供货主体证据关系待核','small'));
+    } else node.append(supplierPanel(supplier,report.graph));
+  }
   if (item.equipment_models) node.append(equipmentModelsPanel(item.equipment_models,state.bundle.report.graph));
   const exchangeEvidence=paymentExchangeEvidence(item,state.bundle.report);
   if (exchangeEvidence) node.append(exchangeEvidence);
@@ -1440,6 +1451,8 @@ async function refresh() {
       } else if (route.params.get('view')==='signatures' && state.openedCitation!==location.hash &&
                  bundle?.report.findings.some(f=>f.rule==='H01' && f.effect_review?.pdf_execution)) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#pdf-signatures';
+      } else if (route.params.get('view')==='suppliers' && state.openedCitation!==location.hash && SupplierPages.current(bundle?.report)) {
+        state.openedCitation=location.hash; state.tab='report'; focusFinding='#supplier-pages';
       } else if (route.params.get('view')==='calendar' && state.openedCitation!==location.hash &&
                  bundle?.report.findings.some(f=>f.rule==='H01' && f.effect_review?.calendar?.length)) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#contract-calendar';
@@ -1455,7 +1468,7 @@ async function refresh() {
           target.open=true;
           $('#trail-tab-final')?.click();
           revealPaperTarget($('#reinspection-wait'));
-        } else if (target?.dataset.finding || ['equipment-reinspection-trail','case-entity-browser','contract-pages','word-signatures','pdf-signatures','contract-calendar'].includes(target?.id)) revealPaperTarget(target);
+        } else if (target?.dataset.finding || ['equipment-reinspection-trail','case-entity-browser','contract-pages','word-signatures','pdf-signatures','contract-calendar','supplier-pages'].includes(target?.id)) revealPaperTarget(target);
         else target?.focus();
       }
       const target = route.params.get('fact');

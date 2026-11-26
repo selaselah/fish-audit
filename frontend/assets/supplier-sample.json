@@ -1,0 +1,126 @@
+{
+  "case_id": "3471aa3a67544af3835aa45f7a0cc321",
+  "revision": 5,
+  "report_sha256": "a9a6623df3ffd107117f3fad4b1152e9cc70309e0b1fa236b54a9723e675ff1a",
+  "status": "missing",
+  "units": [
+    {
+      "role": "contract",
+      "label": "合同供应方",
+      "name": "云桥演练设备中心",
+      "filename": "采购合同.pdf",
+      "source": {
+        "title": "采购合同",
+        "version": "合成采购 · R5",
+        "page": 1,
+        "pdf": "/showcase/supplier-contract.pdf",
+        "image": "/assets/showcase-supplier-contract.jpg",
+        "source_sha256": "c652788a49ec743b926b3349c8c97caf3d21b3a283488aeadbec8c9903271dcd",
+        "page_sha256": "9a533f779e503f9f10a58f5fe89d4306d00ad883b6fd679752bbcdb572796f57",
+        "lines": [
+          {
+            "ref": "d01/p1/f2",
+            "line": 3,
+            "rect": "0.08145,0.2137,0.40724,0.23059",
+            "label": "合同编号",
+            "value": "YL-LY-57C4A51A"
+          },
+          {
+            "ref": "d01/p1/f3",
+            "line": 4,
+            "rect": "0.08209,0.25479,0.38203,0.27078",
+            "label": "采购方",
+            "value": "青禾演练采购中心"
+          },
+          {
+            "ref": "d01/p1/f4",
+            "line": 5,
+            "rect": "0.08145,0.29498,0.38203,0.31142",
+            "label": "供应方",
+            "value": "云桥演练设备中心"
+          }
+        ]
+      },
+      "rows": [
+        {
+          "page": 1,
+          "line": 5,
+          "ref": "d01/p1/f4",
+          "quote": "供应方：云桥演练设备中心",
+          "crop": "/assets/showcase-supplier-contract-line.webp"
+        }
+      ]
+    },
+    {
+      "role": "receipt",
+      "label": "验收供应方",
+      "name": "云桥演练设备中心",
+      "filename": "验收报告.pdf",
+      "source": {
+        "title": "验收报告",
+        "version": "合成采购 · R5",
+        "page": 1,
+        "pdf": "/showcase/supplier-acceptance.pdf",
+        "image": "/assets/showcase-supplier-acceptance.jpg",
+        "source_sha256": "a35f845dc1f0011e42839294eee32367bb632f948e11ae69a9a49101a5a7652e",
+        "page_sha256": "6a8924a99c51b05164c78285126e4397f827259a95679baed831c196f26b50a3",
+        "lines": [
+          {
+            "ref": "d02/p1/f2",
+            "line": 3,
+            "rect": "0.08145,0.2137,0.40724,0.23059",
+            "label": "合同编号",
+            "value": "YL-LY-57C4A51A"
+          },
+          {
+            "ref": "d02/p1/f3",
+            "line": 4,
+            "rect": "0.08209,0.25479,0.38203,0.27078",
+            "label": "采购方",
+            "value": "青禾演练采购中心"
+          },
+          {
+            "ref": "d02/p1/f4",
+            "line": 5,
+            "rect": "0.08145,0.29498,0.38203,0.31142",
+            "label": "供应方",
+            "value": "云桥演练设备中心"
+          }
+        ]
+      },
+      "rows": [
+        {
+          "page": 1,
+          "line": 5,
+          "ref": "d02/p1/f4",
+          "quote": "供应方：云桥演练设备中心",
+          "crop": "/assets/showcase-supplier-acceptance-line.webp"
+        }
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "id": "supplier-page/d01/p1",
+      "page": 1,
+      "state": "annotations",
+      "count": 1,
+      "annotations": [
+        {
+          "field": "SyntheticApproval",
+          "kind": "signature_reason",
+          "note": "",
+          "number": 1,
+          "reason_shortened": false,
+          "shortened": false,
+          "signing_reason": "仅确认到货数量，实际供货单位及终验质量仍待核对。",
+          "subtype": "/Widget"
+        }
+      ],
+      "original_sha256": "c652788a49ec743b926b3349c8c97caf3d21b3a283488aeadbec8c9903271dcd",
+      "page_sha256": "9a533f779e503f9f10a58f5fe89d4306d00ad883b6fd679752bbcdb572796f57",
+      "filename": "采购合同.pdf",
+      "original": "/showcase/supplier-contract.pdf"
+    }
+  ]
+}
