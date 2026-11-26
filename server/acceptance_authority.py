@@ -11,6 +11,7 @@ from delegation import agent_kind, complete_id, covered_rows
 from performance_versions import SIGNATORY_FORMATS
 from reinspection import LINK_KEYS, linked
 import signer_timing
+import signer_clock
 
 
 LEGACY_FORMAT = "named-acceptance-signatures-v1"
@@ -110,12 +111,13 @@ def page_evidence(graph, read_text, version=FORMAT):
     kinds = graph["documents_by_kind"]
     contracts = set(kinds.get("contract",[]))
     receipts = set(kinds.get("acceptance",[])) | set(kinds.get("reinspection",[]))
+    banks = set(kinds.get("bank_receipt", []))
     releases = set(kinds.get("warranty",[])) if "warranty_sources" in graph else set()
     # A narrowly identified confirmation of bank credit belongs to the payment condition.
     prior = graph.get("prior_installment_sources", {})
     credit_rows = {(s["doc"], s["page"], s["line"], s["quote"]) for s in prior.get("lines", ())
                    if prior.get("format")=="prior-installment-bank-evidence-v2" and s.get("credit_only")}
-    rules, signatures, dates = [], [], []
+    rules, signatures, dates, clocks = [], [], [], []
     for ref,page in pages.items():
         doc, suffix = ref.rsplit("/p",1)
         number = int(suffix)
@@ -129,7 +131,12 @@ def page_evidence(graph, read_text, version=FORMAT):
         seen = set()
         def record(raw, line, facts, native):
             label,body = parts(raw)
-            if version in signer_timing.FORMATS and unit in receipts:
+            clock = None
+            if version == signer_clock.FORMAT and (unit in receipts or unit in banks):
+                clock = signer_clock.source(unit, doc, number, line, raw, facts, bank=unit in banks)
+                if clock:
+                    clocks.append(clock)
+            if version in signer_timing.FORMATS and unit in receipts and not clock:
                 dated = signer_timing.dated_line(unit, doc, number, line, raw, facts)
                 if dated:
                     dates.append(dated)
@@ -175,6 +182,8 @@ def page_evidence(graph, read_text, version=FORMAT):
         joint = any((instruction(s["quote"]) or (None,))[0] == "joint" for s in rules)
         timing = {"dates": dates if rules or ambiguous else [],
                   "bank_pages": signer_timing.bank_pages(graph, read_text, pages) if joint else []}
+        if version == signer_clock.FORMAT:
+            timing["clock_rows"] = clocks if joint else []
     if not rules and not ambiguous:
         return {"format":version,"clauses":[],"signatures":[],"pages":[],"visual_notes":[],**timing}
     units = set(kinds.get("contract",[])) | receipts | {r["unit"] for r in rules}
@@ -204,7 +213,7 @@ def attach(graph, read_text):
     source = page_evidence(graph,read_text)
     graph["acceptance_authority_sources"] = source
     graph["gaps"].extend(coverage_gaps(source))
-    nodes, edges = signer_timing.source_graph(source["dates"])
+    nodes, edges = signer_timing.source_graph(source["dates"], source.get("clock_rows", []))
     graph["nodes"].extend(nodes)
     graph["edges"].extend(edges)
 
@@ -302,18 +311,27 @@ def witness_edges(findings):
     return result
 
 
-def verify_sources(report,read_text,*,signing=False):
+def verify_sources(report,read_text,*,signing=False,read_layout=None):
     policy,graph=report["policy"],report["graph"]
     marker=policy.get("acceptance_authority")
-    dated_nodes = [n for n in graph["nodes"] if n["type"] == "acceptance_signer_date"]
-    dated_edges = [e for e in graph["edges"] if e["type"] == "signer_date_source"]
-    if (marker != FORMAT and policy.get("version","") >= signer_timing.PRINTED_ROWS_SINCE or
-            marker not in (signer_timing.HEADER_INDEPENDENT_FORMAT, FORMAT) and policy.get("version","") >= signer_timing.INDEPENDENT_SINCE):
+    dated_nodes = [n for n in graph["nodes"] if n["type"] in ("acceptance_signer_date", "acceptance_clock_line")]
+    dated_edges = [e for e in graph["edges"] if e["type"] in ("signer_date_source", "acceptance_clock_source")]
+    def at_least(version):
+        current = policy.get("version") or "0"
+        return tuple(map(int, current.split("."))) >= tuple(map(int, version.split(".")))
+    code = policy.get("code_sha256")
+    if (marker != FORMAT and (at_least(signer_clock.SINCE) or "signer_clock.py" in (code or {})) or
+            marker == FORMAT and code is not None and "signer_clock.py" not in code):
+        raise ValueError("底稿缺少具名签认与实际扣款时刻的核对程序")
+    if (marker not in (signer_timing.PRINTED_ROWS_FORMAT, FORMAT) and at_least(signer_timing.PRINTED_ROWS_SINCE) or
+            marker not in signer_timing.FORMATS[1:] and at_least(signer_timing.INDEPENDENT_SINCE)):
         raise ValueError("底稿缺少逐人核对签认日期的程序")
-    if marker not in signer_timing.FORMATS and (policy.get("version","") >= signer_timing.SINCE or
+    if marker not in signer_timing.FORMATS and (at_least(signer_timing.SINCE) or
             "signer_timing.py" in policy.get("code_sha256",{}) or dated_nodes or dated_edges or
             any("signer_timing" in f for f in report["findings"])):
         raise ValueError("底稿缺少共同签认时序程序或混入其他版本的原行")
+    if "calls" in report:
+        signer_clock.verify_geometry(report, read_layout)
     if not marker:
         if "acceptance_authority.py" in policy.get("code_sha256",{}) or "acceptance_authority_sources" in graph or policy.get("performance_checks") in PERFORMANCE_FORMATS:
             raise ValueError("缺少底稿所据的具名验收签认程序")
@@ -331,7 +349,7 @@ def verify_sources(report,read_text,*,signing=False):
     actual=sorted((e["from"],e["to"],e["type"],tuple(e["evidence"])) for e in graph["edges"] if e["type"] in (CLAUSE,SIGNER))
     if expected!=actual or witness_edges(report["findings"])!=[e for e in graph["edges"] if e["type"]=="named_acceptance_signature"]:
         raise ValueError("验收签字的原件归属、具名约定或逐人证据关系不符")
-    if (dated_nodes, dated_edges) != signer_timing.source_graph(source.get("dates", [])):
+    if (dated_nodes, dated_edges) != signer_timing.source_graph(source.get("dates", []), source.get("clock_rows", [])):
         raise ValueError("共同签认日期的原行或归属关系不符")
     if signing and marker != FORMAT and source["clauses"] and any(f["rule"] == "H05" for f in report["findings"]):
         from performance import compute
@@ -342,5 +360,6 @@ def verify_sources(report,read_text,*,signing=False):
                 continue
             old = [f for f in report["findings"] if f["rule"] == "H05" and timing["bank"] in f["scope"]]
             newly_early = timing["state"] == "before" and not any(f.get("signer_timing",{}).get("state") == "before" for f in old)
-            if newly_early or (timing["state"] != "after" and any(f["status"] == "ok" for f in old)):
+            early_debit = timing.get("clock", {}).get("state") == "before"
+            if newly_early or early_debit or (timing["state"] != "after" and any(f["status"] == "ok" for f in old)):
                 raise ValueError("旧版付款时点尚未核对共同签认日期，请重新审计后签收。")

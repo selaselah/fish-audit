@@ -483,8 +483,12 @@ def withhold_shares(rows, ledger, unit):
 
 
 def page_lines(ledger):
+    return line_numbers(ledger["lines"])
+
+
+def line_numbers(rows):
     numbers = defaultdict(list)
-    for row in ledger["lines"]:
+    for row in rows:
         if row["line"] is not None:
             numbers[row["doc"], row["page"]].append(str(row["line"]))
     return numbers
@@ -501,14 +505,18 @@ def verify_geometry(report, ledger, read_layout=None):
     for row in ledger["lines"]:
         if proof := row.get("transcription"):
             transcribed[row["doc"], row["page"]][str(row["line"])] = facts[proof["ref"]]["source_line"]["rects"]
-    for call in report["calls"]["pages"]:
+    verify_page_geometry(report["calls"]["pages"], numbers, transcribed, "contract_folio_rects", "合同付款续页", read_layout)
+
+
+def verify_page_geometry(calls, numbers, transcribed, key, subject, read_layout=None):
+    for call in calls:
         address = (call["doc"], call["page"])
-        saved = call.get("contract_folio_rects")
+        saved = call.get(key)
         expected = numbers.pop(address, [])
         if not expected and saved is None:
             continue
         if not expected or not isinstance(saved, dict) or set(saved) != set(expected):
-            raise ValueError("合同付款续页定位的行号与分页记录不符")
+            raise ValueError(subject + "定位的行号与分页记录不符")
         for rects in saved.values():
             if not isinstance(rects, list) or any(
                 not isinstance(rect, list)
@@ -521,13 +529,13 @@ def verify_geometry(report, ledger, read_layout=None):
                 or rect[1] >= rect[3]
                 for rect in rects
             ):
-                raise ValueError("合同付款续页的原行坐标不符")
-        if any(not saved[line] or saved[line] != rects for line, rects in transcribed[address].items()):
-            raise ValueError("付款续页转录对照的行框与原文观察不符")
+                raise ValueError(subject + "的原行坐标不符")
+        if any(not saved[line] or saved[line] != rects for line, rects in transcribed.get(address, {}).items()):
+            raise ValueError(subject + "的行框与原文观察不符")
         if read_layout and geometry(expected, read_layout(*address)) != saved:
-            raise ValueError("合同付款续页定位与原件分页不符")
+            raise ValueError(subject + "定位与原件分页不符")
     if numbers:
-        raise ValueError("合同付款续页缺少分页记录")
+        raise ValueError(subject + "缺少分页记录")
 
 
 def check_older_approval(graph, findings, read_text, calls):

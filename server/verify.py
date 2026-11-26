@@ -480,6 +480,8 @@ def render_addendum_sources(bundle, report, nodes):
             trace = next(t for t in pages if t["page"] == number)
             for line_number, rects in trace.get("contract_folio_rects", {}).items():
                 require(layout["lines"].get(line_number, []) == rects, "合同付款续页的行坐标未能从原件重现")
+            for line_number, rects in trace.get("signer_timing_rects", {}).items():
+                require(layout["lines"].get(line_number, []) == rects, "签认与付款时序的行坐标未能从原件重现")
             for fact in graph["facts"]:
                 line = fact.get("source_line")
                 if fact["doc"]==doc_id and fact["page"]==number and line:

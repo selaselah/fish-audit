@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## 共同签认与实际扣款时刻
+
+规则 `2026.11.26.24` 的 `acceptance_authority` 标记为 `named-acceptance-signatures-v5`。约定两人共同终验、回单能对应到本合同的验收款时，H05 的 `signer_timing` 保存按日比较，`clock` 保存同日可用的时刻证据。其 `days`、`signers`、`debit` 指向逐人日期、逐人时刻与实际扣款栏，`rows` 包含当笔回单上可辨的打印、受理等其他时间。各行属于物理页，持有原文、行号和模型观察引用。页图上的位置存于对应 `calls.pages[].signer_timing_rects`，可从归档原件重新分页校验。
+
+仅在合同、终验人、期次、成功回单与各方归属均能核实，且同日所需时刻使用明确的 UTC+08:00 时比较先后。`before` 提示早付风险，`after` 仅说明扣款晚于具名签认。精度重叠为 `overlap`，缺件、时区待核、相互冲突分别为 `missing`、`zone`、`conflict`，来源或适用范围待核为 `scope`。其他日期按原有日期程序比较。合同效力、验收质量和其余付款条件各自保留审计发现。[水印演练](samples/README.md#同一天签认和扣款)
+
 ## 合同付款条款的 Word 批注
 
 规则 `2026.11.26.18` 在 `policy.contract_word_reviews` 和 `graph.contract_word_reviews.format` 登记 `word-contract-payment-comments-v1`。物理原件、审阅部件、选区和页图的结构沿用 Word 验收审阅格式。合同的 `location.printed` 另存打印层完整原行，允许汉字与随后数字之间因排版出现的单个 ASCII 空格。数字内部的空格、缺字或重复匹配都会使行定位失去依据。

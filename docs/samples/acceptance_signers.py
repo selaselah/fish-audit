@@ -12,8 +12,12 @@ from run import BASE, get, submit
 CASES = {"joint":"合同约定两人共同终验且均签字","missing":"共同验收缺少第二人签字",
          "different":"验收签字人与合同指定人员不同","retest":"整改复验缺少约定共同签字",
          "image":"两人验收签字另有影像代签说明",
-         "before":"验收款早于第二人签认三天","same_day":"验收款与最后签认同日","after":"验收款晚于第二人签认一天"}
+         "before":"验收款早于第二人签认三天","same_day":"验收款与最后签认同日","after":"验收款晚于第二人签认一天",
+         "clock_early":"验收款在最后签认前扣款","clock_late":"验收款在最后签认后扣款",
+         "clock_print":"验收款回单仅列打印时刻"}
 PAID_DAYS = {"before":22, "same_day":25, "after":26}
+CLOCKS = {"clock_early":("实际扣款时间","13:10","before"), "clock_late":("实际扣款时间","16:30","after"),
+          "clock_print":("回单打印时间","16:30","missing")}
 NOTE = "签认附注：林岚一栏为代签，须核对授权"
 
 
@@ -33,10 +37,14 @@ def generate(seed,mode):
         elif mode=="different":
             names=["周宁","何平"]
         records[title]=[(k,v) for k,v in records[title] if k!=label]+[(label,n+"（已签字）") for n in names]
-    if mode in PAID_DAYS:
+    if mode in PAID_DAYS or mode in CLOCKS:
         records["验收报告"].extend([("周宁签认日期","2026年9月20日"), ("林岚签认日期","2026年9月25日")])
         title = next(k for k in records if "回单" in k)
-        records[title] = [(k, f"2026年9月{PAID_DAYS[mode]}日" if k == "付款日期" else v) for k,v in records[title]]
+        records[title] = [(k, f"2026年9月{PAID_DAYS.get(mode,25)}日" if k == "付款日期" else v) for k,v in records[title]]
+        if mode in CLOCKS:
+            label, at, _ = CLOCKS[mode]
+            records["验收报告"].append(("林岚签认时间","2026年9月25日 15:20（北京时间）"))
+            records[title].append((label,f"2026年9月25日 {at}（北京时间）"))
     font=embedded_font("AcceptanceSignersCJK")
     for title,rows in records.items():
         path=folder/(title+".pdf")
@@ -52,6 +60,16 @@ def check(paper,mode):
     h=next(f for f in findings if f["rule"]=="H02")
     a=h["acceptance_authority"]
     payment = next(f for f in findings if f["rule"]=="H05")
+    if mode in CLOCKS:
+        timing = payment.get("signer_timing", {})
+        clock = timing.get("clock", {})
+        assert (timing.get("state"), clock.get("state")) == ("same_day", CLOCKS[mode][2]), payment
+        assert clock["relevant"] == ["林岚"] and len(clock["rows"]) == 2
+        assert set(clock["rows"]) <= set(payment["evidence"])
+        assert bool(clock["debit"]) == (mode != "clock_print")
+        assert payment["status"] == ("risk" if mode == "clock_early" else "missing")
+        assert paper["result"]["verdict"] == "review"
+        return
     if mode in PAID_DAYS:
         timing = payment["signer_timing"]
         assert (timing["state"],timing["days"],timing["latest_on"]) == (mode,PAID_DAYS[mode]-25,"2026-09-25"), timing

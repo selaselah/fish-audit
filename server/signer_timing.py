@@ -6,12 +6,14 @@ from datetime import date
 from unicodedata import normalize
 
 from delegation import covered_rows
+import signer_clock
 
 
 FIRST_FORMAT = "named-acceptance-signatures-v2"
 HEADER_INDEPENDENT_FORMAT = "named-acceptance-signatures-v3"
-FORMAT = "named-acceptance-signatures-v4"
-FORMATS = (FIRST_FORMAT, HEADER_INDEPENDENT_FORMAT, FORMAT)
+PRINTED_ROWS_FORMAT = "named-acceptance-signatures-v4"
+FORMAT = signer_clock.FORMAT
+FORMATS = (FIRST_FORMAT, HEADER_INDEPENDENT_FORMAT, PRINTED_ROWS_FORMAT, FORMAT)
 SINCE = "2026.11.26.21"
 INDEPENDENT_SINCE = "2026.11.26.22"
 PRINTED_ROWS_SINCE = "2026.11.26.23"
@@ -51,13 +53,14 @@ def bank_pages(graph, read_text, pages):
     return coverage
 
 
-def source_graph(rows):
+def source_graph(rows, clocks=()):
     nodes, edges = [], []
-    for row in rows:
+    for row in [*rows, *clocks]:
         page = f"{row['doc']}/p{row['page']}"
-        nodes.append({"id": row["id"], "type": "acceptance_signer_date", "label": row["quote"],
+        node, edge = ("acceptance_clock_line", "acceptance_clock_source") if "kind" in row else ("acceptance_signer_date", "signer_date_source")
+        nodes.append({"id": row["id"], "type": node, "label": row["quote"],
                       "doc": row["doc"], "page": row["page"], "line": row["line"]})
-        edges.append({"from": page, "to": row["id"], "type": "signer_date_source", "evidence": [page, *row["facts"]]})
+        edges.append({"from": page, "to": row["id"], "type": edge, "evidence": [page, *row["facts"]]})
     return nodes, edges
 
 
@@ -78,9 +81,13 @@ def compare(payment, graph, contract, bank, paid, authority, receipts, *, other_
     receipt, record = receipts[0], records[0]
     names = authority["required"]
     rows = [r for r in source["dates"] if r["unit"] == receipt.unit]
+    clocks = [r for r in source.get("clock_rows", []) if version == FORMAT and
+              (r["unit"] == receipt.unit and r["kind"] == "signer" or r["unit"] == bank.unit and r["kind"] in ("debit", "other"))]
+    dates, conflict = signer_clock.calendar(rows, clocks, names, paid) if clocks else (rows, False)
     covered = [p for p in source["pages"] if p["unit"] in (contract.unit, receipt.unit)]
     banks = [p for p in source["bank_pages"] if p["unit"] == bank.unit]
     places = {(r["doc"], r["page"], r["line"], r["quote"]) for r in rows if r["line"]}
+    places.update((r["doc"], r["page"], r["line"], r["quote"]) for r in clocks if signer_clock.legible(r))
     partial = {(g["doc"], g["page"]) for g in graph["gaps"] if g["quality"] in ("partial", "unreadable")}
 
     def clear(unit):
@@ -92,11 +99,13 @@ def compare(payment, graph, contract, bank, paid, authority, receipts, *, other_
                 all((p["doc"], p["page"], x["line"], x["quote"]) in places for x in p["uncovered"]))
 
     signed = record["signed"]
-    if version == FORMAT:
+    if version in (PRINTED_ROWS_FORMAT, FORMAT):
         # Some extracts file an entire dated line under acceptance_signer. Its printed column
         # is still a date. Keep unlocated, disputed, or otherwise ambiguous signatures in scope.
         separate_dates = {(r["doc"], r["page"], r["line"], r["quote"]) for r in rows
                           if r["line"] and r["name"] in names and r["day"] and not r["disputed"]}
+        separate_dates.update((r["doc"], r["page"], r["line"], r["quote"]) for r in clocks
+                              if r["kind"] == "signer" and r["name"] in names and signer_clock.legible(r))
         signed = [s for s in signed if s["name"] or not s["native"] or
                   (s["doc"], s["page"], s["line"], s["quote"]) not in separate_dates]
     checked_names = [s["name"] for s in signed if s["confirmed"]]
@@ -111,15 +120,15 @@ def compare(payment, graph, contract, bank, paid, authority, receipts, *, other_
               and body(receipt, "acceptance_scope") in FINAL_SCOPES and (version != FIRST_FORMAT or bool(record["date"]))
               and term and raw_body(term) == payment["stage"]["clause"] and purpose and purpose["value"] == payment["stage"]["name"] and day)
     complete = (len(signed) == len(names) and Counter(checked_names) == Counter(names)
-                and Counter(r["name"] for r in rows) == Counter(names)
-                and all(r["line"] and r["day"] and not r["disputed"] for r in rows))
+                and not conflict and Counter(r["name"] for r in dates) == Counter(names)
+                and all(r["line"] and r["day"] and not r["disputed"] for r in dates))
     latest, delta = None, None
     if not linked:
         state, detail = "scope", "需核对合同、终验范围、回单用途及原页附注后比对签认日期。"
     elif not complete:
         state, detail = "incomplete", "需核对每位约定验收人的独立签字及签认日期。"
     else:
-        latest = max(r["day"] for r in rows)
+        latest = max(r["day"] for r in dates)
         delta = (paid - date.fromisoformat(latest)).days
         if delta < 0:
             state, detail = "before", f"回单付款日 {paid} 早于最晚一栏签认日期 {latest}，相差 {-delta} 天。"
@@ -129,7 +138,7 @@ def compare(payment, graph, contract, bank, paid, authority, receipts, *, other_
             state, detail = "after", f"回单付款日 {paid} 晚于最晚一栏签认日期 {latest}，相差 {delta} 天。"
     refs = [*authority["clause_evidence"], *record["evidence"], *bank.evidence("paid_on", "payment_designation", "transfer_status"),
             clause, *(f"{p['doc']}/p{p['page']}" for p in [*covered, *banks])]
-    for row in rows:
+    for row in [*rows, *clocks]:
         refs.extend([row["id"], *row["facts"]])
     payment["signer_timing"] = {"format": version, "state": state, "bank": bank.unit, "receipt": receipt.unit,
         "required": names, "rows": [r["id"] for r in rows],
@@ -137,10 +146,18 @@ def compare(payment, graph, contract, bank, paid, authority, receipts, *, other_
         "paid_on": paid.isoformat() if paid_ref else None, "paid_ref": paid_ref,
         "clause_ref": authority["clause_evidence"][0] if len(authority["clause_evidence"]) == 1 else None,
         "stage_ref": clause, "latest_on": latest, "days": delta}
+    clock_state = None
+    if clocks:
+        clock = signer_clock.assess(clocks, dates, names, paid, state, conflict)
+        payment["signer_timing"]["clock"] = clock
+        clock_state = clock["state"]
+        if state != "scope" and clock_state in signer_clock.DETAILS:
+            detail = signer_clock.DETAILS[clock_state]
     payment["evidence"] = list(dict.fromkeys([*payment["evidence"], *refs]))
     payment["scope"] = list(dict.fromkeys([*payment["scope"], receipt.unit]))
-    if (state == "before" and payment["status"] in ("ok", "missing")) or (state != "after" and payment["status"] == "ok"):
-        payment["status"] = "risk" if state == "before" else "missing"
+    early = state == "before" or clock_state == "before"
+    if (early and payment["status"] in ("ok", "missing")) or (state != "after" and payment["status"] == "ok"):
+        payment["status"] = "risk" if early else "missing"
         payment["detail"] = detail
     else:
         payment["detail"] += " " + detail

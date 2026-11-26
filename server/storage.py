@@ -868,13 +868,17 @@ class Store:
                 def page_text(doc,page):
                     row = db.execute("SELECT text FROM pages WHERE case_id=? AND doc=? AND number=?",(case_id,doc,page)).fetchone()
                     return row[0] if row else None
+                def page_layout(doc, page):
+                    saved = db.execute("SELECT layer FROM pages WHERE case_id=? AND doc=? AND number=?",
+                                       (case_id,doc,page)).fetchone()
+                    return json.loads(saved[0] or "{}") if saved else {}
                 verify_quality_numbers(paper,page_text)
                 try:
                     verify_performance(paper,signing=True)
                     verify_quality_references(paper, page_text, signing=True)
                     verify_delegation_sources(paper, page_text, signing=True)
                     verify_addendum_sources(paper, page_text, signing=True)
-                    verify_acceptance_authority(paper,page_text,signing=True)
+                    verify_acceptance_authority(paper,page_text,signing=True,read_layout=page_layout)
                     verify_receipt_packets(paper,page_text,signing=True)
                     verify_stage_payments(paper,page_text,signing=True)
                     verify_equipment_models(paper,page_text,signing=True)
@@ -889,11 +893,7 @@ class Store:
                     verify_payment_releases(paper,page_text,submitted=row["submitted"])
                     verify_repair_completion(paper,page_text,signing=True)
                     verify_reinspection_wait(paper,page_text,signing=True)
-                    def folio_layout(doc, page):
-                        saved = db.execute("SELECT layer FROM pages WHERE case_id=? AND doc=? AND number=?",
-                                           (case_id,doc,page)).fetchone()
-                        return json.loads(saved[0] or "{}") if saved else {}
-                    verify_contract_folios(paper,page_text,signing=True,read_layout=folio_layout)
+                    verify_contract_folios(paper,page_text,signing=True,read_layout=page_layout)
                     verify_invoice_conditions(paper,page_text,signing=True)
                     inspected = [*paper["graph"].get("quality_addenda",{}).get("pages",[]),
                                  *paper["graph"].get("acceptance_authority_sources",{}).get("pages",[]),

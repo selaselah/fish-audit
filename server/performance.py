@@ -13,6 +13,7 @@ import delivery_batches
 import stage_payments
 import payment_acceptance
 import signer_timing
+import signer_clock
 import equipment_models
 import equipment_exchanges
 import contract_effect
@@ -1107,6 +1108,8 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         matching = [(r,s) for r,s in stages if matches_stage(designation,r)]
         if version == FIRST_FORMAT:
             matching = [(r,s) for r,s in stages if designation and designation == s["stage"]["name"]]
+        if version == FORMAT and authority and authority["mode"] == "joint" and len(matching) == 1 and matching[0][0]["kind"] == "acceptance":
+            bank = signer_clock.bank_dates(bank, graph.get("acceptance_authority_sources", {}))
         paid = printed_day(bank,"paid_on") if version in DATE_FORMATS else day(bank.single("paid_on"))
         linked = all(contract.single(left) and contract.single(left) == bank.single(right)
                      for left,right in (("contract_id","contract_id"),("buyer","payer"),("seller","payee")))
