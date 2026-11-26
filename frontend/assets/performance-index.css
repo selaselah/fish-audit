@@ -80,6 +80,23 @@
 .scope-proof-tools button[aria-expanded=true] { border-color:var(--accent-line); background:var(--accent-soft); }
 .scope-proof-tools button[aria-expanded=true]::after { transform:rotate(225deg); margin-bottom:0; }
 .scope-proof-detail { padding:2px 12px 6px; }
+.scope-mandate-proof { margin:0 0 12px; padding:12px 14px; border:1px solid var(--line); border-radius:8px; background:var(--surface); }
+.scope-mandate-heading { display:flex; align-items:center; flex-wrap:wrap; gap:4px 7px; }
+.scope-mandate-heading h4 { margin:0 auto 0 0; font-size:.96rem; }
+.scope-mandate-heading > span:not(.tag) { color:var(--secondary); font-size:.78rem; }
+.scope-mandate-record { margin-top:8px; min-width:0; }
+.scope-mandate-record > strong { display:block; font-size:.91rem; font-weight:580; line-height:1.55; overflow-wrap:anywhere; }
+.scope-mandate-record[data-state=mismatch] > strong { color:var(--issue); }
+.scope-mandate-page { display:flex; align-items:center; justify-content:space-between; gap:6px 12px; min-height:44px; max-width:100%; padding:6px 9px; text-align:start; }
+.scope-mandate-record .scope-mandate-page { width:100%; margin-top:6px; border:1px solid var(--line); background:var(--canvas); }
+.scope-mandate-page > :first-child { min-width:0; color:var(--secondary); font-size:.8rem; overflow-wrap:anywhere; }
+.scope-mandate-open { display:inline-flex; flex:none; align-items:center; gap:5px; color:var(--accent-hover); font-size:.82rem; }
+.scope-mandate-page:is(:hover,:focus-visible) { border-color:var(--accent-line); background:var(--accent-soft); }
+.scope-mandate-record details { margin:0; }
+.scope-mandate-record summary { align-content:center; min-height:44px; width:fit-content; font-size:.82rem; color:var(--accent-hover); cursor:pointer; }
+.scope-mandate-note { margin:9px 0 0; padding-top:8px; border-top:1px solid var(--line); color:var(--secondary); font-size:.84rem; line-height:1.65; overflow-wrap:anywhere; }
+.scope-mandate-note:has(.scope-mandate-scope) { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:center; }
+.scope-mandate-note .scope-mandate-scope { min-height:44px; padding:0 4px; font-size:.82rem; }
 .scope-receipt-links { display:grid; }
 .scope-receipt-phase { display:grid; grid-template-columns:minmax(0,1fr) auto auto auto; gap:8px; align-items:center; min-height:44px; padding:3px 4px; border:0; border-top:1px solid var(--line); border-radius:0; text-align:left; color:var(--ink); background:transparent; font-size:.8rem; }
 .scope-receipt-phase:is(:hover,:focus-visible) { background:var(--accent-soft); }

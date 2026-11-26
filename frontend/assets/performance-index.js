@@ -61,7 +61,7 @@ const PerformanceIndex = (() => {
     }
     return sources;
   }
-  function sourceView(item, graph, receipts=[]) {
+  function sourceView(item, graph, pdfProofs=[]) {
     const rows=originals(item,graph);
     if (!rows.length) return el('p','本版没有可从此项直接打开的字段引文。','scope-empty');
     const pick=el('select'), fileGroups=new Map();
@@ -78,9 +78,9 @@ const PerformanceIndex = (() => {
       H03:['payment_stage','payment_term'], H05:['payment_designation','transfer_status','paid_on'],
     }[item.rule] || [];
     let initial=rows.findIndex(row=>row.fact.id===item.stage?.clause_ref && item.rule==='H04');
-    if (item.rule==='H02' && receipts.length &&
-        (item.status==='missing' || receipts.some(r=>r.record.state==='mismatch'))) {
-      const refs=new Set(receipts.flatMap(r=>r.record.fields));
+    if (item.rule==='H02' && pdfProofs.length &&
+        (item.status==='missing' || pdfProofs.some(r=>r.record.state==='mismatch'))) {
+      const refs=new Set(pdfProofs.flatMap(r=>r.record.fields));
       initial=rows.findIndex(({fact})=>refs.has(fact.id));
     }
     const authority=item.rule==='H02' && item.acceptance_authority;
@@ -115,7 +115,7 @@ const PerformanceIndex = (() => {
       quote.textContent=line?fact.source_line.text:fact.quote;
       place.textContent=doc.name+' · 第 '+fact.page+' 页'+(line?' '+line+' 行':'');
       const status=tag(fact.status);
-      if (fact.status==='confirmed' && receipts.some(r=>r.record.fields.includes(fact.id))) status.textContent='栏中文字已核';
+      if (fact.status==='confirmed' && pdfProofs.some(r=>r.record.fields.includes(fact.id))) status.textContent='栏中文字已核';
       quality.replaceChildren(el('span',line?'原行':'提取引文'),status);
       open.dataset.fact=fact.id;
       crop.replaceChildren(); showExcerpt();
@@ -136,7 +136,7 @@ const PerformanceIndex = (() => {
     if (item.signer_timing && target('signer-timing')) return SignerEvidence.jump(item);
     if (item.payment_acceptance && target('payment-acceptance')) return PaymentAcceptance.jump(item);
     const areas=[
-      [item.rule==='H01' && item.effect_review?.pdf_execution,'pdf-signatures','核对 PDF 签署凭证'],
+      [item.rule==='H01' && item.effect_review?.pdf_execution,'pdf-signatures','查看合同签署凭证'],
       [item.rule==='H01' && item.effect_review?.word_signatures,'word-signatures','核对 Word 签章区'],
       [item.acceptance_comments,'acceptance-comments','核对验收批注'],
       [item.inspection_coverage,'inspection-coverage','核对验收范围'],
@@ -147,24 +147,33 @@ const PerformanceIndex = (() => {
     const selected=areas.find(([applies,id])=>applies && target(id));
     return selected?evidenceJump(selected[2],selected[1]):null;
   }
-  function receiptOriginal(graph,id) {
-    const ledger=graph.acceptance_pdf_sources, index=graphIndex(graph);
-    if (ledger?.format!=='pdf-acceptance-execution-v1' || !Array.isArray(ledger.records)) return null;
-    const inspected=index.receiptProofs ??= new Map();
+  const pdfSources={
+    acceptance:{kinds:['acceptance','reinspection'],field:'acceptance_signer',labels:{
+      typeset:'仅见排印文字',visual:'签认图像待核',current:'本版有电子签名，身份待核',
+      earlier:'签名覆盖较早版',mismatch:'签名校验不符',review:'签署凭证待核'}},
+    mandate:{kinds:['power_of_attorney'],field:'grant_signature',labels:{
+      typeset:'仅见排印文字，未检出嵌入式电子签名',visual:'含影像、图形或批注，签章痕迹待核',
+      current:'电子签名覆盖本版，签署人身份及权限待核',earlier:'电子签名仅覆盖较早版本',
+      mismatch:'电子签名与所签内容校验不符',review:'委托书签章凭证待核'}}
+  };
+  function unitPdfOriginal(graph,id,kind) {
+    const ledger=graph[kind+'_pdf_sources'], {kinds,field,labels}=pdfSources[kind];
+    if (ledger?.format!=='pdf-'+kind+'-execution-v1' || !Array.isArray(ledger.records) ||
+        typeof id!=='string' || !id.startsWith(kind+'-pdf/')) return null;
+    const index=graphIndex(graph), inspected=index.unitPdfOriginals ??= new Map();
     if (inspected.has(id)) return inspected.get(id);
-    const record=ledger.records.find(r=>r?.id===id), node=index.nodes.get(id);
-    const labels={typeset:'仅见排印文字',visual:'签认图像待核',current:'本版有电子签名，身份待核',
-      earlier:'签名覆盖较早版',mismatch:'签名校验不符',review:'签署凭证待核'};
-    if (!record || node?.type!=='acceptance_pdf_inspection' || node.doc!==record.doc || node.state!==record.state ||
-        id!=='acceptance-pdf/'+record.unit || !Object.hasOwn(labels,record.state) ||
+    const records=ledger.records.filter(r=>r?.id===id), [record]=records, node=index.nodes.get(id);
+    if (records.length!==1 || node?.type!==kind+'_pdf_inspection' || node.doc!==record.doc || node.state!==record.state ||
+        id!==kind+'-pdf/'+record.unit || !Object.hasOwn(labels,record.state) ||
         !Array.isArray(record.pages) || !record.pages.length || !Array.isArray(record.fields)) return null;
     const doc=index.documents.get(record.doc);
     if (doc?.ext!=='.pdf' || !/^[a-f0-9]{64}$/.test(doc.sha256) || doc.sha256!==record.original_sha256 ||
-        doc.sha256!==node.sha256 || index.nodes.get(doc.id)?.sha256!==doc.sha256) return null;
+        doc.sha256!==node.sha256 || index.nodes.get(doc.id)?.type!=='document' || index.nodes.get(doc.id).sha256!==doc.sha256) return null;
     const unit=(graph.audit_documents || graph.documents).find(u=>u.id===record.unit);
-    if (!unit || (unit.source || unit.id)!==doc.id || !['acceptance','reinspection'].some(k=>graph.documents_by_kind?.[k]?.includes(unit.id))) return null;
+    if (!unit || (unit.source || unit.id)!==doc.id || !kinds.some(k=>graph.documents_by_kind?.[k]?.includes(unit.id))) return null;
     if (!Number.isSafeInteger(doc.pages) || doc.pages<1 || !Number.isSafeInteger(doc.size) || doc.size<1 ||
-        record.pages.length!==(unit.source?1:doc.pages)) return null;
+        record.pages.length!==(unit.source?1:doc.pages) ||
+        unit.source && (!Number.isSafeInteger(unit.page) || unit.page<1 || unit.page>doc.pages)) return null;
     if (record.pages.some((p,i)=>!p || p.ref!==doc.id+'/p'+(unit.source?unit.page:i+1) ||
         !['text','image_overlay','unknown'].includes(p.layer) || typeof p.has_text!=='boolean' ||
         typeof p.typeset!=='boolean' || p.typeset && p.layer!=='text')) return null;
@@ -176,15 +185,16 @@ const PerformanceIndex = (() => {
       original_sha256:doc.sha256,signatures:record.signatures};
     if (!PdfSignatures.validSignatures(signature)) return null;
     const refs=[doc.id,...record.pages.map(p=>p.ref),...record.fields];
-    if (new Set(refs).size!==refs.length || !graph.edges.some(e=>e.type==='acceptance_pdf_source' && e.from===record.unit &&
-        e.to===id && e.evidence?.length===refs.length && e.evidence.every((ref,i)=>ref===refs[i]))) return null;
+    const edges=graph.edges.filter(e=>e.type===kind+'_pdf_source' && e.to===id);
+    if (new Set(refs).size!==refs.length || edges.length!==1 || edges[0].from!==record.unit ||
+        !Array.isArray(edges[0].evidence) || edges[0].evidence.length!==refs.length || !edges[0].evidence.every((ref,i)=>ref===refs[i])) return null;
     if (record.pages.some(p=>index.nodes.get(p.ref)?.type!=='page' || !p.ref.startsWith(doc.id+'/p') ||
         !/^[a-f0-9]{64}$/.test(p.sha256) || index.nodes.get(p.ref).sha256!==p.sha256)) return null;
     const fields=record.fields.map(ref=>index.facts.get(ref));
-    if (fields.some(f=>!f || f.doc!==doc.id || (f.unit || f.doc)!==record.unit || f.field!=='acceptance_signer' ||
+    if (fields.some(f=>!f || f.doc!==doc.id || (f.unit || f.doc)!==record.unit || f.field!==field || !Number.isSafeInteger(f.page) ||
         f.source_sha256!==doc.sha256 || !record.pages.some(p=>p.ref===f.doc+'/p'+f.page && p.sha256===f.page_sha256))) return null;
     const first=fields[0], page=first?.page || Number(record.pages[0].ref.split('/p').pop());
-    const proof={record,signature,doc,page,field:first?.id,label:labels[record.state]};
+    const proof={record,signature,doc,page,field:first?.id,label:labels[record.state],refs};
     inspected.set(id,proof);
     return proof;
   }
@@ -196,29 +206,135 @@ const PerformanceIndex = (() => {
     return button;
   }
   function receiptCitation(graph,id) {
-    const proof=receiptOriginal(graph,id);
+    const proof=unitPdfOriginal(graph,id,'acceptance');
     return proof && receiptButton(proof);
+  }
+  function issuedReferences(item,graph) {
+    const index=graphIndex(graph), finding=index.nodes.get('finding/'+item.id);
+    if (finding?.type!=='finding' || finding.status!==item.status || finding.detail!==item.detail || !Array.isArray(item.evidence)) return new Set();
+    const supports=index.resultLinks ??= new Set(graph.edges.filter(e=>e.type==='supports_result' &&
+      e.evidence?.length===1 && e.evidence[0]===e.from).map(e=>e.from+' '+e.to));
+    return new Set(item.evidence.filter(ref=>supports.has(ref+' '+finding.id)));
+  }
+  function issuedPdf(proof,cited,calls) {
+    return proof && cited.has(proof.record.id) && proof.refs.every(ref=>cited.has(ref)) && Array.isArray(calls) &&
+      proof.record.pages.every(p=>calls.some(c=>c.doc===proof.doc.id && proof.doc.id+'/p'+c.page===p.ref && c.page_sha256===p.sha256));
   }
   function receiptEvidence(item,report) {
     const {graph,policy}=report;
     if (policy.acceptance_pdf!=='pdf-acceptance-execution-v1' || !['H02','H04','H05','H06'].includes(item.rule) || item.status==='ok') return [];
-    const index=graphIndex(graph), finding=index.nodes.get('finding/'+item.id);
-    if (finding?.type!=='finding' || finding.status!==item.status || finding.detail!==item.detail) return [];
-    const supports=index.receiptLinks ??= new Set(graph.edges.filter(e=>e.type==='supports_result' &&
-      e.evidence?.length===1 && e.evidence[0]===e.from).map(e=>e.from+' '+e.to));
-    const cited=new Set(item.evidence.filter(ref=>supports.has(ref+' '+finding.id)));
+    const index=graphIndex(graph), cited=issuedReferences(item,graph);
     let ids=[...cited].filter(ref=>index.nodes.get(ref)?.type==='acceptance_pdf_inspection');
     if (item.rule==='H02') {
       if (Array.isArray(item.acceptance_execution)) ids=ids.filter(id=>item.acceptance_execution.includes(id));
       else if (Object.hasOwn(item,'acceptance_execution') || policy.version!=='2026.11.26.27' ||
         policy.code_sha256?.['controls.py']!=='eeff68cc20371bace1b158ebf70cc33885603b3913d8896f7b95236be19cd8a6') return [];
     }
-    return ids.map(id=>receiptOriginal(graph,id)).filter(source=>{
-      if (!source) return false;
-      const {record}=source;
-      return [record.doc,...record.fields,...record.pages.map(p=>p.ref)].every(ref=>cited.has(ref)) &&
-        record.pages.every(p=>report.calls?.pages?.some(c=>c.doc===record.doc && record.doc+'/p'+c.page===p.ref && c.page_sha256===p.sha256));
+    return ids.map(id=>unitPdfOriginal(graph,id,'acceptance')).filter(proof=>issuedPdf(proof,cited,report.calls?.pages));
+  }
+  const mandateSides={buyer:'甲方授权',seller:'乙方授权',unassigned:'委托书归属待核'};
+  const mandatePending=['missing','risk','issue'];
+  function mandateScope(item,entry,proofs,rows,cited,graph) {
+    if ([entry.status,item.status].includes('missing') || entry.side==='unassigned' || entry.units.length!==1 ||
+        proofs.length!==1 || typeof entry.detail!=='string' || typeof item.detail!=='string') return null;
+    const {record,doc}=proofs[0], index=graphIndex(graph);
+    const fields=graph.facts.filter(f=>f.field==='grant_scope' && (f.unit || f.doc)===record.unit);
+    if (fields.length!==1) return null;
+    const [fact]=fields, row=rows.get(fact.id), source=MandateCalendar.printed(fact), pageId=fact.doc+'/p'+fact.page;
+    if (!row?.line || !source?.value || !['授权权限','代理权限','授权范围'].includes(source.label) ||
+        fact.doc!==doc.id || !entry.evidence.includes(fact.id) || !cited.has(fact.id) ||
+        index.nodes.get(pageId)?.layer!=='text' || !record.pages.some(p=>p.ref===pageId && p.layer==='text' && p.sha256===fact.page_sha256)) return null;
+    const edges=graph.edges.filter(e=>e.type==='grant_scope' && e.evidence?.includes(fact.id)), [edge]=edges;
+    if (edges.length!==1 || edge.from!==record.unit || !Array.isArray(edge.evidence) || edge.evidence.length!==1) return null;
+    const target=index.nodes.get(edge.to);
+    if (target?.type!=='grant_scope' || typeof target.label!=='string' || target.label.normalize('NFKC').trim()!==source.value) return null;
+    // Link the conflict the issued decision actually cites, even if other limitations share the page.
+    const reason=entry.detail.match(/[^。]+。?/gu)?.map(s=>s.trim()).find(s=>s.includes('“'+source.value+'”') &&
+      /权限不足以支持代理签约|需另核签约授权/u.test(s));
+    return reason && item.detail.includes(reason)?{fact,line:row.line,doc,reason}:null;
+  }
+  function mandateEvidence(item,report) {
+    const {graph,policy}=report, ledger=graph.mandate_pdf_sources;
+    if (item.rule!=='H01' || !mandatePending.includes(item.status) || policy?.mandate_pdf!=='pdf-mandate-execution-v1' || ledger?.format!==policy.mandate_pdf ||
+        !Array.isArray(ledger.records) || !Array.isArray(item.delegations) || !Array.isArray(item.scope)) return [];
+    const cited=issuedReferences(item,graph);
+    if (!cited.size) return [];
+    const rows=new Map(originals(item,graph).map(row=>[row.fact.id,row]));
+    return item.delegations.flatMap(entry=>{
+      const ids=entry?.mandate_execution;
+      if (!Array.isArray(ids) || !ids.length || new Set(ids).size!==ids.length || !Array.isArray(entry.units) ||
+          !Array.isArray(entry.evidence) || !Object.hasOwn(mandateSides,entry.side) ||
+          !mandatePending.includes(entry.status)) return [];
+      const records=ledger.records.filter(r=>r && entry.units.includes(r.unit));
+      if (records.length!==ids.length || !records.every(r=>ids.includes(r.id))) return [];
+      const proofs=[];
+      for (const id of ids) {
+        const proof=unitPdfOriginal(graph,id,'mandate');
+        if (!issuedPdf(proof,cited,report.calls?.pages) || ![id,...proof.refs].every(ref=>entry.evidence.includes(ref))) return [];
+        const {record,doc}=proof;
+        if (!item.scope.includes(record.unit) || record.pages.some(p=>p.layer==='unknown' && (record.state!=='review' || p.has_text))) return [];
+        if (record.state==='mismatch' && [entry.status,item.status].includes('missing')) return [];
+        // An empty field list is valid only when this unit really has no signing observation.
+        const fields=graph.facts.filter(f=>f.field==='grant_signature' && (f.unit || f.doc)===record.unit);
+        if (fields.length!==record.fields.length || !fields.every(f=>record.fields.includes(f.id) && rows.has(f.id))) return [];
+        const locations=record.fields.map(field=>{
+          const {fact,line}=rows.get(field);
+          return {page:fact.page,field,line};
+        });
+        if (!locations.length) {
+          for (const p of record.pages) locations.push({page:Number(p.ref.slice(doc.id.length+2))});
+        }
+        proofs.push({...proof,locations});
+      }
+      return [{entry,proofs,scope:mandateScope(item,entry,proofs,rows,cited,graph)}];
     });
+  }
+  function mandatePage(proof,location) {
+    const {doc,record}=proof, {page,field,line}=location;
+    const button=action('',()=>openPage(doc.id,page,field),'scope-mandate-page');
+    button.dataset.pdfMandate=record.id;
+    button.setAttribute('aria-haspopup','dialog'); button.setAttribute('aria-controls','page-dialog');
+    const place=doc.name+' · 第 '+page+' 页'+(line?' · 第 '+line+' 行':'');
+    const open=el('span',field?'查看签章页':'查看原页','scope-mandate-open');
+    open.append(glyph('arrows-angle-expand')); button.append(el('span',place),open);
+    return button;
+  }
+  function mandatePanel({entry,proofs,scope}) {
+    const panel=el('section','','scope-mandate-proof');
+    panel.setAttribute('aria-label',mandateSides[entry.side]+' · 授权方签章凭证');
+    panel.append(box('scope-mandate-heading',el('h4','授权方签章凭证'),el('span',mandateSides[entry.side]),tag(entry.status)));
+    for (const proof of proofs) {
+      const record=box('scope-mandate-record',el('strong',proof.label));
+      record.dataset.state=proof.record.state;
+      for (const location of proof.locations) record.append(mandatePage(proof,location));
+      if (['current','earlier','mismatch'].includes(proof.record.state)) {
+        record.append(lazyFold('签名覆盖范围',()=>[PdfSignatureCard.digital(proof.signature)]));
+      }
+      panel.append(record);
+    }
+    const [reason='',next='']=typeof entry.detail==='string'?entry.detail.trim().match(/[^。]+。?/gu) || []:[];
+    const note=scope?.reason || (/^(?:委托书 PDF|电子签名)/u.test(reason)?(reason+next).match(/[，。]\s*(请[^。]*。?)/u)?.[1]:reason);
+    if (note) {
+      const paragraph=el('p','','scope-mandate-note'); paragraph.append(el('span',note));
+      if (scope) {
+        const {fact,doc,line}=scope;
+        const open=action('查看权限原行',()=>openPage(doc.id,fact.page,fact.id),'text-button scope-mandate-scope');
+        open.dataset.mandateScope=fact.id; open.title=doc.name+' · 第 '+fact.page+' 页 · 第 '+line+' 行';
+        open.setAttribute('aria-haspopup','dialog'); open.setAttribute('aria-controls','page-dialog');
+        paragraph.append(' ',open);
+      }
+      panel.append(paragraph);
+    }
+    return panel;
+  }
+  function mandateCitation(report,id) {
+    for (const item of report.findings.filter(f=>f.rule==='H01')) {
+      for (const {proofs} of mandateEvidence(item,report)) {
+        const proof=proofs.find(p=>p.record.id===id);
+        if (proof) return mandatePage(proof,proof.locations[0]);
+      }
+    }
+    return el('span','委托书签章凭证来源待核','small');
   }
   function receiptPanel(receipt,item,related,graph,openPayment) {
     const tools=box('scope-proof-tools'), panel=box('scope-proof-detail');
@@ -344,11 +460,13 @@ const PerformanceIndex = (() => {
       if (jump) jump.addEventListener('click',()=>dialog.close(),{capture:true});
       const actions=box('scope-actions',...(jump?[jump]:[]),complete);
       const receipts=receiptEvidence(item,state.bundle.report);
+      const mandates=mandateEvidence(item,state.bundle.report);
       const paired=pairView(item,state.bundle.report,receipts);
       const roster=AcceptanceRoster.bind(item,state.bundle.report);
       const batch=BatchPhase.resolve(item,findings.find(f=>f.rule==='H02'),graph);
       detail.dataset.batch=String(Boolean(batch));
       detail.replaceChildren(box('scope-check-state',el('span',item.id,'mono'),tag(item.status)),heading);
+      for (const mandate of mandates) detail.append(mandatePanel(mandate));
       let detailText=item.detail || '';
       if (batch) detail.append(BatchPhase.panel(batch,item.stage));
       if (paired) detail.append(paired);
@@ -376,7 +494,10 @@ const PerformanceIndex = (() => {
         const reason=el('p',detailText,'scope-reason');
         detail.append(detailText.length<=100 && !receipts.length && !batch?reason:fold('阅读本项结论',reason));
       }
-      if (!paired) detail.append(roster || batch?lazyFold('其他字段引文',()=>[sourceView(item,graph,receipts)]):sourceView(item,graph,receipts));
+      if (!paired) {
+        const sources=()=>sourceView(item,graph,[...receipts,...mandates.flatMap(m=>m.proofs)]);
+        detail.append(roster || batch || mandates.length?lazyFold('其他字段引文',()=>[sources()]):sources());
+      }
       detail.append(actions);
     }
     function filter(pending,unavailable=false) {
@@ -431,5 +552,5 @@ const PerformanceIndex = (() => {
     summary.append(dialog);
     return summary;
   }
-  return {groups,count,originals,fieldLinks,issuedLimitBreach,receiptCitation,receiptEvidence,overview};
+  return {groups,count,originals,fieldLinks,issuedLimitBreach,receiptCitation,receiptEvidence,mandateCitation,mandateEvidence,overview};
 })();

@@ -660,6 +660,7 @@ function citation(ref) {
     return Team.paperLink(label,prior.case_id,'button ref',new URLSearchParams({rev:String(prior.rev),fact:prior.fact}));
   }
   const source = index?.nodes.get(ref);
+  if (ref.startsWith('mandate-pdf/') && state.bundle) return PerformanceIndex.mandateCitation(state.bundle.report,ref);
   if (source?.type==='acceptance_pdf_inspection') {
     return PerformanceIndex.receiptCitation(state.bundle.report.graph,ref) || el('span','验收 PDF 签署来源待核','small');
   }

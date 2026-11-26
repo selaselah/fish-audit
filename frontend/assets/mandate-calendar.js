@@ -227,5 +227,5 @@ const MandateCalendar = (() => {
     if (root.open) requestAnimationFrame(()=>{if (root.isConnected && root.open) build();});
     return root;
   }
-  return {panel,evidence};
+  return {panel,evidence,printed};
 })();

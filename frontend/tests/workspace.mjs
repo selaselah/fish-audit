@@ -8,6 +8,7 @@ import {createServer} from 'node:net';
 import {createHash} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {once} from 'node:events';
+import {parseArgs} from 'node:util';
 import {checkPaymentAcceptance,checkPreviewQueue} from './payment-acceptance.mjs';
 import {checkSignerTiming,checkSignerClock} from './signer-timing.mjs';
 import {checkPaymentProof} from './payment-proof.mjs';
@@ -21,6 +22,7 @@ import {checkPaymentOpinions} from './payment-opinions.mjs';
 import {checkRelease} from './payment-release.mjs';
 import {checkBatchPhase} from './batch-phase.mjs';
 import {checkMandateCalendar} from './mandate-calendar.mjs';
+import {checkMandatePdf} from './mandate-pdf.mjs';
 import {checkWarrantyTimeline} from './warranty-timeline.mjs';
 import {checkWarrantyTickets} from './warranty-tickets.mjs';
 import {checkWarrantyPhotos} from './warranty-photos.mjs';
@@ -87,6 +89,7 @@ const designCase = caseArgument('--design-case');
 const compareCase = caseArgument('--compare-case');
 const mandateCase = caseArgument('--mandate-case');
 const mandateCalendarCase = caseArgument('--mandate-calendar-case');
+const mandatePdfCase = caseArgument('--mandate-pdf-case');
 const warrantyCase = caseArgument('--warranty-case');
 const ticketCase = caseArgument('--ticket-case');
 const photoCase = caseArgument('--warranty-photo-case');
@@ -129,7 +132,7 @@ const acceptanceRoster=process.argv.includes('--acceptance-roster'), publicRoste
 const receiptPdf=caseArgument('--acceptance-pdf-case');
 const publicTest=publicPurchase || publicRoster || publicProof || publicClock || publicTiming || publicBank || product || ruleCatalog || publicInspection || publicContractComments || publicWordComments || publicSuppliers || publicPdf || publicFolios;
 const scopeCase=caseArgument('--scope-case'), publicTopics=process.argv.includes('--public-audit-topics');
-const seeded = [batchCase,receiptPdf,acceptanceRoster,publicTopics,scopeCase,publicTest,proofCase,signerClock,signerTiming,originalCase,citedOriginal,bankAcceptance,previewQueue,contractCommentCase,commentCase,supplierCase,pdfCase,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+const seeded = [mandatePdfCase,batchCase,receiptPdf,acceptanceRoster,publicTopics,scopeCase,publicTest,proofCase,signerClock,signerTiming,originalCase,citedOriginal,bankAcceptance,previewQueue,contractCommentCase,commentCase,supplierCase,pdfCase,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
 const root = originalCase ? process.env.AUDIT_READER_ORIGIN || 'http://127.0.0.1:8000' : publicTest || publicTopics ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
@@ -277,6 +280,9 @@ try {
     await checkPaymentOpinions({root,call,evaluate,wait},paymentOpinionCase,process.env.AUDIT_OPINION_REV);
   } else if (releaseCase) {
     await checkRelease({root,call,evaluate,wait},releaseCase,process.env.AUDIT_RELEASE_REV);
+  } else if (mandatePdfCase) {
+    const {values}=parseArgs({options:{'mandate-pdf-case':{type:'string'},rev:{type:'string'},expect:{type:'string'}}});
+    await checkMandatePdf({root,call,evaluate,wait},mandatePdfCase,values.rev,values.expect);
   } else if (mandateCalendarCase) {
     await checkMandateCalendar({root,call,evaluate,wait},mandateCalendarCase,process.env.AUDIT_MANDATE_REV);
   } else if (warrantyCase) {
