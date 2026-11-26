@@ -3,3 +3,4 @@ waitress==3.0.2
 python-dotenv==1.2.4
 pypdfium2==5.13.0
 Pillow==13.0.0
+pyHanko==0.38.2

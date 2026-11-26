@@ -35,6 +35,7 @@ from stage_payments import verify as verify_stage_payments
 from receipt_packets import verify_sources as verify_receipt_packets
 from delivery_batches import verify_sources as verify_delivery_batches
 from contract_effect import verify as verify_contract_effect
+from pdf_execution import verify as verify_pdf_execution
 from warranty_terms import verify as verify_warranty
 from payment_windows import verify as verify_payment_windows
 from acceptance_reservations import verify as verify_reservations
@@ -735,6 +736,12 @@ class Store:
             paper = json.loads(row["content"])
             graph = paper["graph"]
             if row["profile"]!=BANK:
+                def read_original(doc):
+                    return (self.files / case_id / doc["id"] / ("original" + doc["ext"])).read_bytes()
+                try:
+                    verify_pdf_execution(paper, read_original, signing=True)
+                except (ValueError, OSError, KeyError, TypeError) as error:
+                    raise CaseError(f"签收前核对 PDF 签署凭证失败。{error}", 409) from error
                 checks = [f for f in paper["findings"] if f.get("delegations") or f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("stage_payments") or f.get("invoice_receipt") or f.get("payment_change") or f.get("payment_opinion") or f.get("equipment_models") or f.get("inspection_coverage") or f.get("contract_folios") or f.get("prior_installment")]
                 packets = graph.get("receipt_packet_sources",{}).get("packets",[])
                 timing_pages = graph.get("reinspection_wait_sources", {}).get("pages", [])

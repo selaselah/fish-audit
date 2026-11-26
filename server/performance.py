@@ -14,6 +14,7 @@ import stage_payments
 import equipment_models
 import equipment_exchanges
 import contract_effect
+import pdf_execution
 import contract_calendar
 import signing_parties
 import inspection_coverage
@@ -701,6 +702,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
     signed = effect(contract, approvals, version, grants)
     if version in EFFECT_FORMATS:
         contract_effect.review(signed,graph.get("contract_effect_sources",{}),contract,graph)
+        pdf_execution.review(signed, graph, contract.unit)
     if version in DATE_FORMATS:
         add_date_checks(signed,period_checks(contract))
     classified = {u for group in kinds.values() for u in group}
@@ -870,7 +872,9 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
             accepted["scope"] = list(dict.fromkeys(accepted["scope"]+[doc["id"]]))
         for item in (signed,plan):
             note = "另有尚未归属的资料，请核对其是否变更本合同或付款约定。"
-            if item.get("effect_review", {}).get("word_signatures"):
+            if any(item.get("effect_review", {}).get(k) for k in ("word_signatures", "pdf_execution")):
+                if item["status"] == "ok":
+                    item["status"] = "missing"
                 if note not in item["detail"]:
                     item["detail"] += " " + note
             else:

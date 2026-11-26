@@ -30,6 +30,7 @@ from stage_payments import verify as verify_stage_payments
 from receipt_packets import verify_sources as verify_receipt_packets
 from delivery_batches import verify_sources as verify_delivery_batches
 from contract_effect import verify as verify_contract_effect
+from pdf_execution import verify as verify_pdf_execution
 from warranty_terms import verify as verify_warranty
 from payment_windows import verify as verify_payment_windows
 from acceptance_reservations import verify as verify_reservations
@@ -255,6 +256,10 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
     verify_equipment_models(report,page_text)
     verify_delivery_batches(report,page_text)
     verify_contract_effect(report,page_text)
+    def read_original(doc):
+        path = originals[doc["id"]] if originals is not None else "originals/" + doc["id"] + doc["ext"]
+        return bundle.read(path)
+    verify_pdf_execution(report, read_original)
     verify_warranty(report,page_text,submitted=submitted,signed=signed)
     verify_payment_windows(report,page_text)
     verify_reservations(report,page_text)

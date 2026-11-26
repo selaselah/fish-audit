@@ -21,6 +21,7 @@ import equipment_models
 import equipment_exchanges
 import stage_payments
 import contract_effect
+import pdf_execution
 import contract_calendar
 import signing_parties
 import inspection_coverage
@@ -178,7 +179,7 @@ def heading_candidates(page):
     return candidates if len(candidates) == 1 else []
 
 
-def build_graph(docs, pages, attestations, amendments=()):
+def build_graph(docs, pages, attestations, amendments=(), *, read_original=None):
     nodes = {}
     edges, evidence, gaps, cautions = [], [], [], []
     performance_cautions = []
@@ -353,6 +354,10 @@ def build_graph(docs, pages, attestations, amendments=()):
     graph["payment_window_sources"]=payment_windows.sources(graph,lambda doc,number:texts[doc,number])
     calls = {(p["doc"], p["number"]): p["extraction"] for p in pages}
     graph["contract_effect_sources"]=contract_effect.sources(graph,lambda doc,number:texts[doc,number],calls=calls)
+    graph["pdf_execution_sources"] = pdf_execution.sources(graph, read_original)
+    nodes, edges = pdf_execution.source_graph(graph["pdf_execution_sources"])
+    graph["nodes"].extend(nodes)
+    graph["edges"].extend(edges)
     signing_nodes,signing_edges=signing_parties.source_graph(graph["contract_effect_sources"])
     graph["nodes"].extend(signing_nodes)
     graph["edges"].extend(signing_edges)
