@@ -216,7 +216,7 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
   const otherRefs = [...registerRefs, ...boardRefs, ...repairRefs, ...PhaseEvidence.pageReferences(paper?.graph,docId,pageNumber,pageFacts,lineHint,paper?.calls.pages)];
   const timingRefs=timingRows.filter(s=>!otherRefs.some(r=>r.rawLine===s.rawLine));
   const contractRefs=[...ContractFolios.pageReferences(docId,pageNumber),...ContractCalendar.pageReferences(docId,pageNumber)];
-  const preferred=contractRefs.find(r=>r.ref===rawRef);
+  const preferred=[...contractRefs,...otherRefs].find(r=>r.ref===rawRef);
   const pageRefs=[];
   for (const row of [...(preferred?[preferred]:[]),...timingRefs,...otherRefs,...contractRefs]) {
     if (!pageRefs.some(r=>r.ref===row.ref || (row.rawLine && r.rawLine===row.rawLine))) pageRefs.push(row);
@@ -553,7 +553,7 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
     const label = {inspection_reference:'设备检验原行',contract_signing_reference:'合同签章原行',payment_release_reference:'放行依据原行',acceptance_opinion_reference:'付款意见原行',payment_amendment_reference:'付款变更所据原行',invoice_receipt_reference:'收票条件所据原行',repair_completion_reference:'整改记录原行',equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',approval_reference:'董事会审批记录原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
     const timingRow=timingRefs.find(r=>r.rawLine===gap.line);
     const raw = rawLines.find(source => source.rawLine === gap.line);
-    const heading=contractRefs.includes(raw) || ['acceptance_clock_source','signer_date_source'].includes(raw?.quality)
+    const heading=contractRefs.includes(raw) || ['acceptance_clock_source','signer_date_source','payment_execution_source'].includes(raw?.quality)
       ? raw.label : timingRow?.label || (gap.quality==='register_reference'?'复验附注':label);
     const section = box('evidence-row',el('h4',heading+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
     section.dataset.gapLine = String(gap.line);
@@ -853,7 +853,7 @@ function showFindingPath(item, compare = false, pair = null) {
 
 function finding(item) {
   const heading = item.stage ? item.stage.name + (item.stage.share ? ' · ' + item.stage.share + '%' : '') +
-    (item.rule === 'H05' ? ' 实付时点' : item.rule==='H06'?' 回单合计':' 付款条件') : item.title;
+    (item.execution_basis ? ' 扣款凭证' : item.rule === 'H05' ? ' 实付时点' : item.rule==='H06'?' 回单合计':' 付款条件') : item.execution_basis?'扣款凭证':item.title;
   const node = box('finding-body',el('p', item.detail, 'finding-detail'),el('p', '执行依据 · ' + item.basis, 'muted'));
   if (item.stage) {
     const change=item.payment_change;
@@ -874,6 +874,7 @@ function finding(item) {
   }
   if (item.payment_acceptance) node.append(PaymentAcceptance.jump(item));
   if (item.signer_timing) node.append(SignerEvidence.jump(item));
+  if (item.execution_basis) node.append(PaymentProof.jump(item));
   if (item.contract_comments) node.append(AcceptanceComments.current(state.bundle.report,'contract')?
     evidenceJump('按期核对合同付款批注','contract-comments'):el('span','合同批注来源待核','small'));
   if (item.acceptance_comments) node.append(AcceptanceComments.current(state.bundle.report)?
@@ -903,7 +904,7 @@ function finding(item) {
     const release=ReleaseEvidence.sources(graph,item).filter(s=>!['title','identity'].includes(s.role));
     if (release.length) node.append(lazyFold('核对放行约定、签认及所引原单',()=>release.map(row=>AcceptanceOpinion.source(row,graph))));
   }
-  if (item.stage && ['H04','H05'].includes(item.rule)) {
+  if (item.stage && !item.execution_basis && ['H04','H05'].includes(item.rule)) {
     const batch = state.bundle.report.findings.find(f => f.batch_acceptance)?.batch_acceptance;
     const remarks = phaseRemarks(item, batch, state.bundle.report.graph);
     if (remarks) node.append(remarks);
@@ -1520,6 +1521,9 @@ async function refresh() {
       } else if (route.params.get('view')==='inspection' && state.openedCitation!==location.hash &&
                  bundle?.report.findings.some(f=>f.rule==='H02' && f.inspection_coverage)) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#inspection-coverage';
+      } else if (route.params.get('view')==='payment-proof' && state.openedCitation!==location.hash &&
+                 bundle?.report.findings.some(f=>f.execution_basis)) {
+        state.openedCitation=location.hash; state.tab='report'; focusFinding='#payment-proof';
       } else if (route.params.get('view')==='signer-timing' && state.openedCitation!==location.hash &&
                  bundle?.report.findings.some(f=>f.signer_timing)) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#signer-timing';
@@ -1542,7 +1546,10 @@ async function refresh() {
       renderCase(Boolean(focusFinding));
       if (focusFinding) {
         const target = $(focusFinding);
-        if (target?.id==='signer-timing') {
+        if (target?.id==='payment-proof') {
+          if (route.params.has('receipt')) target.dispatchEvent(new CustomEvent('select-proof',{detail:route.params.get('receipt')}));
+          revealPaperTarget(target);
+        } else if (target?.id==='signer-timing') {
           const receipt=route.params.get('receipt');
           if (receipt && bundle.report.findings.some(f=>f.id===receipt && f.signer_timing)) {
             target.dispatchEvent(new CustomEvent('select-signer-payment',{detail:receipt}));

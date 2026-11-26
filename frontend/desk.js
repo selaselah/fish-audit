@@ -5,7 +5,7 @@ function contractPreview(report, task) {
   if (!signing || !acceptance || !plan) return null;
   function jump(f,label,cls='preview-finding',view) {
     const query=new URLSearchParams({rev:String(task.rev),...(view?{view}:{finding:f.id})});
-    if (view==='payment-acceptance' || view==='signer-timing') query.set('receipt',f.id);
+    if (['payment-acceptance','signer-timing','payment-proof'].includes(view)) query.set('receipt',f.id);
     const node=Team.paperLink(label,task.id,cls,query);
     node.dataset.findingId=f.id;
     if (view!=='payment-acceptance') node.append(tag(f.status));
@@ -41,7 +41,8 @@ function contractPreview(report, task) {
     content.replaceChildren(jump(f,'付款条件'));
     for (const r of related) {
       const bank=payments.length>1 && r.rule==='H05' && traceReferences(graph,r).map(ref=>index.facts.get(ref)).find(v=>v?.field==='bank_receipt');
-      if (r.signer_timing) content.append(jump(r,bank?.name || '签认与付款日','preview-finding','signer-timing'));
+      if (r.execution_basis) content.append(jump(r,'核对扣款凭证','preview-finding','payment-proof'));
+      else if (r.signer_timing) content.append(jump(r,bank?.name || '签认与付款日','preview-finding','signer-timing'));
       else content.append(jump(r,r.rule==='H06'?'本期回单合计':bank?.name || '实付时点'));
     }
     const referenced=payments.filter(r=>r.payment_acceptance);
@@ -271,8 +272,9 @@ const Desk = {
         sources.replaceChildren(documents);
       }
       for (const item of priorities.slice(0,3)) {
-        const target=Team.paperLink(item.stage ? item.stage.name+' · '+item.title : item.title,task.id,'preview-finding',
-          new URLSearchParams({rev:String(task.rev),finding:item.id}));
+        const label=(item.stage?item.stage.name+' · ':'')+(item.execution_basis?'核对扣款凭证':item.title);
+        const params=item.execution_basis?{view:'payment-proof',receipt:item.id}:{finding:item.id};
+        const target=Team.paperLink(label,task.id,'preview-finding',new URLSearchParams({rev:String(task.rev),...params}));
         target.append(tag(item.status)); list.append(target);
       }
       content.insertBefore(result,sources);

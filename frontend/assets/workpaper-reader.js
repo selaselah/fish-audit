@@ -53,7 +53,10 @@ function priorityQueue(items) {
   function show(i) {
     selected=i;
     const finding=items[i], title=finding.stage ? finding.stage.name+' · '+finding.title : finding.title;
-    destination.replaceChildren(performanceJump(finding,title));
+    if (finding.execution_basis) {
+      const jump=PaymentProof.jump(finding,(finding.stage?finding.stage.name+' · ':'')+'核对扣款凭证');
+      jump.classList.add('performance-jump');jump.append(tag(finding.status));destination.replaceChildren(jump);
+    } else destination.replaceChildren(performanceJump(finding,title));
     position.value=(i+1)+' / '+items.length;
     position.setAttribute('aria-label','第 '+(i+1)+' 项，共 '+items.length+' 项');
     const focused=document.activeElement;

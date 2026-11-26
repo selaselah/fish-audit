@@ -1,0 +1,101 @@
+{
+  "case_id": "585a6b42d73043ddbe026e814a588d16",
+  "rev": 4,
+  "report_sha256": "3beef5542c7842bbebe827902516c829061ef15af955158493bd783324bb4778",
+  "finding": "H05-8",
+  "stage": "第二期",
+  "state": "conflict",
+  "document": {
+    "title": "银行付款回单",
+    "version": "合成采购 · R4",
+    "page": 1,
+    "pdf": "/showcase/payment-execution-notice.pdf",
+    "image": "/assets/payment-execution-notice.jpg",
+    "source_sha256": "4128da08ba2de2406af7c0d694ec2d83866d9c177f0465620ac639881c03f0e6",
+    "page_sha256": "1e0b481ea7aec55d9d56dc830d0af917463bfa5b12e3ca867c0486859cfbf0d6",
+    "lines": [
+      {
+        "ref": "execution/d03/p1/l2",
+        "line": 2,
+        "kind": "title",
+        "quote": "银行付款回单",
+        "label": "单据名称",
+        "value": "银行付款回单",
+        "rect": "0.08274,0.13105,0.34971,0.16027",
+        "rects": [
+          [
+            0.08274,
+            0.13105,
+            0.34971,
+            0.16027
+          ]
+        ]
+      },
+      {
+        "ref": "execution/d03/p1/l7",
+        "line": 7,
+        "kind": "purpose",
+        "quote": "款项用途：第二期",
+        "label": "款项用途",
+        "value": "第二期",
+        "rect": "0.08209,0.3758,0.2799,0.39224",
+        "rects": [
+          [
+            0.08209,
+            0.3758,
+            0.2799,
+            0.39224
+          ]
+        ]
+      },
+      {
+        "ref": "execution/d03/p1/l8",
+        "line": 8,
+        "kind": "status",
+        "quote": "交易状态：交易成功",
+        "label": "交易状态",
+        "value": "交易成功",
+        "rect": "0.08274,0.41644,0.30511,0.43242",
+        "rects": [
+          [
+            0.08274,
+            0.41644,
+            0.30511,
+            0.43242
+          ]
+        ],
+        "crop": "/assets/payment-execution-notice-8.webp",
+        "pixels": [
+          109,
+          898,
+          491,
+          961
+        ]
+      },
+      {
+        "ref": "execution/d03/p1/l10",
+        "line": 10,
+        "kind": "limit",
+        "quote": "回单提示：本单仅为付款申请受理凭证，不代表实际扣款",
+        "label": "回单提示",
+        "value": "本单仅为付款申请受理凭证，不代表实际扣款",
+        "rect": "0.08339,0.87763,0.62573,0.89269",
+        "rects": [
+          [
+            0.08339,
+            0.87763,
+            0.62573,
+            0.89269
+          ]
+        ],
+        "crop": "/assets/payment-execution-notice-10.webp",
+        "pixels": [
+          110,
+          1908,
+          987,
+          1969
+        ]
+      }
+    ]
+  }
+}

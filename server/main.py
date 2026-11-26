@@ -280,12 +280,12 @@ def create_app(store, worker):
             args["finding"] = ref
         if "view" in request.args:
             view = request.args["view"]
-            if view not in ("replay", "reinspection", "inspection", "entities", "trial", "contract-pages", "signatures", "calendar", "suppliers", "acceptance-comments", "contract-comments", "payment-acceptance", "signer-timing") or set(args)!={"rev"}:
+            if view not in ("replay", "reinspection", "inspection", "entities", "trial", "contract-pages", "signatures", "calendar", "suppliers", "acceptance-comments", "contract-comments", "payment-acceptance", "signer-timing", "payment-proof") or set(args)!={"rev"}:
                 raise CaseError("请选择有效的底稿视图及版本。",400)
             args["view"] = view
         if "receipt" in request.args:
             receipt = request.args["receipt"]
-            if args.get("view") not in ("payment-acceptance","signer-timing") or not re.fullmatch(r"H05-[1-9][0-9]{0,7}", receipt):
+            if args.get("view") not in ("payment-acceptance","signer-timing","payment-proof") or not re.fullmatch(r"H05-[1-9][0-9]{0,7}", receipt):
                 raise CaseError("请选择本版的回单核对记录。",400)
             args["receipt"] = receipt
         route = ("w/"+wid+"/" if wid else "")+"case/"+case_id
@@ -309,7 +309,7 @@ def create_app(store, worker):
                             "contract-payment-transfer.pdf","named-inspection-contract.pdf","named-inspection-acceptance.pdf",
                             "batch-bank-1.pdf","batch-bank-2.pdf","batch-acceptance-1.pdf","batch-acceptance-2.pdf","batch-payment-contract.pdf",
                             "joint-signing-contract.pdf","joint-signing-acceptance.pdf","joint-signing-transfer.pdf",
-                            "signer-clock-contract.pdf","signer-clock-acceptance.pdf","signer-clock-transfer.pdf"}:
+                            "signer-clock-contract.pdf","signer-clock-acceptance.pdf","signer-clock-transfer.pdf","payment-execution-notice.pdf"}:
             raise CaseError("没有这份演练原件。", 404)
         return send_file(FRONTEND / "showcase" / filename, mimetype="application/pdf")
 

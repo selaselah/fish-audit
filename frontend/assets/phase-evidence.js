@@ -45,6 +45,11 @@ const PhaseEvidence = (() => {
       if (hasFact ?? facts.some(f=>s.facts.includes(f.id) && f.quote===s.quote)) return;
       sources.set(s.line,{ref:prefix+s.line,rawLine:s.line,label,quote:s.quote,option:label+' · 第 '+s.line+' 行',quality,rects});
     }
+    for (const row of PaymentProof.sources(graph)) {
+      const title=PaymentProofCard.labels[row.kind];
+      add(row,title,'payment_execution_source','execution-line/',
+        row.line!==lineHint && facts.some(f=>row.facts.includes(f.id) && f.quote===row.quote),PaymentProof.rectangles(graph,calls,row));
+    }
     for (const row of PaymentAcceptance.sources(graph)) {
       const fact=PaymentAcceptance.observation(row,graph);
       add(row,'验收单号原行','payment_acceptance_reference','bank-acceptance-line/',Boolean(fact) && row.line!==lineHint,fact?.source_line?.rects);

@@ -129,3 +129,7 @@ PDF 的 SHA-256 为 `c9751b24f4902a8f18e963b86b3f2c6b1eeaf5562483814be397165e9a0
 ```sh
 shasum -a 256 frontend/showcase/contract.pdf frontend/showcase/acceptance.pdf frontend/showcase/transfer.pdf
 ```
+
+## 回单受理范围 R4
+
+「试核一笔回单」展示冷藏柜采购的水印回单 H05-8。状态栏在第 8 行，限定说明在第 10 行。导出时逐份比对生成件的摘要，复读归档原页并重绘页图，再按物理坐标取两条原行。公开数据记录原件、页图及底稿的 SHA-256、行号、标准化坐标和裁片像素边界。该例独立于首页首屏的采购案例。[水印 PDF](../frontend/showcase/payment-execution-notice.pdf) · [证据索引](../frontend/assets/payment-execution-notice.json) · [固定底稿 R4](http://127.0.0.1:8000/workpaper/585a6b42d73043ddbe026e814a588d16?rev=4&view=payment-proof) · [可复现的导出程序](../docs/samples/publish_payment_proof.py)

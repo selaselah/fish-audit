@@ -441,4 +441,12 @@ server/.venv/bin/python docs/samples/quality_reinspection.py --run --cases parti
 
 ## 状态栏与回单页脚
 
-同一套四门冷藏柜采购资料的第二期占 60%。三组演练分别附有限定实际扣款的回单、企业付款申请单，或仅说明收款方到账情况的回单。运行 `server/.venv/bin/python docs/samples/bank_execution_notices.py` 生成四份带水印的 PDF，追加 `--run` 可通过本地接口提交和核对原件。脚本会先校验合成案例名称及文件摘要，再按逐字原行补正或确认识别记录。[案例脚本](bank_execution_notices.py) · [业务依据](../../3rd/payment-acceptance.md#受理回执能证明什么)
+同一套四门冷藏柜采购资料的第二期占 60%。四组演练覆盖回单页脚限定实际扣款、只提交付款申请、仅提示收款方到账，以及同案含两份不同用途的凭证。运行 `server/.venv/bin/python docs/samples/bank_execution_notices.py` 生成四份带水印的 PDF，追加 `--run` 可通过本地接口提交和核对原件。脚本会先校验合成案例名称及文件摘要，再按逐字原行补正或确认识别记录。[案例脚本](bank_execution_notices.py) · [业务依据](../../3rd/payment-acceptance.md#受理回执能证明什么)
+
+
+| 水印案例 | H05 与原件核对结果 |
+| --- | --- |
+| [验收款回单 R4](http://127.0.0.1:8000/workpaper/585a6b42d73043ddbe026e814a588d16?rev=4&view=payment-proof&receipt=H05-8) | 第 8 行列示交易成功，第 10 行限定为受理凭证。第二期实付待复核，验收及三期约定分别有据。 |
+| [付款申请 R7](http://127.0.0.1:8000/workpaper/972d00581478461fa1dece2d48b623a4?rev=7&view=payment-proof&receipt=H05-8) | 第 2 行是申请单标题，第 8 行列示审批通过。留存申请时间，并标示期次待核。 |
+| [收款方到账提示 R5](http://127.0.0.1:8000/workpaper/a111692053cd40908cebd70262ac317e?rev=5) | 页脚只提示收款方到账情况。合同签署证据不足，本笔履约付款时点仍待核。 |
+| [同案两份凭证 R8](http://127.0.0.1:8000/workpaper/22aae5a4b20545c994e6a68361d40986?rev=8&view=payment-proof&receipt=H05-9) | 第二期回单有受理限定。另一份申请单自行列示第三期，相关核对保留在其自己的单据和原行上。 |

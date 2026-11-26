@@ -86,7 +86,9 @@ function performanceOverview(findings, graph) {
   const dateQuestion=effect?.effect_review?.calendar?.some(day=>!['exact','spacing'].includes(day.state));
   const bankReferences=PaymentAcceptance.panel(state.bundle?.report);
   const signerTiming=SignerEvidence.panel(state.bundle?.report);
+  const paymentProof=PaymentProof.panel(state.bundle?.report);
   const sections=[
+    {key:'payment-proof',label:'扣款凭证',icon:'receipt',content:paymentProof,priority:Boolean(paymentProof)},
     {key:'signer-timing',label:'签认时序',icon:'clock-history',content:signerTiming,priority:signerTiming?.dataset.state==='before' || signerTiming?.dataset.state==='same_day'},
     {key:'payment-acceptance',label:'回单所据',icon:'receipt',content:bankReferences,priority:bankReferences?.dataset.referenceState==='other_batch'},
     {key:'contract-comments',label:'期款批注',icon:'journal-text',content:contractNotes,priority:contractNotes && contractNotes.dataset.state!=='ok'},
@@ -140,7 +142,8 @@ function performanceOverview(findings, graph) {
     const sameStage = f=>PhaseEvidence.sameStage(stage,f.stage);
     const matched = payments.filter(sameStage);
     if (matched.length) {
-      for (const item of matched) results.append(performanceJump(item,matched.length===1?'实付时点':paymentLabel(item)));
+      for (const item of matched) results.append(item.execution_basis ? PaymentProof.jump(item) :
+        performanceJump(item,matched.length===1?'实付时点':paymentLabel(item)));
     } else {
       results.append(el('span','未关联回单','phase-unlinked'));
     }
@@ -159,7 +162,7 @@ function performanceOverview(findings, graph) {
     }
     const prior=PriorInstallment.panel(phase,matched,graph);
     if (prior) row.append(prior);
-    const evidence=PhaseEvidence.panel(phase,matched,findings,graph);
+    const evidence=PhaseEvidence.panel(phase,matched.filter(f=>!f.execution_basis),findings,graph);
     if (evidence) row.append(evidence);
     const authority=authorityPairs.find(p=>(!p.stageRef || p.stageRef===stage.clause_ref)
       && [p.left.id,p.right.id].every(ref=>phase.evidence.includes(ref)));
@@ -196,7 +199,7 @@ function performanceOverview(findings, graph) {
     choice.dataset.state = state;
     choice.setAttribute('role','tab'); choice.setAttribute('aria-controls',row.id);
     choice.append(el('span',stage.name),el('strong',stage.share ? stage.share+'%' : '比例待核'),tag(state),
-      el('span','。付款条件'+statusName(phase.status)+(matched.length?'，实付时点'+statusName(PhaseEvidence.combined(matched)):''),'visually-hidden'));
+      el('span','。付款条件'+statusName(phase.status)+(matched.length?'，付款凭证'+statusName(PhaseEvidence.combined(matched)):''),'visually-hidden'));
     const noted=contractSource?.stages?.find(s=>s.ref===stage.clause_ref);
     if (noted) {
       if (!edition && !originalNumber) row.dataset.sharedContractSource='true';
@@ -221,6 +224,7 @@ function performanceOverview(findings, graph) {
         list.children[i].hidden = i!==position;
       });
       bankReferences?.dispatchEvent(new CustomEvent('inspect-payment-stage',{detail:phases[position].stage}));
+      paymentProof?.dispatchEvent(new CustomEvent('inspect-payment-stage',{detail:phases[position].stage}));
       signerTiming?.dispatchEvent(new CustomEvent('inspect-payment-stage',{detail:phases[position].stage}));
       contractNotes?.dispatchEvent(new CustomEvent('contract-stage-change',{detail:phases[position].stage.clause_ref}));
       list.children[position].querySelector('.proof-opinion:not([hidden])')?.dispatchEvent(new Event('show-opinion'));
@@ -233,6 +237,7 @@ function performanceOverview(findings, graph) {
     }
     if (contractSource?.stages) contractNotes.addEventListener('select-contract-phase',event=>selectClause(event.detail));
     bankReferences?.addEventListener('select-contract-phase',event=>selectClause(event.detail));
+    paymentProof?.addEventListener('select-contract-phase',event=>selectClause(event.detail));
     signerTiming?.addEventListener('select-contract-phase',event=>selectClause(event.detail));
     inspection?.addEventListener('select-contract-phase',event=>selectClause(event.detail));
     inspection?.addEventListener('reveal-evidence',()=>{
@@ -259,6 +264,10 @@ function performanceOverview(findings, graph) {
     if (initial<0) initial=buttons.findIndex(b=>b.dataset.state===priority);
     if (remembered<0 && index.readerSection==='signer-timing' && signerTiming) {
       const linked=phases.findIndex(f=>f.stage.clause_ref===signerTiming.dataset.clause);
+      if (linked>=0) initial=linked;
+    }
+    if (remembered<0 && index.readerSection==='payment-proof' && paymentProof?.dataset.clause) {
+      const linked=phases.findIndex(f=>f.stage.clause_ref===paymentProof.dataset.clause);
       if (linked>=0) initial=linked;
     }
     select(remembered>=0?remembered:Math.max(0,initial));
@@ -345,7 +354,7 @@ function stagePaymentsPanel(finding,graph,findings) {
     if (rest.length) section.append(lazyFold('核对户名、用途和回单原行',()=>rest.map(v=>operand(v.ref,true))));
     const timing=check.timing.find(t=>t.unit===r.unit);
     const payment=timing?.receipt_ref && findings.find(f=>f.rule==='H05' && f.evidence.includes(timing.receipt_ref));
-    if (payment) section.append(performanceJump(payment,'核对这笔实付时点'));
+    if (payment) section.append(payment.execution_basis?PaymentProof.jump(payment):performanceJump(payment,'核对这笔实付时点'));
     panel.append(section);
   }
   const ledger=graph.stage_payment_sources;
@@ -366,6 +375,7 @@ function stagePaymentsPanel(finding,graph,findings) {
 }
 
 function performanceComparison(finding, graph) {
+  if (finding.execution_basis) return null;
   const comparisons = {
     H01: ['对照生效条件与签署依据',['effect_clause','signed_on','effect_on','valid_until','buyer_signature','seller_signature','contract_state','approval_authority','approval_result','approved_on','approval_signer']],
     H02: ['对照验收范围、标准与结果',['accepted_on','acceptance_scope','quantity_agreed','quantity_accepted','acceptance_criteria','inspection_basis','measured_result','acceptance_result','acceptance_exception','acceptance_signer']],

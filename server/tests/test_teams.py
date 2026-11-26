@@ -495,6 +495,9 @@ class EnterpriseFlow(unittest.TestCase):
         self.assertEqual(admin.get(source_link+"&view=entities").status_code,400)
         bank_view=entity_link+"?rev=1&view=payment-acceptance&receipt=H05-9"
         self.assertEqual(admin.get(bank_view).headers["Location"],"/app#w/"+a+"/case/"+emp_case+"?rev=1&view=payment-acceptance&receipt=H05-9")
+        proof_view=bank_view.replace("payment-acceptance","payment-proof")
+        self.assertEqual(admin.get(proof_view).headers["Location"],"/app#w/"+a+"/case/"+emp_case+"?rev=1&view=payment-proof&receipt=H05-9")
+        self.assertEqual(admin.get(proof_view.replace("H05-9","B04-9")).status_code,400)
         self.assertEqual(admin.get(bank_view.replace("H05-9","H04-9")).status_code,400)
         self.assertEqual(admin.get(bank_view.replace("payment-acceptance","trial")).status_code,400)
         self.assertEqual(admin.get(entity_link+"?rev=1&view=trial").headers["Location"],

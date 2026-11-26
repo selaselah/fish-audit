@@ -1,0 +1,53 @@
+.payment-proof { min-width:0; color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:10px; overflow:hidden; scroll-margin-block:1rem; }
+.debit-head { display:flex; align-items:center; gap:12px; padding:14px 16px; border-bottom:1px solid var(--line); background:var(--canvas); }
+.debit-empty { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:6px 14px; padding:12px 16px; }
+.payment-proof .debit-head h3 { margin:0; font:650 1.08rem/1.4 var(--font-ui); letter-spacing:-.02em; }
+.debit-state { display:inline-flex; align-items:center; gap:7px; padding:4px 9px; border-radius:4px; background:var(--attention-soft); color:var(--attention); font:600 .78rem/1.45 var(--font-ui); }
+.debit-state::before { content:''; box-sizing:border-box; width:9px; height:9px; border:2px solid currentColor; border-radius:50%; }
+.payment-proof[data-state=conflict] .debit-state::before { transform:rotate(45deg); border-radius:1px; }
+.debit-identity { display:grid; gap:4px; min-width:0; }
+.debit-controls { margin-inline-start:auto; display:grid; gap:6px; justify-items:end; flex:none; }
+.debit-map { width:42px; flex:none; }
+.debit-map .debit-open { display:block; position:relative; width:100%; min-height:0; padding:0; line-height:0; border:1px solid var(--field-line); border-radius:3px; box-shadow:0 2px 4px rgb(41 50 74 / 12%); }
+.debit-map img { display:block; width:100%; height:auto; border-radius:2px; }
+.debit-mark { position:absolute; min-height:2px; background:var(--accent); pointer-events:none; }
+.debit-mark[data-active=true] { background:var(--attention-line); box-shadow:0 0 0 1px var(--attention-soft); }
+.debit-file,.debit-picker { min-width:0; max-width:100%; font:560 .81rem/1.45 var(--font-ui); color:var(--secondary); overflow-wrap:anywhere; }
+.debit-picker { padding:6px; }
+.debit-modes { display:flex; padding:2px; border:1px solid var(--line); border-radius:7px; background:var(--soft); }
+.debit-modes button { min-height:32px; padding:3px 11px; border:1px solid transparent; border-radius:5px; color:var(--muted); background:transparent; font:550 .78rem/1.35 var(--font-ui); cursor:pointer; }
+.debit-modes button[aria-pressed=true] { color:var(--accent-hover); border-color:var(--accent-line); background:white; }
+.debit-pair { display:grid; grid-template-columns:minmax(0,.9fr) minmax(0,1.35fr); }
+.debit-side { display:grid; align-content:start; justify-items:start; min-width:0; padding:14px 16px 9px; gap:6px; }
+.debit-side + .debit-side { border-left:1px solid var(--line); }
+.debit-side h4 { margin:0; color:var(--muted); font:600 .81rem/1.5 var(--font-ui); }
+.debit-line { display:grid; align-items:center; width:100%; min-width:0; min-height:42px; }
+.debit-quote { border:0; margin:0; padding:0; color:var(--ink); font:500 .94rem/1.6 var(--font-ui); overflow-wrap:anywhere; }
+.debit-strip { display:flex; align-items:center; min-width:0; }
+.debit-strip :is(img,canvas) { max-width:100%; height:auto; max-height:28px; width:auto; object-fit:contain; object-position:left; }
+.payment-proof[data-mode=image] .with-crop .debit-quote { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); }
+.payment-proof[data-mode=text] .debit-strip { display:none; }
+.debit-open,.debit-extra summary { display:inline-flex; align-items:center; min-height:34px; padding:3px 0; background:transparent; border:0; color:var(--accent-hover); font:580 .8rem/1.45 var(--font-ui); text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
+.debit-open:hover,.debit-extra summary:hover { color:var(--accent); }
+.debit-extra { border-top:1px solid var(--line); padding:2px 16px; }
+.debit-extra summary { display:list-item; width:fit-content; color:var(--secondary); text-decoration:none; padding-block:8px; }
+.debit-extra .debit-open { display:block; text-align:start; }
+.debit-unknown,.debit-empty { margin:0; color:var(--muted); font-size:.85rem; }
+.payment-proof [hidden],.payment-proof[data-out-of-stage=true] :is(.debit-controls,.debit-identity .debit-file,.debit-map,.debit-identity .debit-picker,.debit-pair,.debit-extra) { display:none; }
+.payment-proof :is(button,a,select,summary):focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
+@media(max-width:760px) {
+  .debit-head,.debit-side { padding-inline:12px; }
+  .debit-head { gap:8px; }
+  .debit-map { width:34px; }
+  .debit-pair { grid-template-columns:minmax(0,1fr); }
+  .debit-side + .debit-side { border-left:0; border-top:1px solid var(--line); }
+  .debit-side { gap:2px; padding-block:8px; }
+  .debit-line { min-height:32px; }
+  .debit-open,.debit-modes button { min-height:40px; }
+}
+@media(max-width:420px) {
+  .debit-head { flex-wrap:wrap; }
+  .debit-identity { flex:1; }
+  .debit-controls { width:100%; display:flex; justify-content:space-between; align-items:center; gap:6px; }
+  .debit-modes button { padding-inline:9px; }
+}

@@ -12,7 +12,8 @@ from receipt_before_payment import FIELDS
 from run import BASE, get, submit
 
 
-CASES = {"notice": "交易状态与回单页脚冲突", "request": "验收款仅有付款申请单", "arrival": "回单区分付款与收款到账"}
+CASES = {"notice": "交易状态与回单页脚冲突", "request": "验收款仅有付款申请单", "arrival": "回单区分付款与收款到账",
+         "mixed": "验收款受理回单与质保金付款申请"}
 NOTES = {"notice": "本单仅为付款申请受理凭证，不代表实际扣款", "arrival": "本回单不代表收款方已到账"}
 
 
@@ -22,12 +23,16 @@ def materials(seed, mode):
     folder.mkdir(parents=True, exist_ok=True)
     font = embedded_font("PaymentExecutionSampleCJK")
     records = documents(code, "complete")
+    if mode in ("request", "mixed"):
+        bank = dict(records["银行付款回单"])
+        records["付款申请单"] = [(k, bank[k]) for k in ("合同编号", "付款户名", "收款户名")]
+        records["付款申请单"] += [("款项用途", "第三期" if mode == "mixed" else "第二期"),
+                             ("申请金额", "10,000.00" if mode == "mixed" else "60,000.00"), ("申请状态", "审批通过"),
+                             ("申请时间", "2026年11月21日 14:00" if mode == "mixed" else "2026年9月21日 14:00")]
     if mode == "request":
-        bank = dict(records.pop("银行付款回单"))
-        records["付款申请单"] = [(k, bank[k]) for k in ("合同编号", "付款户名", "收款户名", "款项用途")]
-        records["付款申请单"] += [("申请金额", "60,000.00"), ("申请状态", "审批通过"), ("申请时间", "2026年9月21日 14:00")]
+        del records["银行付款回单"]
     else:
-        records["银行付款回单"].append(("回单提示", NOTES[mode]))
+        records["银行付款回单"].append(("回单提示", NOTES["notice" if mode == "mixed" else mode]))
     for title, rows in records.items():
         path = folder / (title + ".pdf")
         if title == "银行付款回单":
@@ -35,7 +40,7 @@ def materials(seed, mode):
             sheet.setTitle(title)
             draw_pdf_page(sheet, title, rows[:-1], font=font)
             sheet.setFont(font, 13)
-            sheet.drawString(48, 92, "回单提示：" + NOTES[mode])
+            sheet.drawString(48, 92, "回单提示：" + rows[-1][1])
             sheet.save()
         else:
             pdf(path, title, rows, font=font)
@@ -44,11 +49,20 @@ def materials(seed, mode):
 
 def verify_case(report, mode):
     findings = report["findings"]
-    payment, = [f for f in findings if f["rule"] == "H05"]
-    expected = {"notice": ("risk", "conflict"), "request": ("missing", "application"), "arrival": ("ok", None)}
-    assert (payment["status"], payment.get("execution_basis", {}).get("state")) == expected[mode], payment["detail"]
-    assert all(f["status"] == "ok" for f in findings if f["rule"] in ("H01", "H02", "H03", "H04"))
-    if mode != "arrival":
+    payments = [f for f in findings if f["rule"] == "H05"]
+    assert {"H01","H02","H03","H04"} <= {f["rule"] for f in findings}
+    if mode == "mixed":
+        assert sorted((f["status"],f["execution_basis"]["state"]) for f in payments) == [("missing","application"),("risk","conflict")]
+        assert len({f["execution_basis"]["unit"] for f in payments}) == 2
+        assert report["result"]["verdict"] == "review"
+        return
+    payment, = payments
+    if mode == "arrival":
+        assert "execution_basis" not in payment
+        assert not report["graph"]["payment_execution_sources"]["units"]
+    else:
+        expected = {"notice": ("risk", "conflict"), "request": ("missing", "application")}
+        assert (payment["status"], payment["execution_basis"]["state"]) == expected[mode], payment["detail"]
         assert report["result"]["verdict"] == "review"
         assert "signer_timing" not in payment
 
