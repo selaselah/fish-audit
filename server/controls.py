@@ -145,7 +145,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
     def with_performance():
         for item in performance:
             record(item["rule"],item["status"],item["detail"],item["evidence"],item["scope"])
-            for key in ("stage","reinspection","delegations","quality_change","acceptance_authority","date_checks","batch_acceptance","effect_review","warranty_check","warranty_payment","payment_window","invoice_receipt","payment_change","payment_opinion","acceptance_reservations","acceptance_comments","contract_comments","stage_payments","payment_acceptance","equipment_models","inspection_coverage","prior_installment","contract_folios"):
+            for key in ("stage","reinspection","delegations","quality_change","acceptance_authority","signer_timing","date_checks","batch_acceptance","effect_review","warranty_check","warranty_payment","payment_window","invoice_receipt","payment_change","payment_opinion","acceptance_reservations","acceptance_comments","contract_comments","stage_payments","payment_acceptance","equipment_models","inspection_coverage","prior_installment","contract_folios"):
                 if key in item:
                     findings[-1][key] = item[key]
         return findings

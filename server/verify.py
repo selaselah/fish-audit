@@ -302,6 +302,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
         inspected.extend(graph.get("quality_addenda",{}).get("payments",{}).get("pages",[]))
         inspected.extend(graph.get("prior_installment_sources",{}).get("pages",[]))
         inspected.extend(graph.get("payment_acceptance_sources",{}).get("pages",[]))
+        inspected.extend(graph.get("acceptance_authority_sources",{}).get("bank_pages",[]))
         inspected.extend(graph.get("inspection_coverage_sources",{}).get("pages",[]))
         inspected.extend(graph.get("equipment_model_sources",{}).get("pages",[]))
         inspected.extend(p for packet in graph.get("receipt_packet_sources",{}).get("packets",[]) for p in packet["pages"])
@@ -436,6 +437,7 @@ def render_addendum_sources(bundle, report, nodes):
     ledger = graph.get("quality_addenda",{})
     selected = {p["doc"] for key in ("pages","signals","limited_numbers") for p in ledger.get(key,[])}
     selected.update(p["doc"] for p in graph.get("acceptance_authority_sources",{}).get("pages",[]))
+    selected.update(p["doc"] for p in graph.get("acceptance_authority_sources",{}).get("bank_pages",[]))
     selected.update(p["doc"] for p in graph.get("stage_payment_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("prior_installment_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("contract_folio_sources",{}).get("pages",[]))

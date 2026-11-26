@@ -143,6 +143,8 @@ class AcceptanceAuthorityTests(unittest.TestCase):
         old=copy.deepcopy(paper)
         old["policy"]={"performance_checks":ADDENDUM_FORMAT}
         del old["graph"]["acceptance_authority_sources"]
+        for f in old["findings"]:
+            f.pop("signer_timing", None)
         verify_sources(old,read)
         with self.assertRaisesRegex(ValueError,"旧版"):
             verify_sources(old,read,signing=True)

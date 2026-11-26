@@ -760,7 +760,7 @@ class Store:
             except (KeyError, TypeError, ValueError) as error:
                 raise CaseError(f"签收前核对回单所据验收原件失败。{error}", 409) from error
             if row["profile"]!=BANK:
-                checks = [f for f in paper["findings"] if f.get("delegations") or f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("acceptance_comments") or f.get("contract_comments") or f.get("stage_payments") or f.get("invoice_receipt") or f.get("payment_change") or f.get("payment_opinion") or f.get("equipment_models") or f.get("inspection_coverage") or f.get("payment_acceptance") or f.get("contract_folios") or f.get("prior_installment")]
+                checks = [f for f in paper["findings"] if f.get("delegations") or f.get("quality_change") or f.get("acceptance_authority") or f.get("signer_timing") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("acceptance_comments") or f.get("contract_comments") or f.get("stage_payments") or f.get("invoice_receipt") or f.get("payment_change") or f.get("payment_opinion") or f.get("equipment_models") or f.get("inspection_coverage") or f.get("payment_acceptance") or f.get("contract_folios") or f.get("prior_installment")]
                 packets = graph.get("receipt_packet_sources",{}).get("packets",[])
                 timing_pages = graph.get("reinspection_wait_sources", {}).get("pages", [])
                 folio_pages = graph.get("contract_folio_sources", {}).get("pages", [])
@@ -776,7 +776,7 @@ class Store:
                 originals.update(p["doc"] for p in packets)
                 originals.update(p["doc"] for p in timing_pages)
                 originals.update(p["doc"] for p in folio_pages)
-                full_pages = bool(packets) or any(f.get("quality_change") or f.get("acceptance_authority") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("acceptance_comments") or f.get("contract_comments") or f.get("stage_payments") or f.get("invoice_receipt") or f.get("payment_change") or f.get("payment_opinion") or f.get("equipment_models") or f.get("inspection_coverage") or f.get("payment_acceptance") or f.get("contract_folios") or f.get("prior_installment") for f in checks)
+                full_pages = bool(packets) or any(f.get("quality_change") or f.get("acceptance_authority") or f.get("signer_timing") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("acceptance_comments") or f.get("contract_comments") or f.get("stage_payments") or f.get("invoice_receipt") or f.get("payment_change") or f.get("payment_opinion") or f.get("equipment_models") or f.get("inspection_coverage") or f.get("payment_acceptance") or f.get("contract_folios") or f.get("prior_installment") for f in checks)
                 fields = [f["id"] for f in graph["facts"] if f["id"] in named or (full_pages or timing_pages) and f["doc"] in originals]
                 pages = {(p["doc"],p["page"]) for p in paper["calls"]["pages"] if p["doc"] in originals}
                 registered = {(r["doc"],r["number"]) for r in db.execute("SELECT doc,number FROM pages WHERE case_id=?",(case_id,))
@@ -897,6 +897,7 @@ class Store:
                     verify_invoice_conditions(paper,page_text,signing=True)
                     inspected = [*paper["graph"].get("quality_addenda",{}).get("pages",[]),
                                  *paper["graph"].get("acceptance_authority_sources",{}).get("pages",[]),
+                                 *paper["graph"].get("acceptance_authority_sources",{}).get("bank_pages",[]),
                                  *paper["graph"].get("delivery_batch_sources",{}).get("pages",[]),
                                  *paper["graph"].get("contract_effect_sources",{}).get("pages",[]),
                                  *paper["graph"].get("warranty_sources",{}).get("pages",[]),

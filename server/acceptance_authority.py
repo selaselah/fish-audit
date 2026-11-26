@@ -10,9 +10,11 @@ from contract_changes import SOURCE_LABELS, labelled_sources
 from delegation import agent_kind, complete_id, covered_rows
 from performance_versions import SIGNATORY_FORMATS
 from reinspection import LINK_KEYS, linked
+import signer_timing
 
 
-FORMAT = "named-acceptance-signatures-v1"
+LEGACY_FORMAT = "named-acceptance-signatures-v1"
+FORMAT = signer_timing.FORMAT
 PERFORMANCE_FORMATS = SIGNATORY_FORMATS
 CLAUSE = "acceptance_signing_clause"
 SIGNER = "acceptance_signer"
@@ -99,7 +101,7 @@ def covers(field, value, quote):
     return label in names and bool(value) and value in (line,normalized(body).rstrip("。"))
 
 
-def page_evidence(graph, read_text):
+def page_evidence(graph, read_text, version=FORMAT):
     pages = {n["id"]:n for n in graph["nodes"] if n["type"]=="page"}
     sections = {(d["source"],d["page"]):d["id"] for d in graph.get("audit_documents",[]) if "source" in d}
     by_page = defaultdict(list)
@@ -113,7 +115,7 @@ def page_evidence(graph, read_text):
     prior = graph.get("prior_installment_sources", {})
     credit_rows = {(s["doc"], s["page"], s["line"], s["quote"]) for s in prior.get("lines", ())
                    if prior.get("format")=="prior-installment-bank-evidence-v2" and s.get("credit_only")}
-    rules, signatures = [], []
+    rules, signatures, dates = [], [], []
     for ref,page in pages.items():
         doc, suffix = ref.rsplit("/p",1)
         number = int(suffix)
@@ -127,6 +129,10 @@ def page_evidence(graph, read_text):
         seen = set()
         def record(raw, line, facts, native):
             label,body = parts(raw)
+            if version == FORMAT and unit in receipts:
+                dated = signer_timing.dated_line(unit, doc, number, line, raw, facts)
+                if dated:
+                    dates.append(dated)
             clause = mentions(raw) or any(f["field"]==CLAUSE for f in facts) or unit in contracts and label in SIGN_LABELS
             if native and any(s["role"]=="authority" and (s["doc"],s["page"],s["line"],s["quote"])==(doc,number,line,raw)
                               for s in graph.get("payment_release_sources",{}).get("lines",[])):
@@ -164,8 +170,13 @@ def page_evidence(graph, read_text):
             if f["id"] not in seen:
                 record(f["quote"],None,[f],False)
     ambiguous = any(not s["name"] for s in signatures)
+    timing = {}
+    if version == FORMAT:
+        joint = any((instruction(s["quote"]) or (None,))[0] == "joint" for s in rules)
+        timing = {"dates": dates if rules or ambiguous else [],
+                  "bank_pages": signer_timing.bank_pages(graph, read_text, pages) if joint else []}
     if not rules and not ambiguous:
-        return {"format":FORMAT,"clauses":[],"signatures":[],"pages":[],"visual_notes":[]}
+        return {"format":version,"clauses":[],"signatures":[],"pages":[],"visual_notes":[],**timing}
     units = set(kinds.get("contract",[])) | receipts | {r["unit"] for r in rules}
     fields = {f["field"] for f in graph["facts"]}
     coverage = covered_rows(graph,read_text,units,fields,covers,"验收签认依据")
@@ -177,7 +188,7 @@ def page_evidence(graph, read_text):
     notes = [{"unit":f.get("unit",f["doc"]),"doc":f["doc"],"page":f["page"],"fact":f["id"],"quote":f["quote"]}
              for f in graph["facts"] if (f["doc"],f["page"]) in mixed and not (f.get("source_line") or {}).get("rects")
              and f["field"] not in (CLAUSE,SIGNER)]
-    return {"format":FORMAT,"clauses":rules,"signatures":signatures,"pages":coverage,"visual_notes":notes}
+    return {"format":version,"clauses":rules,"signatures":signatures,"pages":coverage,"visual_notes":notes,**timing}
 
 
 def refs(row):
@@ -193,6 +204,9 @@ def attach(graph, read_text):
     source = page_evidence(graph,read_text)
     graph["acceptance_authority_sources"] = source
     graph["gaps"].extend(coverage_gaps(source))
+    nodes, edges = signer_timing.source_graph(source["dates"])
+    graph["nodes"].extend(nodes)
+    graph["edges"].extend(edges)
 
 
 def check(graph, contract, receipts, retests, *, contract_supported, other_terms=False, name_records=False):
@@ -291,16 +305,22 @@ def witness_edges(findings):
 def verify_sources(report,read_text,*,signing=False):
     policy,graph=report["policy"],report["graph"]
     marker=policy.get("acceptance_authority")
+    dated_nodes = [n for n in graph["nodes"] if n["type"] == "acceptance_signer_date"]
+    dated_edges = [e for e in graph["edges"] if e["type"] == "signer_date_source"]
+    if marker != FORMAT and (policy.get("version","") >= signer_timing.SINCE or
+            "signer_timing.py" in policy.get("code_sha256",{}) or dated_nodes or dated_edges or
+            any("signer_timing" in f for f in report["findings"])):
+        raise ValueError("底稿缺少共同签认时序程序或混入其他版本的原行")
     if not marker:
         if "acceptance_authority.py" in policy.get("code_sha256",{}) or "acceptance_authority_sources" in graph or policy.get("performance_checks") in PERFORMANCE_FORMATS:
             raise ValueError("缺少底稿所据的具名验收签认程序")
         if signing and any(f["rule"]=="H02" and f["status"]=="ok" for f in report["findings"]):
-            legacy=page_evidence(graph,read_text)
+            legacy=page_evidence(graph,read_text,LEGACY_FORMAT)
             if legacy["clauses"] or legacy["signatures"]:
                 raise ValueError("旧版终验有具名签认约定或待辨签字栏，请按现行程序重审后签收。")
         return
-    source=page_evidence(graph,read_text)
-    if (marker!=FORMAT or policy.get("performance_checks") not in PERFORMANCE_FORMATS or graph.get("acceptance_authority_sources")!=source or
+    source=page_evidence(graph,read_text,marker)
+    if (marker not in (LEGACY_FORMAT,FORMAT) or policy.get("performance_checks") not in PERFORMANCE_FORMATS or graph.get("acceptance_authority_sources")!=source or
             coverage_gaps(source)!=[g for g in graph["gaps"] if g["quality"]=="acceptance_authority_clause"]):
         raise ValueError("验收签认条款、签字原行或版式覆盖与提交材料不符")
     expected=sorted((f.get("unit",f["doc"]),f["id"],f["field"],(f["id"],)) for f in graph["facts"] if f["field"] in (CLAUSE,SIGNER)
@@ -308,3 +328,15 @@ def verify_sources(report,read_text,*,signing=False):
     actual=sorted((e["from"],e["to"],e["type"],tuple(e["evidence"])) for e in graph["edges"] if e["type"] in (CLAUSE,SIGNER))
     if expected!=actual or witness_edges(report["findings"])!=[e for e in graph["edges"] if e["type"]=="named_acceptance_signature"]:
         raise ValueError("验收签字的原件归属、具名约定或逐人证据关系不符")
+    if (dated_nodes, dated_edges) != signer_timing.source_graph(source.get("dates", [])):
+        raise ValueError("共同签认日期的原行或归属关系不符")
+    if signing and marker == LEGACY_FORMAT and source["clauses"] and any(f["rule"] == "H05" for f in report["findings"]):
+        from performance import compute
+        current = compute({**graph, "acceptance_authority_sources": page_evidence(graph,read_text)})
+        for entry in current:
+            timing = entry.get("signer_timing")
+            if not timing:
+                continue
+            old = [f for f in report["findings"] if f["rule"] == "H05" and timing["bank"] in f["scope"]]
+            if timing["state"] == "before" or (timing["state"] != "after" and any(f["status"] == "ok" for f in old)):
+                raise ValueError("旧版付款时点尚未核对共同签认日期，请重新审计后签收。")

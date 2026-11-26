@@ -12,6 +12,7 @@ from acceptance_authority import LABELS as AUTHORITY_FIELDS, SIGN_LABELS, check 
 import delivery_batches
 import stage_payments
 import payment_acceptance
+import signer_timing
 import equipment_models
 import equipment_exchanges
 import contract_effect
@@ -1191,6 +1192,9 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         if opinion and opinion.get("release"):
             opinion=payment_releases.at_payment(opinion,contract,bank)
         acceptance_payments.attach(payment,opinion)
+        if version == FORMAT and row["kind"] == "acceptance":
+            signer_timing.compare(payment, graph, contract, bank, paid, authority, receipts,
+                                  other_terms=bool(extra_units or changes or repairs or retests or pending_units or batch))
         output.append(payment)
     return output
 
@@ -1228,6 +1232,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("contract_folios") != entry.get("contract_folios")
                 or saved.get("prior_installment") != entry.get("prior_installment")
                 or saved.get("payment_acceptance") != entry.get("payment_acceptance")
+                or saved.get("signer_timing") != entry.get("signer_timing")
                 or saved.get("inspection_coverage") != entry.get("inspection_coverage")
                 or saved.get("equipment_models") != entry.get("equipment_models")
                 or saved.get("stage_payments") != entry.get("stage_payments")
