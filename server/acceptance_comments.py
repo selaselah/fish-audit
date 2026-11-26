@@ -171,8 +171,8 @@ def package_review(raw):
         return record
 
 
-def word_units(graph):
-    ids = {unit for kind in ("acceptance","reinspection") for unit in graph["documents_by_kind"].get(kind, [])}
+def word_units(graph, kinds=("acceptance", "reinspection")):
+    ids = {unit for kind in kinds for unit in graph["documents_by_kind"].get(kind, [])}
     grouped = defaultdict(list)
     for unit in graph.get("audit_documents",graph["documents"]):
         if unit["id"] in ids:
@@ -180,63 +180,70 @@ def word_units(graph):
     return [(d,grouped[d["id"]]) for d in graph["documents"] if d["id"] in grouped and d.get("ext") in {".doc",".docx"}]
 
 
-def source_locations(graph, doc, read_text, wanted):
+def source_locations(graph, doc, read_text, wanted, compare=None):
     places = {(u["source"],u["page"]):u["id"] for u in graph.get("audit_documents",[]) if "source" in u}
     matches = defaultdict(list)
+    keys = {compare(q) if compare else q for q in wanted}
     for p in graph["nodes"]:
         if p["type"]!="page" or not p["id"].startswith(doc["id"]+"/p"):
             continue
         number = int(p["id"].rsplit("/p",1)[1])
         text = read_text(doc["id"],number)
         if not isinstance(text,str) or digest(text.encode())!=p.get("text_sha256"):
-            raise ValueError("验收批注所据页文摘要与归档不符")
+            raise ValueError("Word 批注所据页文摘要与归档不符")
         for line, quote in enumerate(text.splitlines(),1):
-            if quote not in wanted:
+            key = compare(quote) if compare else quote
+            if key not in keys:
                 continue
-            facts = [f["id"] for f in graph["facts"] if f["doc"]==doc["id"] and f["page"]==number and f["quote"]==quote and
+            facts = [f["id"] for f in graph["facts"] if f["doc"]==doc["id"] and f["page"]==number and
+                     (compare(f["quote"]) == key if compare else f["quote"] == quote) and
                      f.get("source_sha256")==doc["sha256"] and f.get("page_sha256")==p["sha256"] and
                      (f.get("source_line") or {}).get("number")==line and f["source_line"].get("text")==quote and f["source_line"].get("rects")]
-            matches[quote].append({"unit":places.get((doc["id"],number),doc["id"]),"page":number,"line":line,
-                                   "page_sha256":p["sha256"],"text_sha256":p["text_sha256"],"facts":facts} if p.get("layer")=="text" else None)
-    return {q:v[0] for q,v in matches.items() if len(v)==1 and v[0]}
+            where = {"unit":places.get((doc["id"],number),doc["id"]),"page":number,"line":line,
+                     "page_sha256":p["sha256"],"text_sha256":p["text_sha256"],"facts":facts}
+            if compare:
+                where["printed"] = quote
+            matches[key].append(where if p.get("layer")=="text" else None)
+    located = {key:v[0] for key,v in matches.items() if len(v)==1 and v[0]}
+    return {q:located[key] for q in wanted if (key := compare(q) if compare else q) in located}
 
 
-def sources(graph, read_original, read_text):
+def sources(graph, read_original, read_text, *, kinds=("acceptance", "reinspection"), role="acceptance", format_id=FORMAT, compare=None):
     records = []
-    for doc,units in word_units(graph):
+    for doc,units in word_units(graph, kinds):
         raw = read_original(doc) if read_original else None
         if raw is not None and digest(raw)!=doc["sha256"]:
-            raise ValueError("Word 验收批注所据原件摘要不符")
+            raise ValueError("Word 批注所据原件摘要不符")
         review = {"coverage":"unreadable","count":None,"notes":[],"limitations":["format"]}
         if raw is not None and doc["ext"]==".docx":
             try:
                 review = package_review(raw)
             except (BadZipFile, ET.ParseError, ValueError, KeyError, OSError, RuntimeError, NotImplementedError):
                 pass
-        ref = "acceptance-word/"+doc["id"]
+        ref = role + "-word/" + doc["id"]
         wanted = {n["anchor"]["quote"] for n in review["notes"] if n["anchor"]}
-        locations = source_locations(graph,doc,read_text,wanted) if wanted else {}
+        locations = source_locations(graph,doc,read_text,wanted,compare) if wanted else {}
         for i,n in enumerate(review["notes"],1):
             n["id"] = ref+"/n"+str(i)
             n["location"] = locations.get(n["anchor"]["quote"]) if n["anchor"] else None
         records.append({**review,"id":ref,"doc":doc["id"],"units":units,"original_sha256":doc["sha256"]})
-    return {"format":FORMAT,"documents":records}
+    return {"format":format_id,"documents":records}
 
 
-def source_graph(ledger):
+def source_graph(ledger, *, role="acceptance", label="验收", relation="word_review"):
     nodes,edges = [],[]
     for doc in ledger["documents"]:
         ref = doc["id"]
-        nodes.append({"id":ref,"type":"acceptance_word_review","doc":doc["doc"],"label":"验收 Word 审阅记录"})
-        edges.append({"from":doc["doc"],"to":ref,"type":"word_review_source","evidence":[doc["doc"]]})
+        nodes.append({"id":ref,"type":role+"_word_review","doc":doc["doc"],"label":label+" Word 审阅记录"})
+        edges.append({"from":doc["doc"],"to":ref,"type":relation+"_source","evidence":[doc["doc"]]})
         for note in doc["notes"]:
             ident = note["id"]
-            nodes.append({"id":ident,"type":"acceptance_word_comment","doc":doc["doc"],"label":"验收 Word 批注"})
-            edges.append({"from":ref,"to":ident,"type":"word_review_comment","evidence":[doc["doc"],ref]})
+            nodes.append({"id":ident,"type":role+"_word_comment","doc":doc["doc"],"label":label+" Word 批注"})
+            edges.append({"from":ref,"to":ident,"type":relation+"_comment","evidence":[doc["doc"],ref]})
             where = note["location"]
             if where:
                 page = f"{doc['doc']}/p{where['page']}"
-                edges.append({"from":page,"to":ident,"type":"word_review_anchor","evidence":[page,*where["facts"]]})
+                edges.append({"from":page,"to":ident,"type":relation+"_anchor","evidence":[page,*where["facts"]]})
     return nodes,edges
 
 

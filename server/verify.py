@@ -33,6 +33,7 @@ from contract_effect import verify as verify_contract_effect
 from pdf_execution import verify as verify_pdf_execution
 from supplier_pages import verify as verify_supplier_pages
 from acceptance_comments import verify as verify_word_reviews
+from contract_comments import verify as verify_contract_reviews
 from warranty_terms import verify as verify_warranty
 from payment_windows import verify as verify_payment_windows
 from acceptance_reservations import verify as verify_reservations
@@ -267,6 +268,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
     except ModuleNotFoundError as error:
         raise ValueError("重验 PDF 签署凭证需要安装 server/requirements.txt 中的依赖，请使用服务端虚拟环境运行校验。") from error
     verify_word_reviews(report, read_original, page_text)
+    verify_contract_reviews(report, read_original, page_text)
     verify_warranty(report,page_text,submitted=submitted,signed=signed)
     verify_payment_windows(report,page_text)
     verify_reservations(report,page_text)

@@ -26,6 +26,7 @@ import payment_windows
 import invoice_conditions
 import payment_amendments
 import acceptance_comments
+import contract_comments
 import acceptance_reservations
 import inspection_register
 import acceptance_payments
@@ -665,6 +666,15 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True, recheck_
     results = performance_findings(graph,version,include_unassigned_receipts=include_unassigned_receipts,
                                   recheck_payment_opinions=recheck_payment_opinions)
     if version == FORMAT:
+        records = contract_comments.checks(graph, results)
+        plan = next((f for f in results if f["rule"] == "H03"), None)
+        plan_review = contract_comments.assessment(records, plan) if records and plan else None
+        if plan_review:
+            for finding in results:
+                if finding["rule"] in contract_comments.STAGE_RULES:
+                    contract_comments.attach(finding, contract_comments.assessment(records, finding))
+            if plan_review["whole"]:
+                contract_comments.attach(plan, plan_review)
         grouped = stage_payments.findings(graph, results)
         if graph.get("prior_installment_sources", {}).get("lines"):
             prior_installment.condition(graph, results, grouped)
@@ -673,6 +683,12 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True, recheck_
                 grouped = stage_payments.findings(graph, results)
             else:
                 grouped = []
+        if plan_review:
+            for finding in grouped:
+                contract_comments.attach(finding, contract_comments.assessment(records, finding))
+            # A suggestion limited to one trigger leaves printed shares available to amount checks.
+            if not plan_review["whole"]:
+                contract_comments.attach(plan, plan_review)
         results.extend(grouped)
     return results
 
@@ -1216,6 +1232,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("invoice_receipt") != entry.get("invoice_receipt")
                 or saved.get("payment_window") != entry.get("payment_window")
                 or saved.get("acceptance_comments") != entry.get("acceptance_comments")
+                or saved.get("contract_comments") != entry.get("contract_comments")
                 or saved.get("acceptance_reservations") != entry.get("acceptance_reservations")
                 or (saved.get("id"),saved.get("version"),saved.get("title"),saved.get("basis")) !=
                 (f"{rule}-{position}",policy["version"],*RULES[rule])):
