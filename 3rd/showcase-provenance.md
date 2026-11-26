@@ -2,6 +2,18 @@
 
 首页采用 Fish Audit 自制的冷藏柜采购演练。采购方「青禾演练采购中心」、供应方「云桥演练设备中心」、金额、温度、签认和回单均为虚构数据。每份原件第 1 行均印有「合成演练资料　仅供系统测试　无交易效力」。4℃ 是这份合同约定的柜温上限，8℃ 是这份验收报告填写的实测值。[水印和主体的生成定义](../docs/samples/generate.py) · [项目演练说明](../docs/samples/README.md#验收的是哪一种设备)
 
+## 合同日期冲突案例 R6
+
+首页「合同生效」的日期冲突取自虚构的水印合同 `YL-LY-985A11F2`。首页的两个日期入口和签约日期入口均可打开原页。日期冲突的判断取自本案 H01，三期付款条件和第二期实付均需复核。[公开原件](../frontend/showcase/calendar-contract.pdf) · [归档页图](../frontend/assets/showcase-calendar-page.jpg) · [固定 R6](http://127.0.0.1:8000/workpaper/ad3f0a459eaa44c393ef346d0c64bdfc?rev=6&view=calendar)
+
+| 采购合同第 1 页 | 印刷栏与读数 | R6 图谱观察 |
+| --- | --- | --- |
+| 第 8 行 | 签约日期，2026 年 9 月 1 日 | `d01/p1/f6` |
+| 第 9 行 | 实际生效日期，2026 年 9 月 1 日 | `d01/p1/f7` |
+| 第 10 行 | 生效确认日期，2026 年 9 月 23 日 | `d01/p1/f8` |
+
+PDF 的 SHA-256 为 `c9751b24f4902a8f18e963b86b3f2c6b1eeaf5562483814be397165e9a0eb741`，归档 JPEG 的 SHA-256 为 `63e7a392710a1adde85eafb3816b43e4abe70bf8a0e2eaf17a6ca0891b45d79c`，R6 底稿的 SHA-256 为 `a803f44f2f582e72fa81eeedefaf4b54685f7fb4738fc91cafdc1454bea5ef37`。168 × 238 像素缩略图由这张页图缩放，两个标记分别使用第 9、10 行坐标。[首页日期演练](http://127.0.0.1:8000/?scene=contract-dates#workflow)
+
 ## Word 签章栏案例 R6
 
 公开例子从虚构任务 `5106e6c347f34b90bdd964b490496cdf` 的 R6 证据包提取。合同有水印，签章栏由普通文字排印，核图回执分别来自 R1 和 R2。首页沿用该版的三条原行及矩形坐标。[生成脚本](../docs/samples/word_signing.py) · [公开案例](http://127.0.0.1:8000/?scene=word-signing#workflow) · [本机固定底稿](http://127.0.0.1:8000/workpaper/5106e6c347f34b90bdd964b490496cdf?rev=6&view=signatures)

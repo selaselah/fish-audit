@@ -268,7 +268,7 @@ def create_app(store, worker):
             args["finding"] = ref
         if "view" in request.args:
             view = request.args["view"]
-            if view not in ("replay", "reinspection", "entities", "trial", "contract-pages", "signatures") or set(args)!={"rev"}:
+            if view not in ("replay", "reinspection", "entities", "trial", "contract-pages", "signatures", "calendar") or set(args)!={"rev"}:
                 raise CaseError("请选择有效的底稿视图及版本。",400)
             args["view"] = view
         route = ("w/"+wid+"/" if wid else "")+"case/"+case_id
@@ -286,7 +286,7 @@ def create_app(store, worker):
             return send_file(FRONTEND / "showcase" / filename, as_attachment=True,
                              mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
         if filename not in {"contract.pdf", "acceptance.pdf", "transfer.pdf", "signing-contract.pdf",
-                            "inspection-contract.pdf", "inspection-acceptance.pdf", "payment-folios.pdf"}:
+                            "inspection-contract.pdf", "inspection-acceptance.pdf", "payment-folios.pdf", "calendar-contract.pdf"}:
             raise CaseError("没有这份演练原件。", 404)
         return send_file(FRONTEND / "showcase" / filename, mimetype="application/pdf")
 

@@ -18,12 +18,6 @@
   <link rel="stylesheet" href="/landing.css">
   <link rel="stylesheet" href="/assets/inspection-coverage.css">
   <script src="/assets/inspection-coverage.js" defer></script>
-  <script>
-    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      document.documentElement.classList.add('m-enter');
-      setTimeout(() => document.documentElement.classList.add('m-enter-done'), 700);
-    }
-  </script>
   <script src="/assets/sample-compare.js" defer></script>
   <script src="/assets/folio-number.js" defer></script>
   <script src="/assets/public-folios.js" defer></script>
@@ -45,9 +39,8 @@
     <section class="hero" data-enter aria-labelledby="hero-title">
       <div class="wrap hero-inner">
         <div class="hero-copy hero-text">
-          <p class="eyebrow"><span class="eyebrow-rule"></span>面向中小企业的 AI 财务审计</p>
-          <h1 id="hero-title">财务审计，<br><em>从原件开始。</em></h1>
-          <p class="lead">上传合同、验收单和回单，逐期核对付款依据。</p>
+          <h1 id="hero-title">中小企业的<br><em>AI 财务审计</em></h1>
+          <p class="lead">上传合同、验收单和回单，核对生效条件、验收结果与每期付款依据。</p>
           <div class="hero-actions"><a class="button" href="/app">进入工作台</a><a class="text-link" href="#payments">查看分期案例</a></div>
           <p class="formats"><i aria-hidden="true" class="ui-glyph ic-paperclip"></i>支持电子与扫描 PDF、照片、Word</p>
         </div>
@@ -123,11 +116,11 @@
     </section>
     <section class="workflow" id="workflow" aria-labelledby="workflow-title">
       <div class="wrap section-inner">
-        <div class="section-copy"><p class="eyebrow"><span class="eyebrow-rule"></span>审计流程</p><h2 id="workflow-title">从资料提交，<br>到人工签收。</h2><p>离开页面后，仍可查看处理进度。签收意见与所据版本一同留存。</p><a class="button light" href="/app?new=contract">新建合同审计</a></div>
+        <div class="section-copy"><h2 id="workflow-title">从资料提交，<br>到人工签收。</h2><p>处理进度可随时查看，签收意见随底稿版本留存。</p><a class="button" href="/app?new=contract">新建合同审计</a></div>
         <div class="workflow-demo">
           <div class="scene-tabs" role="tablist" aria-label="选择核图案例" hidden>
             <button type="button" id="scene-tab-acceptance" role="tab" aria-selected="true" aria-controls="scene-acceptance">验收读数</button>
-            <button type="button" id="scene-tab-signing" role="tab" aria-selected="false" aria-controls="scene-signing" tabindex="-1">合同签章</button>
+            <button type="button" id="scene-tab-signing" role="tab" aria-selected="false" aria-controls="scene-signing" tabindex="-1">合同生效</button>
             <button type="button" id="scene-tab-inspection" role="tab" aria-selected="false" aria-controls="scene-inspection" tabindex="-1">设备抽检</button>
             <button type="button" id="scene-tab-folios" role="tab" aria-selected="false" aria-controls="scene-folios" tabindex="-1">付款续页</button>
           </div>
@@ -136,7 +129,7 @@
           </div>
           <div id="scene-signing" class="signing-sample" role="tabpanel" aria-labelledby="scene-tab-signing" hidden>
             <div class="signing-sample-header"><span><i class="ui-glyph ic-journal-text" aria-hidden="true"></i> 采购合同</span>
-              <label id="signing-example-choice" hidden><span class="sr-only">签章案例</span><select id="signing-example"><option value="company">用印单位</option><option value="word">文字签章</option></select></label>
+              <label id="signing-example-choice" hidden><span class="sr-only">合同生效案例</span><select id="signing-example"><option value="company">用印单位</option><option value="word">文字签章</option><option value="calendar">生效日冲突</option></select></label>
               <small id="signing-example-version">合成案例 · R9</small></div>
             <div id="signing-company">
             <h3>印章单位多出「杭州分公司」</h3>
@@ -161,6 +154,21 @@
                 <a class="open-sample-review" data-sample="word" data-ref="d01/p1/f11" data-line="12" data-rect="0.1495,0.52039,0.48807,0.53495" href="/showcase/signing-text.docx"><span>乙方签章</span><strong>云桥演练设备中心（已盖章）</strong><i aria-hidden="true" class="ui-glyph ic-arrows-angle-expand"></i></a>
               </div>
               <p><span class="finding-dot risk"></span>签署凭证待补 · 三期付款条件待核</p>
+            </div>
+            <div id="signing-calendar" hidden>
+              <div class="word-sample-heading">
+                <h3>这份合同写了两个生效日</h3>
+                <a class="open-sample-review calendar-thumbnail" href="/showcase/calendar-contract.pdf" data-sample="calendar" data-ref="d01/p1/f7" data-scale="page" aria-label="查看采购合同第 1 页，核对两处生效日期">
+                  <img src="/assets/showcase-calendar-thumb.webp" width="168" height="238" loading="lazy" alt="">
+                  <span>第 1 页 <i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i></span>
+                </a>
+              </div>
+              <div class="public-calendar-dates">
+                <a class="open-sample-review" data-sample="calendar" data-ref="d01/p1/f7" data-line="9" data-rect="0.08274,0.45662,0.41176,0.47306" href="/showcase/calendar-contract.pdf"><span>实际生效日期</span><strong>2026年9月<mark>1</mark>日</strong><small>第 9 行 <i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i></small></a>
+                <a class="open-sample-review" data-sample="calendar" data-ref="d01/p1/f8" data-line="10" data-rect="0.08209,0.4968,0.42534,0.51324" href="/showcase/calendar-contract.pdf"><span>生效确认日期</span><strong>2026年9月<mark>23</mark>日</strong><small>第 10 行 <i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i></small></a>
+              </div>
+              <div class="public-signing-lines"><a class="open-sample-review" data-sample="calendar" data-ref="d01/p1/f6" data-line="8" data-rect="0.08209,0.41598,0.36134,0.43242" href="/showcase/calendar-contract.pdf"><span>签约日期</span><strong>2026年9月1日</strong><i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i></a></div>
+              <p><span class="finding-dot risk"></span>生效日冲突 · 三期付款条件待核</p>
             </div>
           </div>
           <div id="scene-inspection" class="inspection-sample" role="tabpanel" aria-labelledby="scene-tab-inspection" hidden>

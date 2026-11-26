@@ -5,6 +5,7 @@ import {join,resolve} from 'node:path';
 import {checkPublicCompare} from './prior-installment.mjs';
 import {checkPublicInspection} from './inspection-coverage.mjs';
 import {checkPublicWordSigning} from './word-signing.mjs';
+import {checkPublicCalendar} from './contract-calendar.mjs';
 
 // These are the three public, watermarked originals of the equipment-quality exercise, R7.
 const digests = {
@@ -288,6 +289,7 @@ export async function checkProduct({root,call,evaluate,wait}) {
   await checkPublicInspection({root,call,evaluate,wait});
   await checkPublicCompare({root,call,evaluate,wait});
   await checkPublicWordSigning({root,call,evaluate,wait});
+  await checkPublicCalendar({root,call,evaluate,wait});
   console.log('PASS · acceptance, signing and unit inspection, original PDFs and Word, keyboard, six viewports, workspace entry and legacy bookmark ('+mode+')');
 }
 

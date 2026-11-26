@@ -1,5 +1,9 @@
 # 合成财会审计演练
 
+## 同一合同上的生效日期
+
+运行 `server/.venv/bin/python docs/samples/printed_dates.py conflict --seed calendar-demo-01` 可生成两处生效日不同的水印合同、验收单、回单和质保确认单，并上传本机审计。把 `conflict` 换成 `mixed` 可核对原件混用分隔符的情况。追加 `--check-fields` 会对这一组水印文件模拟字段核图，先核实本案全部文件摘要和当前版本，再依据原页更正错列或漏读。重复使用相同种子和模式会打开原案。[演练结果](../acceptance.md#合同日期与三期付款)
+
 ## Word 验收款比例断字
 
 `server/.venv/bin/python docs/samples/word_percentage.py` 生成一份单页 Word 合同和三份 PDF，每份都印有合成演练水印。第 17 行写作「最终验收合格后支付6 0%」。加 `--run` 会先检查分页和水印，再经本机上传并核对文件摘要、付款计划及第二期结论。[固定样例与旧规则对照](../acceptance.md#word-合同的转录空格与期款比例)

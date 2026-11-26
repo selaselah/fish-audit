@@ -8,7 +8,7 @@ const WordSigning = (() => {
 
   function resolve(finding,graph,calls) {
     const check=finding?.effect_review?.word_signatures, ledger=graph?.contract_effect_sources;
-    if (!check || ledger?.format!=='contract-effect-sources-v6' || !graph.documents_by_kind?.contract?.includes(check.unit) ||
+    if (!check || !['contract-effect-sources-v6','contract-effect-sources-v7'].includes(ledger?.format) || !graph.documents_by_kind?.contract?.includes(check.unit) ||
         !finding.scope.includes(check.unit) || finding.status==='ok' || !Array.isArray(check.pages) ||
         !check.pages.length || !Array.isArray(check.rows)) return null;
     const index=graphIndex(graph), cited=new Set(traceReferences(graph,finding));
@@ -57,13 +57,8 @@ const WordSigning = (() => {
     return {pages,readings,unit:check.unit};
   }
 
-  function canReview() {
-    return state.detail?.status==='ready' && state.detail.rev===state.bundle?.rev &&
-      (!Team.current || ['admin','auditor'].includes(Team.current.role));
-  }
-
   function editButton(reading) {
-    if (!canReview() || !['pending','field','unread'].includes(reading.status)) return null;
+    if (!canReviewCurrentPaper() || !['pending','field','unread'].includes(reading.status)) return null;
     const {row,fact}=reading;
     if (fact && !fact.source_line.rects?.length) return null;
     if (!fact && state.bundle.report.graph.facts.some(f=>f.doc===row.doc && f.page===row.page &&
@@ -82,14 +77,10 @@ const WordSigning = (() => {
     const summary=el('summary');
     summary.append(glyph('journal-text'),el('strong','签署凭证'),el('span','待补核','word-pending'));
     const body=box('word-signing-body'), note=box('word-requirement',el('span','需取得本版合同的签署页或电子签署记录。'));
-    if (canReview()) {
+    if (canReviewCurrentPaper()) {
       const draft=action('拟补件意见',()=>{
-        openReview();
-        $('#review-decision').value='return';
-        $('#review-decision').dispatchEvent(new Event('change'));
         const doc=index.documents.get(data.pages[0].doc);
-        $('#review-note').value='请补充与《'+doc.name+'》对应的签署版原件或电子签署记录，并注明签署方和所对应的合同版本。';
-        $('#review-note').focus();
+        draftSupplement('请补充与《'+doc.name+'》对应的签署版原件或电子签署记录，并注明签署方和所对应的合同版本。');
       },'word-draft');
       note.append(draft);
     }

@@ -226,11 +226,13 @@ function openPage(docId, pageNumber, highlight, lineHint, registerPair, rawRef) 
   const timingRows=ReinspectionTiming.pageReferences(paper?.findings.find(f=>f.rule==='H02'),paper?.graph,docId,pageNumber);
   const otherRefs = [...registerRefs, ...boardRefs, ...repairRefs, ...PhaseEvidence.pageReferences(paper?.graph,docId,pageNumber,pageFacts,lineHint)];
   const timingRefs=timingRows.filter(s=>!otherRefs.some(r=>r.rawLine===s.rawLine));
-  const folioRefs=ContractFolios.pageReferences(docId,pageNumber);
-  const preferredFolio=folioRefs.find(r=>r.ref===rawRef);
+  const contractRefs=[...ContractFolios.pageReferences(docId,pageNumber),...ContractCalendar.pageReferences(docId,pageNumber)];
+  const preferred=contractRefs.find(r=>r.ref===rawRef);
   const existingRefs=[...timingRefs,...otherRefs];
-  const pageRefs=[...(preferredFolio?[preferredFolio]:[]), ...existingRefs.filter(r=>!preferredFolio || r.rawLine!==preferredFolio.rawLine),
-    ...folioRefs.filter(r=>r!==preferredFolio && !existingRefs.some(s=>r.rawLine===s.rawLine))];
+  const pageRefs=[...(preferred?[preferred]:[]),...existingRefs.filter(r=>!preferred || r.rawLine!==preferred.rawLine)];
+  for (const row of contractRefs) {
+    if (!pageRefs.some(r=>r.rawLine===row.rawLine)) pageRefs.push(row);
+  }
   const comparedFact=registerPair && pageFacts.find(f=>f.id===registerPair.fact && f.field==='acceptance_result' && f.source_line?.rects?.length);
   const comparedNote=registerPair && registerRefs.find(s=>s.rawLine===registerPair.line && s.rawLine!==comparedFact?.source_line.number);
   const comparison=comparedFact && comparedNote ? box('trail-reader-pair') : null;
@@ -541,7 +543,7 @@ function openPage(docId, pageNumber, highlight, lineHint, registerPair, rawRef) 
     const label = {inspection_reference:'设备检验原行',contract_signing_reference:'合同签章原行',payment_release_reference:'放行依据原行',acceptance_opinion_reference:'付款意见原行',payment_amendment_reference:'付款变更所据原行',invoice_receipt_reference:'收票条件所据原行',repair_completion_reference:'整改记录原行',equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',approval_reference:'董事会审批记录原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
     const timingRow=timingRefs.find(r=>r.rawLine===gap.line);
     const raw = rawLines.find(source => source.rawLine === gap.line);
-    const heading=folioRefs.includes(raw)?raw.label:timingRow?.label || (gap.quality==='register_reference'?'复验附注':label);
+    const heading=contractRefs.includes(raw)?raw.label:timingRow?.label || (gap.quality==='register_reference'?'复验附注':label);
     const section = box('evidence-row',el('h4',heading+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
     section.dataset.gapLine = String(gap.line);
     if (raw) {
@@ -630,6 +632,7 @@ function citation(ref) {
     return Team.paperLink(label,prior.case_id,'button ref',new URLSearchParams({rev:String(prior.rev),fact:prior.fact}));
   }
   const source = index?.nodes.get(ref);
+  if (source?.type==='contract_date_line') return ContractCalendar.citation(ref);
   if (source?.type==='contract_folio_line') return ContractFolios.citation(ref);
   if (source?.type==='reinspection_time_line') {
     const report=state.bundle.report;
@@ -771,6 +774,7 @@ function installmentDetails(history) {
 
 function revealPaperTarget(target) {
   if (!target) return;
+  target.dispatchEvent(new Event('reveal-evidence',{bubbles:true}));
   const entry = target.closest('[data-finding]');
   if (entry) {
     if (entry.hidden) entry.dispatchEvent(new Event('reveal-finding', {bubbles:true}));
@@ -999,11 +1003,7 @@ function reportPanel() {
   const conclusion = box('panel conclusion-panel',verdictLine);
   conclusion.dataset.verdict = report.result.verdict;
   const priorities = priorityFindings(report.findings);
-  if (priorities.length) {
-    const first = priorities[0];
-    const label = first.stage ? first.stage.name+' · '+first.title : first.title;
-    conclusion.append(box('priority-findings',el('strong','优先核对'),performanceJump(first,label)));
-  }
+  if (priorities.length) conclusion.append(priorityQueue(priorities));
   const human = box('panel', el('h2', report.peer_review ? '复核签收决定' : '审计人员验收'));
   const decision = state.detail.decisions.find(item => item.rev === state.bundle.rev);
   if (decision) {
@@ -1432,6 +1432,9 @@ async function refresh() {
       } else if (route.params.get('view')==='signatures' && state.openedCitation!==location.hash &&
                  bundle?.report.findings.some(f=>f.rule==='H01' && f.effect_review?.word_signatures)) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#word-signatures';
+      } else if (route.params.get('view')==='calendar' && state.openedCitation!==location.hash &&
+                 bundle?.report.findings.some(f=>f.rule==='H01' && f.effect_review?.calendar?.length)) {
+        state.openedCitation=location.hash; state.tab='report'; focusFinding='#contract-calendar';
       } else if (route.params.get('view')==='entities' && state.openedCitation!==location.hash && state.bundle) {
         state.openedCitation=location.hash; state.tab='graph';
         graphIndex(bundle.report.graph).graphBrowseMode='entities'; focusFinding='#case-entity-browser';
@@ -1444,7 +1447,7 @@ async function refresh() {
           target.open=true;
           $('#trail-tab-final')?.click();
           revealPaperTarget($('#reinspection-wait'));
-        } else if (target?.dataset.finding || ['equipment-reinspection-trail','case-entity-browser','contract-pages','word-signatures'].includes(target?.id)) revealPaperTarget(target);
+        } else if (target?.dataset.finding || ['equipment-reinspection-trail','case-entity-browser','contract-pages','word-signatures','contract-calendar'].includes(target?.id)) revealPaperTarget(target);
         else target?.focus();
       }
       const target = route.params.get('fact');
@@ -1537,6 +1540,18 @@ function showInvoiceReviewConflict(container,problem,choice) {
   container.replaceChildren(el('strong',problem.message),list);
   if (history.count>history.changes.length)
     container.append(el('p','显示 '+history.changes.length+' / '+history.count+' 处变化，重新审计可核对全部匹配。','small'));
+}
+function canReviewCurrentPaper() {
+  return state.detail?.status==='ready' && state.detail.rev===state.bundle?.rev &&
+    (!Team.current || ['admin','auditor'].includes(Team.current.role));
+}
+function draftSupplement(note) {
+  if (!canReviewCurrentPaper()) return;
+  openReview();
+  const decision=$('#review-decision');
+  decision.value='return'; decision.dispatchEvent(new Event('change'));
+  $('#review-note').value=note;
+  $('#review-note').focus();
 }
 function openReview(facts,reviewVisibility=false) {
   state.review = {id: state.detail.id, rev: state.bundle.rev, facts};

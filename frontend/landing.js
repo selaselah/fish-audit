@@ -48,9 +48,10 @@ if (!restoreWorkspaceLink()) {
   const scenes = document.querySelector('.scene-tabs');
   const sceneTabs = [...scenes.querySelectorAll('[role="tab"]')];
   const contractExample=document.getElementById('signing-example');
+  const examples={company:{scene:'signing',revision:9},word:{scene:'word-signing',revision:6},calendar:{scene:'contract-dates',revision:6}};
   function sceneAddress(name) {
     const url=new URL(location.href);
-    url.searchParams.set('scene',name==='signing' && contractExample.value==='word' ? 'word-signing' : name);
+    url.searchParams.set('scene',name==='signing' ? examples[contractExample.value].scene : name);
     url.hash='workflow';
     history.replaceState(history.state,'',url);
   }
@@ -58,14 +59,13 @@ if (!restoreWorkspaceLink()) {
   const requested=new URLSearchParams(location.search).get('scene');
   if (['signing','inspection','folios'].includes(requested)) selectScene(document.getElementById('scene-tab-'+requested));
   function selectContractExample() {
-    const word=contractExample.value==='word';
-    document.getElementById('signing-company').hidden=word;
-    document.getElementById('signing-word').hidden=!word;
-    document.getElementById('signing-example-version').textContent='合成案例 · '+(word?'R6':'R9');
+    for (const key of Object.keys(examples)) document.getElementById('signing-'+key).hidden=key!==contractExample.value;
+    document.getElementById('signing-example-version').textContent='合成案例 · R'+examples[contractExample.value].revision;
   }
-  if (requested==='word-signing') {
+  const requestedExample=Object.keys(examples).find(key=>examples[key].scene===requested);
+  if (requestedExample) {
     selectScene(document.getElementById('scene-tab-signing'));
-    contractExample.value='word';
+    contractExample.value=requestedExample;
   }
   contractExample.addEventListener('change',()=>{ selectContractExample(); sceneAddress('signing'); });
   selectContractExample();

@@ -1,6 +1,6 @@
 # Fish Audit 界面重做资料索引
 
-界面调研始于 2026-11-25，签章原行对照更新于 2026-11-26（北京时间）。归档保留审计与会计软件的官方帮助配图、演示动图和说明书链接，记录具体画面及本工作台采用的做法。
+界面调研始于 2026-11-25，合同日期与签章原行对照更新于 2026-11-26（北京时间）。归档保留审计与会计软件的官方帮助配图、演示动图和说明书链接，记录具体画面及本工作台采用的做法。
 
 | 要核对什么 | 查阅入口 |
 | --- | --- |
@@ -8,6 +8,10 @@
 | Ramp、Xero、Fieldguide 与 FloQast 怎样用颜色区分操作、选择和风险 | [官方截图的配色观察](interface-color.md) |
 | 本工程采用的研究方法、法规条款、外部软件及字体来源 | [文献、制度与技术来源](project-sources.md) |
 | 首页的合同金额、柜温、分期条件及三份水印 PDF 的逐字节摘要 | [合成资料声明与 R7 底稿字段](showcase-provenance.md) |
+
+### 在底稿中逐项核对原件
+
+Ramp 的采购界面按供应商、状态、金额和开票进度浏览采购单，选中一笔再看明细。DataSnipper 的细节测试把选定字段引用到相关证据的位置，复核人可从工作表返回原件。Fish Audit 在同一笔采购里保留待核事项队列，用项目选择器切换签署、合同日期与验收依据，原件与该版读数同时可见。以上参考用于操作方式。[Ramp 官方采购指南](https://support.ramp.com/hc/en-us/articles/49355243914387-Ramp-Procurement-Quick-Start-Guide) · [DataSnipper 官方细节测试](https://www.datasnipper.com/external-audit/test-of-detail) · [本项目交互实拍](../docs/interaction-design/README.md#一次核对一个项目)
 
 ### 从签章栏追到签署凭证
 

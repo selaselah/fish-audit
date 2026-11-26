@@ -72,20 +72,29 @@ function performanceOverview(findings, graph) {
   overview.append(summary);
   const effect=findings.find(f=>f.rule==='H01');
   const word=WordSigning.panel(effect,graph,findings,state.bundle?.report.calls.pages);
-  if (word) overview.append(word);
   const folios=ContractFolios.panel(plan,graph,state.bundle?.report.calls.pages,state.bundle?.report.findings.find(f=>f.rule==='E01'));
-  if (folios) overview.append(folios);
   const parties=SigningParties.panel(effect,graph,phases);
-  if (parties) overview.append(parties);
   const acceptance=findings.find(f=>f.rule==='H02');
-  if (acceptance?.reinspection) overview.append(ReinspectionTrail.panel(acceptance,graph));
   const inspection=InspectionCoverage.panel(acceptance,graph);
-  if (inspection) overview.append(inspection);
+  const dates=ContractCalendar.panel(effect,graph,findings,state.bundle?.report.calls.pages);
+  const dateQuestion=effect?.effect_review?.calendar?.some(day=>!['exact','spacing'].includes(day.state));
+  const sections=[
+    {key:'signatures',label:'签署凭证',icon:'journal-text',content:word,priority:!dateQuestion && Boolean(word)},
+    {key:'contract-dates',label:'合同日期',icon:'clock-history',content:dates,priority:dateQuestion},
+    {key:'contract-pages',label:'分期条款',icon:'layers',content:folios,priority:plan?.status!=='ok'},
+    {key:'parties',label:'签章主体',icon:'shield-check',content:parties,priority:effect?.status==='risk'},
+    {key:'reinspection',label:'整改复验',icon:'clipboard-check',content:acceptance?.reinspection && ReinspectionTrail.panel(acceptance,graph),priority:acceptance?.status!=='ok'},
+    {key:'inspection',label:'验收范围',icon:'card-checklist',content:inspection,priority:acceptance?.status!=='ok'},
+  ];
   let expandedMandate=false;
   for (const entry of effect?.delegations || []) {
     const calendar=MandateCalendar.panel(effect,entry,graph,!expandedMandate);
-    if (calendar) {overview.append(calendar); expandedMandate ||= calendar.open;}
+    if (calendar) {
+      sections.push({key:'mandate-'+entry.side,label:(entry.side==='buyer'?'甲方':'乙方')+'授权',icon:'file-earmark-text',content:calendar,priority:calendar.open});
+      expandedMandate ||= calendar.open;
+    }
   }
+  overview.append(workpaperEvidence(sections,graph));
   const list = el('ol','','phase-summary');
   list.setAttribute('role','presentation');
   const choices = box('phase-choices');

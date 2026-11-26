@@ -42,8 +42,12 @@ const FolioTranscriptions = (() => {
         fact.source_line.number !== row.line || row.facts.length !== 1 || row.facts[0] !== proof.ref ||
         proof.quote !== fact.quote || proof.value !== fact.value || !literalMatch(row,fact)) return false;
     if (proof.basis === 'field_receipt') return Boolean(fieldReceiptOperation(fact,doc,page));
-    const check = call.check, ref = /\/f([1-9][0-9]*)$/u.exec(fact.id)?.[1];
-    if (proof.basis !== 'visual_check' || fact.status !== 'anchored' || fact.visual_check !== 'clear' ||
+    return proof.basis === 'visual_check' && visuallyRead(fact,call);
+  }
+
+  function visuallyRead(fact,call) {
+    const check = call?.check, ref = /\/f([1-9][0-9]*)$/u.exec(fact.id)?.[1];
+    if (!call || fact.status !== 'anchored' || fact.visual_check !== 'clear' ||
         fact.amendment || !ref || !call.response_id || !check?.response_id || call.response_id === check.response_id ||
         fact.response_id !== call.response_id || fact.check_response_id !== check.response_id) return false;
     if (!Array.isArray(check.input) || !Array.isArray(check.output?.checks)) return false;
@@ -109,5 +113,5 @@ const FolioTranscriptions = (() => {
     show(options[0].id);
     return {details,show};
   }
-  return {verified,reader};
+  return {verified,reader,visuallyRead};
 })();

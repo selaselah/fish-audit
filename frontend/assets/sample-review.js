@@ -9,7 +9,9 @@
     signing:{title:'采购合同',version:'合成采购 · R9',image:'/assets/showcase-signing-page.jpg',pdf:'/showcase/signing-contract.pdf',
       lines:[...document.querySelectorAll('#signing-company [data-ref]')].map(describe)},
     word:{title:'演练采购合同',version:'合成采购 · R6',image:'/assets/showcase-word-signing-page.jpg',original:'/showcase/signing-text.docx',
-      lines:[...document.querySelectorAll('#signing-word .public-signing-lines [data-ref]')].map(describe)}
+      lines:[...document.querySelectorAll('#signing-word .public-signing-lines [data-ref]')].map(describe)},
+    calendar:{title:'采购合同',version:'合成采购 · R6',image:'/assets/showcase-calendar-page.jpg',pdf:'/showcase/calendar-contract.pdf',
+      lines:[...document.querySelectorAll('#signing-calendar .public-calendar-dates [data-ref], #signing-calendar .public-signing-lines [data-ref]')].map(describe)}
   };
   const modes=[...dialog.querySelectorAll('[data-scale]')];
   const canvas=dialog.querySelector('canvas'), status=dialog.querySelector('[role=status]');

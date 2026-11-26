@@ -24,6 +24,7 @@ import {checkReinspectionTiming} from './reinspection-timing.mjs';
 import {checkTrialLog,checkIntakeScopes} from './trial-log.mjs';
 import {checkFolios,checkPublicFolios} from './contract-folios.mjs';
 import {checkWordSigning} from './word-signing.mjs';
+import {checkCalendar} from './contract-calendar.mjs';
 import {checkEntityBrowser} from './entity-browser.mjs';
 
 const scratch = await mkdtemp(join(tmpdir(), 'fish-ui-'));
@@ -74,6 +75,7 @@ const trailCase=caseArgument('--reinspection-trail-case');
 const timingCase=caseArgument('--reinspection-time-case');
 const folioCase=caseArgument('--folio-case');
 const wordCase=caseArgument('--word-signing-case');
+const calendarCase=caseArgument('--calendar-case');
 const trialCase=caseArgument('--trial-case');
 const intakeScopes=process.argv.includes('--intake-scopes');
 const entityCase=caseArgument('--entity-case');
@@ -86,7 +88,7 @@ const qualityImageCase = caseArgument('--quality-image-case');
 const reinspectionGap = caseArgument('--reinspection-gap-case');
 const brokenPayment = caseArgument('--payment-source-case');
 const waitingCase = caseArgument('--waiting-case');
-const seeded = [publicFolios,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,product,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+const seeded = [publicFolios,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,product,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
 const root = product || publicFolios ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
@@ -158,6 +160,8 @@ try {
     await checkProduct({root,call,evaluate,wait});
   } else if (intakeScopes) {
     await checkIntakeScopes({root,call,evaluate,wait});
+  } else if (calendarCase) {
+    await checkCalendar({root,call,evaluate,wait},calendarCase,Number(process.env.AUDIT_CALENDAR_REV));
   } else if (wordCase) {
     await checkWordSigning({root,call,evaluate,wait},wordCase,Number(process.env.AUDIT_WORD_REV));
   } else if (folioCase) {

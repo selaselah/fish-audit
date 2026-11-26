@@ -24,6 +24,9 @@
         const panel=$('#file-progress'); panel.open=true; jump(panel.querySelector('summary'));
       }, '', '解析 页数 进度');
       if (paper) {
+        if (ContractCalendar.available()) add('底稿视图','核对合同日期','clock-history',()=>{
+          state.tab='report'; renderCase(true); jump($('#contract-calendar'));
+        },'R'+paper.rev,'签订日 生效日 截止日 原件 冲突');
         if (EntityBrowser.items(paper.report.graph).length) add('底稿视图','按对象查原件','diagram-3',()=>{
           graphIndex(paper.report.graph).graphBrowseMode='entities'; state.tab='graph'; renderCase(true); jump($('#case-entity-browser'));
         },'R'+paper.rev,'合同编号 发票号码 单号 往来单位 标的 关联单据 图谱');
