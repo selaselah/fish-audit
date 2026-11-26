@@ -508,7 +508,7 @@ def stage_terms(text):
     return ratio[0] if len(ratio) == 1 else "", "", ""
 
 
-def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=(),release_terms=(),prior_terms=()):
+def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=(),release_terms=(),prior_terms=(),folio_sources=None):
     fields = ("payment_term","payment_stage","adjustment")
     refs = contract.evidence("contract",*fields)
     rows, counts, issues = [], set(), []
@@ -558,6 +558,8 @@ def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=
                     kind="warranty"
             rows.append(dict(index=index, label=label, share=share, kind=kind, condition=condition,
                              text=part, ref=fact["id"]))
+    if folio_sources:
+        contract_folios.withhold_shares(rows, folio_sources, contract.unit)
     if rows and all(r["index"] is not None for r in rows):
         rows.sort(key=lambda r:r["index"])
     if counts and counts != {len(rows)}:
@@ -588,6 +590,12 @@ def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=
     if uncovered:
         refs += [n["page_id"] for n in uncovered]
         issues.append("另有待归入付款安排的原文")
+    if (issues == ["完整付款方式或各期比例待核"] and folio_sources and
+            len([p for p in folio_sources["pages"] if p["unit"] == contract.unit]) == 1 and
+            all(r.get("ambiguous_number") or r["kind"] and r["share"] and Decimal(r["share"]) > 0 for r in rows)
+            and sum(Decimal(r["share"]) for r in rows if r["share"]) < 100):
+        for row in rows:
+            row["separate_numeric_clause"] = bool(row["share"])
     if issues:
         status, detail = "missing", "；".join(issues) + "。请对照现行合同及附表。"
     else:
@@ -733,7 +741,9 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
     invoice_terms = [s for s in ledger["lines"] if s["role"]=="clause"] if ledger else []
     plan, rows = schedule(contract, warranty_checks=version in WARRANTY_FORMATS, deadlines=version in PAYMENT_WINDOW_FORMATS,release_terms=cash.get("lines",[]),
                           prior_terms=graph.get("prior_installment_sources",{}).get("lines",[]) if version==FORMAT else (),
+                          folio_sources=graph.get("contract_folio_sources") if version==FORMAT else None,
                           invoice_terms=[s for s in invoice_terms if s["unit"]==contract.unit])
+    schedule_detail = plan["detail"]
     batch = None
     models = equipment_models.assess(graph, contract, [*receipts, *retests], effective=signed["status"] == "ok") if version == FORMAT else None
     if version in BATCH_FORMATS:
@@ -907,9 +917,14 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
             accepted_on = None
     if payment_change and not scoped_change:
         payment_amendments.attach(plan,payment_change)
+    if version == FORMAT and (batch or scoped_change):
+        contract_folios.withhold_shares(rows, graph.get("contract_folio_sources", {}), contract.unit)
     folios = contract_folios.assess(graph.get("contract_folio_sources", {}), contract.unit,
                                    {r["ref"] for r in rows if r["kind"]}) if version == FORMAT else None
     standalone = folios and folios["standalone"] if plan["status"] == "ok" and not (batch or changes or extra_units) else None
+    only_number = (folios and len(folios["pages"]) == 1 and folios["state"] == "numeral"
+                   and all(i["state"] == "numeral" for i in folios["pages"][0]["issues"])
+                   and plan["detail"] == schedule_detail and not (batch or changes or extra_units))
     if folios:
         plan["contract_folios"] = folios
         contract_folios.attach(plan, folios)
@@ -954,7 +969,8 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         stage = {"name":row["label"] or fallback_label,"share":row["share"],"clause":row["text"],"clause_ref":row["ref"]}
         refs = [row["ref"], *signed["evidence"]]
         independent_first = bool(standalone and kind == "effect" and row["index"] == 1 and row["ref"] == standalone["clause_ref"])
-        if folios and (independent_first or plan["status"] == "ok"):
+        separate = independent_first or only_number and row.get("separate_numeric_clause")
+        if folios and (separate or plan["status"] == "ok"):
             refs += folios["evidence"]
         scope = [contract.unit] if version == FIRST_FORMAT else signed["scope"].copy()
         this_batch = batch_rows.get(row.get("batch_index"))
@@ -974,7 +990,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
             scope += [r.unit for r in releases]
             if release_check:
                 scope += [r["unit"] for r in release_check.get("tickets",[])]
-        if plan["status"] != "ok" and not independent_first:
+        if plan["status"] != "ok" and not separate:
             refs += plan["evidence"]
             if batch:
                 scope += plan["scope"]

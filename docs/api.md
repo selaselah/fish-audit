@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## 合同原行与转录
+
+规则 `2026.11.26.11` 使用 `policy.contract_folios=contract-payment-folios-v2`。可复核的排版差异在对应的 `graph.contract_folio_sources.lines[]` 增列 `transcription`。其中 `ref` 指向同行的唯一观察，`quote` 和 `value` 保留转录，物理原行仍取该行的 `quote`。`form` 表示日期、数量、摄氏温度限值或分期比例。依据 `basis` 为 `visual_check` 时可查两次模型调用的输入与结果，为 `field_receipt` 时可查当时的人工核图回执。程序逐项核对行框、原件及页图摘要。
+
+原件的期款数字中间有空白或出现可能被折叠的数字字符时，原行在 `ambiguous_body` 中保留完整条款，H03 页状态为 `numeral`。受影响期款的 `stage.share` 为空串，验收款回单据此停止计算应付额。此项也检查单页合同。只在单页付款表完整、疑点限于另一行比例、其他已明示比例均为正且合计小于 100% 时，其他期次才继续按自己的签署、验收或质保条件审查。[规则实现](../server/folio_transcription.py) · [合成 Word 样例](samples/word_percentage.py)
+
 ## 多页合同的付款依据
 
 自规则版本 `2026.11.26.10` 起，`policy.contract_folios` 为 `contract-payment-folios-v1`。有付款约定的多页合同在 `graph.contract_folio_sources` 留存物理页、原行、文件和页图 SHA-256、对应观察及原文支持状态。证据边 `contract_folio_basis` 从原页指向条款行。`calls.pages[].contract_folio_rects` 留存相关行的原图坐标，可从原件重新分页校验。

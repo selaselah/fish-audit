@@ -23,6 +23,7 @@ def fixture(
     attest=None,
     root=ROOT,
     bank=BANK_DOC,
+    edit_second=None,
 ):
     lines = [*notes, *[label + "：" + value for _, label, value in stages], *unobserved]
     rects = {str(i): [[0.1, 0.1, 0.9, 0.2]] for i in range(1, len(lines) + 1)}
@@ -42,6 +43,8 @@ def fixture(
             }
         },
     }
+    if edit_second:
+        edit_second(page)
     graph = material(
         [root, RECEIPT, WARRANTY, bank],
         extra_pages=[page],
@@ -64,6 +67,7 @@ def fixture(
             {
                 "doc": doc,
                 "page": n,
+                **(page["extraction"] if n == 2 else {}),
                 "contract_folio_rects": contract_folios.geometry(
                     numbers[doc, n],
                     {

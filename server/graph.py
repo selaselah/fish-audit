@@ -359,7 +359,8 @@ def build_graph(docs, pages, attestations, amendments=()):
     record_addenda(graph, lambda doc, number: texts[doc, number])
     graph["equipment_model_sources"] = equipment_models.sources(graph,lambda doc,number:texts[doc,number])
     delivery_batches.attach(graph, lambda doc, number: texts[doc,number])
-    folios = contract_folios.sources(graph, lambda doc, number: texts[doc, number])
+    folios = contract_folios.sources(graph, lambda doc, number: texts[doc, number],
+                                     calls={(p["doc"], p["number"]): p["extraction"] for p in pages})
     graph["contract_folio_sources"] = folios
     nodes, edges = contract_folios.source_graph(folios)
     graph["nodes"].extend(nodes)
