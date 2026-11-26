@@ -26,6 +26,7 @@ from quality_labels import verify_report as verify_quality_numbers
 from quality_references import verify_report as verify_quality_references
 from acceptance_authority import verify_sources as verify_acceptance_authority
 import payment_execution
+import advance_guarantee
 from equipment_models import REVIEW_SINCE as MODEL_REVIEW_SINCE, source_kind as model_source_kind, verify as verify_equipment_models
 from stage_payments import verify as verify_stage_payments
 from receipt_packets import verify_sources as verify_receipt_packets
@@ -286,6 +287,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
     verify_inspection(report,page_text)
     verify_payment_acceptance(report,page_text)
     payment_execution.verify(report,page_text)
+    advance_guarantee.verify(report,page_text)
     verify_prior_installment(report,page_text,submitted=submitted,signed=signed)
     verify_payment_releases(report,page_text,submitted=submitted,signed=signed)
     verify_repair_completion(report,page_text)
@@ -312,6 +314,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
         inspected.extend(graph.get("invoice_receipt_sources",{}).get("pages",[]))
         inspected.extend(graph.get("quality_addenda",{}).get("payments",{}).get("pages",[]))
         inspected.extend(graph.get("prior_installment_sources",{}).get("pages",[]))
+        inspected.extend(graph.get(advance_guarantee.KEY,{}).get("pages",[]))
         inspected.extend(graph.get("payment_acceptance_sources",{}).get("pages",[]))
         inspected.extend(graph.get("acceptance_authority_sources",{}).get("bank_pages",[]))
         inspected.extend(graph.get("inspection_coverage_sources",{}).get("pages",[]))
@@ -451,6 +454,7 @@ def render_addendum_sources(bundle, report, nodes):
     selected.update(p["doc"] for p in graph.get("acceptance_authority_sources",{}).get("bank_pages",[]))
     selected.update(p["doc"] for p in graph.get("stage_payment_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("prior_installment_sources",{}).get("pages",[]))
+    selected.update(p["doc"] for p in graph.get(advance_guarantee.KEY,{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("contract_folio_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("reinspection_wait_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("payment_acceptance_sources",{}).get("pages",[]))
@@ -495,6 +499,8 @@ def render_addendum_sources(bundle, report, nodes):
                 require(layout["lines"].get(line_number, []) == rects, "合同付款续页的行坐标未能从原件重现")
             for line_number, rects in trace.get("payment_execution_rects", {}).items():
                 require(layout["lines"].get(line_number, []) == rects, "付款凭证说明的行坐标未能从原件重现")
+            for line_number, rects in trace.get(advance_guarantee.RECTS, {}).items():
+                require(layout["lines"].get(line_number, []) == rects, "预付款保函的行坐标未能从原件重现")
             for line_number, rects in trace.get("signer_timing_rects", {}).items():
                 require(layout["lines"].get(line_number, []) == rects, "签认与付款时序的行坐标未能从原件重现")
             for fact in graph["facts"]:

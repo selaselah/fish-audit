@@ -30,6 +30,7 @@ from inspection_coverage import FORMAT as INSPECTION_COVERAGE
 from equipment_models import FORMAT as EQUIPMENT_MODELS
 from stage_payments import FORMAT as STAGE_PAYMENTS
 from payment_execution import FORMAT as PAYMENT_EXECUTION
+from advance_guarantee import FORMAT as ADVANCE_GUARANTEE
 from payment_acceptance import FORMAT as PAYMENT_ACCEPTANCE
 from receipt_packets import FORMAT as RECEIPT_PACKETS
 from delivery_batches import FORMAT as DELIVERY_BATCHES
@@ -74,6 +75,7 @@ CATALOG = {
     "T05": ("出差人员关联", "对照报销单与具名票据中的出差人，缺姓名、别名和不一致均交人工。"),
 }
 VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING, "performance_checks":PERFORMANCE_FORMAT,
+           "advance_guarantee":ADVANCE_GUARANTEE,
            "invoice_receipt_conditions":INVOICE_RECEIPT, "acceptance_reservations":RESERVATIONS, "acceptance_word_reviews":WORD_REVIEWS, "contract_word_reviews":CONTRACT_WORD_REVIEWS, "payment_releases":PAYMENT_RELEASES, "equipment_models":EQUIPMENT_MODELS, "repair_completion":REPAIR_COMPLETION, "reinspection_wait": REINSPECTION_WAIT, "contract_folios": CONTRACT_FOLIOS, "inspection_coverage":INSPECTION_COVERAGE, "prior_installment":PRIOR_INSTALLMENT,
            "quality_number_classification":QUALITY_NUMBER_FORMAT, "quality_references":QUALITY_REFERENCE_FORMAT,
            "delegation_checks":DELEGATION_FORMAT, "quality_addenda":ADDENDUM_FORMAT, "acceptance_authority":ACCEPTANCE_AUTHORITY,"delivery_batches":DELIVERY_BATCHES,"receipt_packets":RECEIPT_PACKETS,"stage_payments":STAGE_PAYMENTS, "payment_acceptance":PAYMENT_ACCEPTANCE, "payment_execution":PAYMENT_EXECUTION,
@@ -153,7 +155,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
                         "signer_timing","date_checks","batch_acceptance","effect_review","warranty_check","warranty_payment",
                         "payment_window","invoice_receipt","payment_change","payment_opinion","acceptance_reservations",
                         "acceptance_comments","contract_comments","stage_payments","payment_acceptance","execution_basis",
-                        "equipment_models","inspection_coverage","prior_installment","contract_folios"):
+                        "equipment_models","inspection_coverage","prior_installment","contract_folios","advance_guarantee"):
                 if key in item:
                     findings[-1][key] = item[key]
         return findings

@@ -13,6 +13,7 @@ from documents import digest, prepare
 import contract_folios
 import signer_clock
 import payment_execution
+import advance_guarantee
 from graph import PRINTED_TITLES, attach_prior_invoices, build_graph, compact, heading_candidates, invoice_number_edges, link_procedures
 from payment_releases import submission_day
 from model import AUDIT, EXTRACT, VISUAL_CHECK, attach_check, audit_graph, extract_page
@@ -22,7 +23,7 @@ from storage import encode
 
 
 METHODS = {name: (SERVER / name).read_bytes() for name in
-           ("acceptance_authority.py", "acceptance_comments.py", "acceptance_execution.py", "contract_comments.py", "acceptance_payments.py", "acceptance_reservations.py", "calculations.py", "capacity.py", "cn_workdays.py", "conclusions.py", "config.py", "contract_calendar.py", "contract_changes.py", "contract_effect.py", "contract_folios.py", "controls.py", "delegation.py", "delivery_batches.py", "documents.py", "equipment_exchanges.py", "equipment_models.py", "field_receipts.py", "field_sources.py", "folio_transcription.py", "graph.py", "inspection_coverage.py", "inspection_register.py", "installments.py", "invoice_approval.py", "invoice_comparison.py", "invoice_conditions.py", "invoice_history.py", "invoice_identity.py", "invoice_masks.py", "invoice_proof.py", "jobs.py", "mandate_execution.py", "mandate_originals.py", "model.py", "payment_acceptance.py", "payment_execution.py", "payment_amendments.py", "payment_checks.py", "payment_history.py", "payment_index.py", "payment_notes.py", "payment_reference.py", "payment_releases.py", "payment_visibility.py", "payment_windows.py", "pdf_execution.py", "peer_review.py", "performance.py", "performance_versions.py", "policy.py", "prior_installment.py", "protocol.py", "signer_clock.py", "signer_timing.py", "signing_parties.py", "stage_payments.py", "quality_labels.py", "quality_references.py", "receipt_packets.py", "reinspection.py", "reinspection_wait.py", "repair_completion.py", "storage.py", "supplier_pages.py", "supplements.py", "transfers.py", "trial_run.py", "warranty_service.py", "warranty_terms.py", "work_progress.py")}
+           ("advance_guarantee.py", "acceptance_authority.py", "acceptance_comments.py", "acceptance_execution.py", "contract_comments.py", "acceptance_payments.py", "acceptance_reservations.py", "calculations.py", "capacity.py", "cn_workdays.py", "conclusions.py", "config.py", "contract_calendar.py", "contract_changes.py", "contract_effect.py", "contract_folios.py", "controls.py", "delegation.py", "delivery_batches.py", "documents.py", "equipment_exchanges.py", "equipment_models.py", "field_receipts.py", "field_sources.py", "folio_transcription.py", "graph.py", "inspection_coverage.py", "inspection_register.py", "installments.py", "invoice_approval.py", "invoice_comparison.py", "invoice_conditions.py", "invoice_history.py", "invoice_identity.py", "invoice_masks.py", "invoice_proof.py", "jobs.py", "mandate_execution.py", "mandate_originals.py", "model.py", "payment_acceptance.py", "payment_execution.py", "payment_amendments.py", "payment_checks.py", "payment_history.py", "payment_index.py", "payment_notes.py", "payment_reference.py", "payment_releases.py", "payment_visibility.py", "payment_windows.py", "pdf_execution.py", "peer_review.py", "performance.py", "performance_versions.py", "policy.py", "prior_installment.py", "protocol.py", "signer_clock.py", "signer_timing.py", "signing_parties.py", "stage_payments.py", "quality_labels.py", "quality_references.py", "receipt_packets.py", "reinspection.py", "reinspection_wait.py", "repair_completion.py", "storage.py", "supplier_pages.py", "supplements.py", "transfers.py", "trial_run.py", "warranty_service.py", "warranty_terms.py", "work_progress.py")}
 CODE_DIGESTS = {name: digest(source) for name, source in METHODS.items()}
 
 
@@ -186,8 +187,12 @@ class Worker:
                    **page["extraction"]} for page in pages]
         folio_lines = contract_folios.page_lines(graph["contract_folio_sources"])
         signer_lines = contract_folios.line_numbers(signer_clock.located_rows(graph["acceptance_authority_sources"]))
+        guarantee_lines = contract_folios.line_numbers(graph[advance_guarantee.KEY]["rows"])
         execution_lines = contract_folios.line_numbers(graph[payment_execution.KEY]["rows"])
         for page, call in zip(pages, traces):
+            guarantee = guarantee_lines.get((page["doc"], page["number"]))
+            if guarantee:
+                call[advance_guarantee.RECTS] = contract_folios.geometry(guarantee,page["layer"])
             numbers = folio_lines.get((page["doc"], page["number"]))
             if numbers:
                 call["contract_folio_rects"] = contract_folios.geometry(numbers, page["layer"])

@@ -22,6 +22,7 @@ import equipment_exchanges
 import stage_payments
 import payment_acceptance
 import payment_execution
+import advance_guarantee
 import contract_effect
 import pdf_execution
 import acceptance_execution
@@ -370,6 +371,12 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     graph["nodes"].extend(nodes)
     graph["edges"].extend(edges)
     graph["payment_window_sources"]=payment_windows.sources(graph,lambda doc,number:texts[doc,number])
+    layouts = {(p["doc"], p["number"]):p.get("layer") or {} for p in pages}
+    guarantees = advance_guarantee.sources(graph,lambda d,n:texts[d,n],lambda d,n:layouts[d,n])
+    graph[advance_guarantee.KEY] = guarantees
+    nodes,edges = advance_guarantee.source_graph(guarantees)
+    graph["nodes"].extend(nodes)
+    graph["edges"].extend(edges)
     calls = {(p["doc"], p["number"]): p["extraction"] for p in pages}
     graph["contract_effect_sources"]=contract_effect.sources(graph,lambda doc,number:texts[doc,number],calls=calls)
     graph["acceptance_pdf_sources"] = acceptance_execution.sources(graph, read_original)

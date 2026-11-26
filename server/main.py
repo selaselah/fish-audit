@@ -285,8 +285,8 @@ def create_app(store, worker):
             args["view"] = view
         if "stage" in request.args:
             stages = request.args.getlist("stage")
-            if args.get("view") != "payment-checks" or len(stages) != 1 or not re.fullmatch(r"H04-[1-9][0-9]{0,7}", stages[0]):
-                raise CaseError("请选择本版的付款条件检查。", 400)
+            if args.get("view") != "payment-checks" or len(stages) != 1 or not re.fullmatch(r"H0[45]-[1-9][0-9]{0,7}", stages[0]):
+                raise CaseError("请选择本版的付款条件或实付时点检查。", 400)
             args["stage"] = stages[0]
         if "receipt" in request.args:
             receipt = request.args["receipt"]
