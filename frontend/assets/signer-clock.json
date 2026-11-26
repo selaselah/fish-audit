@@ -1,0 +1,234 @@
+{
+  "case_id": "04a1fca6a0974205b58b0175cad08715",
+  "rev": 5,
+  "report_sha256": "824ddcaf6a5770ca8c83238eaa1ca25f8bc5afa2bd4d98c3d9c43f90ded9e2e5",
+  "documents": [
+    {
+      "title": "采购合同",
+      "version": "合成案例 · R5",
+      "page": 1,
+      "pdf": "/showcase/signer-clock-contract.pdf",
+      "image": "/assets/signer-clock-contract.jpg",
+      "source_sha256": "db50bd8ce3d228c16ea569cdcb257f24b49f044089c35c7de978bdc6b931a17d",
+      "page_sha256": "54c746008cdef6226c92a9df5141b51c76a69ccb87ec9f68972578829e0309c4",
+      "lines": [
+        {
+          "ref": "d02/p1/f15",
+          "line": 17,
+          "label": "第二期",
+          "value": "最终验收合格后支付60%",
+          "quote": "第二期：最终验收合格后支付60%",
+          "rects": [
+            [
+              0.08209,
+              0.77945,
+              0.45701,
+              0.79589
+            ]
+          ],
+          "rect": "0.08209,0.77945,0.45701,0.79589",
+          "crop": "/assets/signer-clock-contract-17.webp"
+        },
+        {
+          "ref": "d02/p1/f17",
+          "line": 19,
+          "label": "验收签认约定",
+          "value": "终验须由周宁、林岚共同签字确认",
+          "quote": "验收签认约定：终验须由周宁、林岚共同签字确认",
+          "rects": [
+            [
+              0.08145,
+              0.86027,
+              0.63413,
+              0.87671
+            ]
+          ],
+          "rect": "0.08145,0.86027,0.63413,0.87671",
+          "crop": "/assets/signer-clock-contract-19.webp"
+        }
+      ]
+    },
+    {
+      "title": "银行付款回单",
+      "version": "合成案例 · R5",
+      "page": 1,
+      "pdf": "/showcase/signer-clock-transfer.pdf",
+      "image": "/assets/signer-clock-transfer.jpg",
+      "source_sha256": "e39dae6816e4baf485b708356ee5476a49e3bb0ffe7ecedbaf4f5ca0bfc5c758",
+      "page_sha256": "97e6829ea30c011415b6f223255aa23fd619ab0423cf536367d4079912e678bb",
+      "lines": [
+        {
+          "ref": "d03/p1/f8",
+          "line": 9,
+          "label": "付款日期",
+          "value": "2026年9月25日",
+          "quote": "付款日期：2026年9月25日",
+          "rects": [
+            [
+              0.08209,
+              0.45662,
+              0.37492,
+              0.47306
+            ]
+          ],
+          "rect": "0.08209,0.45662,0.37492,0.47306",
+          "crop": "/assets/signer-clock-transfer-9.webp"
+        },
+        {
+          "ref": "joint-clock/d03/p1/l10",
+          "line": 10,
+          "label": "实际扣款时间",
+          "value": "2026年9月25日 13:10（北京时间）",
+          "quote": "实际扣款时间：2026年9月25日 13:10（北京时间）",
+          "rects": [
+            [
+              0.08274,
+              0.4968,
+              0.64253,
+              0.51553
+            ]
+          ],
+          "rect": "0.08274,0.4968,0.64253,0.51553",
+          "crop": "/assets/signer-clock-transfer-10.webp"
+        }
+      ]
+    },
+    {
+      "title": "验收报告",
+      "version": "合成案例 · R5",
+      "page": 1,
+      "pdf": "/showcase/signer-clock-acceptance.pdf",
+      "image": "/assets/signer-clock-acceptance.jpg",
+      "source_sha256": "cb4df189883b3d7acb524deaf728067578a25111bfcedfca08a15c22d21f6db9",
+      "page_sha256": "22e91abaed045807db6cfd653ad52381800ce789d320cfec4691d669ea96ebd2",
+      "lines": [
+        {
+          "ref": "d04/p1/f12",
+          "line": 14,
+          "label": "验收签认",
+          "value": "周宁（已签字）",
+          "quote": "验收签认：周宁（已签字）",
+          "rects": [
+            [
+              0.08145,
+              0.65845,
+              0.37363,
+              0.67717
+            ]
+          ],
+          "rect": "0.08145,0.65845,0.37363,0.67717",
+          "crop": "/assets/signer-clock-acceptance-14.webp"
+        },
+        {
+          "ref": "d04/p1/f13",
+          "line": 15,
+          "label": "验收签认",
+          "value": "林岚（已签字）",
+          "quote": "验收签认：林岚（已签字）",
+          "rects": [
+            [
+              0.08145,
+              0.69863,
+              0.37363,
+              0.71735
+            ]
+          ],
+          "rect": "0.08145,0.69863,0.37363,0.71735",
+          "crop": "/assets/signer-clock-acceptance-15.webp"
+        },
+        {
+          "ref": "signer-date/d04/p1/l16",
+          "line": 16,
+          "label": "周宁签认日期",
+          "value": "2026年9月20日",
+          "quote": "周宁签认日期：2026年9月20日",
+          "rects": [
+            [
+              0.08145,
+              0.73881,
+              0.42534,
+              0.75571
+            ]
+          ],
+          "rect": "0.08145,0.73881,0.42534,0.75571",
+          "crop": "/assets/signer-clock-acceptance-16.webp"
+        },
+        {
+          "ref": "signer-date/d04/p1/l17",
+          "line": 17,
+          "label": "林岚签认日期",
+          "value": "2026年9月25日",
+          "quote": "林岚签认日期：2026年9月25日",
+          "rects": [
+            [
+              0.08145,
+              0.77945,
+              0.42534,
+              0.79589
+            ]
+          ],
+          "rect": "0.08145,0.77945,0.42534,0.79589",
+          "crop": "/assets/signer-clock-acceptance-17.webp"
+        },
+        {
+          "ref": "joint-clock/d04/p1/l18",
+          "line": 18,
+          "label": "林岚签认时间",
+          "value": "2026年9月25日 15:20（北京时间）",
+          "quote": "林岚签认时间：2026年9月25日 15:20（北京时间）",
+          "rects": [
+            [
+              0.08145,
+              0.82009,
+              0.64253,
+              0.83881
+            ]
+          ],
+          "rect": "0.08145,0.82009,0.64253,0.83881",
+          "crop": "/assets/signer-clock-acceptance-18.webp"
+        }
+      ]
+    }
+  ],
+  "payment": {
+    "key": "H05-8",
+    "stage": "第二期",
+    "state": "same_day",
+    "clockState": "before",
+    "days": 0,
+    "events": [
+      {
+        "label": "周宁签认",
+        "kind": "signer",
+        "day": "2026-09-20",
+        "ref": "signer-date/d04/p1/l16",
+        "signature": "d04/p1/f12"
+      },
+      {
+        "label": "林岚签认",
+        "kind": "signer",
+        "day": "2026-09-25",
+        "ref": "joint-clock/d04/p1/l18",
+        "signature": "d04/p1/f13",
+        "dayRef": "signer-date/d04/p1/l17",
+        "at": "15:20",
+        "zone": "+08:00"
+      },
+      {
+        "label": "实际扣款",
+        "kind": "payment",
+        "day": "2026-09-25",
+        "ref": "joint-clock/d03/p1/l10",
+        "dayRef": "d03/p1/f8",
+        "at": "13:10",
+        "zone": "+08:00"
+      }
+    ],
+    "clause": "d02/p1/f17",
+    "term": "d02/p1/f15",
+    "pair": [
+      "joint-clock/d04/p1/l18",
+      "joint-clock/d03/p1/l10"
+    ]
+  }
+}

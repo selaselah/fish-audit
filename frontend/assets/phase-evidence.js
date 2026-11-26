@@ -37,7 +37,7 @@ const PhaseEvidence = (() => {
     const fact=index.facts.get(ref);
     return fact?.source_line?.rects?.length && ['anchored','confirmed'].includes(fact.status)?fact:null;
   }
-  function pageReferences(graph,doc,page,facts,lineHint) {
+  function pageReferences(graph,doc,page,facts,lineHint,calls) {
     const rows=graph?.invoice_receipt_sources?.lines || [];
     const sources=new Map();
     function add(s,label,quality,prefix,hasFact,rects=[]) {
@@ -49,9 +49,12 @@ const PhaseEvidence = (() => {
       const fact=PaymentAcceptance.observation(row,graph);
       add(row,'验收单号原行','payment_acceptance_reference','bank-acceptance-line/',Boolean(fact) && row.line!==lineHint,fact?.source_line?.rects);
     }
-    for (const row of SignerEvidence.datedRows(graph)) {
+    for (const row of [...SignerEvidence.datedRows(graph),...SignerEvidence.datedRows(graph,true)]) {
+      if (row.doc!==doc || row.page!==page) continue;
       const fact=SignerEvidence.observation(graph,row);
-      add(row,'具名签认日期','signer_date_source','signer-date-line/',Boolean(fact) && row.line!==lineHint,fact?.source_line.rects);
+      const title={signer:'具名签认时刻',debit:'实际扣款时刻',other:'回单所列时刻'}[row.kind] || '具名签认日期';
+      add(row,title,row.kind?'acceptance_clock_source':'signer_date_source',row.kind?'signer-clock-line/':'signer-date-line/',
+        Boolean(fact) && row.line!==lineHint,SignerEvidence.rectangles(graph,calls,row));
     }
     for (const row of PriorInstallment.sources(graph)) {
       const fact=PriorInstallment.observation(row,graph);

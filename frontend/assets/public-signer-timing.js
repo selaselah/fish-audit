@@ -1,11 +1,12 @@
 const PublicSignerTiming = (() => {
-  let loading = false;
-  async function open() {
-    const slot = document.getElementById('payment-signer-timing');
-    if (loading || slot.querySelector('.signer-timeline')) return;
-    loading = true;
+  const loading = new Set();
+  async function open(clock=false) {
+    const name=clock?'signer-clock':'signer-timing';
+    const slot = document.getElementById('payment-'+name);
+    if (loading.has(slot) || slot.querySelector('.signer-timeline')) return;
+    loading.add(slot);
     try {
-      const response = await fetch('/assets/joint-signing.json');
+      const response = await fetch(clock?'/assets/signer-clock.json':'/assets/joint-signing.json');
       if (!response.ok) return;
       const sample = await response.json(), payment = sample.payment;
       function source(ref) {
@@ -17,14 +18,16 @@ const PublicSignerTiming = (() => {
           excerpt:row.crop?async()=>{const image=new Image();image.alt='';image.src=row.crop;await image.decode();return image;}:null,
           open:opener=>!document.dispatchEvent(new CustomEvent('inspect-sample-line',{cancelable:true,detail:{doc,ref,opener}}))};
       }
-      const item = {...payment,clause:source(payment.clause),term:source(payment.term),
-        events:payment.events.map(e=>({...e,source:source(e.ref)}))};
+      const events=payment.events.map(e=>({...e,source:source(e.ref),daySource:source(e.dayRef),signature:source(e.signature)}));
+      const pair=clock && payment.pair?.map(ref=>events.find(e=>e.ref===ref));
+      const item = {...payment,clause:source(payment.clause),term:source(payment.term),events,
+        pair:pair?.length===2 && pair.every(e=>e?.source)?pair:null};
       if (!item.clause || !item.term || !item.events.every(e=>e.source)) return;
-      slot.replaceChildren(SignerTimeline.render([item],'public-signer-timing'));
+      slot.replaceChildren(SignerTimeline.render([item],'public-'+name));
       slot.dataset.revision = sample.rev;
       if (!slot.hidden) document.getElementById('payment-version').textContent = '合成案例 · R'+sample.rev;
     } catch { /* The original watermarked transfer remains available in the HTML. */ }
-    finally { loading = false; }
+    finally { loading.delete(slot); }
   }
   return {open};
 })();

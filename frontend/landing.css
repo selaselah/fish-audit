@@ -487,5 +487,10 @@ body:has(#sample-review[open],#sample-compare[open]) { overflow:hidden; }
 }
 
 @media (min-width:1100px) {
-  .workflow .section-inner { grid-template-columns:minmax(0,.78fr) minmax(0,1.22fr); column-gap:clamp(32px,4vw,64px); }
+  .workflow .section-inner {
+    grid-template-columns:repeat(12,minmax(0,1fr)); column-gap:24px;
+    grid-template-areas:
+      "intro intro intro intro intro demo demo demo demo demo demo demo"
+      "steps steps steps steps steps demo demo demo demo demo demo demo";
+  }
 }

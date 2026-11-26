@@ -55,7 +55,7 @@ if (!restoreWorkspaceLink()) {
   const inspectionRoutes={equipment:'inspection',named:'named-inspection',supplier:'suppliers',comments:'word-comments'};
   function sceneAddress(name) {
     const url=new URL(location.href);
-    const scene=name==='inspection'?inspectionRoutes[inspectionExample.value]:name==='folios'?({comments:'contract-comments',reference:'payment-acceptance',timing:'signer-timing',folios:'folios'}[paymentExample.value]):name;
+    const scene=name==='inspection'?inspectionRoutes[inspectionExample.value]:name==='folios'?({comments:'contract-comments',reference:'payment-acceptance',timing:'signer-timing',clock:'signer-clock',folios:'folios'}[paymentExample.value]):name;
     url.searchParams.set('scene',name==='signing' ? examples[contractExample.value].scene : scene);
     if (url.searchParams.get('scene')==='pdf-signing') url.searchParams.set('pdf',PublicPdfSigning.selected());
     else url.searchParams.delete('pdf');
@@ -67,13 +67,16 @@ if (!restoreWorkspaceLink()) {
   if (['signing','inspection','folios'].includes(requested)) selectScene(document.getElementById('scene-tab-'+requested));
   if (requested==='payment-acceptance') paymentExample.value='reference';
   if (requested==='signer-timing') paymentExample.value='timing';
-  if (['contract-comments','payment-acceptance','signer-timing'].includes(requested)) selectScene(document.getElementById('scene-tab-folios'));
+  if (requested==='signer-clock') paymentExample.value='clock';
+  if (['contract-comments','payment-acceptance','signer-timing','signer-clock'].includes(requested)) selectScene(document.getElementById('scene-tab-folios'));
   if (requested==='folios') paymentExample.value='folios';
   const paymentsScene=document.getElementById('scene-folios');
   function showPayments() {
     const comments=paymentExample.value==='comments', slot=document.getElementById('payment-comments');
     const reference=paymentExample.value==='reference',demo=document.getElementById('payment-reference');
     const timing=document.getElementById('payment-signer-timing');
+    const clock=document.getElementById('payment-signer-clock');
+    clock.hidden=paymentExample.value!=='clock';
     timing.hidden=paymentExample.value!=='timing';
     document.getElementById('payment-folios').hidden=paymentExample.value!=='folios';
     demo.hidden=!reference;
@@ -84,9 +87,10 @@ if (!restoreWorkspaceLink()) {
       edition.textContent=demo.dataset.revision?'合成案例 · R'+demo.dataset.revision:'合成案例';
       if (!paymentsScene.hidden) PublicPaymentAcceptance.open();
     }
-    if (!timing.hidden) {
-      edition.textContent=timing.dataset.revision?'合成案例 · R'+timing.dataset.revision:'合成案例';
-      if (!paymentsScene.hidden) PublicSignerTiming.open();
+    if (!timing.hidden || !clock.hidden) {
+      const active=clock.hidden?timing:clock;
+      edition.textContent=active.dataset.revision?'合成案例 · R'+active.dataset.revision:'合成案例';
+      if (!paymentsScene.hidden) PublicSignerTiming.open(!clock.hidden);
     }
     if (comments && !paymentsScene.hidden) PublicAcceptanceComments.open('contract');
   }

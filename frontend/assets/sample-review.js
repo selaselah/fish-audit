@@ -3,6 +3,7 @@
   const dialog=document.querySelector('#sample-review');
   if (!dialog?.showModal) return;
   const rows=[...dialog.querySelectorAll('[data-ref]')];
+  const records=dialog.querySelector('.sample-records');
   const describe = r => ({...r.dataset, label:r.querySelector('span').textContent, value:r.querySelector('strong').textContent});
   const samples = {
     acceptance:{title:'验收报告',version:'合成采购 · R8',image:'/assets/showcase-acceptance-page.png',pdf:'/showcase/acceptance.pdf',lines:rows.map(describe)},
@@ -56,25 +57,34 @@
     canvas.setAttribute('aria-label',sample.title+location+'，'+row.querySelector('span').textContent+'，'+row.querySelector('strong').textContent);
     draw();
   }
-  for (const [index,button] of rows.entries()) {
-    button.addEventListener('click',()=>select(button,mode));
-    button.addEventListener('keydown',event=>{
-      const k={ArrowUp:(index+rows.length-1)%rows.length,ArrowDown:(index+1)%rows.length,Home:0,End:rows.length-1}[event.key];
-      if (k===undefined) return;
-      event.preventDefault(); select(rows[k],mode); rows[k].focus();
-    });
-  }
+  records.addEventListener('click',event=>{
+    const button=event.target.closest('button[data-ref]');
+    if (button) select(button,mode);
+  });
+  records.addEventListener('keydown',event=>{
+    const index=rows.indexOf(event.target.closest('button[data-ref]'));
+    if (index<0) return;
+    const k={ArrowUp:(index+rows.length-1)%rows.length,ArrowDown:(index+1)%rows.length,Home:0,End:rows.length-1}[event.key];
+    if (k===undefined) return;
+    event.preventDefault(); select(rows[k],mode); rows[k].focus();
+  });
   for (const button of modes) button.addEventListener('click',()=>select(row,button.dataset.scale));
   function load(next) {
     sample=next;
     dialog.querySelector('h2').textContent=sample.title;
     dialog.querySelector('.sample-review-head span').textContent=sample.version;
     dialog.querySelector('form button').setAttribute('aria-label','关闭'+sample.title);
-    dialog.querySelector('.sample-records').setAttribute('aria-label','选择'+sample.title+'原行');
-    const original=dialog.querySelector('.sample-records a');
+    records.setAttribute('aria-label','选择'+sample.title+'原行');
+    const original=records.querySelector('a');
     original.href=sample.original || sample.pdf;
     original.querySelector('.sample-file-kind').textContent=sample.original?'下载 Word 原件':'原始 PDF';
     original.querySelector('.sr-only').textContent=sample.original?'，合成演练资料':'，在新标签页打开';
+    while (rows.length>sample.lines.length) rows.pop().remove();
+    while (rows.length<sample.lines.length) {
+      const button=rows[0].cloneNode(true);
+      original.before(button); rows.push(button);
+    }
+    rectangles.clear();
     for (const [i,button] of rows.entries()) {
       const line=sample.lines[i];
       for (const key of ['ref','line','rect']) button.dataset[key]=line[key];
@@ -101,12 +111,16 @@
     opener=trigger;
     trigger.focus({preventScroll:true});
     load(doc); dialog.showModal();
-    select(rows.find(r=>r.dataset.ref===ref) || rows[2],scale);
+    select(rows.find(r=>r.dataset.ref===ref) || rows[Math.min(2,rows.length-1)],scale);
     row.focus({preventScroll:true});
   }
   document.addEventListener('inspect-sample-line',event=>{
     const {doc,ref,opener,scale}=event.detail;
-    if (!doc.lines.some(l=>l.ref===ref) || doc.lines.length!==rows.length) return;
+    if (!doc.lines.some(l=>l.ref===ref) || !doc.lines.every(line=>{
+      const bounds=line.rects || (line.rect && [line.rect.split(',').map(Number)]);
+      return bounds?.length && bounds.every(r=>Array.isArray(r) && r.length===4 && r.every(n=>Number.isFinite(n) && n>=0 && n<=1) &&
+        r[2]>r[0] && r[3]>r[1]);
+    })) return;
     event.preventDefault(); present(doc,ref,opener,scale==='page'?'page':'line');
   });
   for (const link of document.querySelectorAll('.open-sample-review')) {

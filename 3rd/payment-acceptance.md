@@ -23,3 +23,9 @@ DataSnipper 的文档匹配可追查匹配到的原始文档。这里把相同�
 Xero 在每笔银行匹配旁提供所据记录和文件，Ramp 的账单表按状态组织任务，并能切换查看付款明细。Fish Audit 的时序控件采用逐笔选择，点选一个日期即可见文件名、页码、行号和原件局部。同日签认与扣款并列，风险由文字、点形和颜色共同表示。[Xero 银行对账](https://www.xero.com/us/accounting-software/reconcile-bank-transactions/) · [Ramp 账单及付款管理](https://support.ramp.com/managing-bills-and-payments-on-bill-pay/)
 
 首页时序演练取自本机水印案例 R8。合同、验收单和回单共三份 PDF，索引保存文件、原始页图和底稿摘要。首页的三期合同原行取自另一份已公开的冷藏柜采购合同，编号 YL-LY-32EED203，第 16–18 行。上述六张原行裁片均已按原页坐标逐像素核对。[签认时序证据](../frontend/assets/joint-signing.json) · [三期合同原行](../frontend/assets/installment-originals.json)
+
+## 同日时刻与原行对照
+
+Ramp 的付款列表区分发起、在途和已付款，单据详情可以查看付款进展及回单。FloQast 的官方界面示例将某一期间的控制执行、签核人和附件集中在同一视图。Fish Audit 采用蓝色选中态、带文字的风险提示和可切换的原件对照。审计员可在一张卡内核对具名签认和实际扣款，点开任一原行查看整页。[Ramp 付款进度](https://support.ramp.com/bill-payment-methods-and-timelines/) · [Ramp 账单与付款管理](https://support.ramp.com/managing-bills-and-payments-on-bill-pay/) · [FloQast 控制审阅界面](https://get.floqast.com/hubfs/Assets/FloQast_Data%20Sheet_Achieving%20Connected%20Compliance%20with%20FloQast_July%202024.pdf)
+
+公开同日演练来自本地生成的三份水印 PDF。导出时逐份核对了生成件摘要、该版图谱引用和页图摘要。九张 WebP 裁片均逐像素核对，包括模型遗漏的实际扣款时间原行。[固定版公开数据](../frontend/assets/signer-clock.json) · [首页试核](http://127.0.0.1:8000/?scene=signer-clock#workflow)

@@ -132,7 +132,7 @@
     <section class="workflow" id="workflow" aria-labelledby="workflow-title">
       <div class="wrap section-inner">
         <div class="section-copy"><h2 id="workflow-title">审计一笔采购</h2><p>查看逐页处理进度，核对疑点后签收底稿。</p>
-          <div class="workflow-actions"><a class="button" href="/app?new=contract">新建合同审计</a><a class="text-link" href="/?scene=signer-timing#workflow">试核付款时序</a></div>
+          <div class="workflow-actions"><a class="button" href="/app?new=contract">新建合同审计</a><a class="text-link" href="/?scene=signer-clock#workflow">试核同日扣款</a></div>
         </div>
         <div class="workflow-demo">
           <div class="scene-tabs" role="tablist" aria-label="选择核图案例" hidden>
@@ -211,7 +211,8 @@
           <div id="scene-folios" class="signing-sample public-folios" role="tabpanel" aria-labelledby="scene-tab-folios" hidden>
             <div class="signing-sample-header"><span><i class="ui-glyph ic-journal-text" aria-hidden="true"></i> 付款核对</span>
               <label id="payment-example-choice" hidden><span class="sr-only">选择付款条款案例</span><select id="payment-example">
-                <option value="comments">分期付款批注</option><option value="timing">共同签认与付款</option><option value="reference">回单验收单号</option><option value="folios">合同续页</option></select></label><small id="payment-version">合成案例 · R10</small></div>
+                <option value="comments">分期付款批注</option><option value="clock">同日签认与扣款</option><option value="timing">跨日签认与付款</option><option value="reference">回单验收单号</option><option value="folios">合同续页</option></select></label><small id="payment-version">合成案例 · R10</small></div>
+            <div id="payment-signer-clock" hidden><a href="/showcase/signer-clock-transfer.pdf" rel="noopener" target="_blank">查看演练扣款回单</a></div>
             <div id="payment-signer-timing" hidden><a href="/showcase/joint-signing-transfer.pdf" rel="noopener" target="_blank">查看演练付款回单</a></div>
             <div id="payment-reference" hidden><a href="/showcase/batch-bank-1.pdf" rel="noopener" target="_blank">查看演练付款回单</a></div>
             <div id="payment-comments" hidden><a href="/showcase/contract-payment-review.docx">下载含批注的水印合同</a></div>

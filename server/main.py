@@ -308,7 +308,8 @@ def create_app(store, worker):
                             "supplier-contract.pdf", "supplier-acceptance.pdf", "acceptance-review-contract.pdf", "acceptance-review-transfer.pdf",
                             "contract-payment-transfer.pdf","named-inspection-contract.pdf","named-inspection-acceptance.pdf",
                             "batch-bank-1.pdf","batch-bank-2.pdf","batch-acceptance-1.pdf","batch-acceptance-2.pdf","batch-payment-contract.pdf",
-                            "joint-signing-contract.pdf","joint-signing-acceptance.pdf","joint-signing-transfer.pdf"}:
+                            "joint-signing-contract.pdf","joint-signing-acceptance.pdf","joint-signing-transfer.pdf",
+                            "signer-clock-contract.pdf","signer-clock-acceptance.pdf","signer-clock-transfer.pdf"}:
             raise CaseError("没有这份演练原件。", 404)
         return send_file(FRONTEND / "showcase" / filename, mimetype="application/pdf")
 
