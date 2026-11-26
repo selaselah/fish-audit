@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {size,inspect} from './review-screen.mjs';
+import {browserInput,size,inspect} from './review-screen.mjs';
 
 const q=s=>'document.querySelector('+JSON.stringify(s)+')';
 const all=s=>'[...document.querySelectorAll('+JSON.stringify(s)+')]';
@@ -152,13 +152,59 @@ export async function checkPerformanceIndex(ctx,id,requested) {
   console.log('PASS · R'+rev+' three review scopes, individually issued results, pinned original and return focus · '+widths.join('/'));
 }
 
+async function caseFinder(ctx,width,count) {
+  const {evaluate,wait,call}=ctx,{key,tap}=browserInput(ctx);
+  const open=q('#find-case'), dialog=q('#case-finder'), input=q('#finder-query'), opts=all('#finder-results [role=option]');
+  const filter=text=>evaluate(input+'.value='+JSON.stringify(text)+';'+input+'.dispatchEvent(new Event("input"))');
+  const href=await evaluate('location.href');
+  await evaluate(open+'.focus();'+open+'.click()');
+  await wait(dialog+'.open && document.activeElement==='+input,'case finder input');
+  assert.equal(await evaluate(opts+'.length'),count);
+  await filter('验收'); await inspect(ctx,width,'#case-finder','case-finder');
+  if (width===390) {
+    await call('Emulation.setDeviceMetricsOverride',{width,height:460,deviceScaleFactor:1,mobile:true});
+    await wait('(()=>{const r='+dialog+'.getBoundingClientRect(), v=visualViewport; return r.top>=v.offsetTop && r.bottom<=v.offsetTop+v.height+1 && document.activeElement==='+input+'})()','search stays within reduced mobile viewport');
+    await size(ctx,width);
+  }
+  await filter('未收录987'); assert.equal(await evaluate(opts+'.length'),0);
+  assert.ok(await evaluate('!'+q('.finder-empty')+'.hidden && !'+input+'.hasAttribute("aria-activedescendant")'));
+  await key('Escape');
+  await wait('!'+dialog+'.open && document.activeElement==='+open,'cancel search');
+  assert.equal(await evaluate('location.href'),href);
+  await call('Input.dispatchKeyEvent',{type:'keyDown',key:'k',code:'KeyK',windowsVirtualKeyCode:75,modifiers:2});
+  await call('Input.dispatchKeyEvent',{type:'keyUp',key:'k',code:'KeyK',windowsVirtualKeyCode:75,modifiers:2});
+  await wait(dialog+'.open && document.activeElement==='+input,'global keyboard search');
+  await filter('付款'); await key('ArrowDown');
+  assert.equal(await evaluate(input+'.getAttribute("aria-activedescendant")'),'finder-option-1');
+  assert.ok(await evaluate('document.activeElement==='+input));
+  await filter('保函 到期');
+  assert.deepEqual(await evaluate(opts+'.map(o=>o.querySelector("strong").textContent)'),['保函期间与付款日']);
+  await evaluate(input+'.dispatchEvent(new KeyboardEvent("keydown",{key:"Enter",isComposing:true,bubbles:true}))');
+  assert.ok(await evaluate(dialog+'.open'),'IME confirmation keeps the result open');
+  if (width<600) { await call('Emulation.setTouchEmulationEnabled',{enabled:true}); await tap(q('#finder-option-0')); }
+  else await key('Enter');
+  await wait('!'+dialog+'.open && '+q('#payment-example')+'.value==="guarantee" && document.activeElement==='+q('#payment-example'),'open selected scenario at '+width,4000).catch(async error=>{
+    const snapshot=await evaluate('['+dialog+'.open,'+q('#payment-example')+'.value,document.activeElement.id,location.href,'+input+'.getAttribute("aria-activedescendant")]');
+    throw new Error(error.message+' '+JSON.stringify(snapshot));
+  });
+  assert.equal(await evaluate('new URL(location.href).searchParams.get("scene")'),'guarantee-period');
+}
+
 export async function checkPublicTopics(ctx) {
   const {root,call,evaluate,wait}=ctx;
   const routes=[
     ['signing',['signing','word-signing','contract-dates','pdf-signing'],'signing-example',['company','word','calendar','pdf']],
     ['inspection',['acceptance','batch-standards','acceptance-signers','inspection','named-inspection','suppliers','word-comments'],'inspection-example',['readings','standards','signers','equipment','named','supplier','comments']],
-    ['folios',['contract-comments','payment-proof','signer-clock','signer-timing','payment-acceptance','folios'],'payment-example',['comments','proof','clock','timing','reference','folios']],
+    ['folios',['guarantee-period','contract-comments','payment-proof','signer-clock','signer-timing','payment-acceptance','folios'],'payment-example',['guarantee','comments','proof','clock','timing','reference','folios']],
   ];
+  await call('Page.navigate',{url:root+'/#workflow'});
+  await wait(q('.scene-tabs')+'?.hidden===false','product workflow ready');
+  for (const id of ['payments','workflow','start','workflow']) {
+    await evaluate(q('#'+id)+'.scrollIntoView({block:"start",behavior:"instant"})');
+    await wait(q('.section-nav [aria-current=location]')+'?.hash==="#'+id+'"','navigation highlights '+id);
+  }
+  await evaluate(q('#scene-tab-folios')+'.click()');
+  await wait(q('#payment-guarantee-period')+'?.dataset.revision==="2" && new URL(location.href).searchParams.get("scene")==="guarantee-period"','default payment example');
   for (const [tab,scenes,pick,values] of routes) {
     for (const [i,scene] of scenes.entries()) {
       await call('Page.navigate',{url:root+'/?scene='+scene+'#workflow'});
@@ -176,8 +222,9 @@ export async function checkPublicTopics(ctx) {
     assert.ok(await evaluate('location.search.includes("scene=acceptance")'));
     assert.equal(await evaluate(q('#inspection-version')+'.textContent'),'合成案例 · R8');
     await inspect(ctx,width,'.workflow .section-inner','public-audit-topics');
+    await wait(all('.temperature-line')+'.every(img=>img.naturalWidth===Number(img.getAttribute("width")) && img.style.getPropertyValue("--relative-width"))','both printed lines loaded');
     const scales=await evaluate(all('.temperature-line')+'.map(img=>img.getBoundingClientRect().width/Number(img.getAttribute("width")))');
-    assert.ok(Math.abs(scales[0]-scales[1])<.007,'originals share the same print scale at '+width);
+    assert.ok(Math.abs(scales[0]-scales[1])<.007,'originals share the same print scale at '+width+' '+scales.join('/'));
     for (const [ref,line,file] of [['d02/p1/f13',14,'contract'],['d04/p1/f11',12,'acceptance']]) {
       const anchor=q('#inspection-readings [data-ref="'+ref+'"]');
       await wait(anchor+'.querySelector(".temperature-sheet img").naturalWidth===320','physical page miniature');
@@ -197,6 +244,7 @@ export async function checkPublicTopics(ctx) {
     await evaluate(q('#sample-compare form button')+'.click()');
     await wait('document.activeElement==='+q('#compare-inspection'),'back to comparison button');
     assert.equal(await evaluate('performance.getEntriesByType("resource").some(r=>new URL(r.name).pathname.startsWith("/api/"))'),false);
+    await caseFinder(ctx,width,routes.reduce((n,entry)=>n+entry[1].length,0));
   }
   console.log('PASS · '+routes.reduce((count,route)=>count+route[1].length,0)+' public scenario addresses in three topics, watermarked original and revision, responsive and keyboard focus');
 }

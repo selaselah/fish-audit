@@ -49,7 +49,10 @@ function contractPreview(report, task) {
     for (const r of related) {
       const bank=payments.length>1 && r.rule==='H05' && traceReferences(graph,r).map(ref=>index.facts.get(ref)).find(v=>v?.field==='bank_receipt');
       if (r.execution_basis) content.append(jump(r,'核对扣款凭证','preview-finding','payment-proof'));
-      else if (r.advance_guarantee) content.append(jump(r,payments.length>1?AdvanceGuarantee.receiptName(r,report)+' · 签收与付款日':'签收与付款日','preview-finding','payment-checks'));
+      else if (r.advance_guarantee) {
+        const label=r.advance_guarantee.period?'付款日与保函期间':'签收与付款日';
+        content.append(jump(r,(payments.length>1?AdvanceGuarantee.receiptName(r,report)+' · ':'')+label,'preview-finding','payment-checks'));
+      }
       else if (r.signer_timing) content.append(jump(r,bank?.name || '签认与付款日','preview-finding','signer-timing'));
       else content.append(jump(r,r.rule==='H06'?'本期回单合计':bank?.name || '实付时点'));
     }

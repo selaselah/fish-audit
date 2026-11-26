@@ -5,9 +5,9 @@ const AdvanceGuarantee = (() => {
     number:'保函编号',receiptNumber:'签收保函编号',issued:'保函开立',received:'签收单记载',paid:'回单付款',
     contractId:'本合同编号',guaranteeContract:'保函引用合同',receiptContract:'签收单引用合同',paymentContract:'回单引用合同'
   };
-  const format='advance-payment-guarantee-v1';
+  const legacy='advance-payment-guarantee-v1', current='advance-payment-guarantee-v2';
   const roles={
-    clause:{clause:'term'}, contract:{buyer:'buyer',seller:'seller',contract_id:'contractId'},
+    clause:{clause:'term',period_clause:'periodClause'}, contract:{buyer:'buyer',seller:'seller',contract_id:'contractId'},
     guarantee:{beneficiary:'beneficiary',guarantee_id:'number',issued_on:'issued',contract_id:'guaranteeContract'},
     receipt:{recipient:'recipient',received_guarantee_id:'receiptNumber',received_on:'received',contract_id:'receiptContract'},
     payment:{paid_on:'paid',contract_id:'paymentContract',payer:'payer',payee:'payee',payment_designation:'designation',transfer_status:'transferStatus'}
@@ -26,7 +26,8 @@ const AdvanceGuarantee = (() => {
     const {item,graph,index,ledger,links,calls}=ctx, pageId=row.doc+'/p'+row.page;
     const doc=index.documents.get(row.doc), page=index.nodes.get(pageId), node=index.nodes.get(row.id);
     const owners=ledger.pages.filter(p=>p.doc===row.doc && p.page===row.page && p.unit===row.unit &&
-      p.role===(row.role==='clause'?'contract':row.role));
+      (p.role===(row.role==='clause'?'contract':row.role) || ledger.format===current && row.role==='extension' &&
+        ['extension_note','attachment'].includes(row.field)));
     const raw=ledger.rows.filter(s=>s.id===row.id), edges=graph.edges.filter(e=>e.type==='advance_guarantee_source' && e.to===row.id);
     if (raw.length!==1 || owners.length!==1 || edges.length!==1 || node?.type!=='advance_guarantee_line' ||
         node.label!==row.quote || raw[0].quote!==row.quote || !doc?.sha256 || doc.sha256!==row.original_sha256 ||
@@ -70,9 +71,11 @@ const AdvanceGuarantee = (() => {
   }
   function bind(item,report) {
     const proof=item?.advance_guarantee, graph=report?.graph, ledger=graph?.advance_guarantee_sources;
-    if (!proof || !['H04','H05'].includes(item.rule) || report.policy?.advance_guarantee!==format || ledger?.format!==format ||
+    if (!proof || !['H04','H05'].includes(item.rule) || ![legacy,current].includes(ledger?.format) || report.policy?.advance_guarantee!==ledger.format ||
         !Array.isArray(ledger.rows) || !Array.isArray(ledger.pages) || !Array.isArray(proof.sources) || !Array.isArray(proof.evidence) ||
         !Array.isArray(item.evidence) || !Array.isArray(item.scope) || typeof proof.detail!=='string' || !proof.detail) return null;
+    if (ledger.format===current && (!(report.policy.version>='2026.11.27.06') ||
+        !['advance_guarantee.py','guarantee_period.py'].every(name=>/^[a-f0-9]{64}$/.test(report.policy.code_sha256?.[name])))) return null;
     const index=graphIndex(graph), finding=index.nodes.get('finding/'+item.id);
     if (finding?.type!=='finding' || finding.status!==item.status || finding.detail!==item.detail) return null;
     const linked=new Map(), byId=new Map();
@@ -128,17 +131,59 @@ const AdvanceGuarantee = (() => {
     } else if (outcome==='missing' && single('number') && !single('received')) label='签收依据待补';
     if (!bound) { label='依据待核'; subjectFirst=false; }
     const documented=bound && ['recorded','after_receipt'].includes(outcome);
-    return {fields:linked,byId,paid,paidOn:bound?proof.paid_on:null,state:bound?outcome:'unverified',label,subjectFirst,elapsed,documented,
+    const period=ledger.format===current && (proof.period || linked.has('periodClause'))?
+      bindPeriod(proof,ctx,byId,owner,bound):null;
+    return {fields:linked,byId,paid,paidOn:bound?proof.paid_on:null,state:bound?outcome:'unverified',label,subjectFirst,elapsed,documented,period,
       tone:documented?'documented':bound && proof.status==='issue'?'issue':'review'};
   }
 
   function dateValue(text) {
-    const match=/^(\d{4})(?:年(\d{1,2})月(\d{1,2})日|-(\d{1,2})-(\d{1,2}))$/u.exec(text);
-    if (!match) return null;
-    const y=Number(match[1]),m=Number(match[2] || match[4]),d=Number(match[3] || match[5]);
-    const check=new Date(Date.UTC(y,m-1,d));
-    if (check.getUTCFullYear()!==y || check.getUTCMonth()+1!==m || check.getUTCDate()!==d) return null;
-    return [match[1],String(m).padStart(2,'0'),String(d).padStart(2,'0')].join('-');
+    return GuaranteePeriodCard.iso(text);
+  }
+
+  function bindPeriod(proof,ctx,byId,owner,bound) {
+    const {item,ledger}=ctx, p=proof.period, paidItem=item.rule==='H05';
+    const evidence=Array.from(byId.values()).filter(row=>row.role);
+    const take=(role,...fields)=>evidence.filter(row=>row.role===role && fields.includes(row.field));
+    const rows={clause:take('clause','period_clause'),start:take('guarantee','valid_from'),
+      end:take('guarantee','valid_until','valid_until_inclusive'),paid:take('payment','paid_on'),
+      extension:evidence.filter(row=>row.field==='extension_note'),
+      unknown:evidence.filter(row=>row.field==='period_note' || row.role==='extension' && row.field!=='extension_note')};
+    const physical=key=>rows[key].length===1 && rows[key][0].line?dateValue(rows[key][0].value):null;
+    const start=physical('start'),end=physical('end'),paid=physical('paid');
+    const held={state:'review',start:null,end:null,paid:null,inclusive:null,rows:{...rows,
+      unknown:[...rows.unknown,...rows.start,...rows.end,...rows.paid]}};
+    if (!p || !bound || !Array.isArray(p.sources) || !sameList(p.sources.map(s=>s?.id),proof.sources.map(s=>s.id)) ||
+        !sameList(p.evidence,proof.evidence) || !sameList(p.units,proof.units) || !sameList(p.units,[...new Set(evidence.map(s=>s.unit))]) ||
+        !p.units.every(unit=>item.scope.includes(unit)) || !p.detail || !item.detail.includes(p.detail)) return held;
+    // Both projections must be identical to the individual rows already verified against this revision.
+    if (!p.sources.every(s=>{
+      const row=byId.get(s.id);
+      return row && ['field','role','doc','unit','page','line','quote','original_sha256','page_sha256'].every(k=>s[k]===row[k]) &&
+        sameList(s.facts,row.facts) && JSON.stringify(s.rects)===JSON.stringify(row.rects);
+    })) return held;
+    if (ledger.rows.some(s=>(['guarantee','receipt','extension'].includes(s.role) ||
+        s.role==='clause' && s.unit===owner || s.role==='payment' && p.units.includes(s.unit)) && !byId.has(s.id))) return held;
+    const clause=rows.clause.length===1 && rows.clause[0];
+    if (!clause?.line || clause.unit!==owner || !/^保函有效期要求[:：]\s*(?:第[一1]期|首期)预付款的付款日须在本合同项下的?预付款保函的有效期内。?$/u.test(clause.quote.trim()) ||
+        !['recorded','after_receipt','before_receipt','same_day'].includes(proof.state)) return held;
+    const inclusive=end && rows.end[0].field==='valid_until_inclusive'?true:null;
+    if (p.valid_from!==start || p.valid_until!==end || p.end_inclusive!==inclusive || p.paid_on!==paid ||
+        paid!==proof.paid_on || paid && !paidItem) return held;
+    let state='review';
+    if (rows.extension.length) state='extension_review';
+    else if (!rows.unknown.length && start && end && start<=end && end>=proof.issued_on) {
+      if (!paidItem) state='stated';
+      else if (paid) {
+        if (paid<start) state='before_start';
+        else if (paid>end) state='expired';
+        else if (paid===end && !inclusive) state='end_unspecified';
+        else if (paid!==start || paid===end) state='covered';
+      }
+    }
+    const status=['before_start','expired'].includes(state)?'risk':'missing';
+    return state===p.state && status===p.status && ['risk','issue',...(status==='missing'?['missing']:[])].includes(item.status)?
+      {state,start,end,paid,inclusive,rows}:held;
   }
 
   function sourceButton(row,label,content) {
@@ -218,10 +263,10 @@ const AdvanceGuarantee = (() => {
     if (!view) return null;
     const section=el('section','','advance-guarantee');
     section.dataset.state=view.state;
+    if (view.period) section.classList.add('has-period');
     const label=el('h4','预付款保函');
     label.id='guarantee-heading-'+item.id; section.setAttribute('aria-labelledby',label.id);
-    const status=el('span',view.label,'guarantee-status'); status.dataset.tone=view.tone;
-    if (view.elapsed!==null) status.append(el('b',String(view.elapsed),'guarantee-elapsed'),document.createTextNode('天'));
+    const status=el('span','','guarantee-status');
     section.append(box('guarantee-heading',box('guarantee-title',glyph('file-earmark-text'),label),status));
     const tabs=box('guarantee-tabs'), body=box('guarantee-panel');
     tabs.setAttribute('role','tablist'); tabs.setAttribute('aria-label','核对预付款保函');
@@ -245,31 +290,43 @@ const AdvanceGuarantee = (() => {
       }
     }
     toggle.addEventListener('change',showOriginalLines);
+    body.addEventListener('guarantee-day-change',showOriginalLines);
     const choices=[
       ['dates','单据日期',()=>dates(view)],
       ['parties','主体与编号',()=>parties(view)],
       ['clause','合同约定',()=>rows(view,['term','stage'])]
     ];
+    if (view.period) choices.unshift(['period','保函期间',()=>GuaranteePeriodCard.render(view.period,'period-'+item.id,(row,title)=>
+      sourceButton(row,title+' · 第 '+row.page+' 页'+(row.line?' / '+row.line+' 行':''),row.file))]);
     function select(position) {
       for (const [i,tab] of Array.from(tabs.children).entries()) {
         tab.tabIndex=i===position?0:-1; tab.setAttribute('aria-selected',String(i===position));
       }
       body.dataset.tab=choices[position][0]; body.setAttribute('aria-labelledby',tabs.children[position].id);
+      const period=body.dataset.tab==='period';
+      const shown=period?GuaranteePeriodCard.describe(view.period):view;
+      status.textContent=shown.label; status.dataset.tone=shown.tone;
+      if (!period && view.elapsed!==null) status.append(el('b',String(view.elapsed),'guarantee-elapsed'),document.createTextNode('天'));
       body.replaceChildren(choices[position][2]());
       showOriginalLines();
     }
     for (const [i,[key,title]] of choices.entries()) {
       const tab=action(title,()=>select(i));
+      if (view.period) {
+        const compact={period:'期间',dates:'收函',parties:'主体',clause:'条款'};
+        tab.replaceChildren(el('span',title,'guarantee-tab-full'),el('span',compact[key],'guarantee-tab-short'));
+        tab.setAttribute('aria-description',title);
+      }
       tab.setAttribute('role','tab'); tab.id='guarantee-'+item.id+'-'+key;
       tab.setAttribute('aria-controls',body.id);
       tab.addEventListener('keydown',event=>{
-        const next={ArrowRight:(i+1)%3,ArrowLeft:(i+2)%3,Home:0,End:2}[event.key];
+        const n=choices.length,next={ArrowRight:(i+1)%n,ArrowLeft:(i+n-1)%n,Home:0,End:n-1}[event.key];
         if (next===undefined) return;
         event.preventDefault(); select(next); tabs.children[next].focus();
       });
       tabs.append(tab);
     }
-    select(view.subjectFirst?1:0);
+    select(view.subjectFirst?choices.findIndex(([key])=>key==='parties'):0);
     section.append(box('guarantee-tools',tabs,switcher),body);
     if (view.documented) section.append(box('guarantee-followup',glyph('eye'),el('span','待人工核验保函真伪、效力及付款授权')));
     const held=new Map();

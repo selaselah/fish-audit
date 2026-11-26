@@ -33,11 +33,11 @@ export async function accessibility(ctx,name) {
     assert.deepEqual(violations,[],name);
   }
 }
-export async function inspect(ctx,width,id,name) {
+export async function inspect(ctx,width,id,name,block='center') {
   if (![390,1440].includes(width)) return;
   await accessibility(ctx,name+' at '+width);
   if (process.env.AUDIT_UI_SHOTS) {
-    await ctx.evaluate(q(id)+'.scrollIntoView({block:"center",behavior:"instant"})');
+    await ctx.evaluate(q(id)+'.scrollIntoView({block:'+JSON.stringify(block)+',behavior:"instant"})');
     const image=await ctx.call('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
     await writeFile(join(process.env.AUDIT_UI_SHOTS,name+'-'+width+'.png'),Buffer.from(image.data,'base64'));
   }

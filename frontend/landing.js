@@ -26,6 +26,23 @@ if (!restoreWorkspaceLink()) {
   startForm.addEventListener('change',showStartProfile);
   window.addEventListener('pageshow',showStartProfile);
   showStartProfile();
+  const sectionLinks=[...document.querySelectorAll('.section-nav a[href^="#"],.mobile-menu a[href^="#"]')];
+  const sections=[...new Set(sectionLinks.map(link=>document.getElementById(link.hash.slice(1))))].filter(Boolean);
+  let currentSection, navigationFrame;
+  function markSection() {
+    navigationFrame=0;
+    const edge=document.querySelector('.site-header').getBoundingClientRect().bottom+Math.min(140,innerHeight*.2);
+    const current=sections.filter(section=>section.getBoundingClientRect().top<=edge).at(-1)?.id || '';
+    if (current===currentSection) return;
+    currentSection=current;
+    for (const link of sectionLinks) {
+      if (link.hash==='#'+current) link.setAttribute('aria-current','location');
+      else link.removeAttribute('aria-current');
+    }
+  }
+  const queueSection=()=>{ if (!navigationFrame) navigationFrame=requestAnimationFrame(markSection); };
+  window.addEventListener('scroll',queueSection,{passive:true}); window.addEventListener('resize',queueSection);
+  window.addEventListener('pageshow',queueSection); queueSection();
   const menu = document.querySelector('.mobile-menu');
   menu.addEventListener('click', event => {
     if (event.target.closest('a')) menu.open = false;
@@ -77,9 +94,10 @@ if (!restoreWorkspaceLink()) {
   }
   const examples={company:{scene:'signing',revision:9},word:{scene:'word-signing',revision:6},calendar:{scene:'contract-dates',revision:6},pdf:{scene:'pdf-signing'}};
   const inspectionRoutes={readings:'acceptance',standards:'batch-standards',signers:'acceptance-signers',equipment:'inspection',named:'named-inspection',supplier:'suppliers',comments:'word-comments'};
+  const paymentRoutes={comments:'contract-comments',guarantee:'guarantee-period',reference:'payment-acceptance',timing:'signer-timing',clock:'signer-clock',proof:'payment-proof',folios:'folios'};
   function sceneAddress(name) {
     const url=new URL(location.href);
-    const scene=name==='inspection'?inspectionRoutes[inspectionExample.value]:name==='folios'?({comments:'contract-comments',reference:'payment-acceptance',timing:'signer-timing',clock:'signer-clock',proof:'payment-proof',folios:'folios'}[paymentExample.value]):name;
+    const scene=name==='inspection'?inspectionRoutes[inspectionExample.value]:name==='folios'?paymentRoutes[paymentExample.value]:name;
     url.searchParams.set('scene',name==='signing' ? examples[contractExample.value].scene : scene);
     if (url.searchParams.get('scene')==='pdf-signing') url.searchParams.set('pdf',PublicPdfSigning.selected());
     else url.searchParams.delete('pdf');
@@ -91,12 +109,11 @@ if (!restoreWorkspaceLink()) {
   const selectScene = enableTabs(sceneTabs,tab=>sceneAddress(tab.id.slice('scene-tab-'.length)));
   const requested=new URLSearchParams(location.search).get('scene');
   if (['signing','inspection','folios'].includes(requested)) selectScene(document.getElementById('scene-tab-'+requested));
-  if (requested==='payment-acceptance') paymentExample.value='reference';
-  if (requested==='signer-timing') paymentExample.value='timing';
-  if (requested==='payment-proof') paymentExample.value='proof';
-  if (requested==='signer-clock') paymentExample.value='clock';
-  if (['contract-comments','payment-acceptance','signer-timing','signer-clock','payment-proof'].includes(requested)) selectScene(document.getElementById('scene-tab-folios'));
-  if (requested==='folios') paymentExample.value='folios';
+  const paymentChoice=Object.keys(paymentRoutes).find(key=>paymentRoutes[key]===requested);
+  if (paymentChoice) {
+    paymentExample.value=paymentChoice;
+    selectScene(document.getElementById('scene-tab-folios'));
+  }
   const paymentsScene=document.getElementById('scene-folios');
   function showPayments() {
     const comments=paymentExample.value==='comments', slot=document.getElementById('payment-comments');
@@ -104,6 +121,8 @@ if (!restoreWorkspaceLink()) {
     const timing=document.getElementById('payment-signer-timing');
     const clock=document.getElementById('payment-signer-clock');
     const proof=document.getElementById('payment-execution');
+    const period=document.getElementById('payment-guarantee-period');
+    period.hidden=paymentExample.value!=='guarantee';
     proof.hidden=paymentExample.value!=='proof';
     clock.hidden=paymentExample.value!=='clock';
     timing.hidden=paymentExample.value!=='timing';
@@ -112,6 +131,10 @@ if (!restoreWorkspaceLink()) {
     slot.hidden=!comments;
     const edition=document.getElementById('payment-version');
     edition.textContent=comments?(slot.dataset.revision?'合成案例 · R'+slot.dataset.revision:'合成合同'):'合成案例 · R10';
+    if (!period.hidden) {
+      edition.textContent=period.dataset.revision?'合成案例 · R'+period.dataset.revision:'合成案例';
+      if (!paymentsScene.hidden) PublicGuaranteePeriod.open();
+    }
     if (!proof.hidden) {
       edition.textContent=proof.dataset.revision?'合成案例 · R'+proof.dataset.revision:'合成案例';
       if (!paymentsScene.hidden) PublicPaymentProof.open();
@@ -207,6 +230,11 @@ if (!restoreWorkspaceLink()) {
   document.getElementById('inspection-example-choice').hidden=false;
   showInspection();
   scenes.hidden = false;
+  PublicCaseFinder.mount(sceneTabs,[contractExample,inspectionExample,paymentExample],(tab,picker,value)=>{
+    picker.value=value; selectScene(tab); picker.dispatchEvent(new Event('change'));
+    picker.focus({preventScroll:true});
+    document.getElementById(tab.getAttribute('aria-controls')).scrollIntoView({block:'center',behavior:'instant'});
+  });
   const readingSwitch = document.querySelector('.reading-switch');
   const readings = [...readingSwitch.querySelectorAll('button')];
   function selectReading(button) {

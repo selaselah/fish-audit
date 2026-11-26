@@ -1,5 +1,17 @@
 # 合成财会审计演练
 
+## 四份首期预付款保函
+
+每案有四份带「合成演练」水印的 PDF。采购方于 9 月 3 日签收，银行于 9 月 5 日付款。四份保函分别写明 9 月 4 日届满、9 月 5 日届满且包含当日、9 月 5 日届满但端点含义待核，以及展期申请尚待确认。每案有独立的合同号、保函号和流水号。
+
+```sh
+server/.venv/bin/python docs/samples/guarantee_periods.py --seed local-period-review
+server/.venv/bin/python docs/samples/guarantee_periods.py --seed local-period-review --run
+server/.venv/bin/python docs/samples/publish_guarantee_period.py --check
+```
+
+第一条命令生成演练原件，第二条通过本地服务上传并调用模型，第三条从固定的旧函止日风险案重建并逐字节比对公开样张。导出包含四份 PDF、四张原始页图和六条可回查的原行。首页加载这份静态索引。[生成器](guarantee_periods.py) · [固定样张导出器](publish_guarantee_period.py)
+
 ## 预付款保函与收函时间
 
 四组盖有演练水印的原件采用三期采购合同。第一期约定预付款 30,000 元，采购方须先收到本合同项下的保函。演练分别提交只有保函、付款后才签收、付款前已签收，以及合同指定受益人与保函记载不同的材料。每组使用独立的合同号、保函编号及银行流水号。

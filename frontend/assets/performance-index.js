@@ -19,6 +19,7 @@ const PerformanceIndex = (() => {
   function checkName(item) {
     let label=item.title;
     if (item.execution_basis) label='扣款凭证';
+    else if (item.advance_guarantee?.period) label=item.rule==='H05'?'付款日与保函期间':'保函期间约定';
     else if (item.advance_guarantee) label=item.rule==='H05'?'签收与付款日':'预付款收函条件';
     if (item.stage) return item.stage.name+' · '+label;
     if (item.rule==='H05' || item.stage_payments) return '期次待核 · '+label;

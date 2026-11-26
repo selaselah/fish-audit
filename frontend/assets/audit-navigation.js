@@ -27,10 +27,11 @@
         const guarantees=paper.report.findings.filter(f=>f.advance_guarantee);
         const payments=guarantees.filter(f=>f.rule==='H05');
         for (const f of payments.length?payments:guarantees) {
-          const label=payments.length>1?'核对预付款保函 · '+AdvanceGuarantee.receiptName(f,paper.report):'核对预付款保函';
+          const title=f.advance_guarantee.period?'核对保函期间':'核对预付款保函';
+          const label=payments.length>1?title+' · '+AdvanceGuarantee.receiptName(f,paper.report):title;
           add('底稿视图',label,'file-earmark-text',()=>{
             state.tab='report'; renderCase(true); AdvanceGuarantee.open(f);
-          },'R'+paper.rev+(payments.length>1?' · '+f.id:''),'首期付款 收函 签收 开立 受益人 担保');
+          },'R'+paper.rev+(payments.length>1?' · '+f.id:''),'首期付款 收函 签收 开立 受益人 担保 有效期 展期');
         }
         if (paper.report.findings.some(f=>f.execution_basis)) add('底稿视图','核对扣款凭证','receipt',()=>{
           state.tab='report'; renderCase(true); jump($('#payment-proof'));

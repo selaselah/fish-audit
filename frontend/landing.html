@@ -40,11 +40,15 @@
   <link rel="stylesheet" href="/assets/signer-timeline.css">
   <script src="/assets/signer-timeline.js" defer></script>
   <script src="/assets/public-signer-timing.js" defer></script>
+  <link rel="stylesheet" href="/assets/guarantee-period.css">
+  <script src="/assets/guarantee-period-card.js" defer></script>
   <link rel="stylesheet" href="/assets/payment-proof.css">
   <script src="/assets/payment-proof-card.js" defer></script>
   <script src="/assets/public-payment-proof.js" defer></script>
+  <script src="/assets/public-guarantee-period.js" defer></script>
   <script src="/assets/intake-profiles.js" defer></script>
   <script src="/assets/purchase-preview.js" defer></script>
+  <script src="/assets/case-finder.js" defer></script>
   <script src="/landing.js" defer></script>
   <script src="/assets/sample-review.js" defer></script>
 </head>
@@ -59,7 +63,7 @@
       </div>
     </div>
   </header>
-  <main id="main">
+  <main id="main" tabindex="-1">
     <section class="hero hero--split" data-enter aria-labelledby="hero-title">
       <div class="wrap"><div class="hero-text hero-inner">
         <div class="hero-copy">
@@ -162,7 +166,10 @@
     </section>
     <section class="workflow" id="workflow" aria-labelledby="workflow-title">
       <div class="wrap section-inner">
-        <div class="section-copy"><h2 id="workflow-title">采购审计案例</h2><p>从一项疑点出发，打开合成原件亲自核对。</p>
+        <div class="section-copy"><h2 id="workflow-title">采购审计案例</h2>
+          <button id="find-case" class="case-finder-trigger" type="button" aria-haspopup="dialog" aria-controls="case-finder" hidden>
+            <i class="ui-glyph ic-search" aria-hidden="true"></i><span>查找案例</span><kbd aria-hidden="true">Ctrl K</kbd>
+          </button>
           <div class="scene-tabs" role="tablist" aria-label="选择审计主题" hidden>
             <button type="button" id="scene-tab-signing" role="tab" aria-selected="false" aria-controls="scene-signing" tabindex="-1"><i class="ui-glyph ic-journal-text" aria-hidden="true"></i><strong>签署与生效</strong><small></small></button>
             <button type="button" id="scene-tab-inspection" role="tab" aria-selected="true" aria-controls="scene-inspection"><i class="ui-glyph ic-clipboard-check" aria-hidden="true"></i><strong>交付验收</strong><small></small></button>
@@ -262,7 +269,12 @@
           <div id="scene-folios" class="signing-sample public-folios" role="tabpanel" aria-labelledby="scene-tab-folios" hidden>
             <div class="signing-sample-header"><span><i class="ui-glyph ic-journal-text" aria-hidden="true"></i> 付款核对</span>
               <label id="payment-example-choice" hidden><span class="sr-only">选择付款条款案例</span><select id="payment-example">
-                <option value="comments">分期付款批注</option><option value="proof">付款是否已执行</option><option value="clock">同日签认与扣款</option><option value="timing">跨日签认与付款</option><option value="reference">回单验收单号</option><option value="folios">合同续页</option></select></label><small id="payment-version">合成案例 · R10</small></div>
+                <option value="guarantee">保函期间与付款日</option><option value="comments">分期付款批注</option><option value="proof">付款是否已执行</option><option value="clock">同日签认与扣款</option><option value="timing">跨日签认与付款</option><option value="reference">回单验收单号</option><option value="folios">合同续页</option></select></label><small id="payment-version">合成案例 · R10</small></div>
+            <div id="payment-guarantee-period" data-integrity="sha256-eu1APu+E4wYs036zdvQwmKNGqc0ySAUsX0CNINGLv7w=" hidden>
+              <div class="period-fallback"><h3>首期预付款保函</h3>
+                <a href="/showcase/guarantee-period-guarantee.pdf" target="_blank" rel="noopener">查看水印保函 ↗</a>
+                <a href="/showcase/guarantee-period-bank.pdf" target="_blank" rel="noopener">查看水印付款回单 ↗</a></div>
+            </div>
             <div id="payment-execution" hidden><a href="/showcase/payment-execution-notice.pdf" target="_blank" rel="noopener">查看演练付款回单</a></div>
             <div id="payment-signer-clock" hidden><a href="/showcase/signer-clock-transfer.pdf" rel="noopener" target="_blank">查看演练扣款回单</a></div>
             <div id="payment-signer-timing" hidden><a href="/showcase/joint-signing-transfer.pdf" rel="noopener" target="_blank">查看演练付款回单</a></div>
@@ -281,6 +293,16 @@
       </div>
     </section>
   </main>
+  <dialog id="case-finder" aria-labelledby="case-finder-title">
+    <h2 id="case-finder-title" class="sr-only">查找审计案例</h2>
+    <div class="finder-search"><i class="ui-glyph ic-search" aria-hidden="true"></i>
+      <input id="finder-query" type="text" role="combobox" aria-label="查找审计案例" aria-controls="finder-results" aria-expanded="true" aria-autocomplete="list" autocomplete="off" placeholder="搜索保函、验收、电子签名…" autofocus>
+      <form method="dialog"><button type="submit" aria-label="关闭案例搜索"><i class="ui-glyph ic-x-lg" aria-hidden="true"></i></button></form>
+    </div>
+    <div id="finder-results" role="listbox" aria-label="匹配的合成案例"></div>
+    <p class="finder-empty" hidden>没有匹配的案例</p>
+    <div class="finder-footer"><span role="status" aria-live="polite"></span><span aria-hidden="true"><kbd>↑</kbd><kbd>↓</kbd> 选择 <kbd>↵</kbd> 打开</span></div>
+  </dialog>
   <dialog id="sample-compare" aria-labelledby="sample-compare-title">
     <header class="sample-review-head"><div><span>合成采购 · R8</span><h2 id="sample-compare-title">合同标准与验收实测</h2></div>
       <form method="dialog"><button aria-label="关闭原件对照" autofocus><i class="ui-glyph ic-x-lg" aria-hidden="true"></i></button></form></header>

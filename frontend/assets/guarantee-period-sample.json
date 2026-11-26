@@ -1,0 +1,187 @@
+{
+  "case_id": "dcda3682a4994b1f94b35b29fd22dbe5",
+  "rev": 2,
+  "report_sha256": "22d4b33dabdab9443f0a8b741402c685cb0c4576fea089e2bb816782b62a4947",
+  "rule_version": "2026.11.27.06",
+  "finding": "H05-8",
+  "stage": "第一期",
+  "state": "expired",
+  "documents": {
+    "contract": {
+      "title": "采购合同",
+      "version": "合成采购 · R2",
+      "page": 1,
+      "pdf": "/showcase/guarantee-period-contract.pdf",
+      "image": "/assets/guarantee-period-contract.jpg",
+      "source_sha256": "875996be053f5d883b2e6040f76f9b8da1213deb36a6ec10cb74e1b66891b565",
+      "page_sha256": "f21c0e9ab84baf739403fb1ac95bc71cbbd4befc8b50c4ab5196792190e1dfe5",
+      "lines": [
+        {
+          "key": "receipt_clause",
+          "ref": "advance-guarantee/d01/p1/l19",
+          "line": 19,
+          "label": "预付款支付前提",
+          "value": "采购方收到本合同项下的预付款保函后方可支付第一期预付款",
+          "quote": "预付款支付前提：采购方收到本合同项下的预付款保函后方可支付第一期预付款",
+          "rects": [
+            [
+              0.08209,
+              0.76575,
+              0.91984,
+              0.78174
+            ]
+          ],
+          "rect": [
+            0.08209,
+            0.76575,
+            0.91984,
+            0.78174
+          ]
+        },
+        {
+          "key": "clause",
+          "ref": "advance-guarantee/d01/p1/l20",
+          "line": 20,
+          "label": "保函有效期要求",
+          "value": "第一期预付款的付款日须在本合同项下预付款保函的有效期内",
+          "quote": "保函有效期要求：第一期预付款的付款日须在本合同项下预付款保函的有效期内",
+          "rects": [
+            [
+              0.08145,
+              0.8,
+              0.91791,
+              0.81598
+            ]
+          ],
+          "rect": [
+            0.08145,
+            0.8,
+            0.91791,
+            0.81598
+          ]
+        }
+      ]
+    },
+    "guarantee": {
+      "title": "预付款保函",
+      "version": "合成采购 · R2",
+      "page": 1,
+      "pdf": "/showcase/guarantee-period-guarantee.pdf",
+      "image": "/assets/guarantee-period-guarantee.jpg",
+      "source_sha256": "9a3c1b6d780921367e995d118949a694b03ee8c80b50f9ca643fb82e3d36696e",
+      "page_sha256": "0236f4c2ead8d692dae677d884e8a6ca50079c9fad536cc1b752a09e91e5f83e",
+      "lines": [
+        {
+          "key": "start",
+          "ref": "advance-guarantee/d02/p1/l8",
+          "line": 8,
+          "label": "保函有效期自",
+          "value": "2026年9月2日",
+          "quote": "保函有效期自：2026年9月2日",
+          "rects": [
+            [
+              0.08145,
+              0.3863,
+              0.41176,
+              0.40274
+            ]
+          ],
+          "rect": [
+            0.08145,
+            0.3863,
+            0.41176,
+            0.40274
+          ]
+        },
+        {
+          "key": "end",
+          "ref": "advance-guarantee/d02/p1/l9",
+          "line": 9,
+          "label": "保函有效期至（含当日）",
+          "value": "2026年9月4日",
+          "quote": "保函有效期至（含当日）：2026年9月4日",
+          "rects": [
+            [
+              0.08145,
+              0.42055,
+              0.53782,
+              0.43973
+            ]
+          ],
+          "rect": [
+            0.08145,
+            0.42055,
+            0.53782,
+            0.43973
+          ]
+        }
+      ]
+    },
+    "receipt": {
+      "title": "预付款保函签收单",
+      "version": "合成采购 · R2",
+      "page": 1,
+      "pdf": "/showcase/guarantee-period-receipt.pdf",
+      "image": "/assets/guarantee-period-receipt.jpg",
+      "source_sha256": "4071caf9b22c4d72f4939a249a3a6ba91edb6a9dcc8bf9ae25441fc145be08f6",
+      "page_sha256": "78152265c989d74d1c11098711c5c4c5c2cc4ffefca7f9e7a9011428bc443fbf",
+      "lines": [
+        {
+          "key": "received",
+          "ref": "advance-guarantee/d03/p1/l6",
+          "line": 6,
+          "label": "签收日期",
+          "value": "2026年9月3日",
+          "quote": "签收日期：2026年9月3日",
+          "rects": [
+            [
+              0.08209,
+              0.31735,
+              0.36134,
+              0.33379
+            ]
+          ],
+          "rect": [
+            0.08209,
+            0.31735,
+            0.36134,
+            0.33379
+          ]
+        }
+      ]
+    },
+    "bank": {
+      "title": "银行付款回单",
+      "version": "合成采购 · R2",
+      "page": 1,
+      "pdf": "/showcase/guarantee-period-bank.pdf",
+      "image": "/assets/guarantee-period-bank.jpg",
+      "source_sha256": "03c8bae1eb390c9d0466f713c738751b68bf3aa06cdccfc7bbbb14df8c3a4c66",
+      "page_sha256": "63015ee54e8bfbb7bbb5705d9ca018dcdbcd7e08270b16740c38112ce7ebd2d5",
+      "lines": [
+        {
+          "key": "paid",
+          "ref": "advance-guarantee/d04/p1/l9",
+          "line": 9,
+          "label": "付款日期",
+          "value": "2026年9月5日",
+          "quote": "付款日期：2026年9月5日",
+          "rects": [
+            [
+              0.08209,
+              0.421,
+              0.36134,
+              0.43699
+            ]
+          ],
+          "rect": [
+            0.08209,
+            0.421,
+            0.36134,
+            0.43699
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -122,7 +122,7 @@
     event.preventDefault(); select(rows[k],mode); rows[k].focus();
   });
   for (const button of modes) button.addEventListener('click',()=>select(row,button.dataset.scale));
-  function load(next) {
+  function load(next,loadPage) {
     sample=next;
     dialog.querySelector('h2').textContent=sample.title;
     dialog.querySelector('.sample-review-head span').textContent=sample.version;
@@ -147,10 +147,18 @@
     }
     const bounds=[...rectangles.values()].flat();
     start=Math.min(...bounds.map(r=>r[0])); end=Math.max(...bounds.map(r=>r[2]));
-    if (page?.getAttribute('src')===sample.image) return;
+    if (!loadPage && page?.getAttribute('src')===sample.image) return;
     // Changing width resets the pixels, so a delayed load cannot show the previous case.
     canvas.width=canvas.width; delete canvas.dataset.fact;
     status.textContent='正在载入原页…'; status.hidden=false;
+    if (loadPage) {
+      page=null;
+      loadPage().then(img=>{if (sample===next) { page=img; draw(); }}).catch(()=>{
+        if (sample!==next) return;
+        status.hidden=false; status.textContent='页图未通过载入校验，可打开演练原件。';
+      });
+      return;
+    }
     const requested=new Image(); page=requested;
     requested.onload=()=>{if (page===requested) draw();};
     requested.onerror=()=>{
@@ -160,21 +168,21 @@
     requested.src=sample.image;
   }
   new ResizeObserver(draw).observe(canvas.parentElement);
-  function present(doc,ref,trigger,scale='line') {
+  function present(doc,ref,trigger,scale='line',loadPage) {
     opener=trigger;
     trigger.focus({preventScroll:true});
-    load(doc); dialog.showModal();
+    load(doc,loadPage); dialog.showModal();
     select(rows.find(r=>r.dataset.ref===ref) || rows[Math.min(2,rows.length-1)],scale);
     row.focus({preventScroll:true});
   }
   document.addEventListener('inspect-sample-line',event=>{
-    const {doc,ref,opener,scale}=event.detail;
+    const {doc,ref,opener,scale,loadPage}=event.detail;
     if (!doc.lines.some(l=>l.ref===ref) || !doc.lines.every(line=>{
       const bounds=line.rects || (line.rect && [line.rect.split(',').map(Number)]);
       return bounds?.length && bounds.every(r=>Array.isArray(r) && r.length===4 && r.every(n=>Number.isFinite(n) && n>=0 && n<=1) &&
         r[2]>r[0] && r[3]>r[1]);
     })) return;
-    event.preventDefault(); present(doc,ref,opener,scale==='page'?'page':'line');
+    event.preventDefault(); present(doc,ref,opener,scale==='page'?'page':'line',loadPage);
   });
   for (const link of document.querySelectorAll('.open-sample-review')) {
     link.setAttribute('aria-haspopup','dialog'); link.setAttribute('aria-controls',dialog.id);

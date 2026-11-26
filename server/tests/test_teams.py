@@ -489,6 +489,13 @@ class EnterpriseFlow(unittest.TestCase):
         source_link = "/w/"+a+"/workpaper/"+emp_case+"?rev=1&fact=d01%2Fp1%2Ff1"
         self.assertEqual(admin.get(source_link).headers["Location"],"/app#w/"+a+"/case/"+emp_case+"?rev=1&fact=d01%2Fp1%2Ff1")
         entity_link = "/w/"+a+"/workpaper/"+emp_case
+        for step in ("d01%2Fp1%2Finitial","d01%2Fp1%2Fcheck","expert"):
+            query = "?rev=1&view=execution&call="+step
+            self.assertEqual(admin.get(entity_link+query).headers["Location"],"/app#w/"+a+"/case/"+emp_case+query)
+        for query in ("?view=execution&call=expert","?rev=1&view=replay&call=expert","?rev=1&view=execution&call=d01/p0/check",
+                      "?rev=1&view=execution&call=d01/p1/absent","?rev=1&view=execution&call=expert&call=expert",
+                      "?rev=1&rev=2&view=execution&call=expert"):
+            self.assertEqual(admin.get(entity_link+query).status_code,400)
         self.assertEqual(admin.get(entity_link+"?rev=1&view=entities").headers["Location"],
                          "/app#w/"+a+"/case/"+emp_case+"?rev=1&view=entities")
         self.assertEqual(admin.get(entity_link+"?view=entities").status_code,400)

@@ -1,5 +1,13 @@
 # 合同付款批注与财务复核交互
 
+## 付款日与银行保函期间
+
+洛阳市政府采购中心的预付款担保格式将生效与预付款实际支付相联系，将终止与进度付款证书载明扣清预付款相联系。这类文本需要事件凭证。本项目只有在提交的具体合同要求按日期比较、保函也清楚载明日期时，才将首笔实际付款放入该期间核对。[采购文件「附件9 预付款担保」](https://gongyi.zfcg.henan.gov.cn/cmsweb81e27e/luoyang/rootfiles/2025/08/27/f64130d012bc478386fb54fc8efe9332.pdf)
+
+SAP 的银行保函展期流程可以修改期限和到期日。演练中出现待确认的展期申请时，审计程序保留原函日期，单独列出需向开立机构核验的展期凭证。界面参考 SAP Fiori 甘特图的时间比例和里程碑符号，使用区间带表示原函期间、菱形标记实际付款日。[SAP 银行保函展期](https://help.sap.com/docs/s4hana-cloud-best-practices/bank-guarantee-management-2nz-kw/rollover-bank-guarantee) · [SAP Fiori 时间轴和里程碑](https://www.sap.com/design-system/fiori-design-web/v1-145/ui-elements/gantt-chart)
+
+Stripe Dashboard 支持搜索并跳转到账单、付款等具体资源。首页的「查找案例」借鉴了从搜索结果直接打开业务对象的交互。搜索框内保留输入焦点，方向键移动结果，回车打开，Esc 取消。组合框的活动选项遵循 WAI-ARIA 的键盘模式。[Stripe Dashboard 搜索](https://docs.stripe.com/dashboard/search) · [W3C 组合框交互](https://www.w3.org/WAI/ARIA/apg/patterns/combobox/)
+
 ## 预付款保函的收取
 
 洛阳市政府采购中心一份货物采购文件在合同第五条约定，采购人收到与预付款等额的银行保函后支付合同价款的 80%，安装调试和验收合格后再处理保函退还和余款。这个项目说明付款条件可以随期次变化。演练中的 30% 及其受益人条款均来自合成合同，实际案件按各自提交的约定审查。[采购文件，第五条付款方式](https://sqsmqx.zfcg.henan.gov.cn/cmsweb35rc67w/lyslnx/rootfiles/2026/11/25/eec6bed0c0a2480b9692f5cd1a63edc7.pdf)

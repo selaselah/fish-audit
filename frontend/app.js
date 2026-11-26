@@ -1346,22 +1346,10 @@ function graphRelations(report) {
     .map(edge => box('line', el('code', edge.from + ' → ' + edge.to), box('chips', ...edge.evidence.map(citation))))));
   return panel;
 }
-function activityPanel() {
-  const log = box('panel', el('h2', '处理进度记录'));
-  for (const entry of [...state.detail.events].reverse()) {
-    log.append(box('line', el('strong', time(entry.time), 'mono'), el('span', entry.message)));
-  }
+function activityPanel(log = ExecutionTrace.log(state.detail)) {
   const bundle = state.bundle;
   if (!bundle) return log;
-  const calls = bundle.report.calls;
-  const panel = box('panel', el('h2', '本版模型调用'), el('p', '可检查模型、请求摘要、结构化输出与证据编号。', 'muted'));
-  for (const trace of [...calls.pages, calls.expert]) {
-    const title = trace.doc ? trace.doc + ' 第 ' + trace.page + ' 页' : '专家追加程序';
-    panel.append(fold(title + ' · ' + trace.model, el('pre', JSON.stringify(trace, null, 2))));
-  }
-  const prompts = Object.entries(calls.instructions || {});
-  if (prompts.length) panel.append(fold('查看本版留存的模型指令', ...prompts.map(([hash, prompt]) =>
-    box('line', el('code', hash), el('pre', prompt)))));
+  const panel = box('panel', el('h2', '执行程序'));
   const policy = bundle.report.policy;
   const methods = Object.entries(policy.code_sha256 || {});
   if (methods.length) panel.append(fold('执行程序与版本摘要', ...methods.map(([name, hash]) => {
@@ -1373,14 +1361,18 @@ function activityPanel() {
     return box('line', file, el('code', hash, 'small'));
   })));
   panel.append(el('p', '规则集版本 ' + bundle.report.policy.version, 'small'));
-  if (state.detail.status === 'ready' && state.detail.rev === bundle.rev) {
-    panel.append(action('保留此版并重新审计', async event => {
-      event.currentTarget.disabled = true;
-      try { await post(base() + '/rerun', {rev: bundle.rev}); chooseRevision(); await refresh(); }
-      catch (error) { alertText(error); await refresh(); }
-    }));
-  }
-  return box('', ruleReplayPanel(bundle), panel, log);
+  const rerun = action('保留此版并重新审计', async event => {
+    if (!rerun.isConnected || rerun.hidden || state.bundle !== bundle || state.detail?.id !== bundle.report.case_id ||
+        state.detail.status !== 'ready' || state.detail.rev !== bundle.rev) return;
+    event.currentTarget.disabled = true;
+    try { await post(base() + '/rerun', {rev: bundle.rev}); chooseRevision(); await refresh(); }
+    catch (error) { alertText(error); await refresh(); }
+    finally { rerun.disabled = false; }
+  });
+  rerun.dataset.traceRerun = '';
+  rerun.hidden = state.detail.status !== 'ready' || state.detail.rev !== bundle.rev;
+  panel.append(rerun);
+  return box('', box('execution-overview',ExecutionTrace.inspector(bundle),log), ruleReplayPanel(bundle), panel);
 }
 function paperViewContext(data, rev) {
   const canReview = data.status === 'ready' && data.rev === rev;
@@ -1388,8 +1380,6 @@ function paperViewContext(data, rev) {
     case 'report':
       return JSON.stringify([canReview, data.decisions.find(row => row.rev === rev),
         data.referrals?.find(row => row.rev === rev), Team.current?.role, Team.session.user?.id]);
-    case 'activity':
-      return JSON.stringify([canReview, data.events.at(-1)?.seq]);
     case 'evidence':
       return JSON.stringify(data.documents);
     default:
@@ -1430,22 +1420,21 @@ function renderCase(forcePanel = false) {
   PageProgress.render(data,bundle?.rev);
   renderSupplementFamily(data,bundle?.rev);
   $('#report-tools').hidden = !bundle;
+  const previousLog = $('#case-panel .execution-events');
+  const log = previousLog?.dataset.case === data.id ? previousLog : undefined;
+  const logFocus = log?.contains(document.activeElement) ? document.activeElement : null;
+  if (log) ExecutionTrace.updateLog(log,data);
   if (!bundle) {
     const source = JSON.stringify([data.id,data.documents,data.decisions]);
-    const events = JSON.stringify(data.events);
-    if (displayedPaper?.bundle===null && displayedPaper.source===source) {
-      if (displayedPaper.events!==events) {
-        $('#case-panel').lastElementChild.replaceWith(activityPanel());
-        displayedPaper.events = events;
-      }
-      return;
-    }
-    const content = [sourceList(), activityPanel()];
+    if (displayedPaper?.bundle===null && displayedPaper.source===source) return;
+    const content = [sourceList(), activityPanel(log)];
     const decision = data.decisions?.at(-1);
     if (decision) content.unshift(box('panel',el('h2','验收决定'),tag(decision.decision),el('p',decision.note)));
     $('#case-panel').replaceChildren(...content);
-    displayedPaper = {bundle:null,source,events}; return;
+    logFocus?.focus({preventScroll:true});
+    displayedPaper = {bundle:null,source}; return;
   }
+  if (!forcePanel && displayedPaper?.bundle === null && (logFocus || log?.querySelector('details[open]'))) state.tab = 'activity';
   const nav = $('#tabs');
   if (!nav.childElementCount) {
     const icons = {report:'card-checklist', evidence:'file-earmark-text', graph:'diagram-3', activity:'clock-history'};
@@ -1462,9 +1451,15 @@ function renderCase(forcePanel = false) {
   }
   if (versions.value !== String(bundle.rev)) versions.value = String(bundle.rev);
   const context = paperViewContext(data, bundle.rev);
-  if (!forcePanel && displayedPaper?.bundle === bundle && displayedPaper.tab === state.tab && displayedPaper.context === context) return;
-  const panel = {report: reportPanel, evidence: sourceList, graph: graphPanel, activity: activityPanel}[state.tab]();
+  if (!forcePanel && displayedPaper?.bundle === bundle && displayedPaper.tab === state.tab && displayedPaper.context === context) {
+    if (state.tab === 'activity') {
+      $('#case-panel [data-trace-rerun]').hidden = data.status !== 'ready' || data.rev !== bundle.rev;
+    }
+    return;
+  }
+  const panel = state.tab === 'activity' ? activityPanel(log) : {report: reportPanel, evidence: sourceList, graph: graphPanel}[state.tab]();
   $('#case-panel').replaceChildren(panel);
+  if (state.tab === 'activity') logFocus?.focus({preventScroll:true});
   displayedPaper = {bundle, tab: state.tab, context};
 }
 function clearCaseView() {
@@ -1538,6 +1533,8 @@ async function refresh() {
         state.tab=traced?'graph':'report'; focusFinding=traced?'#trace-select':'[data-finding="'+requestedFinding+'"]';
       } else if (requestedScope && state.openedCitation!==location.hash) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='[data-audit-scope="'+requestedScope.id+'"]';
+      } else if (requestedView==='execution' && state.openedCitation!==location.hash && state.bundle) {
+        state.openedCitation=location.hash; state.tab='activity'; focusFinding='#execution-trace-page';
       } else if (route.params.get('view')==='replay' && state.openedCitation!==location.hash && state.bundle) {
         state.openedCitation=location.hash; state.tab='activity'; focusFinding='.rule-replay button';
       } else if (['reinspection','trial'].includes(route.params.get('view')) && state.openedCitation!==location.hash &&
