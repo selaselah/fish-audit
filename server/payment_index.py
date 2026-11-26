@@ -1,6 +1,7 @@
 """Keep the two searchable projections of a bank workpaper consistent with its archived facts."""
 
 from config import BANK, CaseError
+import payment_execution
 from field_sources import source_row
 from payment_notes import pending_notes
 from payment_reference import FORMAT, check
@@ -22,10 +23,11 @@ def prepare_reference_column(db):
 
 def install(db, *, new_column):
     # A row is keyed by case, so even an update pointing it to the wrong revision must dirty the current case.
-    tables = ("payment_index", "contract_payments", "reports")
+    tables = ("payment_index", "contract_payments", "reports", "payment_execution_holds")
     operations = {"insert": ("NEW",), "delete": ("OLD",), "update": ("OLD", "NEW")}
     existing = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type IN ('table','trigger')")}
-    required = {"payment_index_pending"}
+    required = {"payment_index_pending", "payment_execution_holds"}
+    db.execute("CREATE TABLE IF NOT EXISTS payment_execution_holds(case_id TEXT PRIMARY KEY, rev INTEGER NOT NULL) WITHOUT ROWID")
     db.execute("CREATE TABLE IF NOT EXISTS payment_index_pending(case_id TEXT PRIMARY KEY) WITHOUT ROWID")
     for table in tables:
         for operation, sources in operations.items():
@@ -40,6 +42,25 @@ def install(db, *, new_column):
         db.execute("INSERT OR IGNORE INTO payment_index_pending SELECT id FROM cases WHERE profile=? AND rev>0", (BANK,))
         if version < 9:
             db.execute("PRAGMA user_version=9")
+
+
+def sync_execution(db, case_id, revision, paper):
+    """Index current comparability without changing a signed report or its issued payment projection."""
+    graph = paper["graph"]
+    def text(doc, page):
+        saved = db.execute("SELECT text FROM pages WHERE case_id=? AND doc=? AND number=?", (case_id, doc, page)).fetchone()
+        return saved[0] if saved else None
+    try:
+        held = payment_execution.sources(graph, text, banks_only=True)["units"]
+        if paper["policy"].get("payment_execution") and held != [u for u in graph[payment_execution.KEY]["units"] if u["bank"]]:
+            raise ValueError("受理限定与当时的原件记载不符")
+    except (KeyError, ValueError, TypeError) as exc:
+        raise CaseError("核对归档付款凭证的证明范围失败。", 409) from exc
+    if held:
+        db.execute("""INSERT INTO payment_execution_holds VALUES(?,?) ON CONFLICT(case_id)
+                      DO UPDATE SET rev=excluded.rev WHERE rev<>excluded.rev""", (case_id, revision))
+    else:
+        db.execute("DELETE FROM payment_execution_holds WHERE case_id=?", (case_id,))
 
 
 def checked_visibility(db, case_id, graph, selected=None):

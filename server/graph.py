@@ -21,6 +21,7 @@ import equipment_models
 import equipment_exchanges
 import stage_payments
 import payment_acceptance
+import payment_execution
 import contract_effect
 import pdf_execution
 import supplier_pages
@@ -400,6 +401,11 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     record_signatories(graph, lambda doc, number: texts[doc, number])
     record_quality_references(graph, lambda doc, number: texts[doc, number])
     attach_payment_references(graph, lambda doc, number: texts[doc,number])
+    execution = payment_execution.sources(graph, lambda doc, number: texts[doc,number])
+    graph[payment_execution.KEY] = execution
+    lines, links = payment_execution.source_graph(execution)
+    graph["nodes"].extend(lines)
+    graph["edges"].extend(links)
     citations = payment_acceptance.sources(graph, lambda doc, number: texts[doc, number])
     graph[payment_acceptance.GRAPH_KEY] = citations
     lines, links = payment_acceptance.source_graph(citations)

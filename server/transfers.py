@@ -2,6 +2,8 @@
 
 import re
 
+import payment_execution
+
 from calculations import in_yuan, money, normalized
 from payment_notes import note_refs, pending_notes
 from payment_visibility import unchecked
@@ -57,6 +59,12 @@ def check_transfers(graph, docs, values, record, parsed_date, verified_grants=()
         else:
             record("B03","ok" if a == b else "risk",f"合同约定账号尾号 {a[-4:]}，回单收款账号尾号 {b[-4:]}。"+
                    ("两个完整账号一致。" if a == b else "两个完整账号不同，请核验变更授权及对方确认记录。"),refs)
+    proof = payment_execution.entry(graph, bank)
+    if proof:
+        cited = [*basis, *payment_execution.refs(graph, bank)]
+        record("B05", "risk" if proof["state"] == "conflict" else "missing", payment_execution.DETAIL[proof["state"]], cited, [bank])
+        record("B04", "missing", "本笔实际扣款凭证待核，暂缓比较实付金额与合同价款。", cited, ids)
+        return
     partial = [m for m in graph.get("transfer_references",{}).get("facts",[]) if m["unit"]==bank]
     trace = None
     if partial:

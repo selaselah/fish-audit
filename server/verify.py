@@ -25,6 +25,7 @@ from performance_versions import DATE_FORMATS
 from quality_labels import verify_report as verify_quality_numbers
 from quality_references import verify_report as verify_quality_references
 from acceptance_authority import verify_sources as verify_acceptance_authority
+import payment_execution
 from equipment_models import REVIEW_SINCE as MODEL_REVIEW_SINCE, source_kind as model_source_kind, verify as verify_equipment_models
 from stage_payments import verify as verify_stage_payments
 from receipt_packets import verify_sources as verify_receipt_packets
@@ -187,6 +188,9 @@ def verify_payment_history(bundle, hashes, report, journal, *, issued_at=None):
                 and signoff["workspace"] == journal["workspace"]
                 and previous["graph"]["profile"] == graph["profile"], "历史签收归属或核查范围不符")
         old_graph = previous["graph"]
+        if report["policy"].get("payment_execution"):
+            held = payment_execution.sources(old_graph, lambda d,n: bundle.read(f"{root}/{d}/{n}.txt").decode(), banks_only=True)
+            require(not held["units"], "所引历史付款凭证的受理或扣款限定尚未核实")
         old = payment_record(old_graph, previous["findings"])
         marked = None
         version = report["policy"].get("payment_references")
@@ -275,6 +279,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
     verify_reservations(report,page_text)
     verify_inspection(report,page_text)
     verify_payment_acceptance(report,page_text)
+    payment_execution.verify(report,page_text)
     verify_prior_installment(report,page_text,submitted=submitted,signed=signed)
     verify_payment_releases(report,page_text,submitted=submitted,signed=signed)
     verify_repair_completion(report,page_text)
@@ -480,6 +485,8 @@ def render_addendum_sources(bundle, report, nodes):
             trace = next(t for t in pages if t["page"] == number)
             for line_number, rects in trace.get("contract_folio_rects", {}).items():
                 require(layout["lines"].get(line_number, []) == rects, "合同付款续页的行坐标未能从原件重现")
+            for line_number, rects in trace.get("payment_execution_rects", {}).items():
+                require(layout["lines"].get(line_number, []) == rects, "付款凭证说明的行坐标未能从原件重现")
             for line_number, rects in trace.get("signer_timing_rects", {}).items():
                 require(layout["lines"].get(line_number, []) == rects, "签认与付款时序的行坐标未能从原件重现")
             for fact in graph["facts"]:

@@ -30,6 +30,8 @@ def unmasked(value):
 def payment_record(graph, findings):
     record = receipt_keys(graph,findings)
     record["installment"] = installment_record(graph,findings,record["payer"],record["reference"])
+    if any(u["bank"] for u in graph.get("payment_execution_sources", {}).get("units", [])):
+        record["installment"].update(key=None, entry=None)
     apply_reference_notes(record,graph.get("transfer_references",{}).get("facts",[]))
     return record
 
@@ -68,6 +70,9 @@ def receipt_keys(graph, findings):
     if len(receipts) != 1:
         return record
     bank = receipts[0]
+    from payment_execution import entry
+    if entry(graph, bank):
+        return record
     facts = {fact["id"]: fact for fact in graph["facts"]}
     controls = [f for f in findings if f["rule"] in BASE_RULES]
     record["full_refs"] = list(dict.fromkeys(ref for finding in controls for ref in finding["evidence"] if ref in facts))

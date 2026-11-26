@@ -29,6 +29,7 @@ from prior_installment import FORMAT as PRIOR_INSTALLMENT
 from inspection_coverage import FORMAT as INSPECTION_COVERAGE
 from equipment_models import FORMAT as EQUIPMENT_MODELS
 from stage_payments import FORMAT as STAGE_PAYMENTS
+from payment_execution import FORMAT as PAYMENT_EXECUTION
 from payment_acceptance import FORMAT as PAYMENT_ACCEPTANCE
 from receipt_packets import FORMAT as RECEIPT_PACKETS
 from delivery_batches import FORMAT as DELIVERY_BATCHES
@@ -72,7 +73,7 @@ CATALOG = {
 VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING, "performance_checks":PERFORMANCE_FORMAT,
            "invoice_receipt_conditions":INVOICE_RECEIPT, "acceptance_reservations":RESERVATIONS, "acceptance_word_reviews":WORD_REVIEWS, "contract_word_reviews":CONTRACT_WORD_REVIEWS, "payment_releases":PAYMENT_RELEASES, "equipment_models":EQUIPMENT_MODELS, "repair_completion":REPAIR_COMPLETION, "reinspection_wait": REINSPECTION_WAIT, "contract_folios": CONTRACT_FOLIOS, "inspection_coverage":INSPECTION_COVERAGE, "prior_installment":PRIOR_INSTALLMENT,
            "quality_number_classification":QUALITY_NUMBER_FORMAT, "quality_references":QUALITY_REFERENCE_FORMAT,
-           "delegation_checks":DELEGATION_FORMAT, "quality_addenda":ADDENDUM_FORMAT, "acceptance_authority":ACCEPTANCE_AUTHORITY,"delivery_batches":DELIVERY_BATCHES,"receipt_packets":RECEIPT_PACKETS,"stage_payments":STAGE_PAYMENTS, "payment_acceptance":PAYMENT_ACCEPTANCE,
+           "delegation_checks":DELEGATION_FORMAT, "quality_addenda":ADDENDUM_FORMAT, "acceptance_authority":ACCEPTANCE_AUTHORITY,"delivery_batches":DELIVERY_BATCHES,"receipt_packets":RECEIPT_PACKETS,"stage_payments":STAGE_PAYMENTS, "payment_acceptance":PAYMENT_ACCEPTANCE, "payment_execution":PAYMENT_EXECUTION,
            "supplier_page_inspection": SUPPLIER_PAGE_INSPECTION, "pdf_execution": PDF_EXECUTION, "contract_effect":CONTRACT_EFFECT,"warranty_checks":WARRANTY_CHECKS,"payment_windows":PAYMENT_WINDOWS,"sources": SOURCES, "rule_sources": MAPPING, "invoice_sources": INVOICE_SOURCE_FORMAT,
            "invoice_approval": INVOICE_APPROVAL_FORMAT,"invoice_identity":INVOICE_IDENTITY_FORMAT,"invoice_lookup":INVOICE_LOOKUP,
            "invoice_number_masks":MASK_FORMAT,"payment_references":PAYMENT_REFERENCE_FORMAT,"payment_checks":PAYMENT_CHECKS}
@@ -145,7 +146,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
     def with_performance():
         for item in performance:
             record(item["rule"],item["status"],item["detail"],item["evidence"],item["scope"])
-            for key in ("stage","reinspection","delegations","quality_change","acceptance_authority","signer_timing","date_checks","batch_acceptance","effect_review","warranty_check","warranty_payment","payment_window","invoice_receipt","payment_change","payment_opinion","acceptance_reservations","acceptance_comments","contract_comments","stage_payments","payment_acceptance","equipment_models","inspection_coverage","prior_installment","contract_folios"):
+            for key in ("stage","reinspection","delegations","quality_change","acceptance_authority","signer_timing","date_checks","batch_acceptance","effect_review","warranty_check","warranty_payment","payment_window","invoice_receipt","payment_change","payment_opinion","acceptance_reservations","acceptance_comments","contract_comments","stage_payments","payment_acceptance","execution_basis","equipment_models","inspection_coverage","prior_installment","contract_folios"):
                 if key in item:
                     findings[-1][key] = item[key]
         return findings

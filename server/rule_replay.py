@@ -31,7 +31,7 @@ def result_bytes(value):
 
 def compare_rules(report, engine):
     policy = report["policy"]
-    if any(policy.get(k) != engine.VERSION.get(k) for k in ("version","sources","rule_sources","invoice_sources","invoice_approval","invoice_identity","invoice_lookup","invoice_number_masks","performance_checks","quality_number_classification","quality_references","delegation_checks","quality_addenda","acceptance_authority","delivery_batches","contract_effect","warranty_checks","payment_windows","invoice_receipt_conditions","acceptance_reservations","acceptance_word_reviews","contract_word_reviews","payment_releases","receipt_packets","stage_payments","payment_acceptance","equipment_models","repair_completion","inspection_coverage","prior_installment","reinspection_wait","contract_folios")):
+    if any(policy.get(k) != engine.VERSION.get(k) for k in ("version","sources","rule_sources","invoice_sources","invoice_approval","invoice_identity","invoice_lookup","invoice_number_masks","performance_checks","quality_number_classification","quality_references","delegation_checks","quality_addenda","acceptance_authority","delivery_batches","contract_effect","warranty_checks","payment_windows","invoice_receipt_conditions","acceptance_reservations","acceptance_word_reviews","contract_word_reviews","payment_releases","receipt_packets","stage_payments","payment_acceptance","payment_execution","equipment_models","repair_completion","inspection_coverage","prior_installment","reinspection_wait","contract_folios")):
         raise RuleMismatch("制度与执行程序目录和当时的规则版本不符。")
     if report["graph"].get("profile") != policy["profile"]:
         raise RuleMismatch("底稿与规则的业务范围不符。")

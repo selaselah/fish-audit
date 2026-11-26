@@ -7,6 +7,7 @@ from field_receipts import field_actions, validate_field_actions
 from invoice_approval import validate as validate_invoice_approval
 from invoice_proof import FORMAT as INVOICE_SOURCE_FORMAT
 from payment_history import payment_matches_with_evidence
+import payment_execution
 from payment_index import checked_visibility
 from peer_review import journal_decision, verify_referrals, verify_review
 from storage import encode
@@ -165,6 +166,7 @@ def export_bundle(store, case_id, revision, stream):
             write(path, historic.read_bytes(), match["page_hash"])
         invoices.extend(bundle.get("invoice_approval",{}).get("screened",[]))
         payments = payment_matches_with_evidence(report["graph"].get("payment_history", {"matches":[]}))
+        payment_origins = {(m["case_id"],m["rev"]) for m in payments}
         references = {}
         for match in [*invoices,*payments]:
             key = match["case_id"],match["rev"]
@@ -191,6 +193,8 @@ def export_bundle(store, case_id, revision, stream):
             prior_nodes = {n["id"]: n for n in graph["nodes"]}
             pages = {(p["doc"], p["number"]): p for p in store.pages(prior)}
             cited = group["pages"]
+            if report["policy"].get("payment_execution") and (prior,rev) in payment_origins:
+                cited.update(payment_execution.bank_pages(graph))
             for doc in sorted({doc for doc, page in cited}):
                 meta = documents[doc]
                 original = "original" + meta["ext"]

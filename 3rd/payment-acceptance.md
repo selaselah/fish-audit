@@ -29,3 +29,9 @@ Xero 在每笔银行匹配旁提供所据记录和文件，Ramp 的账单表按�
 Ramp 的付款列表区分发起、在途和已付款，单据详情可以查看付款进展及回单。FloQast 的官方界面示例将某一期间的控制执行、签核人和附件集中在同一视图。Fish Audit 采用蓝色选中态、带文字的风险提示和可切换的原件对照。审计员可在一张卡内核对具名签认和实际扣款，点开任一原行查看整页。[Ramp 付款进度](https://support.ramp.com/bill-payment-methods-and-timelines/) · [Ramp 账单与付款管理](https://support.ramp.com/managing-bills-and-payments-on-bill-pay/) · [FloQast 控制审阅界面](https://get.floqast.com/hubfs/Assets/FloQast_Data%20Sheet_Achieving%20Connected%20Compliance%20with%20FloQast_July%202024.pdf)
 
 公开同日演练来自本地生成的三份水印 PDF。导出时逐份核对了生成件摘要、该版图谱引用和页图摘要。九张 WebP 裁片均逐像素核对，包括模型遗漏的实际扣款时间原行。[固定版公开数据](../frontend/assets/signer-clock.json) · [首页试核](http://127.0.0.1:8000/?scene=signer-clock#workflow)
+
+## 受理回执能证明什么
+
+兴业银行的个人网银说明明确限定了转账回单的证明范围。建设银行的企业网银指南分别说明查询交易明细、打印回执和查询正式回单的入口。两家产品的用语说明了审计员需要核对具体单据载明的范围。水印案例中的措辞由项目自行编写，各项判断回引本案原件。[兴业银行转账回单查询说明](https://www.cib.com.cn/cn/e-banking/personal/faqs/tips/notice4.html) · [建设银行企业网银指南，第 13–15 页](https://www.ccb.com/chn/attachDir/2020/07/2020070614245962247.pdf#page=13)
+
+付款凭证复核沿用 Xero 逐笔对读和 Ramp 按处理状态浏览的交互。复核员可以从状态栏或页脚直接打开该笔原页。风险用图形和文字共同标注。[Xero 银行对账](https://www.xero.com/us/accounting-software/reconcile-bank-transactions/) · [Ramp 账单与付款视图](https://support.ramp.com/managing-bills-and-payments-on-bill-pay/)

@@ -438,3 +438,7 @@ server/.venv/bin/python docs/samples/quality_reinspection.py --run --cases parti
 | 9 月 26 日 | 晚 1 天，合同及验收依据继续待核 | [R6](http://127.0.0.1:8000/workpaper/95f293ec9d9140f3857c382e5c5eb676?rev=6&view=signer-timing) |
 
 要从提前付款案例的固定版证据包重建首页时序样本，运行 `server/.venv/bin/python docs/samples/publish_signer_timing.py <证据包.zip> --seed signer-timing-nov26`。脚本将每份已提交原件与水印生成件比对，重绘页面，核对物理行和页图摘要后生成公开材料。
+
+## 状态栏与回单页脚
+
+同一套四门冷藏柜采购资料的第二期占 60%。三组演练分别附有限定实际扣款的回单、企业付款申请单，或仅说明收款方到账情况的回单。运行 `server/.venv/bin/python docs/samples/bank_execution_notices.py` 生成四份带水印的 PDF，追加 `--run` 可通过本地接口提交和核对原件。脚本会先校验合成案例名称及文件摘要，再按逐字原行补正或确认识别记录。[案例脚本](bank_execution_notices.py) · [业务依据](../../3rd/payment-acceptance.md#受理回执能证明什么)

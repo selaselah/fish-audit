@@ -12,6 +12,7 @@ from acceptance_authority import LABELS as AUTHORITY_FIELDS, SIGN_LABELS, check 
 import delivery_batches
 import stage_payments
 import payment_acceptance
+import payment_execution
 import signer_timing
 import signer_clock
 import equipment_models
@@ -679,6 +680,7 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True, recheck_
                     contract_comments.attach(finding, contract_comments.assessment(records, finding))
             if plan_review["whole"]:
                 contract_comments.attach(plan, plan_review)
+        payment_execution.apply(graph, results)
         payment_acceptance.apply(graph, results)
         grouped = stage_payments.findings(graph, results)
         if graph.get("prior_installment_sources", {}).get("lines"):
@@ -1236,6 +1238,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("prior_installment") != entry.get("prior_installment")
                 or saved.get("payment_acceptance") != entry.get("payment_acceptance")
                 or saved.get("signer_timing") != entry.get("signer_timing")
+                or saved.get("execution_basis") != entry.get("execution_basis")
                 or saved.get("inspection_coverage") != entry.get("inspection_coverage")
                 or saved.get("equipment_models") != entry.get("equipment_models")
                 or saved.get("stage_payments") != entry.get("stage_payments")

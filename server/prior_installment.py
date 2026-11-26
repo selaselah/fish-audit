@@ -126,7 +126,7 @@ def condition(graph, findings, grouped):
     totals_refs = [v["ref"] for v in base.values() if v]
     evidence = unique([*page_refs,*(ref for r in terms for ref in [r["id"],*r["facts"]]),*totals_refs,
                        *([donor["clause_ref"]] if donor else []),*(source["evidence"] if source else [])])
-    payments = [f for f in findings if f["rule"]=="H05"]
+    payments = [f for f in findings if f["rule"]=="H05" and not f.get("execution_basis")]
     # Include the ledger's actual bank pages and designations also when none is assigned to the first installment.
     for r in banks.values():
         evidence.extend(v["ref"] for v in r["inputs"].values() if v)

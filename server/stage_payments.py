@@ -2,6 +2,8 @@
 
 import hashlib
 import re
+
+import payment_execution
 from collections import defaultdict
 from decimal import Decimal
 from unicodedata import normalize
@@ -162,6 +164,8 @@ def bank_record(graph,contract,bank,checks):
     v={k:r["value"] if r else "" for k,r in values.items()}
     paid=amount(values,"transfer_amount")
     reasons=[]
+    if payment_execution.entry(graph, bank.unit):
+        reasons.append("该单有付款申请或受理限定，实际扣款金额待核")
     if any(not contract.get(a) or contract[a]["value"]!=v[b] for a,b in (("buyer","payer"),("seller","payee"),("contract_id","contract_id"))):
         reasons.append("合同号或收付主体缺少完整对应的原文")
     account=contract.get("contract_account")

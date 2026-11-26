@@ -26,6 +26,7 @@ from invoice_proof import source_record as invoice_source_record
 from payment_checks import comparison_refs, verify_findings as verify_payment_findings
 from payment_history import LIMIT as PAYMENT_HISTORY_LIMIT, canonical, cited_facts, comparable_record, payment_record
 import payment_index
+import payment_execution
 from performance import verify_findings as verify_performance
 from quality_labels import verify_report as verify_quality_numbers
 from quality_references import verify_report as verify_quality_references
@@ -562,6 +563,7 @@ class Store:
             return
         signature = payment_record(report["graph"], report["findings"])
         marked = payment_index.checked_references(db,case_id,report)
+        payment_index.sync_execution(db, case_id, revision, report)
         payment_index.update(db, case_id, revision, signature, eligible=not marked, reconcile=False)
 
     @staticmethod
@@ -570,6 +572,7 @@ class Store:
             raise CaseError("付款底稿的案件归属或审计范围与检索记录不一致。", 409)
         signature = payment_record(paper["graph"], paper["findings"])
         marked = payment_index.checked_references(db,case_id,paper)
+        payment_index.sync_execution(db, case_id, revision, paper)
         added = payment_index.update(db, case_id, revision, signature, eligible=not marked, reconcile=True)
         if added:
             event(db, case_id, "payment_index", f"已按留存底稿 R{revision} 补全{'、'.join(added)}检索记录。")
@@ -608,7 +611,8 @@ class Store:
                                   JOIN cases c ON c.id=i.case_id AND c.rev=i.rev
                                   JOIN signoffs s ON s.case_id=i.case_id AND s.rev=i.rev
                                   JOIN reports r ON r.case_id=i.case_id AND r.rev=i.rev
-                                  WHERE c.workspace=(SELECT workspace FROM cases WHERE id=?) AND c.status IN ('closed','in_review')
+                                  WHERE NOT EXISTS (SELECT 1 FROM payment_execution_holds h WHERE h.case_id=i.case_id AND h.rev=i.rev)
+                      AND c.workspace=(SELECT workspace FROM cases WHERE id=?) AND c.status IN ('closed','in_review')
                                   AND c.id<>? AND c.profile=? AND i.reference_eligible=1 AND s.time<=? AND {predicate}
                                   ORDER BY s.time DESC,i.case_id LIMIT ?""",
                               (case_id, case_id, BANK, as_of, *params, PAYMENT_HISTORY_LIMIT))
@@ -717,7 +721,8 @@ class Store:
                     JOIN cases c ON c.id=i.case_id AND c.rev=i.rev
                     JOIN reports r ON r.case_id=i.case_id AND r.rev=i.rev
                     JOIN signoffs s ON s.case_id=i.case_id AND s.rev=i.rev
-                    WHERE c.workspace=(SELECT workspace FROM cases WHERE id=?) AND i.contract_key=? AND i.case_id<>?
+                    WHERE NOT EXISTS (SELECT 1 FROM payment_execution_holds h WHERE h.case_id=i.case_id AND h.rev=i.rev)
+                      AND c.workspace=(SELECT workspace FROM cases WHERE id=?) AND i.contract_key=? AND i.case_id<>?
                       AND c.profile=? AND c.status='closed' AND s.decision='approve' AND s.time<=?
                     ORDER BY s.time DESC,i.case_id LIMIT ?""",(case_id,key,case_id,BANK,as_of,INSTALLMENT_LIMIT))]
         count = rows[0]["total"] if rows else 0
@@ -889,6 +894,7 @@ class Store:
                     verify_reservations(paper,page_text,signing=True)
                     verify_inspection(paper,page_text,signing=True)
                     verify_payment_acceptance(paper,page_text,signing=True)
+                    payment_execution.verify(paper,page_text,signing=True,read_layout=page_layout)
                     verify_prior_installment(paper,page_text,submitted=row["submitted"],signing=True)
                     verify_payment_releases(paper,page_text,submitted=row["submitted"])
                     verify_repair_completion(paper,page_text,signing=True)
