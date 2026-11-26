@@ -1,6 +1,6 @@
 // Read the same two fixed page images at four synchronized scales.
 (() => {
-  const triggers=document.querySelectorAll('#compare-sample,#compare-inspection'), dialog=document.querySelector('#sample-compare');
+  const triggers=document.querySelectorAll('#compare-sample,#compare-inspection,.phase-temperature'), dialog=document.querySelector('#sample-compare');
   if (!triggers.length || !dialog?.showModal) return;
   let opener;
   const zoom=dialog.querySelector('input[type=range]'), caption=dialog.querySelector('output');
@@ -39,6 +39,10 @@
     }
   }
   function open(event) {
+    if (event.currentTarget.tagName==='A') {
+      if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+    }
     opener=event.currentTarget; opener.focus({preventScroll:true});dialog.showModal();zoom.value='2';
     for (const sheet of sheets) {
       if (sheet.image) continue;
@@ -49,7 +53,11 @@
     }
     draw();
   }
-  for (const trigger of triggers) {trigger.hidden=false; trigger.addEventListener('click',open);}
+  for (const trigger of triggers) {
+    trigger.hidden=false;
+    trigger.setAttribute('aria-haspopup','dialog'); trigger.setAttribute('aria-controls',dialog.id);
+    trigger.addEventListener('click',open);
+  }
   zoom.addEventListener('input',draw);
   for (const button of dialog.querySelectorAll('[data-step]')) button.addEventListener('click',()=>{
     zoom.value=String(Number(zoom.value)+Number(button.dataset.step));draw();

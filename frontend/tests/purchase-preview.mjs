@@ -119,6 +119,11 @@ export async function checkPurchasePreview(ctx) {
     await wait(q('#sample-review canvas')+'.dataset.fact==="d02/p1/f16"','60% contract clause');
     assert.equal(await evaluate(q('#sample-review output')+'.textContent'),'第 1 页 · 第 17 行');
     await key(ctx,'Escape'); await wait('document.activeElement==='+clause,'return to second installment');
+    const compare=q('#sample-phase-2 .phase-temperature');
+    await evaluate(compare+'.focus()'); await key(ctx,'Enter');
+    await wait(q('#sample-compare')+'.open && [...document.querySelectorAll("#sample-compare canvas")].every(c=>c.dataset.scale==="2")','contract and acceptance readings at payment decision');
+    assert.deepEqual(await evaluate('[...document.querySelectorAll("#sample-compare canvas")].map(c=>c.dataset.fact)'),['d02/p1/f13','d04/p1/f11']);
+    await key(ctx,'Escape'); await wait('document.activeElement==='+compare,'return to the same payment condition');
     for (const alias of Object.keys(profiles)) await choose(ctx,alias);
     if ([390,1440].includes(width)) await inspect(ctx,width,'#start','purchase-start');
     await noTenantRequests(ctx);

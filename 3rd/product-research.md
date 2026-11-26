@@ -1,5 +1,11 @@
 # 审计与会计软件的公开界面
 
+## 从本期付款查到本批收货
+
+Microsoft Dynamics 365 Finance 允许应付会计选择采购收货单，再打开匹配明细。Fish Audit 将这一做法用于分批履约。审计员先选付款期，再在合同约定、本批验收单之间切换。每个可核字段保留文件、页码和行号。该参考用于交互设计，审计依据来自具体底稿的原件。[Microsoft Dynamics 365 Finance 采购收货匹配流程](https://learn.microsoft.com/en-us/dynamics365/finance/accounts-payable/tasks/record-vendor-invoice-match-against-received-quantity)
+
+SAP Fiori 的列表与详情布局会随所选记录更新详情，在较窄屏幕上调整可见列。底稿沿用同一期次选择，桌面显示检查清单和该项凭据，手机将清单收为期次选择器。关闭原件后，焦点回到触发它的字段。[SAP Fiori Flexible Column Layout](https://www.sap.com/design-system/fiori-design-web/v1-154/page-types/page-layouts/flexible-column-layout)
+
 ## 在单据上选择字段
 
 DataSnipper 将工作底稿的检查项目链接到原始凭证，复核人可以沿链接重看证据。Dext 按单据类型说明哪些字段可以提取，审阅时可以把提取值与原件对照。Fish Audit 将这两种操作用于同一笔采购。在合同、验收单和银行回单之间切换时，页签下方列出这份文件可定位的原行。查看整页后也可以直接点选标线。页面上的图和读数都取自本项目的水印演练资料。[DataSnipper 审计程序与原始凭证](https://knowledge.datasnipper.com/en/articles/685955-how-to-document-your-audit-procedures-with-datasnipper) · [Dext 单据类型和提取字段](https://help.dext.com/en/articles/416691-what-information-does-dext-extract-from-costs-and-sales-documents) · [演练原件登记](showcase-provenance.md#首屏三份原件与九个字段)

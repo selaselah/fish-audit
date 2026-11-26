@@ -1567,7 +1567,10 @@ async function refresh() {
       if (focusFinding) {
         const target = $(focusFinding);
         if (target?.dataset.auditScope) {
-          target.focus(); target.click();
+          target.focus();
+          if (target.dataset.auditScope==='payment' && route.params.has('stage'))
+            target.dispatchEvent(new CustomEvent('open-payment-stage',{detail:route.params.get('stage')}));
+          else target.click();
         } else if (target?.id==='payment-proof') {
           if (route.params.has('receipt')) target.dispatchEvent(new CustomEvent('select-proof',{detail:route.params.get('receipt')}));
           revealPaperTarget(target);

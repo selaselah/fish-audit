@@ -124,10 +124,12 @@
           <a class="text-link" href="/showcase/contract.pdf" target="_blank" rel="noopener">阅读演练合同<span class="sr-only">，在新标签页打开 PDF</span></a>
         </div>
         <div class="phase-ledger">
-          <div class="ledger-top"><span>四门冷藏柜采购</span><span class="case-token">合成案例</span></div>
-          <div class="ledger-switch" role="group" aria-label="分期演练查看方式" hidden>
-            <button type="button" aria-controls="sample-installments" aria-pressed="true">按期次</button>
-            <button type="button" aria-controls="sample-dates" aria-pressed="false">按日期</button>
+          <div class="ledger-top">
+            <div class="ledger-case"><strong>四门冷藏柜采购</strong><small class="case-token">合成案例</small></div>
+            <div class="ledger-switch" role="group" aria-label="分期演练查看方式" hidden>
+              <button type="button" aria-controls="sample-installments" aria-pressed="true">按期次</button>
+              <button type="button" aria-controls="sample-dates" aria-pressed="false">按日期</button>
+            </div>
           </div>
           <div id="sample-installments">
           <div class="settlement-summary">
@@ -135,7 +137,18 @@
             <button type="button" class="phase-dial" hidden><span class="dial-share"></span><span class="dial-label">约定占比</span></button>
           </div>
           <details id="sample-phase-1" name="payment" class="phase"><summary><span class="phase-share">30<small>%</small></span><span class="phase-name">生效预付款</span><span class="state risk">签署待核</span><i aria-hidden="true"></i></summary><div class="phase-detail"><q>合同生效后支付30%</q><p>签章栏仅见排印文字，需补充双方签署凭证。</p><a href="/showcase/contract.pdf" target="_blank" rel="noopener">采购合同 · 第 1 页</a></div></details>
-          <details id="sample-phase-2" name="payment" class="phase" open><summary><span class="phase-share">60<small>%</small></span><span class="phase-name">终验款</span><span class="state risk">付款待核</span><i aria-hidden="true"></i></summary><div class="phase-detail"><q>最终验收合格后支付60%</q><p>签署凭证待核，验收实测 8℃ 超出合同上限 4℃。需查整改和复验记录。</p><a href="/showcase/acceptance.pdf" target="_blank" rel="noopener">验收报告 · 第 1 页</a></div></details>
+          <details id="sample-phase-2" name="payment" class="phase" open>
+            <summary><span class="phase-share">60<small>%</small></span><span class="phase-name">终验款</span><span class="state risk">付款待核</span><i aria-hidden="true"></i></summary>
+            <div class="phase-detail">
+              <q>最终验收合格后支付60%</q>
+              <a class="phase-temperature" href="/showcase/acceptance.pdf" target="_blank" rel="noopener">
+                <span><small>合同上限</small><strong>≤ 4 ℃</strong></span>
+                <span><small>验收实测</small><strong>8 ℃</strong></span>
+                <span class="phase-temperature-action">核对原件<i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i></span>
+              </a>
+              <p>签署凭证待核，需查整改及复验记录。</p>
+            </div>
+          </details>
           <details id="sample-phase-3" name="payment" class="phase"><summary><span class="phase-share">10<small>%</small></span><span class="phase-name">质保金</span><span class="state risk">起算待核</span><i aria-hidden="true"></i></summary><div class="phase-detail"><q>质保期满后支付10%</q><p>合同签署待核，终验温度超限，质保期起算仍需核实。</p><a href="/showcase/contract.pdf" target="_blank" rel="noopener">采购合同 · 第 1 页</a></div></details>
           </div>
           <ol class="sample-dates" id="sample-dates" aria-label="三份原件记载的日期" hidden>

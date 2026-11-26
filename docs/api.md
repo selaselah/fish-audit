@@ -1,5 +1,9 @@
 # 本机审计接口
 
+## 定位固定版付款条件
+
+`/workpaper/{case_id}?rev={rev}&view=payment-checks&stage=H04-7` 打开该版 H04-7。企业入口使用 `/w/{workspace_id}/workpaper/{case_id}`。省略 `stage` 时按原有顺序打开付款检查。版本号、视图或期款编号格式不符时返回 HTTP 400。格式有效且本版未收录的编号由界面提示，可在本版检查中重新选择。[合成底稿示例](http://127.0.0.1:8000/workpaper/00eef8bd06734c78bf73f10d85dd24a1?rev=4&view=payment-checks&stage=H04-7)
+
 ## 验收 PDF 签署检查
 
 `policy.acceptance_pdf` 使用 `pdf-acceptance-execution-v1`。每个 PDF 验收或复验单元在 `graph.acceptance_pdf_sources.records` 保存原件摘要、物理页、签字字段、签名校验结果及覆盖范围。`2026.11.27.01` 起，H02 的 `acceptance_execution` 显式列出所据记录。首版 `2026.11.26.27` 将相同记录列在发现的 `evidence` 中。由 `acceptance_pdf_source` 可回到该单的来源，由 `supports_result` 可查引用它的判断。工作台的「交付验收」可从签署状态进入对应 PDF 的署名栏。

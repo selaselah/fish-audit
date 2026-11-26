@@ -34,13 +34,16 @@ const PerformanceIndex = (() => {
     if (phases.length>1) return '分 '+phases.length+' 期付款';
     return Number(phases[0].stage.share)===100?'单期付款':'付款安排';
   }
+  function fieldLinks(graph) {
+    return graphIndex(graph).fieldLinks ??= new Set(graph.edges.filter(e=>e.evidence?.length===1 &&
+      ((e.type==='records' && e.evidence[0]===e.to) || (e.type==='supports_result' && e.evidence[0]===e.from)))
+      .map(e=>e.from+' '+e.to));
+  }
   // Only offer a direct original when the issued finding, observation and physical page agree.
   function originals(item,graph) {
     const index=graphIndex(graph), node=index.nodes.get('finding/'+item.id);
     if (node?.type!=='finding' || node.status!==item.status || node.detail!==item.detail) return [];
-    const links=index.fieldLinks ??= new Set(graph.edges.filter(e=>e.evidence?.length===1 &&
-      ((e.type==='records' && e.evidence[0]===e.to) || (e.type==='supports_result' && e.evidence[0]===e.from)))
-      .map(e=>e.from+' '+e.to));
+    const links=fieldLinks(graph);
     const sources=[];
     for (const ref of new Set(traceReferences(graph,item))) {
       const fact=index.facts.get(ref), observation=index.nodes.get(ref);
@@ -250,6 +253,10 @@ const PerformanceIndex = (() => {
     }
     return box('scope-receipt-proof',receiptButton(receipt),tools,panel);
   }
+  function issuedLimitBreach(detail,criterion,reading) {
+    const statement='合同要求“'+criterion.value+'”，验收原页记载“'+reading.value+'”，实测值超出约定限值。';
+    return detail.normalize('NFKC').includes(statement.normalize('NFKC'));
+  }
   function pairedLines(item,report) {
     if (item.execution_basis) {
       const [entry]=PaymentProof.entries(report,[item]);
@@ -267,8 +274,7 @@ const PerformanceIndex = (() => {
     const contract=only('acceptance_criteria','contract'), acceptance=only('measured_result','acceptance');
     if (!contract || !acceptance) return null;
     // This is the issued quantitative finding. Other procedures may cite the same fields as context.
-    const findingText='合同要求“'+contract.fact.value+'”，验收原页记载“'+acceptance.fact.value+'”，实测值超出约定限值。';
-    if (!item.detail.normalize('NFKC').includes(findingText.normalize('NFKC'))) return null;
+    if (!issuedLimitBreach(item.detail,contract.fact,acceptance.fact)) return null;
     const rows=[contract,acceptance].map(({doc,fact,line})=>({
       label:doc.name,place:'第 '+fact.page+' 页 · 第 '+line+' 行',line,quote:fact.source_line.text,
       excerpt:()=>EvidenceCompare.lineExcerpt(fact,graphIndex(graph)),open:()=>openPage(doc.id,fact.page,fact.id),
@@ -340,8 +346,11 @@ const PerformanceIndex = (() => {
       const receipts=receiptEvidence(item,state.bundle.report);
       const paired=pairView(item,state.bundle.report,receipts);
       const roster=AcceptanceRoster.bind(item,state.bundle.report);
+      const batch=BatchPhase.resolve(item,findings.find(f=>f.rule==='H02'),graph);
+      detail.dataset.batch=String(Boolean(batch));
       detail.replaceChildren(box('scope-check-state',el('span',item.id,'mono'),tag(item.status)),heading);
       let detailText=item.detail || '';
+      if (batch) detail.append(BatchPhase.panel(batch,item.stage));
       if (paired) detail.append(paired);
       else if (detailText && (receipts.length && ['issue','risk'].includes(item.status) || roster && item.status==='issue')) {
         const end=detailText.indexOf('。')+1 || detailText.length;
@@ -365,12 +374,12 @@ const PerformanceIndex = (() => {
         if (detailText) detail.append(fold('本项检查结论',el('p',detailText,'scope-reason')));
       } else if (!paired && detailText) {
         const reason=el('p',detailText,'scope-reason');
-        detail.append(detailText.length<=100 && !receipts.length?reason:fold('阅读本项结论',reason));
+        detail.append(detailText.length<=100 && !receipts.length && !batch?reason:fold('阅读本项结论',reason));
       }
-      if (!paired) detail.append(roster?lazyFold('其他字段引文',()=>[sourceView(item,graph,receipts)]):sourceView(item,graph,receipts));
+      if (!paired) detail.append(roster || batch?lazyFold('其他字段引文',()=>[sourceView(item,graph,receipts)]):sourceView(item,graph,receipts));
       detail.append(actions);
     }
-    function filter(pending) {
+    function filter(pending,unavailable=false) {
       shown=pending?priorityFindings(group.pending).concat(group.pending.filter(f=>!['risk','issue','missing'].includes(f.status))):group.items;
       [...filters.children].forEach((button,i)=>button.setAttribute('aria-pressed',String((i===0)===pending)));
       checks.replaceChildren(); mobile.replaceChildren();
@@ -380,25 +389,36 @@ const PerformanceIndex = (() => {
         const option=el('option',item.id+' · '+checkName(item)+' · '+statusName(item.status)); option.value=item.id;
         checks.append(row); mobile.append(option);
       }
+      if (unavailable) {
+        selected=null; detail.dataset.batch='false';
+        for (const row of checks.children) row.setAttribute('aria-pressed','false');
+        const placeholder=new Option('选择本版检查项','',true,true); placeholder.disabled=true;
+        mobile.prepend(placeholder); mobile.value='';
+        const note=el('p','所选期次未收录于本版底稿，请从本组检查中选择。','scope-empty');
+        note.id='scope-check-title'; note.setAttribute('role','status'); detail.replaceChildren(note);
+        return;
+      }
       select(shown.find(f=>f.id===selected) || shown[0]);
     }
     mobile.addEventListener('change',()=>select(shown.find(f=>f.id===mobile.value)));
-    function showGroup(scope,item) {
+    function showGroup(scope,item,unavailable=false) {
       group=scope; selected=item?.id; title.textContent=scope.label;
-      dialog.dataset.single=String(group.items.length===1);
+      dialog.dataset.single=String(group.items.length===1 && !unavailable);
       filters.hidden=!group.pending.length || group.pending.length===group.items.length;
       const pending=action('待核 '+group.pending.length,()=>filter(true));
       pending.disabled=!group.pending.length;
       filters.replaceChildren(pending,action('全部 '+group.items.length,()=>filter(false)));
-      filter(Boolean(group.pending.length) && item?.status!=='ok');
+      filter(Boolean(group.pending.length) && item?.status!=='ok',unavailable);
     }
-    function open(scope) {
+    function open(scope, stage) {
       previous=null; back.hidden=true;
-      showGroup(scope);
+      const item=stage && scope.items.find(f=>f.rule==='H04' && f.id===stage);
+      showGroup(scope,item,Boolean(stage && !item));
       dialog.showModal();
     }
     for (const scope of groupsHere) {
       const button=action('',()=>open(scope),'scope-card');
+      if (scope.id==='payment') button.addEventListener('open-payment-stage',event=>open(scope,event.detail));
       button.dataset.auditScope=scope.id;
       button.setAttribute('aria-haspopup','dialog'); button.setAttribute('aria-controls',dialog.id);
       const status=PhaseEvidence.combined(scope.items);
@@ -411,5 +431,5 @@ const PerformanceIndex = (() => {
     summary.append(dialog);
     return summary;
   }
-  return {groups,count,originals,receiptCitation,receiptEvidence,overview};
+  return {groups,count,originals,fieldLinks,issuedLimitBreach,receiptCitation,receiptEvidence,overview};
 })();

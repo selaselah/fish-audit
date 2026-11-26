@@ -113,7 +113,17 @@ const PhaseEvidence = (() => {
     if (plan && plan.status!=='ok') point('schedule','付款约定','layers',plan.status,null,inspect(plan));
     const accepted=findings.find(f=>f.rule==='H02');
     const relevant=accepted?.evidence.some(ref=>inPhase.has(ref) && ['accepted_on','acceptance_result','acceptance_scope'].includes(facts.get(ref)?.field));
-    if (relevant) {
+    const batchProof=BatchPhase.resolve(phase,accepted,graph);
+    const batchPanel=batchProof && BatchPhase.panel(batchProof,phase.stage);
+    if (batchProof) {
+      const label=BatchPhase.label(batchProof);
+      point('acceptance',label,'clipboard-check',batchProof.status,null,()=>{
+        select('batch'); controls.querySelector('[data-mode=batch]').focus();
+      },batchProof.verified?null:'批次待核');
+      for (const record of batchProof.records || []) {
+        if (record.date) event('acceptance',label+'单据日期',dateOn(record.date),record.date,batchProof.status);
+      }
+    } else if (relevant) {
       const day=unique(accepted,'accepted_on');
       point('acceptance','交付验收','clipboard-check',accepted.status,null,inspect(accepted));
       event('acceptance','交付验收',dateOn(day),day,accepted.status);
@@ -201,6 +211,7 @@ const PhaseEvidence = (() => {
       root.append(row);
     }
     root.append(checks,rail,tools);
+    if (batchPanel) root.insertBefore(batchPanel,tools);
     if (opinion) root.insertBefore(opinion,tools);
     if (warranty) root.insertBefore(warranty,tools);
     if (tickets) root.insertBefore(tickets,tools);
@@ -310,7 +321,7 @@ const PhaseEvidence = (() => {
       for (const payment of payments) linked(payment,'receipt-payment-date',payments.length===1?'对照收付日期':'对照收付日期 · '+payment.id,more);
     }
     if (more!==tools && !more.children.length) more.parentElement.remove();
-    const modes=[['checks','条件核对',checks],['timeline','时间线',rail],['warranty','质保时点',warranty],['tickets','维修工单',tickets],['opinion','付款意见',opinion]].filter(([, ,view])=>view?.children.length);
+    const modes=[['checks','条件核对',checks],['timeline','时间线',rail],['batch','本批原件',batchPanel],['warranty','质保时点',warranty],['tickets','维修工单',tickets],['opinion','付款意见',opinion]].filter(([, ,view])=>view?.children.length);
     function select(key) {
       index.phaseViews.set(phase.id,key);
       root.dataset.mode=key;
@@ -319,7 +330,7 @@ const PhaseEvidence = (() => {
         view.hidden=!active;
         controls.querySelector('[data-mode="'+mode+'"]').setAttribute('aria-pressed',String(active));
       }
-      count.textContent=key==='tickets' || key==='warranty'?'':key==='opinion'?(release?ReleaseEvidence.caption(release,ReleaseEvidence.sources(graph,phase)):AcceptanceOpinion.caption(phase.payment_opinion)):key==='checks'?checkpoints.filter(s=>s.status==='ok').length+' / '+checkpoints.length+' 项相符':
+      count.textContent=key==='tickets' || key==='warranty' || key==='batch'?'':key==='opinion'?(release?ReleaseEvidence.caption(release,ReleaseEvidence.sources(graph,phase)):AcceptanceOpinion.caption(phase.payment_opinion)):key==='checks'?checkpoints.filter(s=>s.status==='ok').length+' / '+checkpoints.length+' 项相符':
         timing || events.length+' 项日期记录';
       count.classList.toggle('timing-alert',Boolean(timing && key==='timeline' || key==='opinion' && phase.payment_opinion.state!=='assent' && release?.state!=='matched'));
       if (key==='opinion') opinion.dispatchEvent(new Event('show-opinion'));
