@@ -9,10 +9,12 @@ from delegation import covered_rows
 
 
 FIRST_FORMAT = "named-acceptance-signatures-v2"
-FORMAT = "named-acceptance-signatures-v3"
-FORMATS = (FIRST_FORMAT, FORMAT)
+HEADER_INDEPENDENT_FORMAT = "named-acceptance-signatures-v3"
+FORMAT = "named-acceptance-signatures-v4"
+FORMATS = (FIRST_FORMAT, HEADER_INDEPENDENT_FORMAT, FORMAT)
 SINCE = "2026.11.26.21"
 INDEPENDENT_SINCE = "2026.11.26.22"
+PRINTED_ROWS_SINCE = "2026.11.26.23"
 HINT = re.compile(r"(?:签认|签字|签署|签名|会签).{0,9}(?:日期|时间|日[：:])")
 LABEL = re.compile(r"([\u3400-\u9fff]{2,8})(?:签认|签字|签署|签名)日期")
 CHINESE_DAY = re.compile(r"([0-9]{4})年([0-9]{1,2})月([0-9]{1,2})日")
@@ -90,6 +92,13 @@ def compare(payment, graph, contract, bank, paid, authority, receipts, *, other_
                 all((p["doc"], p["page"], x["line"], x["quote"]) in places for x in p["uncovered"]))
 
     signed = record["signed"]
+    if version == FORMAT:
+        # Some extracts file an entire dated line under acceptance_signer. Its printed column
+        # is still a date. Keep unlocated, disputed, or otherwise ambiguous signatures in scope.
+        separate_dates = {(r["doc"], r["page"], r["line"], r["quote"]) for r in rows
+                          if r["line"] and r["name"] in names and r["day"] and not r["disputed"]}
+        signed = [s for s in signed if s["name"] or not s["native"] or
+                  (s["doc"], s["page"], s["line"], s["quote"]) not in separate_dates]
     checked_names = [s["name"] for s in signed if s["confirmed"]]
     clause = payment["stage"]["clause_ref"]
     term = next((f for f in contract.fields["payment_stage"] if f["id"] == clause), None)
@@ -99,7 +108,7 @@ def compare(payment, graph, contract, bank, paid, authority, receipts, *, other_
               and identity(contract, receipt) and bank_identity(contract, bank)
               and all(body(contract, k) and not masked_value(body(contract, k)) and
                       body(contract, k) not in {"同上", "待核", "未知", "无", "见附件", "略", "甲方", "乙方", "采购方", "供应方"} for k in LINK_KEYS)
-              and body(receipt, "acceptance_scope") in FINAL_SCOPES and (version == FORMAT or bool(record["date"]))
+              and body(receipt, "acceptance_scope") in FINAL_SCOPES and (version != FIRST_FORMAT or bool(record["date"]))
               and term and raw_body(term) == payment["stage"]["clause"] and purpose and purpose["value"] == payment["stage"]["name"] and day)
     complete = (len(signed) == len(names) and Counter(checked_names) == Counter(names)
                 and Counter(r["name"] for r in rows) == Counter(names)

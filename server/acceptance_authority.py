@@ -307,7 +307,8 @@ def verify_sources(report,read_text,*,signing=False):
     marker=policy.get("acceptance_authority")
     dated_nodes = [n for n in graph["nodes"] if n["type"] == "acceptance_signer_date"]
     dated_edges = [e for e in graph["edges"] if e["type"] == "signer_date_source"]
-    if marker != FORMAT and policy.get("version","") >= signer_timing.INDEPENDENT_SINCE:
+    if (marker != FORMAT and policy.get("version","") >= signer_timing.PRINTED_ROWS_SINCE or
+            marker not in (signer_timing.HEADER_INDEPENDENT_FORMAT, FORMAT) and policy.get("version","") >= signer_timing.INDEPENDENT_SINCE):
         raise ValueError("底稿缺少逐人核对签认日期的程序")
     if marker not in signer_timing.FORMATS and (policy.get("version","") >= signer_timing.SINCE or
             "signer_timing.py" in policy.get("code_sha256",{}) or dated_nodes or dated_edges or

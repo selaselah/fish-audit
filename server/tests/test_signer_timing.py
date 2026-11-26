@@ -89,6 +89,14 @@ class SignerTimingTests(unittest.TestCase):
         g["acceptance_authority_sources"]["format"] = signer_timing.FIRST_FORMAT
         self.assertEqual(payment(g)["signer_timing"]["state"],"scope")
 
+    def test_date_lines_misclassified_as_extra_signatures_are_not_signatures(self):
+        extra = [("acceptance_signer","周宁签认日期","2026年9月20日"), ("acceptance_signer","林岚签认日期","2026年9月25日")]
+        g = material([contract(JOINT), [*sign(RECEIPT,"周宁","林岚"), *extra], WARRANTY, BANK_DOC])
+        self.assertEqual(len(g["acceptance_authority_sources"]["signatures"]),4)
+        self.assertEqual(payment(g)["signer_timing"]["state"],"before")
+        g["acceptance_authority_sources"]["format"] = signer_timing.HEADER_INDEPENDENT_FORMAT
+        self.assertEqual(payment(g)["signer_timing"]["state"],"incomplete")
+
     def test_original_lines_conclusions_and_legacy_replay(self):
         g, read = example()
         def report(graph, version):
