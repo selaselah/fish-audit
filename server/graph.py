@@ -26,6 +26,7 @@ import contract_effect
 import pdf_execution
 import acceptance_execution
 import mandate_execution
+import mandate_originals
 import supplier_pages
 import contract_calendar
 import signing_parties
@@ -377,6 +378,10 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     graph["edges"].extend(edges)
     graph["mandate_pdf_sources"] = mandate_execution.sources(graph, read_original)
     nodes, edges = mandate_execution.source_graph(graph["mandate_pdf_sources"])
+    graph["nodes"].extend(nodes)
+    graph["edges"].extend(edges)
+    graph["mandate_original_sources"] = mandate_originals.sources(graph, read_original, lambda doc, number: texts[doc, number])
+    nodes, edges = mandate_originals.source_graph(graph["mandate_original_sources"])
     graph["nodes"].extend(nodes)
     graph["edges"].extend(edges)
     graph["pdf_execution_sources"] = pdf_execution.sources(graph, read_original)

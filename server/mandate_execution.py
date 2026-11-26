@@ -31,6 +31,18 @@ def review(entries, records):
         apply_unit_records(entry, relevant, "mandate_execution", DETAIL)
 
 
+def depends_on_positive(entries, findings, load_records):
+    approved = {unit for entry in entries if entry["status"] == "ok" for unit in entry["units"]}
+    positives = [f for f in findings if f["rule"] in ("H01", "H04", "H05") and f["status"] == "ok"]
+    if not approved and not positives:
+        return False
+    for row in load_records():
+        if row["unit"] in approved or any(row["unit"] in f.get("scope", ()) and
+                set(row["fields"]).intersection(f["evidence"]) for f in positives):
+            return True
+    return False
+
+
 def verify(report, read_original, *, signing=False):
     graph, policy = report["graph"], report["policy"]
     nodes = [n for n in graph["nodes"] if n["type"] == "mandate_pdf_inspection"]
@@ -42,14 +54,8 @@ def verify(report, read_original, *, signing=False):
         if (version >= SINCE or "mandate_execution.py" in policy.get("code_sha256", {}) or
                 "mandate_pdf_sources" in graph or nodes or edges or any("mandate_execution" in e for e in entries)):
             raise ValueError("缺少本版委托书 PDF 签章凭证程序")
-        if signing:
-            approved = {unit for e in entries if e["status"] == "ok" for unit in e["units"]}
-            positives = [f for f in report["findings"] if f["rule"] in ("H01", "H04", "H05") and f["status"] == "ok"]
-            if approved or positives:
-                for row in sources(graph, read_original)["records"]:
-                    if row["unit"] in approved or any(row["unit"] in f.get("scope", ()) and
-                            set(row["fields"]).intersection(f["evidence"]) for f in positives):
-                        raise ValueError("旧版相符结论所据委托书 PDF 尚未核对被代理人的签章凭证，请重审后签收。")
+        if signing and depends_on_positive(entries, report["findings"], lambda: sources(graph, read_original)["records"]):
+            raise ValueError("旧版相符结论所据委托书 PDF 尚未核对被代理人的签章凭证，请重审后签收。")
         return
     if policy.get("code_sha256") is not None and "mandate_execution.py" not in policy["code_sha256"]:
         raise ValueError("委托书 PDF 签章程序缺少归档源码摘要")

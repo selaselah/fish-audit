@@ -20,6 +20,7 @@ import equipment_exchanges
 import contract_effect
 import pdf_execution
 import mandate_execution
+import mandate_originals
 import acceptance_execution
 import contract_calendar
 import signing_parties
@@ -342,7 +343,7 @@ def check_approval(contract, approvals, party):
     return "ok","约定的董事会批准决定、日期和签认已有材料支持。",refs
 
 
-def effect(contract, approvals=(), version=FORMAT, grants=(), mandate_records=()):
+def effect(contract, approvals=(), version=FORMAT, grants=(), mandate_records=(), original_sources=None):
     fields = ("contract","contract_id","buyer","seller","signed_on","effect_clause","contract_state","effect_on","valid_until",
               "buyer_signature","seller_signature","adjustment")
     refs = contract.evidence(*fields)
@@ -363,6 +364,8 @@ def effect(contract, approvals=(), version=FORMAT, grants=(), mandate_records=()
     read_date = printed_day if version==FORMAT and contract.mandate_format in MANDATE_TERM_FORMATS else None
     delegations = check_delegations(contract, grants, strict_names=version!=DELEGATION_FORMAT,read_date=read_date) if version in MANDATE_FORMATS else []
     mandate_execution.review(delegations, mandate_records)
+    if original_sources:
+        mandate_originals.review_entries(delegations, original_sources)
     for field, party, name in (("buyer_signature",buyer,"甲方"),("seller_signature",seller,"乙方")):
         side = field.removesuffix("_signature")
         delegate = next((item for item in delegations if item["side"]==side), None)
@@ -726,7 +729,8 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         receipts = [r for r in receipts if r.unit not in pending_units]
     approvals = materials("contract_approval") if version != FIRST_FORMAT else []
     grants = materials("power_of_attorney") if version in MANDATE_FORMATS else ()
-    signed = effect(contract, approvals, version, grants, graph.get("mandate_pdf_sources", {}).get("records", ()))
+    signed = effect(contract, approvals, version, grants, graph.get("mandate_pdf_sources", {}).get("records", ()),
+                    graph.get("mandate_original_sources"))
     if version in EFFECT_FORMATS:
         contract_effect.review(signed,graph.get("contract_effect_sources",{}),contract,graph)
         pdf_execution.review(signed, graph, contract.unit)

@@ -39,6 +39,7 @@ from contract_effect import verify as verify_contract_effect
 from pdf_execution import verify as verify_pdf_execution
 from acceptance_execution import verify as verify_acceptance_pdf
 from mandate_execution import verify as verify_mandate_pdf
+from mandate_originals import verify as verify_mandate_originals
 from supplier_pages import verify as verify_supplier_pages
 from acceptance_comments import verify as verify_word_reviews
 from contract_comments import verify as verify_contract_reviews
@@ -769,6 +770,10 @@ class Store:
                                       (case_id, doc, page)).fetchone()
                 return page_row[0] if page_row else None
             try:
+                verify_mandate_originals(paper, read_original, read_text, signing=True)
+            except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
+                raise CaseError(f"签收前核对委托书原件失败。{error}", 409) from error
+            try:
                 verify_word_reviews(paper, read_original, read_text, signing=True)
                 verify_contract_reviews(paper, read_original, read_text, signing=True)
             except (ValueError, OSError, KeyError, TypeError) as error:
@@ -778,10 +783,10 @@ class Store:
             except (KeyError, TypeError, ValueError) as error:
                 raise CaseError(f"签收前核对回单所据验收原件失败。{error}", 409) from error
             if row["profile"]!=BANK:
-                pdf_proofs = {r["id"] for key in ("acceptance_pdf_sources", "mandate_pdf_sources")
+                signing_proofs = {r["id"] for key in ("acceptance_pdf_sources", "mandate_pdf_sources", "mandate_original_sources")
                               for r in graph.get(key, {}).get("records", [])}
                 full_page_checks = [f for f in paper["findings"] if any(f.get(key) for key in FULL_PAGE_EVIDENCE)
-                                    or pdf_proofs.intersection(f["evidence"])]
+                                    or signing_proofs.intersection(f["evidence"])]
                 checks = list(full_page_checks)
                 checks.extend(f for f in paper["findings"] if f.get("delegations") and f not in full_page_checks)
                 packets = graph.get("receipt_packet_sources",{}).get("packets",[])
