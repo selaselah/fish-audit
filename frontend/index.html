@@ -26,6 +26,7 @@
   <script src="/assets/warranty-images.js" defer></script>
   <script src="/assets/warranty-tickets.js" defer></script>
   <script src="/assets/signing-parties.js" defer></script>
+  <script src="/assets/word-signing.js" defer></script>
   <script src="/assets/inspection-coverage.js" defer></script>
   <script src="/assets/entity-browser.js" defer></script>
   <link rel="stylesheet" href="/assets/contract-folios.css">
@@ -196,10 +197,12 @@
       <button id="peer-submit" class="primary">保存复核决定</button>
     </form>
   </dialog>
-  <dialog id="amend-dialog" class="wide-dialog">
+  <dialog id="amend-dialog" class="wide-dialog" aria-labelledby="amend-title">
     <div class="dialog-head"><h2 id="amend-title">补录原文</h2><button class="plain" type="button" data-close>关闭</button></div>
     <div class="page-view">
-      <div><img id="amend-image" class="page-image" alt="本次核对的原页"></div>
+      <div id="amend-original" role="region" aria-label="更正所据原页" tabindex="0">
+        <div class="image-sheet"><img id="amend-image" class="page-image" alt="本次核对的原页"><svg id="amend-marks" viewBox="0 0 1000 1000" preserveAspectRatio="none" aria-hidden="true"></svg></div>
+      </div>
       <form id="amend-form">
         <p id="amend-context" class="muted"></p>
         <label>字段<select id="amend-field" required></select></label>

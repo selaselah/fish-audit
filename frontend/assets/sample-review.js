@@ -7,7 +7,9 @@
   const samples = {
     acceptance:{title:'验收报告',version:'合成采购 · R7',image:'/assets/showcase-acceptance-page.png',pdf:'/showcase/acceptance.pdf',lines:rows.map(describe)},
     signing:{title:'采购合同',version:'合成采购 · R9',image:'/assets/showcase-signing-page.jpg',pdf:'/showcase/signing-contract.pdf',
-      lines:[...document.querySelectorAll('.public-signing-lines [data-ref]')].map(describe)}
+      lines:[...document.querySelectorAll('#signing-company [data-ref]')].map(describe)},
+    word:{title:'演练采购合同',version:'合成采购 · R6',image:'/assets/showcase-word-signing-page.jpg',original:'/showcase/signing-text.docx',
+      lines:[...document.querySelectorAll('#signing-word .public-signing-lines [data-ref]')].map(describe)}
   };
   const modes=[...dialog.querySelectorAll('[data-scale]')];
   const canvas=dialog.querySelector('canvas'), status=dialog.querySelector('[role=status]');
@@ -65,7 +67,10 @@
     dialog.querySelector('.sample-review-head span').textContent=sample.version;
     dialog.querySelector('form button').setAttribute('aria-label','关闭'+sample.title);
     dialog.querySelector('.sample-records').setAttribute('aria-label','选择'+sample.title+'原行');
-    dialog.querySelector('.sample-records a').href=sample.pdf;
+    const original=dialog.querySelector('.sample-records a');
+    original.href=sample.original || sample.pdf;
+    original.querySelector('.sample-file-kind').textContent=sample.original?'下载 Word 原件':'原始 PDF';
+    original.querySelector('.sr-only').textContent=sample.original?'，合成演练资料':'，在新标签页打开';
     for (const [i,button] of rows.entries()) {
       const line=sample.lines[i];
       for (const key of ['ref','line','rect']) button.dataset[key]=line[key];
@@ -83,16 +88,16 @@
     requested.onload=()=>{if (page===requested) draw();};
     requested.onerror=()=>{
       if (page!==requested) return;
-      page=null; status.hidden=false; status.textContent='页图未能载入，可打开原始 PDF。';
+      page=null; status.hidden=false; status.textContent='页图未能载入，可打开演练原件。';
     };
     requested.src=sample.image;
   }
   new ResizeObserver(draw).observe(canvas.parentElement);
-  function present(doc,ref,trigger) {
+  function present(doc,ref,trigger,scale='line') {
     opener=trigger;
     trigger.focus({preventScroll:true});
     load(doc); dialog.showModal();
-    select(rows.find(r=>r.dataset.ref===ref) || rows[2],'line');
+    select(rows.find(r=>r.dataset.ref===ref) || rows[2],scale);
     row.focus({preventScroll:true});
   }
   document.addEventListener('inspect-sample-line',event=>{
@@ -104,7 +109,7 @@
     link.setAttribute('aria-haspopup','dialog'); link.setAttribute('aria-controls',dialog.id);
     link.addEventListener('click',event=>{
       if (event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
-      event.preventDefault(); present(samples[link.dataset.sample || 'acceptance'],link.dataset.ref,link);
+      event.preventDefault(); present(samples[link.dataset.sample || 'acceptance'],link.dataset.ref,link,link.dataset.scale==='page'?'page':'line');
     });
   }
   dialog.addEventListener('close',()=>{

@@ -21,23 +21,24 @@ if (!restoreWorkspaceLink()) {
       menu.querySelector('summary').focus();
     }
   });
-  function enableTabs(tabs) {
-    function selectTab(tab) {
+  function enableTabs(tabs, changed) {
+    function selectTab(tab, userAction=false) {
       for (const item of tabs) {
         const selected = item === tab;
         item.setAttribute('aria-selected', String(selected));
         item.tabIndex = selected ? 0 : -1;
         document.getElementById(item.getAttribute('aria-controls')).hidden = !selected;
       }
+      if (userAction) changed?.(tab);
     }
     tabs.forEach((tab, index) => {
-      tab.addEventListener('click', () => selectTab(tab));
+      tab.addEventListener('click', () => selectTab(tab,true));
       tab.addEventListener('keydown', event => {
         const positions = {ArrowLeft: (index + tabs.length - 1) % tabs.length, ArrowRight: (index + 1) % tabs.length, Home: 0, End: tabs.length - 1};
         if (!(event.key in positions)) return;
         event.preventDefault();
         const next = tabs[positions[event.key]];
-        selectTab(next);
+        selectTab(next,true);
         next.focus();
       });
     });
@@ -46,9 +47,29 @@ if (!restoreWorkspaceLink()) {
   enableTabs([...document.querySelectorAll('.file-tabs [role="tab"]')]);
   const scenes = document.querySelector('.scene-tabs');
   const sceneTabs = [...scenes.querySelectorAll('[role="tab"]')];
-  const selectScene = enableTabs(sceneTabs);
+  const contractExample=document.getElementById('signing-example');
+  function sceneAddress(name) {
+    const url=new URL(location.href);
+    url.searchParams.set('scene',name==='signing' && contractExample.value==='word' ? 'word-signing' : name);
+    url.hash='workflow';
+    history.replaceState(history.state,'',url);
+  }
+  const selectScene = enableTabs(sceneTabs,tab=>sceneAddress(tab.id.slice('scene-tab-'.length)));
   const requested=new URLSearchParams(location.search).get('scene');
   if (['signing','inspection','folios'].includes(requested)) selectScene(document.getElementById('scene-tab-'+requested));
+  function selectContractExample() {
+    const word=contractExample.value==='word';
+    document.getElementById('signing-company').hidden=word;
+    document.getElementById('signing-word').hidden=!word;
+    document.getElementById('signing-example-version').textContent='合成案例 · '+(word?'R6':'R9');
+  }
+  if (requested==='word-signing') {
+    selectScene(document.getElementById('scene-tab-signing'));
+    contractExample.value='word';
+  }
+  contractExample.addEventListener('change',()=>{ selectContractExample(); sceneAddress('signing'); });
+  selectContractExample();
+  document.getElementById('signing-example-choice').hidden=false;
   const inspectionScene=document.getElementById('scene-inspection');
   let loadingInspection=false;
   async function showInspection() {

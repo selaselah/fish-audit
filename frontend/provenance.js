@@ -70,9 +70,11 @@ function performanceOverview(findings, graph) {
   }
   overview.setAttribute('aria-label','履约结论与期次');
   overview.append(summary);
+  const effect=findings.find(f=>f.rule==='H01');
+  const word=WordSigning.panel(effect,graph,findings,state.bundle?.report.calls.pages);
+  if (word) overview.append(word);
   const folios=ContractFolios.panel(plan,graph,state.bundle?.report.calls.pages,state.bundle?.report.findings.find(f=>f.rule==='E01'));
   if (folios) overview.append(folios);
-  const effect=findings.find(f=>f.rule==='H01');
   const parties=SigningParties.panel(effect,graph,phases);
   if (parties) overview.append(parties);
   const acceptance=findings.find(f=>f.rule==='H02');

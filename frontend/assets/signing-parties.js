@@ -2,8 +2,8 @@
 const SigningParties = (() => {
   const sides = {buyer:'甲方', seller:'乙方', unspecified:'归属待核'};
   const roles = {party:'约定主体', signature:'签章栏', imprint:'印章单位'};
-  const imageFormat = 'contract-effect-sources-v5';
-  const formats = new Set(['contract-effect-sources-v4',imageFormat]);
+  const imageFormats = new Set(['contract-effect-sources-v5','contract-effect-sources-v6']);
+  const formats = new Set(['contract-effect-sources-v4',...imageFormats]);
   const pending = {
     multiple:'同一方有多处记载', partial:'单位名称不完整', side:'印章归属待核',
     image_pending:'影像栏位待核', unlocated:'原行待定位', ambiguous:'多条候选待核', disputed:'栏位有异议',
@@ -100,7 +100,7 @@ const SigningParties = (() => {
         r.role === role && r.unit === record.unit && [id, r.doc+'/p'+r.page, ...r.facts].every(ref =>
           finding.evidence.includes(ref) && record.evidence.includes(ref) && supports?.has(ref)))).filter(Boolean);
       if (rows[role].length !== ids.length) bound = false;
-      if (graph.contract_effect_sources.format===imageFormat) {
+      if (imageFormats.has(graph.contract_effect_sources.format)) {
         for (const row of rows[role]) basis.set(row.id,fieldBasis(row,record,graph));
       }
     }
@@ -121,7 +121,7 @@ const SigningParties = (() => {
       } else if (bound) {
         bound = record.state === 'different' && sealName(original) !== sealName(subject);
       }
-      if (bound && graph.contract_effect_sources.format===imageFormat) {
+      if (bound && imageFormats.has(graph.contract_effect_sources.format)) {
         const required=record.state==='match' ? [original,subject,rows.signature[0]] : [original,subject];
         bound=required.every(row=>basis.get(row.id)?.usable);
       }
@@ -201,7 +201,7 @@ const SigningParties = (() => {
 
   function reviewPages(finding,graph) {
     const ledger=graph.contract_effect_sources;
-    if (!finding?.effect_review || ledger?.format!==imageFormat) return [];
+    if (!finding?.effect_review || !imageFormats.has(ledger?.format)) return [];
     const index=graphIndex(graph), support=index.supports.get('finding/'+finding.id);
     return finding.effect_review.mixed_pages.flatMap(p=>{
       const ref=p.doc+'/p'+p.page, doc=index.documents.get(p.doc), page=index.nodes.get(ref);

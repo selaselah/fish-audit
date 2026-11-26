@@ -2,6 +2,17 @@
 
 首页采用 Fish Audit 自制的冷藏柜采购演练。采购方「青禾演练采购中心」、供应方「云桥演练设备中心」、金额、温度、签认和回单均为虚构数据。每份原件第 1 行均印有「合成演练资料　仅供系统测试　无交易效力」。4℃ 是这份合同约定的柜温上限，8℃ 是这份验收报告填写的实测值。[水印和主体的生成定义](../docs/samples/generate.py) · [项目演练说明](../docs/samples/README.md#验收的是哪一种设备)
 
+## Word 签章栏案例 R6
+
+公开例子从虚构任务 `5106e6c347f34b90bdd964b490496cdf` 的 R6 证据包提取。合同有水印，签章栏由普通文字排印，核图回执分别来自 R1 和 R2。首页沿用该版的三条原行及矩形坐标。[生成脚本](../docs/samples/word_signing.py) · [公开案例](http://127.0.0.1:8000/?scene=word-signing#workflow) · [本机固定底稿](http://127.0.0.1:8000/workpaper/5106e6c347f34b90bdd964b490496cdf?rev=6&view=signatures)
+
+| 公开文件 | 字节 | SHA-256 |
+| --- | ---: | --- |
+| [水印合同 Word](../frontend/showcase/signing-text.docx) | 37,192 | `1902b237402d810010cc477e6327368dba4e32d50da4f610d3188180ef78b184` |
+| [合同第 1 页](../frontend/assets/showcase-word-signing-page.jpg) | 165,345 | `b22afb14f83e9a80fc635518e167bbb9465df63a0939572197c2cf2bd6789a70` |
+
+生效条款、甲方签章、乙方签章分别对应第 10、11、12 行，字段引用为 `d01/p1/f9`、`d01/p1/f10`、`d01/p1/f11`。216 × 279 像素的缩略图由同一张页图等比缩小，页内提示标出两个签章栏的位置。打开原行或整页时才载入完整 JPEG。企业底稿的原件由各自的工作区接口鉴权。[公开缩略图](../frontend/assets/showcase-word-signing-thumb.webp)
+
 ## 付款续页案例 R10
 
 首页「付款续页」引用虚构合同正文的 `YL-LY-D1094C6B` 和续页的 `YL-OTHER-D1094C6B`，分别是同一份 PDF 第 1 页和第 2 页的第 3 行。两页都印有合成演练水印。公开 PDF 的 SHA-256 为 `053f0ca1aec9a45b5ddef9eacc7e5f8d85b0caa39b73b908bda0bb814aec9ad9`。两张完整 JPEG 直接取自 R10 证据包。缩略图由页图按比例缩至 150 像素宽，标记位置取自该版的原行坐标。公开演示只使用随项目发布的静态资料。[两页合同](../frontend/showcase/payment-folios.pdf) · [各页摘要和六处原行坐标](../frontend/assets/showcase-payment-folios.json) · [本机 R10](http://127.0.0.1:8000/workpaper/9c91f77a45f84a8496cfeb09d1fcf8ba?rev=10&view=contract-pages)

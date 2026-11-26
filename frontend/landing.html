@@ -135,7 +135,10 @@
             <a class="workflow-image open-sample-review" href="/showcase/acceptance.pdf" target="_blank" rel="noopener" aria-label="核对这张合成验收报告"><img src="/assets/review-sample.webp" width="1360" height="819" loading="lazy" alt="核图工作台在验收单上定位到实测柜温 8℃ 的原行"><span><i class="ui-glyph ic-eye" aria-hidden="true"></i>核对这张验收单</span></a>
           </div>
           <div id="scene-signing" class="signing-sample" role="tabpanel" aria-labelledby="scene-tab-signing" hidden>
-            <div class="signing-sample-header"><span><i class="ui-glyph ic-journal-text" aria-hidden="true"></i> 采购合同</span><small>合成案例 · R9</small></div>
+            <div class="signing-sample-header"><span><i class="ui-glyph ic-journal-text" aria-hidden="true"></i> 采购合同</span>
+              <label id="signing-example-choice" hidden><span class="sr-only">签章案例</span><select id="signing-example"><option value="company">用印单位</option><option value="word">文字签章</option></select></label>
+              <small id="signing-example-version">合成案例 · R9</small></div>
+            <div id="signing-company">
             <h3>印章单位多出「杭州分公司」</h3>
             <div class="public-signing-lines">
               <a class="open-sample-review" data-sample="signing" data-ref="d02/p1/f3" data-line="4" data-rect="0.08209,0.24749,0.43051,0.26393" href="/showcase/signing-contract.pdf" target="_blank" rel="noopener"><span>采购方</span><strong>青禾演练设备有限公司</strong><i aria-hidden="true" class="ui-glyph ic-arrows-angle-expand"></i></a>
@@ -143,6 +146,22 @@
               <a class="open-sample-review" data-sample="signing" data-ref="d02/p1/f18" data-line="19" data-rect="0.08403,0.74612,0.68261,0.76256" href="/showcase/signing-contract.pdf" target="_blank" rel="noopener"><span>甲方印章单位</span><strong>青禾演练设备有限公司<mark>杭州分公司</mark></strong><i aria-hidden="true" class="ui-glyph ic-arrows-angle-expand"></i></a>
             </div>
             <p><span class="finding-dot risk"></span>签章授权待核 · 三期付款条件待核</p>
+            </div>
+            <div id="signing-word" hidden>
+              <div class="word-sample-heading">
+                <h3>签章栏写着「已盖章」</h3>
+                <a class="open-sample-review word-sample-thumbnail" href="/showcase/signing-text.docx" data-sample="word" data-ref="d01/p1/f10" data-scale="page" aria-label="打开合同第 1 页，定位甲方签章">
+                  <img src="/assets/showcase-word-signing-thumb.webp" width="216" height="279" loading="lazy" alt="">
+                  <span>第 1 页<i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i></span>
+                </a>
+              </div>
+              <div class="public-signing-lines">
+                <a class="open-sample-review" data-sample="word" data-ref="d01/p1/f9" data-line="10" data-rect="0.14824,0.44612,0.49937,0.46068" href="/showcase/signing-text.docx"><span>生效条款</span><strong>本合同自双方盖章之日起生效</strong><i aria-hidden="true" class="ui-glyph ic-arrows-angle-expand"></i></a>
+                <a class="open-sample-review" data-sample="word" data-ref="d01/p1/f10" data-line="11" data-rect="0.15013,0.48301,0.48807,0.49757" href="/showcase/signing-text.docx"><span>甲方签章</span><strong>青禾演练采购中心（已盖章）</strong><i aria-hidden="true" class="ui-glyph ic-arrows-angle-expand"></i></a>
+                <a class="open-sample-review" data-sample="word" data-ref="d01/p1/f11" data-line="12" data-rect="0.1495,0.52039,0.48807,0.53495" href="/showcase/signing-text.docx"><span>乙方签章</span><strong>云桥演练设备中心（已盖章）</strong><i aria-hidden="true" class="ui-glyph ic-arrows-angle-expand"></i></a>
+              </div>
+              <p><span class="finding-dot risk"></span>签署凭证待补 · 三期付款条件待核</p>
+            </div>
           </div>
           <div id="scene-inspection" class="inspection-sample" role="tabpanel" aria-labelledby="scene-tab-inspection" hidden>
             <div class="signing-sample-header"><span><i class="ui-glyph ic-clipboard-check" aria-hidden="true"></i> 采购验收</span><small>合成案例 · R11</small></div>
@@ -190,7 +209,7 @@
         <button type="button" data-ref="d04/p1/f8" data-line="9" data-rect="0.08145,0.40639,0.25663,0.42283" aria-pressed="false"><span>验收结论</span><strong>合格</strong></button>
         <button type="button" data-ref="d04/p1/f10" data-line="11" data-rect="0.08145,0.47078,0.37169,0.48721" aria-pressed="false"><span>检验依据</span><strong>柜温不高于4℃</strong></button>
         <button type="button" data-ref="d04/p1/f11" data-line="12" data-rect="0.08274,0.50274,0.29606,0.51918" aria-pressed="true"><span>实测结果</span><strong>柜温8℃</strong></button>
-        <a href="/showcase/acceptance.pdf" target="_blank" rel="noopener">原始 PDF<i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i><span class="sr-only">，在新标签页打开</span></a>
+        <a href="/showcase/acceptance.pdf" target="_blank" rel="noopener"><span class="sample-file-kind">原始 PDF</span><i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i><span class="sr-only">，在新标签页打开</span></a>
       </div>
     </div>
   </dialog>

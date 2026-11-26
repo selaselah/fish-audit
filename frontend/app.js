@@ -168,6 +168,19 @@ async function loadReviewImage(image, source) {
     URL.revokeObjectURL(objectUrl);
   }
 }
+function markPageRects(overlay, rects) {
+  overlay.replaceChildren();
+  for (const bounds of rects) {
+    if (!Array.isArray(bounds) || bounds.length!==4 || !bounds.every(n=>Number.isFinite(n) && n>=0 && n<=1)) continue;
+    const [left,top,right,bottom]=bounds;
+    if (right<=left || bottom<=top) continue;
+    const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');
+    for (const [name,value] of Object.entries({x:left,y:top,width:right-left,height:bottom-top}))
+      rect.setAttribute(name,String(1000*value));
+    overlay.append(rect);
+  }
+}
+
 function openPage(docId, pageNumber, highlight, lineHint, registerPair, rawRef) {
   const item = state.detail.documents.find(doc => doc.id === docId);
   if (!item) return;
@@ -208,6 +221,7 @@ function openPage(docId, pageNumber, highlight, lineHint, registerPair, rawRef) 
   const boardRefs = boardPageReferences(state.bundle?.report.graph, docId, pageNumber, pageFacts);
   const repairRefs = repairPageReferences(state.bundle?.report.graph, docId, pageNumber, pageFacts);
   const paper=state.bundle?.report;
+  const word=WordSigning.resolve(paper?.findings.find(f=>f.rule==='H01'),paper?.graph,paper?.calls.pages);
   const registerRefs=ReinspectionTrail.pageReferences(paper?.findings.find(f=>f.rule==='H02'),paper?.graph,docId,pageNumber);
   const timingRows=ReinspectionTiming.pageReferences(paper?.findings.find(f=>f.rule==='H02'),paper?.graph,docId,pageNumber);
   const otherRefs = [...registerRefs, ...boardRefs, ...repairRefs, ...PhaseEvidence.pageReferences(paper?.graph,docId,pageNumber,pageFacts,lineHint)];
@@ -285,13 +299,7 @@ function openPage(docId, pageNumber, highlight, lineHint, registerPair, rawRef) 
   function locate(fact, raw) {
     const ref = fact?.id || raw?.ref || '';
     comparison?.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.pairRef===ref)));
-    overlay.replaceChildren();
-    for (const [left, top, right, bottom] of fact?.source_line?.rects || raw?.rects || []) {
-      const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
-      for (const [name, value] of Object.entries({x:left,y:top,width:right-left,height:bottom-top}))
-        rect.setAttribute(name,String(1000*value));
-      overlay.append(rect);
-    }
+    markPageRects(overlay,fact?.source_line?.rects || raw?.rects || []);
     for (const row of right.querySelectorAll('.evidence-row')) {
       const rowRef = row.dataset.fact || row.dataset.sourceRef;
       row.classList.toggle('located', Boolean(ref) && rowRef === ref);
@@ -545,7 +553,12 @@ function openPage(docId, pageNumber, highlight, lineHint, registerPair, rawRef) 
       focusRow=section;
     }
     const field = ['mandate_clause','addendum_clause','acceptance_authority_clause','delivery_batch_clause'].includes(gap.quality) ? null : gap.field || gap.title_hint;
-    if (editable && field) {
+    const signing=word?.readings.find(r=>r.row.doc===docId && r.row.page===pageNumber &&
+      r.row.line===gap.line && r.row.quote===gap.quote);
+    if (signing) {
+      const edit=WordSigning.editButton(signing);
+      if (edit) section.append(edit);
+    } else if (editable && field) {
       const unresolved=pageFacts.filter(f=>['visual','unsupported'].includes(f.status));
       const matching=unresolved.filter(f=>f.source_line?.number===gap.line && f.source_line.text===gap.quote);
       const candidates=matching.length?matching:unresolved.filter(f=>f.field===field && !f.source_line);
@@ -1416,6 +1429,9 @@ async function refresh() {
       } else if (route.params.get('view')==='contract-pages' && state.openedCitation!==location.hash &&
                  bundle?.report.findings.some(f=>f.rule==='H03' && f.contract_folios)) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#contract-pages';
+      } else if (route.params.get('view')==='signatures' && state.openedCitation!==location.hash &&
+                 bundle?.report.findings.some(f=>f.rule==='H01' && f.effect_review?.word_signatures)) {
+        state.openedCitation=location.hash; state.tab='report'; focusFinding='#word-signatures';
       } else if (route.params.get('view')==='entities' && state.openedCitation!==location.hash && state.bundle) {
         state.openedCitation=location.hash; state.tab='graph';
         graphIndex(bundle.report.graph).graphBrowseMode='entities'; focusFinding='#case-entity-browser';
@@ -1428,7 +1444,7 @@ async function refresh() {
           target.open=true;
           $('#trail-tab-final')?.click();
           revealPaperTarget($('#reinspection-wait'));
-        } else if (target?.dataset.finding || ['equipment-reinspection-trail','case-entity-browser','contract-pages'].includes(target?.id)) revealPaperTarget(target);
+        } else if (target?.dataset.finding || ['equipment-reinspection-trail','case-entity-browser','contract-pages','word-signatures'].includes(target?.id)) revealPaperTarget(target);
         else target?.focus();
       }
       const target = route.params.get('fact');
@@ -1578,7 +1594,12 @@ async function openAmend(doc, page, fact, printed) {
     const source = workpaperSource(doc,'pages/'+page);
     const submit = $('#amend-submit'); submit.disabled = true;
     const item = current.documents.find(item => item.id === doc);
-    $('#amend-context').textContent = item.name + ' · 第 ' + page + ' 页 · 底稿 R' + state.bundle.rev;
+    const line=fact?.doc===doc && fact.page===page && (!printed || printed.quote===fact.source_line?.text) ? fact.source_line : null;
+    const marks=$('#amend-marks'), pane=$('#amend-original');
+    markPageRects(marks,line?.rects || []);
+    image.alt=item.name+' 第 '+page+' 页';
+    $('#amend-context').textContent = item.name + ' · 第 ' + page + ' 页' + (marks.childElementCount?' · 第 '+line.number+' 行':'') + ' · 底稿 R' + state.bundle.rev;
+    pane.setAttribute('aria-label',$('#amend-context').textContent+'，更正所据原页');
     const select = $('#amend-field'); select.replaceChildren(new Option('请选择字段', ''));
     for (const [key, label] of Object.entries(state.fields)) select.add(new Option(label, key));
     select.value = printed?.field || fact?.field || '';
@@ -1589,7 +1610,12 @@ async function openAmend(doc, page, fact, printed) {
     $('#amend-dialog').showModal();
     try {
       await loadReviewImage(image,source);
-      if (image.isConnected) submit.disabled = false;
+      if (image.isConnected) {
+        submit.disabled = false;
+        const mark=marks.firstElementChild?.getBoundingClientRect(), area=pane.getBoundingClientRect();
+        if (mark && pane.scrollHeight>pane.clientHeight)
+          pane.scrollTop+=(mark.top+mark.bottom-area.top-area.bottom)/2;
+      }
     } catch {
       if (image.isConnected) $('#amend-error').textContent = '原页加载失败，请重新打开并核对原图。';
     }

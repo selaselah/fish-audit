@@ -9,6 +9,12 @@
 | 本工程采用的研究方法、法规条款、外部软件及字体来源 | [文献、制度与技术来源](project-sources.md) |
 | 首页的合同金额、柜温、分期条件及三份水印 PDF 的逐字节摘要 | [合成资料声明与 R7 底稿字段](showcase-provenance.md) |
 
+### 从签章栏追到签署凭证
+
+DataSnipper 用工作底稿与证据文件中具体位置的交叉引用支持同步审阅。本项目在签署方切换器中展示真实页图的行片段，并在原页、字段更正及引用该行的付款程序之间保留版本定位。[DataSnipper 官方操作文档](https://knowledge.datasnipper.com/en/articles/685955-how-to-document-your-audit-procedures-with-datasnipper)
+
+Docusign 的完成证书记录信封、参与人和签署事件。这里借鉴其对签署过程留痕的做法，在补件意见中请求能够对应合同版本及签署方的材料。国内个案中的电子签署依据参照《电子签名法》第八、十三、十四条，由审计人员结合当事人的约定和实际资料复核。[Docusign 交易记录说明](https://www.docusign.com/trust/security/transaction-data-use) · [工信部公布的法律全文](https://wap.miit.gov.cn/zwgk/zcwj/flfg/art/2022/art_4ed0e4a46946479c90a9e0f2c76a11ef.html)
+
 ### 审计取证与关账协作参考
 
 | DataSnipper · 审计取证 | FloQast Close · 关账协作 |
