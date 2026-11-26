@@ -20,6 +20,7 @@ import receipt_packets
 import equipment_models
 import equipment_exchanges
 import stage_payments
+import payment_acceptance
 import contract_effect
 import pdf_execution
 import supplier_pages
@@ -317,7 +318,7 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
             if field in ADDENDUM_NUMBERS:
                 target, entity_label = number_target(field,value,quote,fact_id)
                 kind = ADDENDUM_NUMBERS[field]
-            if field in payment_amendments.LABELS or field in invoice_conditions.LABELS or field in (AUTHORITY_CLAUSE,ACCEPTANCE_SIGNATURE,payment_windows.FIELD) or field in delivery_batches.LABELS or field in warranty_terms.LABELS or field in warranty_service.LABELS:
+            if field in payment_amendments.LABELS or field in invoice_conditions.LABELS or field in (AUTHORITY_CLAUSE,ACCEPTANCE_SIGNATURE,payment_windows.FIELD,payment_acceptance.FIELD) or field in delivery_batches.LABELS or field in warranty_terms.LABELS or field in warranty_service.LABELS:
                 target = fact_id
             if target!=fact_id:
                 nodes[target] = {"id": target, "type": kind, "label": entity_label}
@@ -399,6 +400,11 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     record_signatories(graph, lambda doc, number: texts[doc, number])
     record_quality_references(graph, lambda doc, number: texts[doc, number])
     attach_payment_references(graph, lambda doc, number: texts[doc,number])
+    citations = payment_acceptance.sources(graph, lambda doc, number: texts[doc, number])
+    graph[payment_acceptance.GRAPH_KEY] = citations
+    lines, links = payment_acceptance.source_graph(citations)
+    graph["nodes"].extend(lines)
+    graph["edges"].extend(links)
     graph["stage_payment_sources"]=stage_payments.sources(graph,lambda doc,number:texts[doc,number])
     graph["invoice_identity"] = IDENTITY_FORMAT
     graph["invoice_lookup"] = INVOICE_LOOKUP

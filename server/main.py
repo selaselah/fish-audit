@@ -268,7 +268,7 @@ def create_app(store, worker):
             args["finding"] = ref
         if "view" in request.args:
             view = request.args["view"]
-            if view not in ("replay", "reinspection", "inspection", "entities", "trial", "contract-pages", "signatures", "calendar", "suppliers", "acceptance-comments", "contract-comments") or set(args)!={"rev"}:
+            if view not in ("replay", "reinspection", "inspection", "entities", "trial", "contract-pages", "signatures", "calendar", "suppliers", "acceptance-comments", "contract-comments", "payment-acceptance") or set(args)!={"rev"}:
                 raise CaseError("请选择有效的底稿视图及版本。",400)
             args["view"] = view
         route = ("w/"+wid+"/" if wid else "")+"case/"+case_id
@@ -289,7 +289,8 @@ def create_app(store, worker):
                             "inspection-contract.pdf", "inspection-acceptance.pdf", "payment-folios.pdf", "calendar-contract.pdf",
                             "signature-typeset.pdf", "signature-current.pdf", "signature-earlier.pdf",
                             "supplier-contract.pdf", "supplier-acceptance.pdf", "acceptance-review-contract.pdf", "acceptance-review-transfer.pdf",
-                            "contract-payment-transfer.pdf","named-inspection-contract.pdf","named-inspection-acceptance.pdf"}:
+                            "contract-payment-transfer.pdf","named-inspection-contract.pdf","named-inspection-acceptance.pdf",
+                            "batch-bank-1.pdf","batch-bank-2.pdf","batch-acceptance-1.pdf","batch-acceptance-2.pdf","batch-payment-contract.pdf"}:
             raise CaseError("没有这份演练原件。", 404)
         return send_file(FRONTEND / "showcase" / filename, mimetype="application/pdf")
 

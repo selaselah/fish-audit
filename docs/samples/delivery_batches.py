@@ -7,7 +7,7 @@ from contract_milestones import PROFILE, confirm_printed_records, documents, nor
 from generate import ROOT, WATERMARK, embedded_font, pdf
 from quality_addenda import FIELDS, pdf_with_note
 from quality_reinspection import reconcile_training_pages
-from run import BASE, get, submit
+from run import BASE, get, submit, wait
 from warranty_release import check_training_watermark
 
 
@@ -25,6 +25,12 @@ REMARK_CASES = {
 }
 COUNT_ONLY = "本批仅核对到货数量，性能测试另行办理"
 HOLD = "本合同项下全部付款暂缓"
+BANK_CASES = {
+    "bank_cross":"第三期回单引用第一批验收单号",
+    "bank_match":"第三期回单引用第二批验收单号",
+    "bank_absent":"第三期回单所引验收单未随附",
+    "bank_split":"同一期两笔回单分别引用第一批和第二批验收单",
+}
 CASES = {
     "complete":"两批各两台均完成验收",
     "missing":"第一批已验收而第二批缺单",
@@ -35,6 +41,7 @@ CASES = {
     "image":"第二批验收单另有影像附注",
     **SIGNING_CASES,
     **REMARK_CASES,
+    **BANK_CASES,
 }
 TITLES={"第一批验收报告":"验收报告","第二批验收报告":"验收报告"}
 FIELD_LABELS={**FIELDS,"第四期":"payment_stage","分批交付":"delivery_batch","分批验收约定":"batch_clause",
@@ -82,6 +89,19 @@ def batch_documents(code,mode):
     if mode in SIGNING_CASES:
         values.update({"款项用途":"第二期" if mode in ("undelivered","sign_rider") else "第三期","付款日期":"2026年9月21日"})
     records["银行付款回单"]=[(k,values.get(k,v)) for k,v in records["银行付款回单"]]
+    if mode in BANK_CASES:
+        bank=records.pop("银行付款回单")
+        if mode=="bank_split":
+            currency=[("币种","人民币"),("金额单位","元")]
+            records["采购合同"].extend(currency)
+            bank=[*bank,*currency]
+        references={"bank_cross":[1],"bank_match":[2],"bank_absent":[9],"bank_split":[1,2]}[mode]
+        for n,ref in enumerate(references,1):
+            name="银行付款回单" if len(references)==1 else f"第{n}笔付款回单"
+            amount="35,000.00" if len(references)==1 else ("15,000.00" if n==1 else "20,000.00")
+            values={"款项用途":"第三期","付款日期":"2026年9月21日","付款金额":amount}
+            records[name]=[(k,values.get(k,v)) for k,v in bank]+[
+                ("交易流水号",f"PAY-{code}-{n}"),("付款依据验收单号",f"YS-{code}-{ref}")]
     return records
 
 
@@ -93,7 +113,7 @@ def generate(seed,mode):
     font=embedded_font("BatchDeliveryCJK")
     for name,rows in records.items():
         path=folder/(name+".pdf")
-        title=TITLES.get(name,name)
+        title="银行付款回单" if name in ("第1笔付款回单","第2笔付款回单") else TITLES.get(name,name)
         if name=="第二批验收报告" and mode=="hold_image":
             pdf_with_note(path,title,rows,font,"付款意见："+HOLD,spacing=SPACING,note_y=95)
         elif name=="第二批验收报告" and mode in ("image","sign_image"):
@@ -175,7 +195,7 @@ if __name__=="__main__":
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--run",action="store_true")
     parser.add_argument("--run-id",default="synthetic-delivery-batches-v1")
-    parser.add_argument("--cases",nargs="+",choices=CASES,default=[mode for mode in CASES if mode not in SIGNING_CASES and mode not in REMARK_CASES])
+    parser.add_argument("--cases",nargs="+",choices=CASES,default=[mode for mode in CASES if mode not in SIGNING_CASES and mode not in REMARK_CASES and mode not in BANK_CASES])
     args=parser.parse_args()
     queued=[]
     for mode in args.cases:
@@ -187,10 +207,21 @@ if __name__=="__main__":
         print(mode,BASE+"/workpaper/"+cid,flush=True)
         queued.append((mode,cid,folder,records))
     for mode,cid,folder,records in queued:
-        reconcile_training_pages(cid,folder,records,case_titles=CASES.values(),field_labels=FIELD_LABELS,
-                                 printed_titles=TITLES,row_spacing=SPACING,exact_fields=("delivery_batch","delivered_serials","acceptance_signing_clause"))
+        fields=dict(FIELD_LABELS)
+        if mode in BANK_CASES and wait(cid)["policy"].get("payment_acceptance"):
+            fields.update({"付款依据验收单号":"payment_acceptance_ref","交易流水号":"transfer_ref","币种":"currency","金额单位":"unit"})
+        titles={**TITLES,"第1笔付款回单":"银行付款回单","第2笔付款回单":"银行付款回单"}
+        reconcile_training_pages(cid,folder,records,case_titles=CASES.values(),field_labels=fields,
+                                 printed_titles=titles,row_spacing=SPACING,
+                                 exact_fields=("delivery_batch","delivered_serials","acceptance_signing_clause","payment_acceptance_ref"))
         report=confirm_printed_records(cid,folder,records)
-        if mode in SIGNING_CASES or mode in REMARK_CASES:
+        if mode in SIGNING_CASES or mode in REMARK_CASES or mode in BANK_CASES:
             report=check_training_watermark(cid,folder,records,report)
-        validate(report,mode)
+        if mode in BANK_CASES:
+            if report["policy"].get("payment_acceptance"):
+                states=sorted(f["payment_acceptance"]["state"] for f in report["findings"] if f["rule"]=="H05")
+                expected={"bank_cross":["other_batch"],"bank_match":["matched"],"bank_absent":["unlocated"],"bank_split":["matched","other_batch"]}
+                assert states==expected[mode],(mode,states)
+        else:
+            validate(report,mode)
         print(mode,"R"+str(get("/api/cases/"+cid)["rev"]),report["result"]["verdict"],flush=True)

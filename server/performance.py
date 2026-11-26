@@ -11,6 +11,7 @@ from contract_changes import LABELS as ADDENDUM_FIELDS, LIMIT, SOURCE_LABELS, ca
 from acceptance_authority import LABELS as AUTHORITY_FIELDS, SIGN_LABELS, check as check_acceptance_authority
 import delivery_batches
 import stage_payments
+import payment_acceptance
 import equipment_models
 import equipment_exchanges
 import contract_effect
@@ -56,6 +57,7 @@ LABELS = {
     **equipment_exchanges.LABELS,
     "equipment_model": tuple(sorted(equipment_models.ORDERED | equipment_models.RECEIVED)),
     **delivery_batches.LABELS,
+    **payment_acceptance.LABELS,
     **warranty_terms.LABELS,
     **signing_parties.IMPRINT_FIELDS,
     **inspection_coverage.LABELS,
@@ -675,6 +677,7 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True, recheck_
                     contract_comments.attach(finding, contract_comments.assessment(records, finding))
             if plan_review["whole"]:
                 contract_comments.attach(plan, plan_review)
+        payment_acceptance.apply(graph, results)
         grouped = stage_payments.findings(graph, results)
         if graph.get("prior_installment_sources", {}).get("lines"):
             prior_installment.condition(graph, results, grouped)
@@ -1224,6 +1227,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("warranty_payment") != entry.get("warranty_payment")
                 or saved.get("contract_folios") != entry.get("contract_folios")
                 or saved.get("prior_installment") != entry.get("prior_installment")
+                or saved.get("payment_acceptance") != entry.get("payment_acceptance")
                 or saved.get("inspection_coverage") != entry.get("inspection_coverage")
                 or saved.get("equipment_models") != entry.get("equipment_models")
                 or saved.get("stage_payments") != entry.get("stage_payments")

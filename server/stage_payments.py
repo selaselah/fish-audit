@@ -91,7 +91,15 @@ def sources(graph,read_text):
     for page in coverage:
         page["uncovered"] = [r for r in page["uncovered"]
                              if (page["doc"], page["page"], r["line"], r["quote"]) not in covered_terms]
-    coverage+=covered_rows(graph,read_text,banks,BANK,is_printed,"分笔付款回单")
+    from payment_acceptance import GRAPH_KEY, column, number
+    citation_rows = {(r["doc"],r["page"],r["line"],r["quote"]) for r in graph.get(GRAPH_KEY,{}).get("rows",[])
+                     if r["role"]=="bank_receipt" and r["kind"]=="citation" and r["line"] and not r["disputed"]
+                     and number(column(r["quote"])[1])}
+    bank_coverage = covered_rows(graph,read_text,banks,BANK,is_printed,"分笔付款回单")
+    for page in bank_coverage:
+        page["uncovered"] = [r for r in page["uncovered"]
+                             if (page["doc"],page["page"],r["line"],r["quote"]) not in citation_rows]
+    coverage.extend(bank_coverage)
     bound={(p["doc"],p["page"]):p for p in coverage}
     partial={(g["doc"],g["page"]) for g in graph["gaps"] if g["quality"] in ("partial","unreadable")}
     for node in graph["nodes"]:
@@ -286,7 +294,10 @@ def findings(graph,checks):
         timing=[{"unit":r["unit"],"receipt_ref":by_bank[r["unit"]][0] if r["unit"] in by_bank else None,
                  "status":by_bank[r["unit"]][1]["status"] if r["unit"] in by_bank else "missing"} for r in group]
         if state!="unresolved" and (phase["status"]!="ok" or any(t["status"]!="ok" for t in timing)):
-            detail+=" 合同履约或实付时点另有待核事项。"
+            if any(f.get("payment_acceptance",{}).get("status") in ("risk","missing") for f in related):
+                detail+=" 回单所引验收凭证另有待核事项。"
+            else:
+                detail+=" 合同履约或实付时点另有待核事项。"
             if status=="ok":
                 status="risk" if any(t["status"] in ("risk","issue") for t in timing) else "missing"
         refs=[v["ref"] for v in base.values() if v]
