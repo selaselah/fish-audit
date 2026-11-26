@@ -30,6 +30,7 @@ import contract_folios
 import prior_installment
 import warranty_terms
 import warranty_service
+import warranty_register
 import payment_windows
 import invoice_conditions
 import payment_amendments
@@ -54,6 +55,7 @@ RULES = {
     "H03": ("付款安排与期次完整性", "从合同原文提取期次及付款条件，按约定核对期序、期数及比例合计。"),
     "H04": ("本期付款条件", "逐期核对合同写明的付款前提与履约证据，分别列示预付款、验收款和质保金等约定。"),
     "H06": stage_payments.RULE,
+    "H07": warranty_register.RULE,
     "H05": ("实付日期与合同前提", "按同一合同、回单明列期次及付款日期，核对付款时点已有的履约证据。"),
 }
 LABELS = {
@@ -716,6 +718,7 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True, recheck_
             if not plan_review["whole"]:
                 contract_comments.attach(plan, plan_review)
         results.extend(grouped)
+        results.extend(warranty_register.findings(graph,results))
     return results
 
 
@@ -1275,6 +1278,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("effect_review") != entry.get("effect_review")
                 or saved.get("warranty_check") != entry.get("warranty_check")
                 or saved.get("warranty_payment") != entry.get("warranty_payment")
+                or saved.get("warranty_difference") != entry.get("warranty_difference")
                 or saved.get("contract_folios") != entry.get("contract_folios")
                 or saved.get("prior_installment") != entry.get("prior_installment")
                 or saved.get("advance_guarantee") != entry.get("advance_guarantee")

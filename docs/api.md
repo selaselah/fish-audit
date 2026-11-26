@@ -568,6 +568,12 @@ H05 的 `warranty_payment` 保留本笔回单列示的 `paid_on`、日期字段�
 
 规则 `2026.11.26.01` 的 `contract-warranty-release-v4` 同时核查照片和扫描页。缺少抬头时，同页出现工单编号及状态、报修日期或事项，或者同页有工单状态、报修日期和报修事项三项时，可归入待核工单。程序核对候选类别、引文中的字段标签和值。对应物理页的 `image_ticket_refs` 列出参与识别的字段引用，同文件的封面仍可核对。影像单保持 `bounded=false` 与 `state=scope`。单项引文经人工核图后会有独立的原件和页图摘要回执，质保期付款条件仍需复核。旧版底稿继续使用当时的分类规则复算。
 
+规则 `2026.11.27.07` 使用 `policy.warranty_checks = "contract-warranty-release-v5"`。出现候选确认单、合同和工单时，`graph.warranty_sources.register_pages[]` 按物理页保存 `doc`、`page`、`role`、`text_only`、`bounded` 和各具名栏位的事实 ID 列表 `refs`。同页完整印刷行按文字层摘要核对，栏位按页、行号和引文归属。现阶段的直接对照适用于单页专用合同、确认单及工单，附页、附注或归属疑点保留原版证据。
+
+符合条件的每张工单产生一条 `H07`，状态为 `risk`。`finding.warranty_difference` 包含 `state="record_difference"`、`ticket_unit`、`release_unit`、`number`、`reported_on`、`confirmed_on` 和 `printed_state`。`refs` 的 `condition`、`confirmation`、`defects`、`ticket_id`、`reported_on`、`fault`、`ticket_state` 均指向本版 `graph.facts`，由事实的 `doc`、`page` 和 `source_line.number/text/rects` 打开原行。`warranty_record_difference` 边从 `refs.defects` 指向 `refs.ticket_state`，`evidence` 等于该 H07 的证据列表。清结期次、三份原件的身份、确认签认和各自页码均纳入本条发现的 `supports_result`。
+
+H04/H05 继续返回原有的 `warranty_check` 和逐单期间状态。v3、v4 归档按出具时的方法复算。旧版签收重读原页，若现已能定位同一笔记载差异而旧版未揭示，则要求重审。已有同一工单、同一确认事实和具名比较边的未关闭风险可通过这项专项检查。
+
 ### 共同签认与实付日期
 
 自规则 `2026.11.26.21` 起，`policy.acceptance_authority` 为 `named-acceptance-signatures-v2`。一份合同指定两人共同终验，且成功回单明确列示终验款期次时，H05 可包含 `signer_timing`。对象保存本笔回单、终验单、约定人名、已核图签字引用、各签认日期原行、付款日期原行、合同签认条款和期款条款的引用。`days` 为回单日减去最晚具名签认栏日期的自然日数。材料范围或日期归属待核时，`days` 和 `latest_on` 均为 `null`。

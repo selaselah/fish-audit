@@ -101,6 +101,7 @@ SOURCES = {
 MAPPING = {"H01":["contract-effect","written-mandate","contract-signing","branch-activities","seal-authority","electronic-signature","purchase-records"],"H02":["receipt","received-specifications","acceptance-roles","contract-change","batch-delivery","exchange-records","evidence-quality"],
            "H03":["payment","purchase-records"],"H04":["payment","receipt","contract-change","batch-delivery","warranty-period","payment-time"],
            "H06":["payment","installment-tracking","evidence-quality"],
+           "H07":["evidence-quality","follow-up"],
            "H05":["payment","evidence-quality","warranty-period","payment-time"],
            "B01":["purchase-records","evidence-quality"],"B02":["payment"],"B03":["payment","follow-up"],
            "B08":["installment-tracking","follow-up"],

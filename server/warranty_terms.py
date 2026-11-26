@@ -14,13 +14,16 @@ from delivery_batches import one, ordinal, raw_body
 from performance_versions import WARRANTY_FORMAT, WARRANTY_FORMATS
 from reinspection import LINK_KEYS, linked
 import warranty_service
+import warranty_register
 
 
 LEGACY_FORMAT = "contract-warranty-release-v1"
 SUBMISSION_FORMAT = "contract-warranty-release-v2"
 TICKET_FORMAT = "contract-warranty-release-v3"
-FORMAT = "contract-warranty-release-v4"
-TICKET_FORMATS = {TICKET_FORMAT,FORMAT}
+IMAGE_FORMAT = "contract-warranty-release-v4"
+FORMAT = warranty_register.FORMAT
+IMAGE_FORMATS = {IMAGE_FORMAT,FORMAT}
+TICKET_FORMATS = {TICKET_FORMAT,*IMAGE_FORMATS}
 CUTOFF_FORMATS = {SUBMISSION_FORMAT,*TICKET_FORMATS}
 LABELS = {
     "warranty_period": ("质保期限","质保期","保修期限","保修期","质保截止日"),
@@ -158,11 +161,14 @@ def sources(graph,read_text,version=FORMAT):
                 kind="unresolved" if MENTION.search(normalized(raw)) else None
             if kind:
                 lines.append({**place,"line":index,"kind":kind,"quote":raw,"facts":matches[index,raw]})
+    ledger = {"format":version,"pages":pages,"lines":lines}
     if version in TICKET_FORMATS:
-        ticket_pages,ticket_lines=warranty_service.pages_and_lines(graph,read_text,inspect_images=version==FORMAT)
+        ticket_pages,ticket_lines=warranty_service.pages_and_lines(graph,read_text,inspect_images=version in IMAGE_FORMATS)
         pages.extend(ticket_pages)
         lines.extend(ticket_lines)
-    return {"format":version,"pages":pages,"lines":lines}
+        if version==FORMAT and (register:=warranty_register.register_pages(graph,read_text,ticket_pages)):
+            ledger["register_pages"]=register
+    return ledger
 
 
 def identity(contract,record):
@@ -364,17 +370,24 @@ def edges(findings):
                     evidence.append(w["defect_ref"])
                 result.append({"type":"warranty_ticket_comparison","from":f["stage"]["clause_ref"],"to":ref,
                                "evidence":list(dict.fromkeys(evidence))})
-    return result
+    return result + warranty_register.edges(findings)
 
 
-def verify(report,read_text,*,signing=False,submitted=None,signed=None):
+def verify(report,read_text,*,signing=False,submitted=None,signed=None,read_layout=None):
     policy,graph=report["policy"],report["graph"]
     from payment_releases import submission_day
     marker=policy.get("warranty_checks")
     version=policy.get("version","0").split(".")
     number=tuple(map(int,version)) if all(n.isdecimal() for n in version) else ()
-    if number>=(2026,11,26,1) and marker!=FORMAT:
+    if number>=(2026,11,26,1) and marker not in IMAGE_FORMATS:
         raise ValueError("缺少质保金提交时点与维修工单影像候选页核对程序")
+    current = number >= warranty_register.SINCE
+    methods = policy.get("code_sha256",{})
+    if ((marker==FORMAT)!=current or "code_sha256" in policy and ("warranty_register.py" in methods)!=current or
+            not current and ("register_pages" in graph.get("warranty_sources",{}) or any(
+                f["rule"]=="H07" or "warranty_difference" in f for f in report["findings"]) or
+                any(e["type"]==warranty_register.EDGE for e in graph["edges"]))):
+        raise ValueError("质保记载差异与所列程序版本不符")
     if number>=(2026,11,25,29) and marker not in TICKET_FORMATS:
         raise ValueError("缺少质保金提交时点与维修工单核对程序")
     if number>=(2026,11,25,28) and marker not in CUTOFF_FORMATS:
@@ -389,7 +402,7 @@ def verify(report,read_text,*,signing=False,submitted=None,signed=None):
     if not marker:
         if "warranty_terms.py" in policy.get("code_sha256",{}) or "warranty_sources" in graph or policy.get("performance_checks") in WARRANTY_FORMATS:
             raise ValueError("质保核对程序标记缺失")
-    if signing and marker!=FORMAT:
+    if signing and marker not in IMAGE_FORMATS:
         positives=[f for f in report["findings"] if f["rule"] in ("H04","H05") and f["status"]=="ok"
                    and (f.get("warranty_check") or MENTION.search(f.get("stage",{}).get("clause","")))]
         if positives:
@@ -404,7 +417,11 @@ def verify(report,read_text,*,signing=False,submitted=None,signed=None):
         return
     if marker not in {LEGACY_FORMAT,*CUTOFF_FORMATS} or policy.get("performance_checks") not in WARRANTY_FORMATS or graph.get("warranty_sources")!=sources(graph,read_text,marker):
         raise ValueError("质保条款、确认记录或原页版式与归档不符")
-    if [e for e in graph["edges"] if e["type"] in ("warranty_release_basis","warranty_ticket_comparison")]!=edges(report["findings"]):
+    if current:
+        warranty_register.verify(report,read_layout)
+    elif signing and any(f.get("warranty_check") for f in report["findings"]):
+        warranty_register.legacy_signoff(report,read_text,submitted)
+    if [e for e in graph["edges"] if e["type"] in ("warranty_release_basis","warranty_ticket_comparison",warranty_register.EDGE)]!=edges(report["findings"]):
         raise ValueError("质保金期次所据的期满确认关系与归档不符")
     fields=set(LABELS) | (set(warranty_service.LABELS) if marker in TICKET_FORMATS else set())
     expected=sorted((f.get("unit",f["doc"]),f["id"],f["field"],(f["id"],)) for f in graph["facts"]

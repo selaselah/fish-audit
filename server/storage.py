@@ -70,7 +70,7 @@ TRANSIENT_WRITER_CODES = {getattr(sqlite3,k) for k in ("SQLITE_BUSY","SQLITE_BUS
 
 FULL_PAGE_EVIDENCE = (
     "quality_change", "acceptance_authority", "acceptance_execution", "signer_timing", "date_checks", "batch_acceptance",
-    "effect_review", "warranty_check", "payment_window", "acceptance_reservations", "acceptance_comments",
+    "effect_review", "warranty_check", "warranty_difference", "payment_window", "acceptance_reservations", "acceptance_comments",
     "contract_comments", "stage_payments", "invoice_receipt", "payment_change", "payment_opinion",
     "equipment_models", "inspection_coverage", "payment_acceptance", "execution_basis", "contract_folios",
     "prior_installment", "advance_guarantee",
@@ -802,11 +802,12 @@ class Store:
                 named = {ref for f in checks for ref in f["evidence"]}
                 units = {d["id"]:d.get("source", d["id"]) for d in graph.get("audit_documents", graph["documents"])}
                 originals = {units[unit] for finding in checks for unit in finding["scope"]}
-                if any(f.get("advance_guarantee",{}).get("period") for f in checks):
-                    # The period comparison also checked other submitted pages for a supplement or extension.
+                if any(f.get("advance_guarantee",{}).get("period") or f.get("warranty_difference") for f in checks):
+                    # These comparisons also inspect the rest of the submission for qualifications.
                     submitted={r[0] for r in db.execute("SELECT id FROM docs WHERE case_id=?",(case_id,))}
                     if submitted!={d["id"] for d in graph["documents"]}:
-                        raise CaseError("保函期间所据的完整提交资料与出具清单不符。",409)
+                        label="质保记载差异" if any(f.get("warranty_difference") for f in checks) else "保函期间"
+                        raise CaseError(label+"所据的完整提交资料与出具清单不符。",409)
                     originals.update(submitted)
                 originals.update(p["doc"] for p in packets)
                 originals.update(p["doc"] for p in timing_pages)
@@ -914,6 +915,12 @@ class Store:
             advance_guarantee.verify(paper,page_text,signing=True,read_layout=page_layout)
         except (KeyError,TypeError,ValueError) as error:
             raise CaseError(f"签收前核对预付款保函失败。{error}",409) from error
+        if (checks_conclusions or paper["policy"].get("warranty_checks") or any(
+                f["rule"]=="H07" or "warranty_difference" in f or f.get("warranty_check") for f in paper["findings"])):
+            try:
+                verify_warranty(paper,page_text,signing=True,submitted=row["submitted"],read_layout=page_layout)
+            except (KeyError,TypeError,ValueError) as error:
+                raise CaseError(f"签收前核对质保依据失败。{error}",409) from error
         if checks_conclusions:
             try:
                 verify_result(paper)
@@ -929,7 +936,6 @@ class Store:
                     verify_equipment_models(paper,page_text,signing=True)
                     verify_delivery_batches(paper,page_text,signing=True)
                     verify_contract_effect(paper,page_text,signing=True)
-                    verify_warranty(paper,page_text,signing=True,submitted=row["submitted"])
                     verify_payment_windows(paper,page_text,signing=True)
                     verify_reservations(paper,page_text,signing=True)
                     verify_inspection(paper,page_text,signing=True)
@@ -950,6 +956,7 @@ class Store:
                                  *paper["graph"].get("acceptance_reservation_sources",{}).get("pages",[])]
                     inspected.extend(paper["graph"].get("stage_payment_sources",{}).get("pages",[]))
                     inspected.extend(paper["graph"].get("payment_release_sources",{}).get("pages",[]))
+                    inspected.extend(paper["graph"].get("warranty_sources",{}).get("register_pages",[]))
                     inspected.extend(paper["graph"].get("repair_completion_sources",{}).get("pages",[]))
                     inspected.extend(paper["graph"].get("contract_folio_sources",{}).get("pages",[]))
                     inspected.extend(paper["graph"].get("reinspection_wait_sources",{}).get("pages",[]))
