@@ -10,7 +10,9 @@ import subprocess
 import sys
 from tempfile import TemporaryDirectory
 
-FORMAT = "pdf-supplier-pages-v1"
+LEGACY = "pdf-supplier-pages-v1"
+FORMAT = "pdf-supplier-pages-v2"
+NOTES_SINCE = "2026.11.26.16"
 SINCE = "2026.11.26.15"
 MAX_ANNOTATIONS = 64
 WIDGET_KEYS = {"/Type", "/Subtype", "/FT", "/F", "/P", "/Rect", "/T", "/V"}
@@ -20,7 +22,7 @@ def digest(raw):
     return sha256(raw).hexdigest()
 
 
-def annotations(reader, page, fields):
+def annotations(reader, page, fields, format):
     from pyhanko.pdf_utils import generic
 
     ref, _ = reader.find_page_for_modification(page - 1)
@@ -34,7 +36,19 @@ def annotations(reader, page, fields):
         row = {"number": index, "subtype": subtype[:80], "kind": "annotation", "note": note[:512],
                "shortened": len(note) > 512}
         field = fields.get(item.reference) if isinstance(item, generic.IndirectObject) else None
-        if field and set(obj).issubset(WIDGET_KEYS) and obj.get("/Type", "/Annot") == "/Annot" and subtype == "/Widget" and obj.get("/FT") == "/Sig":
+        ordinary = True
+        if format == FORMAT and subtype == "/Widget" and obj.get("/FT") == "/Sig" and "/V" in obj:
+            sig = obj["/V"]
+            reason = sig.get("/Reason")
+            if reason is not None:
+                literal = str(reason) if isinstance(reason, generic.TextStringObject) else ""
+                row.update(kind="signature_reason", signing_reason=literal[:512], reason_shortened=len(literal) > 512)
+            ordinary = set(sig).issubset({"/Type", "/Filter", "/SubFilter", "/Contents", "/ByteRange", "/M"})
+            if not ordinary and reason is None:
+                row["kind"] = "signature_details"
+            if field:
+                row["field"] = field
+        if ordinary and field and "/P" in obj and set(obj).issubset(WIDGET_KEYS) and obj.get("/Type", "/Annot") == "/Annot" and subtype == "/Widget" and obj.get("/FT") == "/Sig":
             rect = obj.get("/Rect")
             if (isinstance(rect, generic.ArrayObject) and len(rect) == 4 and
                     all(isinstance(x, (generic.NumberObject, generic.FloatObject)) for x in rect) and
@@ -79,7 +93,7 @@ def render_pages(source, target):
     return json.loads((target / "manifest.json").read_bytes())
 
 
-def inspect(source, targets, execution):
+def inspect(source, targets, execution, format):
     from pyhanko.pdf_utils.reader import PdfFileReader
     from pyhanko.sign.fields import enumerate_sig_fields
 
@@ -99,9 +113,12 @@ def inspect(source, targets, execution):
                 fields = {field.reference: str(name) for name, _, field in filled}
         candidates = []
         for page in rows:
-            total, notes = annotations(reader, page, fields)
+            try:
+                total, notes = annotations(reader, page, fields, format)
+            except Exception:
+                continue
             rows[page].update(count=total, annotations=notes)
-            if total and any(note["kind"] != "signature_field" for note in notes) or total > len(notes):
+            if total > len(notes) or any(note["kind"] != "signature_field" for note in notes):
                 rows[page]["state"] = "annotations"
             elif total and fields:
                 candidates.append(page)
@@ -144,14 +161,14 @@ def inspect(source, targets, execution):
         return rows
 
 
-def inspect_isolated(raw, targets, execution):
+def inspect_isolated(raw, targets, execution, format):
     # PDFium rendering runs in a short-lived process, independent of simultaneous signoffs.
     with TemporaryDirectory() as tmp:
         source = Path(tmp) / "original.pdf"
         source.write_bytes(raw)
         try:
             run = subprocess.run([sys.executable, str(Path(__file__).resolve()), str(source)],
-                                 input=json.dumps([targets, execution]), text=True, capture_output=True, timeout=150)
+                                 input=json.dumps([targets, execution, format]), text=True, capture_output=True, timeout=150)
         except subprocess.TimeoutExpired as exc:
             raise ValueError("PDF 供应方页版式核对超时，请重试。") from exc
         if run.returncode:
@@ -159,7 +176,7 @@ def inspect_isolated(raw, targets, execution):
         return {int(n): row for n, row in json.loads(run.stdout).items()}
 
 
-def sources(graph, read_original):
+def sources(graph, read_original, format=FORMAT):
     ledger = graph.get("acceptance_reservation_sources", {})
     documents = {d["id"]: d for d in graph["documents"]}
     nodes = {n["id"]: n for n in graph["nodes"] if n["type"] == "page"}
@@ -178,7 +195,7 @@ def sources(graph, read_original):
             raise ValueError("供应方页所据 PDF 与入库原件摘要不符")
         targets = {p["page"]: sorted({s["line"] for s in ledger["supplier_rows"] if s["doc"] == doc and
                    s["page"] == p["page"] and s["kind"] == "seller" and s["line"]}) for p in places}
-        observed = inspect_isolated(raw, targets, signed.get(doc)) if raw is not None else {}
+        observed = inspect_isolated(raw, targets, signed.get(doc), format) if raw is not None else {}
         for p in places:
             ref = f"{doc}/p{p['page']}"
             check = observed.get(p["page"], {"state": "review", "count": None, "annotations": []})
@@ -188,7 +205,7 @@ def sources(graph, read_original):
                 raise ValueError("供应方页复算影像或文字与当版原件不符")
             result.append({**p, "id": "supplier-page/" + ref, "original_sha256": original["sha256"],
                            "page_sha256": node["sha256"], "signature_source": signed.get(doc, {}).get("id"), **check})
-    return {"format": FORMAT, "pages": result}
+    return {"format": format, "pages": result}
 
 
 def source_graph(ledger):
@@ -221,22 +238,32 @@ def supported(page, rows, facts):
     return True
 
 
-def verify(report, read_original):
+def verify(report, read_original, *, signing=False):
     graph, policy = report["graph"], report["policy"]
     marker = policy.get("supplier_page_inspection")
     if marker is None and "supplier_page_sources" not in graph:
         if policy.get("version", "") >= SINCE or "supplier_pages.py" in policy.get("code_sha256", {}):
             raise ValueError("本版缺少供应方页版式核查记录")
         return
-    ledger = sources(graph, read_original)
+    if marker not in (LEGACY, FORMAT) or policy.get("version", "") >= NOTES_SINCE and marker != FORMAT:
+        raise ValueError("供应方页版式核查程序标记不符")
+    ledger = sources(graph, read_original, marker)
     nodes, edges = source_graph(ledger)
-    if (marker != FORMAT or graph.get("supplier_page_sources") != ledger or
+    if (graph.get("supplier_page_sources") != ledger or
             [n for n in graph["nodes"] if n["type"] == "supplier_page_inspection"] != nodes or
             [e for e in graph["edges"] if e["type"] == "supplier_page_source"] != edges):
         raise ValueError("供应方页所据修订、批注、影像或图谱关系与原件不符")
 
+    if signing and marker == LEGACY:
+        accepted = {ref for f in report.get("findings", []) if f["rule"] == "H02" and f["status"] == "ok"
+                    for ref in f.get("acceptance_reservations", {}).get("supplier", {}).get("matching_print", [])}
+        if accepted:
+            current = sources(graph, read_original)
+            if any(p["id"] in accepted and p["state"] != "same_print" for p in current["pages"]):
+                raise ValueError("旧版验收供应方结论所据的 PDF 另有签名属性待核，请重新审计后签收。")
+
 
 if __name__ == "__main__":
-    targets, execution = json.load(sys.stdin)
-    result = inspect(Path(sys.argv[1]), {int(k): v for k, v in targets.items()}, execution)
+    targets, execution, format = json.load(sys.stdin)
+    result = inspect(Path(sys.argv[1]), {int(k): v for k, v in targets.items()}, execution, format)
     print(json.dumps(result, ensure_ascii=False))

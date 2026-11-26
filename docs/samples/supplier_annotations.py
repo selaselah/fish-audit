@@ -11,6 +11,9 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 
 NOTE = "实际供货单位另附送货单，请核对与合同供应方的关系。"
 THIRD = "山岚演练交付中心"
+REASON = "仅确认到货数量，实际供货单位及终验质量仍待核对。"
+CASES = {"comment": "签后批注要求核对实际供货方", "different": "签名控件与不同的终验供货方",
+         "reason": "电子签名原因仅确认到货数量"}
 
 
 def with_comment(raw, page=0):
@@ -32,7 +35,7 @@ def with_comment(raw, page=0):
     return out.getvalue()
 
 
-def run(seed, upload):
+def run(seed, upload, modes):
     from contract_milestones import PROFILE, documents
     from generate import ROOT, WATERMARK, embedded_font, pdf
     from pdf_signing import signed_copy
@@ -51,14 +54,16 @@ def run(seed, upload):
     pdf(raw, "采购合同", records["采购合同"], font=font)
     signed = signed_copy(raw.read_bytes())
     submitted = []
-    for mode, title in (("comment", "签后批注要求核对实际供货方"), ("different", "签名控件与不同的终验供货方")):
+    for mode in modes:
+        title = CASES[mode]
         folder = base / mode
         folder.mkdir()
         paths, originals = [], {}
         for name, fields in records.items():
             path = folder / (name + ".pdf")
             if name == "采购合同":
-                path.write_bytes(with_comment(signed) if mode == "comment" else signed)
+                content = signed_copy(raw.read_bytes(), reason=REASON) if mode == "reason" else signed
+                path.write_bytes(with_comment(content) if mode == "comment" else content)
             else:
                 if mode == "different" and name == "验收报告":
                     fields = [(k, THIRD if k == "供应方" else v) for k, v in fields]
@@ -82,6 +87,9 @@ def run(seed, upload):
         if mode == "comment":
             assert page["state"] == "annotations" and NOTE in [n["note"] for n in page["annotations"]]
             assert supplier["status"] == "missing"
+        elif mode == "reason":
+            assert page["state"] == "annotations" and REASON in [n.get("signing_reason") for n in page["annotations"]]
+            assert supplier["status"] == "missing"
         else:
             assert page["state"] == "same_print" and THIRD in supplier["names"].values() and supplier["status"] == "risk"
         assert all(f["status"] != "ok" for f in report["findings"] if f["rule"] in ("H01", "H04", "H05"))
@@ -92,5 +100,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", required=True)
     parser.add_argument("--run", action="store_true")
+    parser.add_argument("--case", nargs="+", choices=CASES, default=list(CASES))
     opts = parser.parse_args()
-    run(opts.seed, opts.run)
+    run(opts.seed, opts.run, opts.case)

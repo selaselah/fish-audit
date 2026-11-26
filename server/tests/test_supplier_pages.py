@@ -12,10 +12,11 @@ import supplier_pages
 
 ROOT = Path(__file__).resolve().parents[2]
 with patch.object(sys, "path", [str(ROOT / "docs" / "samples"), *sys.path]):
-    from supplier_annotations import NOTE, with_comment
+    from pdf_signing import signed_copy
+    from supplier_annotations import NOTE, REASON, with_comment
 
 
-def report_for(raw, receipt_name=None):
+def report_for(raw, receipt_name=None, *, format=supplier_pages.FORMAT):
     with TemporaryDirectory() as tmp:
         path = Path(tmp) / "采购合同.pdf"
         path.write_bytes(raw)
@@ -37,11 +38,12 @@ def report_for(raw, receipt_name=None):
              "nodes": [node], "edges": [], "facts": [field, other],
              "acceptance_reservation_sources": {"supplier_pages": [place, receipt], "supplier_rows": lines}}
     graph["pdf_execution_sources"] = pdf_execution.sources(graph, lambda d: raw)
-    graph["supplier_page_sources"] = ledger = supplier_pages.sources(graph, lambda d: raw)
+    graph["supplier_page_sources"] = ledger = supplier_pages.sources(graph, lambda d: raw, format)
     nodes, edges = supplier_pages.source_graph(ledger)
     graph["nodes"].extend(nodes)
     graph["edges"].extend(edges)
-    return {"graph": graph, "policy": {"version": supplier_pages.SINCE, "supplier_page_inspection": supplier_pages.FORMAT}}
+    version = supplier_pages.NOTES_SINCE if format == supplier_pages.FORMAT else supplier_pages.SINCE
+    return {"graph": graph, "policy": {"version": version, "supplier_page_inspection": format}}
 
 
 def check(report):
@@ -88,6 +90,36 @@ class SupplierPageTests(unittest.TestCase):
         self.assertEqual(check(report)["matching_print"], [])
         fact["status"] = "disputed"
         self.assertEqual(check(report)["status"], "missing")
+
+    def test_signed_reason_is_reviewable_even_if_the_printed_page_is_unchanged(self):
+        raw = signed_copy(self.plain, reason=REASON)
+        report = report_for(raw)
+        graph = report["graph"]
+        self.assertEqual(graph["pdf_execution_sources"]["documents"][0]["state"], "current")
+        page, = graph["supplier_page_sources"]["pages"]
+        attribute, = page["annotations"]
+        self.assertEqual((attribute["kind"], attribute["signing_reason"], attribute["reason_shortened"]),
+                         ("signature_reason", REASON, False))
+        self.assertEqual(page["state"], "annotations")
+        self.assertEqual(page["page_sha256"], report_for(self.signed)["graph"]["supplier_page_sources"]["pages"][0]["page_sha256"])
+        self.assertEqual((check(report)["status"], check(report)["matching_print"]), ("missing", []))
+        supplier_pages.verify(report, lambda doc: raw, signing=True)
+        attribute["signing_reason"] = "同意支付全款"
+        with self.assertRaises(ValueError):
+            supplier_pages.verify(report, lambda doc: raw)
+
+    def test_archived_v1_reason_replays_but_a_positive_signoff_requires_rerun(self):
+        raw = signed_copy(self.plain, reason=REASON)
+        old = report_for(raw, format=supplier_pages.LEGACY)
+        supplier = check(old)
+        self.assertEqual(supplier["status"], "ok")
+        old["findings"] = [{"rule": "H02", "status": "ok", "acceptance_reservations": {"supplier": supplier}}]
+        supplier_pages.verify(old, lambda doc: raw)
+        with self.assertRaisesRegex(ValueError, "重新审计"):
+            supplier_pages.verify(old, lambda doc: raw, signing=True)
+        old["policy"]["version"] = supplier_pages.NOTES_SINCE
+        with self.assertRaises(ValueError):
+            supplier_pages.verify(old, lambda doc: raw)
 
     def test_recheck_rejects_changed_note_source_and_missing_markers(self):
         raw = with_comment(self.signed)

@@ -155,7 +155,10 @@ def supplier_check(ledger, scope, graph):
     elif any(row["kind"]=="delivery_note" for row in rows):
         status,detail="missing","另有实际供货或委托交付说明，须取得其与合同供应方的关系及对应交付依据。"
     elif any(p["state"] == "annotations" for p in inspected):
-        status,detail="missing","供应方原页含 PDF 批注或表单，请核对其对供货主体及验收归属的影响。"
+        has_reason = any(a["kind"] == "signature_reason" for p in inspected for a in p["annotations"])
+        detail = ("PDF 签名属性另有签署原因，请核对其对供货主体与验收范围的影响。" if has_reason else
+                  "供应方原页含 PDF 批注或表单，请核对其对供货主体及验收归属的影响。")
+        status = "missing"
     elif len(names)!=len({p["unit"] for p in pages}) or any(not p["native"] or not p["text_only"] and (p["doc"],p["page"]) not in supported for p in pages):
         status,detail="missing","须核对合同及各次验收原页的完整供应方名称、影像附注或补充可关联的交付凭证。"
     else:

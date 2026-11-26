@@ -20,7 +20,7 @@ from pyhanko_certvalidator.registry import SimpleCertificateStore
 LABELS = {"typeset": "仅有排印签章栏", "current": "测试签名覆盖当前文件", "earlier": "签名后另存了新版本"}
 
 
-def signed_copy(data, field="SyntheticApproval"):
+def signed_copy(data, field="SyntheticApproval", *, reason=None):
     """The fictional self-signed test identity and private key are created in memory."""
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Fish Audit synthetic test only")])
@@ -33,7 +33,7 @@ def signed_copy(data, field="SyntheticApproval"):
         keys.PrivateKeyInfo.load(key.private_bytes(der, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())),
         SimpleCertificateStore())
     return signers.sign_pdf(IncrementalPdfFileWriter(BytesIO(data)),
-                            signers.PdfSignatureMetadata(field_name=field), signer=signer).getvalue()
+                            signers.PdfSignatureMetadata(field_name=field, reason=reason), signer=signer).getvalue()
 
 
 def later_copy(signed):

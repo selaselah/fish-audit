@@ -740,7 +740,7 @@ class Store:
                 return (self.files / case_id / doc["id"] / ("original" + doc["ext"])).read_bytes()
             try:
                 verify_pdf_execution(paper, read_original, signing=True)
-                verify_supplier_pages(paper, read_original)
+                verify_supplier_pages(paper, read_original, signing=True)
             except (ValueError, OSError, KeyError, TypeError) as error:
                 raise CaseError(f"签收前核对 PDF 签署凭证失败。{error}", 409) from error
             if row["profile"]!=BANK:
