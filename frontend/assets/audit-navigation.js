@@ -24,6 +24,9 @@
         const panel=$('#file-progress'); panel.open=true; jump(panel.querySelector('summary'));
       }, '', '解析 页数 进度');
       if (paper) {
+        if (AcceptanceComments.current(paper.report)) add('底稿视图','对照验收批注','journal-text',()=>{
+          state.tab='report'; renderCase(true); jump($('#acceptance-comments'));
+        },'R'+paper.rev,'Word 审阅 原文 期款');
         if (SupplierPages.current(paper.report)) add('底稿视图','核对供货主体','layers',()=>{
           state.tab='report'; renderCase(true); jump($('#supplier-pages'));
         },'R'+paper.rev,'合同 供应方 验收 原行 批注 签署原因');

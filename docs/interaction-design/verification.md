@@ -1,5 +1,15 @@
 # 首页与工作台验收记录
 
+## 验收 Word 审阅与规则目录
+
+本机与企业入口均可浏览现行 32 项检查程序和 24 条制度出处。实测关键词搜索、零结果后清除、从出处反查程序、逐条翻阅、重开已选条文以及未收录的出处链接。桌面用方向键选目录，手机用原生选择器。打开历史 R6 的 H02 发现在同一界面可选出该版保存的七条依据；对照的是 R6 留存的版本号与原文地址。[目录实拍](rule-directory.webp) · [手机实拍](rule-directory-mobile.webp) · [浏览器用例](../../frontend/tests/rule-catalog.mjs)
+
+底稿和首页的批注演练用实际浏览器核对 320、390、768、820、1024、1440 像素六种宽度。在“正文与批注”中选中“合格”会打开第 1 页第 9 行，原页框与归档字段坐标一致。“关联款项”列出两个付款条件与一张回单。工作台的期次、发现和补件草稿可操作；公开案例的三个来源分别定位到验收正文、合同条款和回单用途。桌面和手机对比视图、关联款项和目录均通过 axe-core 对 WCAG 2 与 2.1 A/AA 的自动检查。公开的三份水印原件和三张页图逐字节匹配归档。企业端匿名访问本地演练底稿及其原件均返回 404。[工作底稿实拍](word-acceptance-comments.webp) · [手机公开案例](landing-word-payments-mobile.webp) · [交互回归](../../frontend/tests/acceptance-comments.mjs)
+
+单独运行 `node frontend/tests/workspace.mjs --rule-catalog` 或 `node frontend/tests/workspace.mjs --public-word-comments` 可核对本机界面。用环境变量 `AUDIT_PRODUCT_ORIGIN=http://127.0.0.1:8010` 选择企业入口。底稿用例接受 `--word-comment-case 84c4fa7a1a8e4dd594a03717614ed7ef`，可加 `AUDIT_COMMENT_REV=6` 回看旧版。[后台与旧版证据包验证](../acceptance.md#word-验收正文与审阅批注)
+
+通用商品网站视觉检查最后在首页保留五个提示，分别针对首屏入场标记、品牌动效、页首演练面板高度、90 像素页脚高度和页脚分屏。此前在业务底稿上报告 20 个提示，涉及多操作按钮、纵向滚动及人工验收侧栏等版式。本轮保持交互读单面板和紧凑页脚，记录中没有使用豁免。
+
 ## 供货主体与签署意见
 
 Chrome 在 320、390、768、820、1024、1440 像素宽度验证五组水印案例和两个历史版。检查了逐字差异开关、页签方向键、原件行框和完整页图、固定版下载、补件草稿、快速定位及期次跳转。旧版记录会说明当时尚未核对签署原因。浏览器回归对换原件摘要、页图摘要、审查单元、格式标记或移除两类来源边后，核对卡均停止展示该组依据。[自动回归](../../frontend/tests/supplier-pages.mjs) · [桌面名称对照](supplier-name-difference.webp) · [手机签署意见](supplier-signing-note-mobile.webp)

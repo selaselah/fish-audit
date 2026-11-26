@@ -76,11 +76,14 @@ function performanceOverview(findings, graph) {
   const folios=ContractFolios.panel(plan,graph,state.bundle?.report.calls.pages,state.bundle?.report.findings.find(f=>f.rule==='E01'));
   const parties=SigningParties.panel(effect,graph,phases);
   const acceptance=findings.find(f=>f.rule==='H02');
+  const commentSource=acceptance && AcceptanceComments.current(state.bundle.report);
+  const comments=commentSource && AcceptanceComments.panel(state.bundle.report);
   const supplier=acceptance && SupplierPages.panel(state.bundle.report);
   const inspection=InspectionCoverage.panel(acceptance,graph);
   const dates=ContractCalendar.panel(effect,graph,findings,state.bundle?.report.calls.pages);
   const dateQuestion=effect?.effect_review?.calendar?.some(day=>!['exact','spacing'].includes(day.state));
   const sections=[
+    {key:'acceptance-comments',label:'验收批注',icon:'journal-text',content:comments,priority:comments && comments.dataset.state!=='ok'},
     {key:'suppliers',label:'供货主体',icon:'layers',content:supplier,priority:supplier && supplier.dataset.state!=='ok'},
     {key:'signatures',label:'签署凭证',icon:'journal-text',content:signatures,priority:!dateQuestion && Boolean(signatures)},
     {key:'contract-dates',label:'合同日期',icon:'clock-history',content:dates,priority:dateQuestion},
@@ -136,6 +139,8 @@ function performanceOverview(findings, graph) {
     const sum=findings.find(f=>f.stage_payments && sameStage(f));
     if (sum) results.append(performanceJump(sum,'本期回单合计'));
     row.append(box('phase-contract',source,el('q',revised?revised.quote:stage.clause)),results);
+    const noteLink=AcceptanceComments.phaseLink(phase,commentSource);
+    if (noteLink) row.append(noteLink);
     if (plan?.contract_folios?.standalone) {
       const independent=ContractFolios.independentLink(phase,graph);
       if (independent) row.append(independent);
@@ -207,7 +212,10 @@ function performanceOverview(findings, graph) {
     });
     const priority=PhaseEvidence.combined(buttons.map(b=>({status:b.dataset.state})));
     const remembered=phases.findIndex(p=>p.id===index.activePhase);
-    select(remembered>=0?remembered:Math.max(0,buttons.findIndex(b=>b.dataset.state===priority)));
+    const withComment=commentSource?.status!=='ok' && index.readerSection==='acceptance-comments'
+      ? buttons.findIndex((b,i)=>b.dataset.state===priority && list.children[i].querySelector('.word-phase-link')) : -1;
+    const initial=withComment>=0?withComment:buttons.findIndex(b=>b.dataset.state===priority);
+    select(remembered>=0?remembered:Math.max(0,initial));
     const shares = phases.map(f=>Number(f.stage.share));
     if (plan?.status==='ok' && shares.every(n=>Number.isFinite(n) && n>0) && Math.abs(shares.reduce((a,b)=>a+b,0)-100)<.000001) {
       const bar=box('share-strip');
@@ -1478,7 +1486,9 @@ function provenancePanel(report) {
     compare.replaceChildren();
     const methods=graph.edges.filter(e=>e.type==='method_reference' && e.to===control).map(e=>index.nodes.get(e.from)).filter(Boolean);
     const program=box('trace-part',el('h3','执行程序'),el('strong',rule.label+' · '+f.title),el('p',rule.basis));
-    if (methods.length) program.append(lazyFold('制度出处与适用范围',()=>methods.map(sourceEntry)));
+    if (methods.length) program.append(lazyFold('制度出处与适用范围',()=>[
+      RuleCatalog.sourceChooser(methods.map(source=>[source.id,source]),state.bundle.report.policy.version)
+    ]));
     const result=box('trace-part trace-result',el('h3','本项结论'),tag(f.status),el('p',f.detail));
     if (f.calculations?.length) result.append(lazyFold('复算金额',()=>f.calculations.map(calculationPanel)));
     trail.replaceChildren(program,traceEvidence(f,index,references),result);

@@ -28,8 +28,8 @@
     canvas.width=Math.round(width*density); canvas.height=Math.round(height*density);
     context.setTransform(canvas.width/width,0,0,canvas.height/height,0,0);
     const w=page.naturalWidth, h=page.naturalHeight;
-    const [left,top,right,bottom]=rectangles.get(row);
-    const lineWidth=(right-left)*w, lineHeight=(bottom-top)*h;
+    const spans=rectangles.get(row);
+    const top=Math.min(...spans.map(r=>r[1])), bottom=Math.max(...spans.map(r=>r[3]));
     const viewWidth=Math.min(w,Math.max((end-start)*w+100,Math.min(810,width*1.45)));
     const scale=mode==='page'?Math.min(width/w,height/h):width/viewWidth;
     function origin(view,extent,center) {
@@ -40,9 +40,11 @@
     const y=origin(height,h*scale,(top+bottom)*h*scale/2);
     context.fillStyle='#e9edf3'; context.fillRect(0,0,width,height);
     context.drawImage(page,x,y,w*scale,h*scale);
-    const highlight=[x+left*w*scale,y+top*h*scale,lineWidth*scale,lineHeight*scale];
-    context.fillStyle='rgba(255,196,49,.25)'; context.fillRect(...highlight);
-    context.strokeStyle='#935d10'; context.lineWidth=1.5; context.strokeRect(...highlight);
+    context.fillStyle='rgba(255,196,49,.25)'; context.strokeStyle='#935d10'; context.lineWidth=1.5;
+    for (const [l,t,r,b] of spans) {
+      const area=[x+l*w*scale,y+t*h*scale,(r-l)*w*scale,(b-t)*h*scale];
+      context.fillRect(...area); context.strokeRect(...area);
+    }
     canvas.dataset.fact=row.dataset.ref; status.hidden=true;
   }
   function select(next,scale) {
@@ -78,9 +80,9 @@
       for (const key of ['ref','line','rect']) button.dataset[key]=line[key];
       button.querySelector('span').textContent=line.label;
       button.querySelector('strong').textContent=line.value;
-      rectangles.set(button,line.rect.split(',').map(Number));
+      rectangles.set(button,line.rects || [line.rect.split(',').map(Number)]);
     }
-    const bounds=[...rectangles.values()];
+    const bounds=[...rectangles.values()].flat();
     start=Math.min(...bounds.map(r=>r[0])); end=Math.max(...bounds.map(r=>r[2]));
     if (page?.getAttribute('src')===sample.image) return;
     // Changing width resets the pixels, so a delayed load cannot show the previous case.

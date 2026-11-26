@@ -4,6 +4,7 @@
 
 | 要核对什么 | 查阅入口 |
 | --- | --- |
+| Word 验收原件的审阅选区、DataSnipper 证据定位，以及规则出处的逐项核对 | [Word 审阅与交互依据](word-acceptance-review.md) · [公开演练原件](showcase-provenance.md#word-验收批注与第二期回单) |
 | 七款软件的原始链接、可见操作和国内工作台用法，包括 Karbon 看板和 Fieldguide 侧栏 | [产品界面调研](product-research.md) |
 | Ramp、Xero、Fieldguide 与 FloQast 怎样用颜色区分操作、选择和风险 | [官方截图的配色观察](interface-color.md) |
 | 采购收货状态、原件定位和签署意见如何进入复核界面 | [Ramp、DataSnipper 与 PDF 签署资料](pdf-signature-review.md) · [固定水印原件](showcase-provenance.md#供货主体与签署原因) |

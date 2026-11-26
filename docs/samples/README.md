@@ -1,5 +1,11 @@
 # 合成财会审计演练
 
+## Word 验收审阅意见
+
+`server/.venv/bin/python docs/samples/word_acceptance.py --seed fish-word-acceptance-20261126` 生成三套带水印的本地演练资料。`clean` 是 3℃ 且无批注的验收单，`limited` 将数量签收意见附在同一打印行的“合格”上，`hot` 将实测值改为 8℃ 并保留相同批注。可以用 `--case limited` 单独生成第二案。
+
+追加 `--run` 会提交到本机服务，以相同种子及原件摘要重跑时可复用原案。脚本对照水印、文件摘要、页图和文字行模拟字段核读，并核查 H02 和引用它的期款。模拟核图只用于这组水印演练。查看最终意见需要审计员签收。[三份固定底稿](../acceptance.md#word-验收正文与审阅批注) · [试读含批注的验收单](http://127.0.0.1:8000/?scene=word-comments#workflow)
+
 ## 供货主体与 PDF 签署意见
 
 运行 `server/.venv/bin/python docs/samples/supplier_annotations.py --seed supplier-demo` 可生成三套带水印的合同、验收单和付款回单。分别模拟签后附注要求取得送货单、终验供货方与合同不同、签署人仅确认到货数量。`--case reason` 可单独生成第三案。加 `--run` 后会上传本机服务，在核实每份文件的摘要和水印后模拟字段核验，并检查 H01、H02 和各期付款结论。[本机演练结果](../acceptance.md#验收供货主体批注和签署原因)

@@ -1,5 +1,15 @@
 # 本机审计接口
 
+## Word 验收审阅记录
+
+规则 `2026.11.26.17` 在 `policy.acceptance_word_reviews` 和 `graph.acceptance_word_reviews.format` 记录 `word-acceptance-comments-v1`。验收和复验的 Word 文档逐份登记。每个 `documents[]` 记录绑定物理文件、所属审查单元、原件摘要、支持范围和批注总数。可读的 DOCX 同时登记正文 XML 摘要，有批注时还登记关联部件及其摘要。
+
+`notes[]` 中的 `text`、`author`、`date` 和 `key` 来自 Word 文件。可确定单段选区时，`anchor` 保存段落序号、完整引文、按 Unicode 码点计算且右端开区间的偏移、所选文字。有唯一打印行时，`location` 保存页码、行号、页图及页文 SHA-256，以及与该行对应的字段 ID。旧格式 `.doc` 或不可读部件记为 `unreadable`，扩展审阅记录和支持范围内检出的修订痕迹记为 `partial`。跨段或无法唯一匹配的选区进入人工复核。每份原件最多摘录 64 条批注，每条最多 1,024 个字符，未完整显示的文字带有 `shortened` 标记。
+
+H02 的 `acceptance_comments` 返回审查状态、文件、批注及引用。图谱通过 `word_review_source`、`word_review_comment`、`word_review_anchor` 连接原件、批注及物理页，通过 `supports_result` 连接实际引用它们的发现。正文的已核“合格”字段与明确限定数量核验、要求另行验收的批注同时成立时列为风险。其他审阅意见需核实，已有质量问题继续列在报告中。离线校验和批准前核对都从原件重建记录。旧版中的相符结论若遗漏所据 Word 的待核审阅意见，批准前要求重审。[工作底稿视图](http://127.0.0.1:8000/workpaper/84c4fa7a1a8e4dd594a03717614ed7ef?rev=7&view=acceptance-comments)
+
+`GET /api/controls` 提供现行程序、制度出处及对应关系。规则目录支持 `/app#rules?rule=H02&source=receipt`，可以加 `q` 保存当前检索。仅带 `source` 时打开出处及其引用程序。归档底稿取本版的 `policy.sources`、`policy.rule_sources` 及已有图谱引用。[查看现行规则目录](http://127.0.0.1:8000/app#rules?rule=H02&source=receipt)
+
 ## PDF 供应方原页
 
 在存在合同和验收单的审查范围内，`graph.supplier_page_sources.pages` 逐页记载需进一步核对的 PDF。每条记录绑定物理原件、页码、审查单元、原件与页图 SHA-256，以及实际存在的 PDF 签署检查。图谱从原页以 `supplier_page_source` 边指向 `supplier_page_inspection` 节点。H02 的 `acceptance_reservations.supplier` 同时公开原行、已定位名称、`page_inspections` 及可支持合同排印内容的 `matching_print`。

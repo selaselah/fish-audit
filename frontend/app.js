@@ -138,25 +138,6 @@ function renderList() {
     button.setAttribute('aria-pressed', String(button.dataset.filter === state.filter));
   }
 }
-function renderCatalog(data) {
-  const panel = box('panel', el('h2', '资料检查程序'), el('p', Object.values(data.profiles).join('、')+' · 版本 ' + data.version, 'muted'));
-  for (const rule of data.rules) {
-    panel.append(box('line', el('strong', rule.id, 'mono'), el('strong', rule.name), el('p', rule.basis)));
-  }
-  const law = data.background;
-  const url = link(law.title, law.url);
-  url.target = '_blank'; url.rel = 'noopener noreferrer';
-  const references = box('panel', el('h2', '制度与方法参考'));
-  if (data.sources) {
-    for (const source of Object.values(data.sources)) references.append(sourceEntry(source));
-  } else references.append(el('p', law.scope), url);
-  $('#catalog').replaceChildren(panel, references);
-}
-function sourceEntry(source) {
-  const url = link(source.title, source.url); url.target = '_blank'; url.rel = 'noopener noreferrer';
-  return box('line', url, el('p', source.locator + ' · ' + source.edition, 'small'),
-    el('p', source.summary), el('p', source.scope, 'muted'));
-}
 async function loadReviewImage(image, source) {
   const response = await fetch(source, {cache:'no-store'});
   if (!response.ok) throw new Error('原页加载失败');
@@ -632,6 +613,7 @@ function citation(ref) {
     return Team.paperLink(label,prior.case_id,'button ref',new URLSearchParams({rev:String(prior.rev),fact:prior.fact}));
   }
   const source = index?.nodes.get(ref);
+  if (['acceptance_word_review','acceptance_word_comment'].includes(source?.type)) return AcceptanceComments.citation(ref);
   if (source?.type==='supplier_page_inspection') {
     const page=SupplierPages.current(state.bundle.report)?.pages.find(p=>p.id===ref);
     return page ? evidenceJump(page.filename+' · 第 '+page.page+' 页供货主体','supplier-pages') : el('span','供货主体证据关系待核','small');
@@ -836,6 +818,8 @@ function finding(item) {
     const dates = dateEvidencePanel(item,state.bundle.report.graph);
     if (dates) node.append(dates);
   }
+  if (item.acceptance_comments) node.append(AcceptanceComments.current(state.bundle.report)?
+    evidenceJump('对照验收正文与 Word 批注','acceptance-comments'):el('span','验收批注来源待核','small'));
   if (item.reinspection) node.append(evidenceJump('核对整改复验原件','equipment-reinspection-trail'));
   if (item.delegations) node.append(mandatePanel(item.delegations, state.bundle.report.graph));
   if (item.quality_change) node.append(qualityChangePanel(item.quality_change, state.bundle.report.graph));
@@ -932,8 +916,16 @@ function finding(item) {
   if (graphIndex(state.bundle.report.graph).nodes.has('finding/'+item.id))
     node.append(action('查看证据路径',()=>showFindingPath(item),'text-button'));
   const policy = state.bundle.report.policy;
-  const refs = policy.rule_sources?.[item.rule] || [];
-  if (refs.length) node.append(fold('核对制度出处与适用范围', ...refs.map(id => sourceEntry(policy.sources[id]))));
+  const reportGraph=state.bundle.report.graph;
+  const extra=traceReferences(reportGraph,item).map(ref=>graphIndex(reportGraph).nodes.get(ref))
+    .filter(n=>n?.type==='method_reference' && n.id.startsWith('source/')).map(n=>n.id.slice(7));
+  const refs=[...new Set([...(policy.rule_sources?.[item.rule] || []),...extra])];
+  if (refs.length) node.append(lazyFold('核对制度出处与适用范围',()=>{
+    const entries=refs.filter(id=>policy.sources?.[id]).map(id=>[id,policy.sources[id]]);
+    const panes=entries.length?[RuleCatalog.sourceChooser(entries,policy.version)]:[];
+    if (entries.length!==refs.length) panes.push(el('p','此版底稿有制度条目待核。','small'));
+    return panes;
+  }));
   const row = box('finding');
   row.dataset.finding = item.id;
   row.dataset.findingStatus = item.status;
@@ -1404,7 +1396,11 @@ async function refresh() {
       if (!session.user) Team.returnTo = location.hash;
       view = 'account';
     } else if (!route.id && session.mode === 'saas' && view !== 'account' && (view !== 'rules' || session.user)) {
-      if (session.workspaces.length) { location.replace(Team.hash('w/'+session.workspaces[0].id+'/'+route.page)); return; }
+      if (session.workspaces.length) {
+        const query=route.params.toString();
+        location.replace(Team.hash('w/'+session.workspaces[0].id+'/'+route.page)+(query?'?'+query:''));
+        return;
+      }
       view = 'account';
     }
     if (view === 'team' && Team.current?.role !== 'admin') view = 'account';
@@ -1451,6 +1447,8 @@ async function refresh() {
       } else if (route.params.get('view')==='signatures' && state.openedCitation!==location.hash &&
                  bundle?.report.findings.some(f=>f.rule==='H01' && f.effect_review?.pdf_execution)) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#pdf-signatures';
+      } else if (route.params.get('view')==='acceptance-comments' && state.openedCitation!==location.hash && AcceptanceComments.current(bundle?.report)) {
+        state.openedCitation=location.hash; state.tab='report'; focusFinding='#acceptance-comments';
       } else if (route.params.get('view')==='suppliers' && state.openedCitation!==location.hash && SupplierPages.current(bundle?.report)) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#supplier-pages';
       } else if (route.params.get('view')==='calendar' && state.openedCitation!==location.hash &&
@@ -1468,7 +1466,7 @@ async function refresh() {
           target.open=true;
           $('#trail-tab-final')?.click();
           revealPaperTarget($('#reinspection-wait'));
-        } else if (target?.dataset.finding || ['equipment-reinspection-trail','case-entity-browser','contract-pages','word-signatures','pdf-signatures','contract-calendar','supplier-pages'].includes(target?.id)) revealPaperTarget(target);
+        } else if (target?.dataset.finding || ['equipment-reinspection-trail','case-entity-browser','contract-pages','word-signatures','pdf-signatures','contract-calendar','supplier-pages','acceptance-comments'].includes(target?.id)) revealPaperTarget(target);
         else target?.focus();
       }
       const target = route.params.get('fact');
@@ -1479,7 +1477,7 @@ async function refresh() {
       if (['queued','running'].includes(data.status)) interval = 1600;
       if (data.status === 'in_review') interval = 6000;
     } else if (view === 'rules') {
-      const data = await api('/api/controls'); if (epoch !== state.epoch) return; renderCatalog(data);
+      const data = await api('/api/controls'); if (epoch !== state.epoch) return; $('#catalog').replaceChildren(RuleCatalog.render(data,route.params));
     } else {
       await Desk.load(epoch); if (epoch !== state.epoch) return; interval = 5000;
       const entry=new URL(location.href);

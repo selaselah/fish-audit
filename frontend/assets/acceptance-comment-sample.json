@@ -1,0 +1,255 @@
+{
+  "case_id": "84c4fa7a1a8e4dd594a03717614ed7ef",
+  "revision": 7,
+  "report_sha256": "80b74d8ad467c1093cb7f65ad663c59d87f322de04b775f096a07e6cd86a0111",
+  "status": "risk",
+  "document": {
+    "body_sha256": "cda01f68a732bbdb2b9d95a5066390fea80411037b65d94ec3b485ecbb41b252",
+    "count": 1,
+    "coverage": "complete",
+    "doc": "d02",
+    "id": "acceptance-word/d02",
+    "limitations": [],
+    "notes": [
+      {
+        "anchor": {
+          "end": 7,
+          "paragraph": 9,
+          "quote": "验收结论：合格",
+          "selected": "合格",
+          "start": 5
+        },
+        "author": "演练仓储复核员",
+        "date": "2026-09-20T03:00:00Z",
+        "id": "acceptance-word/d02/n1",
+        "key": "0",
+        "location": {
+          "facts": [
+            "d02/p1/f7"
+          ],
+          "line": 9,
+          "page": 1,
+          "page_sha256": "77ecedfd922c9164a228ffeec60694c8e32363dba47bdc6946275e5acf0ef5b1",
+          "text_sha256": "331d9f1bba1bd3183ae062d10427429780fef5090c48028e8521a62144dea199",
+          "unit": "d02"
+        },
+        "shortened": false,
+        "text": "本次仅核对到货数量，制冷性能须由技术部另行终验。",
+        "ref": "d02/p1/f7",
+        "related": [
+          {
+            "kind": "condition",
+            "id": "H04-6",
+            "name": "第二期",
+            "share": "60",
+            "status": "missing",
+            "doc": "d01",
+            "ref": "d01/p1/f15"
+          },
+          {
+            "kind": "condition",
+            "id": "H04-7",
+            "name": "第三期",
+            "share": "10",
+            "status": "missing",
+            "doc": "d01",
+            "ref": "d01/p1/f16"
+          },
+          {
+            "kind": "payment",
+            "id": "H05-8",
+            "name": "第二期",
+            "share": "60",
+            "status": "missing",
+            "doc": "d03",
+            "ref": "d03/p1/f6"
+          }
+        ]
+      }
+    ],
+    "original_sha256": "26d8d357447ffa3cb0800c8fc6f21432beb34efdfda54a097b8bc621f5d83dd3",
+    "part": "word/comments.xml",
+    "part_sha256": "4d9630fe3991f307652fa25d974ddee1db3f67f968cbc0dd96a4f7db46498ca8",
+    "units": [
+      "d02"
+    ],
+    "name": "验收报告.docx",
+    "original": "/showcase/acceptance-review.docx"
+  },
+  "sources": {
+    "d02": {
+      "title": "验收报告",
+      "version": "合成采购 · R7",
+      "page": 1,
+      "original": "/showcase/acceptance-review.docx",
+      "image": "/assets/acceptance-review-page.jpg",
+      "source_sha256": "26d8d357447ffa3cb0800c8fc6f21432beb34efdfda54a097b8bc621f5d83dd3",
+      "page_sha256": "77ecedfd922c9164a228ffeec60694c8e32363dba47bdc6946275e5acf0ef5b1",
+      "lines": [
+        {
+          "ref": "d02/p1/f6",
+          "line": 8,
+          "rect": "0.14761,0.37184,0.36181,0.38641",
+          "rects": [
+            [
+              0.14761,
+              0.37184,
+              0.36181,
+              0.38641
+            ]
+          ],
+          "label": "验收范围",
+          "value": "全部交付终验"
+        },
+        {
+          "ref": "d02/p1/f7",
+          "line": 9,
+          "rect": "0.14761,0.40874,0.28392,0.4233",
+          "rects": [
+            [
+              0.14761,
+              0.40874,
+              0.28392,
+              0.4233
+            ]
+          ],
+          "label": "验收结论",
+          "value": "合格"
+        },
+        {
+          "ref": "d02/p1/f10",
+          "line": 12,
+          "rect": "0.14824,0.52039,0.28392,0.53495",
+          "rects": [
+            [
+              0.14824,
+              0.52039,
+              0.28392,
+              0.53495
+            ],
+            [
+              0.28957,
+              0.52087,
+              0.31344,
+              0.53301
+            ]
+          ],
+          "label": "实测结果",
+          "value": "柜温 3℃"
+        }
+      ]
+    },
+    "d01": {
+      "title": "采购合同",
+      "version": "合成采购 · R7",
+      "page": 1,
+      "pdf": "/showcase/acceptance-review-contract.pdf",
+      "image": "/assets/acceptance-review-contract-page.jpg",
+      "source_sha256": "c5d74b215a4f6a6a2a6c52c8357ac433812d0cc827aaaca44811141b9feeac4a",
+      "page_sha256": "b1a7c0af34b769084b2f6ba2bee303abaf9032018631e07a4b498cd1006984b3",
+      "lines": [
+        {
+          "ref": "d01/p1/f14",
+          "line": 16,
+          "rect": "0.08209,0.73881,0.40659,0.75525",
+          "rects": [
+            [
+              0.08209,
+              0.73881,
+              0.40659,
+              0.75525
+            ]
+          ],
+          "label": "第一期",
+          "value": "合同生效后支付30%"
+        },
+        {
+          "ref": "d01/p1/f15",
+          "line": 17,
+          "rect": "0.08209,0.77945,0.45701,0.79589",
+          "rects": [
+            [
+              0.08209,
+              0.77945,
+              0.45701,
+              0.79589
+            ]
+          ],
+          "label": "第二期",
+          "value": "最终验收合格后支付60%"
+        },
+        {
+          "ref": "d01/p1/f16",
+          "line": 18,
+          "rect": "0.08209,0.82009,0.40659,0.83607",
+          "rects": [
+            [
+              0.08209,
+              0.82009,
+              0.40659,
+              0.83607
+            ]
+          ],
+          "label": "第三期",
+          "value": "质保期满后支付10%"
+        }
+      ]
+    },
+    "d03": {
+      "title": "银行付款回单",
+      "version": "合成采购 · R7",
+      "page": 1,
+      "pdf": "/showcase/acceptance-review-transfer.pdf",
+      "image": "/assets/acceptance-review-transfer-page.jpg",
+      "source_sha256": "8db1df00aa2c6c428a441c8a54e1414725e6227c6a53fd4bb8a1816be42c8d97",
+      "page_sha256": "b12cc8da5e4788312dae839c9a44db9c43d360cbb0cf8cd1d11d52735112b4f6",
+      "lines": [
+        {
+          "ref": "d03/p1/f6",
+          "line": 7,
+          "rect": "0.08209,0.3758,0.2799,0.39224",
+          "rects": [
+            [
+              0.08209,
+              0.3758,
+              0.2799,
+              0.39224
+            ]
+          ],
+          "label": "款项用途",
+          "value": "第二期"
+        },
+        {
+          "ref": "d03/p1/f7",
+          "line": 8,
+          "rect": "0.08274,0.41644,0.30511,0.43242",
+          "rects": [
+            [
+              0.08274,
+              0.41644,
+              0.30511,
+              0.43242
+            ]
+          ],
+          "label": "交易状态",
+          "value": "交易成功"
+        },
+        {
+          "ref": "d03/p1/f8",
+          "line": 9,
+          "rect": "0.08209,0.45662,0.37492,0.47306",
+          "rects": [
+            [
+              0.08209,
+              0.45662,
+              0.37492,
+              0.47306
+            ]
+          ],
+          "label": "付款日期",
+          "value": "2026年9月21日"
+        }
+      ]
+    }
+  }
+}

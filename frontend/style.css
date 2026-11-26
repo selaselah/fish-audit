@@ -255,7 +255,7 @@ dialog::backdrop { background: rgb(24 30 47 / 45%); }
 .dialog-head { border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 12px; }
 [role=alert] { color: var(--issue); }
 #network-error { padding: 10px 14px; background: var(--issue-soft); }
-@keyframes enter { from { opacity: .65; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+@keyframes enter { from { transform: translateY(3px); } to { transform: none; } }
 @media(max-width: 760px) {
   .grid, .page-view { grid-template-columns: 1fr; }
   .page-view > div:first-child { position: static; max-height: none; }
@@ -758,7 +758,7 @@ button.icon-button:hover,button.icon-button:focus-visible { color:var(--accent);
 .performance-heading,.trace-heading,.trace-toolbar,.compare-bar { flex-wrap:wrap; justify-content:space-between; gap:10px 16px; }
 .performance-heading { margin-bottom:10px; }
 .performance-heading h2,.trace-heading h2 { margin:0; }
-.compare-jump { gap:7px; min-height:38px; padding:4px 10px; color:var(--accent); font-size:.86rem; }
+.compare-jump { gap:7px; min-height:44px; padding:4px 10px; color:var(--accent); font-size:.86rem; }
 .trace-revision { color:var(--muted); font-size:.85rem; font-variant-numeric:tabular-nums; }
 .trace-toolbar { align-items:flex-end; padding:14px 0; border-bottom:1px solid var(--line); }
 .trace-finding-picker { flex:1 1 240px; max-width:38rem; min-width:0; margin:0; color:var(--muted); font-size:.83rem; }
@@ -965,7 +965,6 @@ button.icon-button:hover,button.icon-button:focus-visible { color:var(--accent);
 .proof-check .tag { grid-column:2; justify-self:start; }
 .proof-check:only-child { display:flex; align-items:center; min-height:44px; gap:8px; }
 .proof-check:only-child .tag { margin-left:auto; }
-.proof-check:is([data-state=missing],[data-state=risk]) { border-color:#ddbd8b; }
 .proof-check:is([data-state=missing],[data-state=risk]) > i { color:var(--attention); }
 .proof-rail { display:flex; max-width:100%; align-items:stretch; overflow:auto; padding:4px 2px 2px; margin-top:5px; }
 .proof-event { display:flex; position:relative; flex:1 0 79px; flex-direction:column; align-items:flex-start; gap:3px; text-align:start; padding:5px 0 7px; color:var(--secondary); border:0; background:transparent; }

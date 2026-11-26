@@ -25,6 +25,8 @@ import {checkTrialLog,checkIntakeScopes} from './trial-log.mjs';
 import {checkFolios,checkPublicFolios} from './contract-folios.mjs';
 import {checkWordSigning} from './word-signing.mjs';
 import {checkCalendar} from './contract-calendar.mjs';
+import {checkRuleCatalog} from './rule-catalog.mjs';
+import {checkWordComments,checkPublicWordComments} from './acceptance-comments.mjs';
 import {checkSupplierPages,checkPublicSuppliers} from './supplier-pages.mjs';
 import {checkPdfCase,checkPublicPdf} from './pdf-signatures.mjs';
 import {checkEntityBrowser} from './entity-browser.mjs';
@@ -37,6 +39,8 @@ await new Promise(resolve => socket.close(resolve));
 const sampleDesk = process.argv.includes('--sample-desk');
 const product = process.argv.includes('--product');
 const publicFolios=process.argv.includes('--public-folios');
+const ruleCatalog=process.argv.includes('--rule-catalog');
+const publicWordComments=process.argv.includes('--public-word-comments');
 const publicSuppliers=process.argv.includes('--public-suppliers');
 const publicPdf=process.argv.includes('--public-pdf');
 function caseArgument(name) {
@@ -80,6 +84,7 @@ const timingCase=caseArgument('--reinspection-time-case');
 const folioCase=caseArgument('--folio-case');
 const wordCase=caseArgument('--word-signing-case');
 const calendarCase=caseArgument('--calendar-case');
+const commentCase=caseArgument('--word-comment-case');
 const supplierCase=caseArgument('--supplier-page-case');
 const pdfCase=caseArgument('--pdf-case');
 const trialCase=caseArgument('--trial-case');
@@ -94,12 +99,12 @@ const qualityImageCase = caseArgument('--quality-image-case');
 const reinspectionGap = caseArgument('--reinspection-gap-case');
 const brokenPayment = caseArgument('--payment-source-case');
 const waitingCase = caseArgument('--waiting-case');
-const seeded = [publicSuppliers,supplierCase,publicPdf,pdfCase,publicFolios,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,product,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+const seeded = [ruleCatalog,publicWordComments,commentCase,publicSuppliers,supplierCase,publicPdf,pdfCase,publicFolios,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,product,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
-const root = product || publicSuppliers || publicPdf || publicFolios ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
+const root = product || ruleCatalog || publicWordComments || publicSuppliers || publicPdf || publicFolios ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
   recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
-if (product || publicSuppliers || publicPdf || publicFolios || recoveringCase || waitingCase || legacyCase || brokenPayment) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
+if (product || ruleCatalog || publicWordComments || publicSuppliers || publicPdf || publicFolios || recoveringCase || waitingCase || legacyCase || brokenPayment) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
 if (legacyCase || brokenPayment) assert.ok(!['8000','8010'].includes(new URL(root).port));
 const children = [];
 const faults = [];
@@ -160,7 +165,13 @@ try {
   const click = (label, container='document') => evaluate('[...'+container+'.querySelectorAll("button,a")].find(b=>b.textContent==='+JSON.stringify(label)+' && b.getClientRects().length).click()');
   await call('Runtime.enable');
   await call('Page.navigate',{url:product ? root : root+'/app'});
-  if (supplierCase) {
+  if (ruleCatalog) {
+    await checkRuleCatalog({root,call,evaluate,wait});
+  } else if (commentCase) {
+    await checkWordComments({root,call,evaluate,wait},commentCase,Number(process.env.AUDIT_COMMENT_REV));
+  } else if (publicWordComments) {
+    await checkPublicWordComments({root,call,evaluate,wait});
+  } else if (supplierCase) {
     await checkSupplierPages({root,call,evaluate,wait},supplierCase,Number(process.env.AUDIT_SUPPLIER_REV));
   } else if (publicSuppliers) {
     await checkPublicSuppliers({root,call,evaluate,wait});
