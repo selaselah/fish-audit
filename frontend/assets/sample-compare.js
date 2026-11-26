@@ -1,7 +1,8 @@
 // Read the same two fixed page images at four synchronized scales.
 (() => {
-  const trigger=document.querySelector('#compare-sample'), dialog=document.querySelector('#sample-compare');
-  if (!trigger || !dialog?.showModal) return;
+  const triggers=document.querySelectorAll('#compare-sample,#compare-inspection'), dialog=document.querySelector('#sample-compare');
+  if (!triggers.length || !dialog?.showModal) return;
+  let opener;
   const zoom=dialog.querySelector('input[type=range]'), caption=dialog.querySelector('output');
   const levels=['整页','页宽','放大','原行'];
   const sheets=[...dialog.querySelectorAll('figure')].map(figure=>{
@@ -37,9 +38,8 @@
       figure.querySelector('[role=status]').hidden=true;
     }
   }
-  trigger.hidden=false;
-  trigger.addEventListener('click',()=>{
-    trigger.focus({preventScroll:true});dialog.showModal();zoom.value='2';
+  function open(event) {
+    opener=event.currentTarget; opener.focus({preventScroll:true});dialog.showModal();zoom.value='2';
     for (const sheet of sheets) {
       if (sheet.image) continue;
       const image=new Image();sheet.image=image;
@@ -48,12 +48,16 @@
       image.src=sheet.figure.dataset.image;
     }
     draw();
-  });
+  }
+  for (const trigger of triggers) {trigger.hidden=false; trigger.addEventListener('click',open);}
   zoom.addEventListener('input',draw);
   for (const button of dialog.querySelectorAll('[data-step]')) button.addEventListener('click',()=>{
     zoom.value=String(Number(zoom.value)+Number(button.dataset.step));draw();
   });
   const observer=new ResizeObserver(draw);
   for (const {canvas} of sheets) observer.observe(canvas);
-  dialog.addEventListener('close',()=>trigger.focus({preventScroll:true}));
+  dialog.addEventListener('close',()=>{
+    if (!document.querySelector('dialog[open]') && (document.activeElement===document.body || dialog.contains(document.activeElement)))
+      opener?.focus({preventScroll:true});
+  });
 })();

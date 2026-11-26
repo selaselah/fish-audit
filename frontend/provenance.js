@@ -53,23 +53,10 @@ function performanceJump(item,label) {
 
 function performanceOverview(findings, graph) {
   const overview = el('section','','performance-overview');
-  const summary = box('performance-statuses');
   const phases = findings.filter(f=>f.rule==='H04' && f.stage);
-  for (const [rule,label] of [['H01','签署与生效'],['H02','交付验收']]) {
-    const item = findings.find(f=>f.rule===rule);
-    if (item) summary.append(performanceJump(item,label));
-  }
   const plan = findings.find(f=>f.rule==='H03');
-  if (plan) {
-    let label = plan.contract_comments && !plan.contract_comments.whole ? '付款安排' : '付款期次待核';
-    if (plan.status==='ok') {
-      if (phases.length>1) label = '分 '+phases.length+' 期付款';
-      else if (phases.length===1 && Number(phases[0].stage.share)===100) label = '单期全额付款';
-    }
-    summary.append(performanceJump(plan,label));
-  }
   overview.setAttribute('aria-label','履约结论与期次');
-  overview.append(summary);
+  overview.append(PerformanceIndex.overview(findings,graph,state.bundle.rev));
   const effect=findings.find(f=>f.rule==='H01');
   const signatures=WordSigning.panel(effect,graph,findings,state.bundle?.report.calls.pages) ||
     PdfSignatures.panel(effect,graph,findings,state.bundle?.report.calls.pages,state.bundle?.report.policy);

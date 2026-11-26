@@ -50,7 +50,7 @@ async function checkSampleReader({root,call,evaluate,wait}) {
   const records=[['d04/p1/f8','9','合格'],['d04/p1/f10','11','柜温不高于4℃'],['d04/p1/f11','12','柜温8℃']];
   for (const width of [1440,1024,820,768,390,320]) {
     await call('Emulation.setDeviceMetricsOverride',{width,height:width<600?844:900,deviceScaleFactor:1,mobile:width<600});
-    const opener=width<600?'.workflow-image':'.evidence-note .open-sample-review';
+    const opener=width<600?'#inspection-readings [data-ref="d04/p1/f11"]':'.evidence-note .open-sample-review';
     await evaluate('document.querySelector('+JSON.stringify(opener)+').click()');
     const canvas=inside('canvas');
     await wait(dialog+'.open && '+canvas+'.dataset.fact==="d04/p1/f11"','public archived page ready');
@@ -84,7 +84,7 @@ async function checkSampleReader({root,call,evaluate,wait}) {
 async function checkSigningSample({root,call,evaluate,wait}) {
   const q = s=>'document.querySelector('+JSON.stringify(s)+')';
   const dialog = q('#sample-review'), canvas = q('#sample-review canvas');
-  const signingTab = q('#scene-tab-signing'), acceptanceTab = q('#scene-tab-acceptance');
+  const signingTab = q('#scene-tab-signing'), acceptanceTab = q('#scene-tab-inspection');
   for (const [path,hash] of [
     ['/assets/showcase-signing-page.jpg','5bcc03f483827ae679d14455dec8c3e8a85b04dd8b218c197417c2cfd57988fc'],
     ['/showcase/signing-contract.pdf','f5d63eb3c3630fe538e409a55df09b641ab4b9b9987136bdd19f3a2d3ff4390d']
@@ -97,7 +97,9 @@ async function checkSigningSample({root,call,evaluate,wait}) {
   for (const width of [320,390,600,768,1024,1440]) {
     await call('Emulation.setDeviceMetricsOverride',{width,height:width<600?844:900,deviceScaleFactor:1,mobile:width<600});
     await evaluate(acceptanceTab+'.focus()');
-    await call('Input.dispatchKeyEvent',{type:'keyDown',key:'ArrowRight',code:'ArrowRight'});
+    const back=width>=961?'ArrowUp':'ArrowLeft', ahead=width>=961?'ArrowDown':'ArrowRight';
+    await wait(q('.scene-tabs')+'.getAttribute("aria-orientation")==='+JSON.stringify(width>=961?'vertical':'horizontal'),'case tabs orientation');
+    await call('Input.dispatchKeyEvent',{type:'keyDown',key:back,code:back});
     assert.equal(await evaluate('document.activeElement.id'),'scene-tab-signing');
     assert.equal(await evaluate(signingTab+'.getAttribute("aria-selected")'),'true');
     assert.equal(await evaluate(q('#scene-signing mark')+'.textContent'),'杭州分公司');
@@ -119,8 +121,9 @@ async function checkSigningSample({root,call,evaluate,wait}) {
       await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
       await wait('!'+dialog+'.open && document.activeElement==='+source,'focus back on signed contract row');
     }
-    await evaluate(signingTab+'.focus()'); await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Home',code:'Home'});
-    await evaluate(q('.workflow-image')+'.click()');
+    await evaluate(signingTab+'.focus()'); await call('Input.dispatchKeyEvent',{type:'keyDown',key:ahead,code:ahead});
+    assert.equal(await evaluate('document.activeElement.id'),'scene-tab-inspection');
+    await evaluate(q('#inspection-readings [data-ref="d04/p1/f11"]')+'.click()');
     await wait(canvas+'.dataset.fact==="d04/p1/f11" && '+q('#sample-review-title')+'.textContent==="验收报告"','switch to other archived original');
     await evaluate(dialog+'.close()');
   }

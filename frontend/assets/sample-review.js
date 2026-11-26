@@ -14,6 +14,20 @@
     calendar:{title:'采购合同',version:'合成采购 · R6',image:'/assets/showcase-calendar-page.jpg',pdf:'/showcase/calendar-contract.pdf',
       lines:[...document.querySelectorAll('#signing-calendar .public-calendar-dates [data-ref], #signing-calendar .public-signing-lines [data-ref]')].map(describe)}
   };
+  const standard=document.querySelector('#sample-compare figure[data-fact="d02/p1/f13"]');
+  samples.standard={title:'采购合同',version:'合成采购 · R8',image:standard.dataset.image,pdf:'/showcase/contract.pdf',
+    lines:[{ref:standard.dataset.fact,line:'14',rect:standard.dataset.rect,label:'约定验收标准',value:'柜温不高于4℃'}]};
+  const strips=[...document.querySelectorAll('.temperature-line')];
+  const widest=Math.max(...strips.map(strip=>Number(strip.getAttribute('width'))));
+  for (const strip of strips) strip.style.setProperty('--relative-width',100*Number(strip.getAttribute('width'))/widest+'%');
+  for (const source of document.querySelectorAll('.temperature-originals [data-ref]')) {
+    const documentSample=samples[source.dataset.sample || 'acceptance'];
+    const line=documentSample.lines.find(l=>l.ref===source.dataset.ref);
+    if (!line || new URL(source.href).pathname!==documentSample.pdf) continue;
+    const [left,top,right,bottom]=line.rect.split(',').map(Number), mark=source.querySelector('.temperature-sheet i');
+    Object.assign(mark.style,{left:left*100+'%',top:top*100+'%',width:(right-left)*100+'%',height:(bottom-top)*100+'%'});
+    mark.hidden=false;
+  }
   const modes=[...dialog.querySelectorAll('[data-scale]')];
   const canvas=dialog.querySelector('canvas'), status=dialog.querySelector('[role=status]');
   const context=canvas.getContext('2d');
@@ -131,7 +145,7 @@
     });
   }
   dialog.addEventListener('close',()=>{
-    if (!dialog.open && (document.activeElement===document.body || dialog.contains(document.activeElement)))
+    if (!document.querySelector('dialog[open]') && (document.activeElement===document.body || dialog.contains(document.activeElement)))
       opener?.focus({preventScroll:true});
   });
 })();

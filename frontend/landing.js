@@ -35,7 +35,8 @@ if (!restoreWorkspaceLink()) {
     tabs.forEach((tab, index) => {
       tab.addEventListener('click', () => selectTab(tab,true));
       tab.addEventListener('keydown', event => {
-        const positions = {ArrowLeft: (index + tabs.length - 1) % tabs.length, ArrowRight: (index + 1) % tabs.length, Home: 0, End: tabs.length - 1};
+        const vertical=tab.parentElement.getAttribute('aria-orientation')==='vertical';
+        const positions = {[vertical?'ArrowUp':'ArrowLeft']: (index + tabs.length - 1) % tabs.length, [vertical?'ArrowDown':'ArrowRight']: (index + 1) % tabs.length, Home: 0, End: tabs.length - 1};
         if (!(event.key in positions)) return;
         event.preventDefault();
         const next = tabs[positions[event.key]];
@@ -51,8 +52,14 @@ if (!restoreWorkspaceLink()) {
   const contractExample=document.getElementById('signing-example');
   const inspectionExample=document.getElementById('inspection-example');
   const paymentExample=document.getElementById('payment-example');
+  const desktopScenes=matchMedia('(min-width:961px)');
+  const sceneOrientation=()=>scenes.setAttribute('aria-orientation',desktopScenes.matches?'vertical':'horizontal');
+  sceneOrientation(); desktopScenes.addEventListener('change',sceneOrientation);
+  for (const [i,select] of [contractExample,inspectionExample,paymentExample].entries()) {
+    sceneTabs[i].querySelector('small').textContent=select.options.length+' 个场景';
+  }
   const examples={company:{scene:'signing',revision:9},word:{scene:'word-signing',revision:6},calendar:{scene:'contract-dates',revision:6},pdf:{scene:'pdf-signing'}};
-  const inspectionRoutes={equipment:'inspection',named:'named-inspection',supplier:'suppliers',comments:'word-comments'};
+  const inspectionRoutes={readings:'acceptance',equipment:'inspection',named:'named-inspection',supplier:'suppliers',comments:'word-comments'};
   function sceneAddress(name) {
     const url=new URL(location.href);
     const scene=name==='inspection'?inspectionRoutes[inspectionExample.value]:name==='folios'?({comments:'contract-comments',reference:'payment-acceptance',timing:'signer-timing',clock:'signer-clock',proof:'payment-proof',folios:'folios'}[paymentExample.value]):name;
@@ -126,13 +133,13 @@ if (!restoreWorkspaceLink()) {
     inspectionExample.value=selection; selectScene(document.getElementById('scene-tab-inspection'));
   }
   const loadedInspections=new Set();
-  const inspectionRevisions={equipment:11,supplier:5,comments:7};
+  const inspectionRevisions={readings:8,equipment:11,supplier:5,comments:7};
   async function showInspection() {
     const choice=inspectionExample.value;
     for (const key of Object.keys(inspectionRoutes)) document.getElementById('inspection-'+key).hidden=key!==choice;
     const version=document.getElementById('inspection-version');
     version.textContent=inspectionRevisions[choice]?'合成案例 · R'+inspectionRevisions[choice]:'合成案例';
-    if (inspectionScene.hidden) return;
+    if (inspectionScene.hidden || choice==='readings') return;
     if (choice==='supplier') {PublicSuppliers.open();return;}
     if (choice==='comments') {PublicAcceptanceComments.open();return;}
     if (loadedInspections.has(choice)) return;

@@ -47,9 +47,9 @@
     <div class="wrap nav-row nav__bar">
       <a class="skip skip-link" href="#main">跳到正文</a>
       <a class="fish-wordmark" href="/" aria-label="Fish Audit 产品首页"><img src="/assets/fish-mark.png" width="36" height="36" alt="">Fish Audit</a>
-      <nav class="section-nav" aria-label="产品导航"><a href="#payments">分期案例</a><a href="#workflow">审计流程</a></nav>
+      <nav class="section-nav" aria-label="产品导航"><a href="#payments">分期案例</a><a href="#workflow">审计案例</a></nav>
       <div class="nav-actions"><a class="login-link" href="/app#account">企业登录</a><a class="button compact" href="/app">进入工作台</a>
-        <details class="mobile-menu"><summary>菜单</summary><nav aria-label="移动产品导航"><a href="#payments">分期案例</a><a href="#workflow">审计流程</a><a href="/app#account">企业登录</a></nav></details>
+        <details class="mobile-menu"><summary>菜单</summary><nav aria-label="移动产品导航"><a href="#payments">分期案例</a><a href="#workflow">审计案例</a><a href="/app#account">企业登录</a></nav></details>
       </div>
     </div>
   </header>
@@ -59,7 +59,7 @@
         <div class="hero-copy hero-text">
           <h1 id="hero-title">中小企业的<br><em>AI 财务审计</em></h1>
           <p class="lead">核对合同生效、交付验收和分期付款。每项发现都可回到原件。</p>
-          <div class="hero-actions"><a class="button" href="/app">进入工作台</a><a class="text-link" href="/?scene=payment-proof#workflow">试核一笔回单 <i aria-hidden="true" class="ui-glyph ic-arrows-angle-expand"></i></a></div>
+          <div class="hero-actions"><a class="button" href="/app">进入工作台</a><a class="text-link" href="#workflow">试核采购原件 <i aria-hidden="true" class="ui-glyph ic-arrows-angle-expand"></i></a></div>
           <p class="formats" aria-label="支持上传的资料格式">PDF（含扫描件） · 照片 · Word</p>
         </div>
         <div class="specimen document-mat app-frame" data-visual id="sample" role="region" aria-label="交互演示，切换文件核对证据">
@@ -134,19 +134,15 @@
     </section>
     <section class="workflow" id="workflow" aria-labelledby="workflow-title">
       <div class="wrap section-inner">
-        <div class="section-copy"><h2 id="workflow-title">审计一笔采购</h2><p>查看逐页处理进度，核对疑点后签收底稿。</p>
-          <div class="workflow-actions"><a class="button" href="/app?new=contract">新建合同审计</a><a class="text-link" href="/?scene=signer-clock#workflow">试核同日扣款</a></div>
+        <div class="section-copy"><h2 id="workflow-title">采购审计案例</h2><p>从一项疑点出发，打开合成原件亲自核对。</p>
+          <div class="scene-tabs" role="tablist" aria-label="选择审计主题" hidden>
+            <button type="button" id="scene-tab-signing" role="tab" aria-selected="false" aria-controls="scene-signing" tabindex="-1"><i class="ui-glyph ic-journal-text" aria-hidden="true"></i><strong>签署与生效</strong><small></small></button>
+            <button type="button" id="scene-tab-inspection" role="tab" aria-selected="true" aria-controls="scene-inspection"><i class="ui-glyph ic-clipboard-check" aria-hidden="true"></i><strong>交付验收</strong><small></small></button>
+            <button type="button" id="scene-tab-folios" role="tab" aria-selected="false" aria-controls="scene-folios" tabindex="-1"><i class="ui-glyph ic-receipt" aria-hidden="true"></i><strong>分期与付款</strong><small></small></button>
+          </div>
+          <div class="workflow-actions"><a class="text-link" href="/app?new=contract">新建合同审计 <i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i></a></div>
         </div>
         <div class="workflow-demo">
-          <div class="scene-tabs" role="tablist" aria-label="选择核图案例" hidden>
-            <button type="button" id="scene-tab-acceptance" role="tab" aria-selected="true" aria-controls="scene-acceptance">验收读数</button>
-            <button type="button" id="scene-tab-signing" role="tab" aria-selected="false" aria-controls="scene-signing" tabindex="-1">合同生效</button>
-            <button type="button" id="scene-tab-inspection" role="tab" aria-selected="false" aria-controls="scene-inspection" tabindex="-1">采购验收</button>
-            <button type="button" id="scene-tab-folios" role="tab" aria-selected="false" aria-controls="scene-folios" tabindex="-1">付款条款</button>
-          </div>
-          <div id="scene-acceptance" role="tabpanel" aria-labelledby="scene-tab-acceptance">
-            <a class="workflow-image open-sample-review" href="/showcase/acceptance.pdf" target="_blank" rel="noopener" aria-label="核对这张合成验收报告"><img src="/assets/review-sample.webp" width="1360" height="819" loading="lazy" alt="核图工作台在验收单上定位到实测柜温 8℃ 的原行"><span><i class="ui-glyph ic-eye" aria-hidden="true"></i>核对这张验收单</span></a>
-          </div>
           <div id="scene-signing" class="signing-sample" role="tabpanel" aria-labelledby="scene-tab-signing" hidden>
             <div class="signing-sample-header"><span><i class="ui-glyph ic-journal-text" aria-hidden="true"></i> 采购合同</span>
               <label id="signing-example-choice" hidden><span class="sr-only">合同生效案例</span><select id="signing-example"><option value="company">用印单位</option><option value="word">文字签章</option><option value="calendar">生效日冲突</option><option value="pdf">PDF 电子签名</option></select></label>
@@ -199,12 +195,28 @@
               <div class="pdf-demo-view"><a href="/showcase/signature-earlier.pdf">打开签后修订的水印合同</a></div>
             </div>
           </div>
-          <div id="scene-inspection" class="inspection-sample" role="tabpanel" aria-labelledby="scene-tab-inspection" hidden>
+          <div id="scene-inspection" class="inspection-sample" role="tabpanel" aria-labelledby="scene-tab-inspection">
             <div class="signing-sample-header"><span><i class="ui-glyph ic-clipboard-check" aria-hidden="true"></i> 采购验收</span>
               <label id="inspection-example-choice" hidden><span class="sr-only">选择采购验收案例</span>
-                <select id="inspection-example"><option value="equipment">设备抽检</option><option value="named">合同指定抽检</option><option value="supplier">供货主体</option><option value="comments">Word 审阅批注</option></select></label>
-              <small id="inspection-version">合成案例 · R11</small></div>
-            <div id="inspection-equipment"><h3>冷藏柜采购 · 第二期验收款</h3>
+                <select id="inspection-example"><option value="readings">实测温度超限</option><option value="equipment">设备抽检</option><option value="named">合同指定抽检</option><option value="supplier">供货主体</option><option value="comments">Word 审阅批注</option></select></label>
+              <small id="inspection-version">合成案例 · R8</small></div>
+            <div id="inspection-readings">
+              <h3>合同标准与验收实测</h3>
+              <div class="temperature-originals" data-visual>
+                <a class="open-sample-review" data-sample="standard" data-ref="d02/p1/f13" href="/showcase/contract.pdf#page=1" target="_blank" rel="noopener">
+                  <span class="temperature-location"><strong>采购合同</strong><small>第 1 页 · 第 14 行</small><i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i></span>
+                  <span class="temperature-mat" aria-hidden="true"><span class="temperature-sheet"><img src="/assets/temperature-contract-thumb.webp" width="320" height="453" loading="lazy" alt=""><i hidden></i></span></span>
+                  <img class="temperature-line" src="/assets/showcase-contract-line.png" width="540" height="47" loading="lazy" alt="约定验收标准：柜温不高于4℃">
+                </a>
+                <a class="open-sample-review" data-ref="d04/p1/f11" href="/showcase/acceptance.pdf#page=1" target="_blank" rel="noopener">
+                  <span class="temperature-location"><strong>验收报告</strong><small>第 1 页 · 第 12 行</small><i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i></span>
+                  <span class="temperature-mat" aria-hidden="true"><span class="temperature-sheet"><img src="/assets/temperature-acceptance-thumb.webp" width="320" height="453" loading="lazy" alt=""><i hidden></i></span></span>
+                  <img class="temperature-line" src="/assets/showcase-acceptance-line.png" width="344" height="47" loading="lazy" alt="实测结果：柜温8℃">
+                </a>
+              </div>
+              <div class="temperature-review"><strong><i class="finding-dot issue" aria-hidden="true"></i>实测超出合同上限</strong><button type="button" id="compare-inspection" aria-controls="sample-compare" aria-haspopup="dialog" hidden><i class="ui-glyph ic-layout-sidebar-inset-reverse" aria-hidden="true"></i>原件对照</button></div>
+            </div>
+            <div id="inspection-equipment" hidden><h3>冷藏柜采购 · 第二期验收款</h3>
               <div id="inspection-demo"><a href="/showcase/inspection-acceptance.pdf" target="_blank" rel="noopener">查看演练验收单</a></div></div>
             <div id="inspection-named" hidden><h3>冷藏柜采购 · 指定设备验收</h3>
               <div id="named-inspection-demo"><a href="/showcase/named-inspection-contract.pdf" target="_blank" rel="noopener">查看演练合同中的必检清单</a></div></div>
@@ -230,12 +242,6 @@
             </div>
           </div>
         </div>
-        <ol class="process-list">
-          <li><i aria-hidden="true" class="ui-glyph ic-paperclip"></i><h3>提交资料</h3></li>
-          <li><i aria-hidden="true" class="ui-glyph ic-diagram-3"></i><h3>逐页解析与建图</h3></li>
-          <li><i aria-hidden="true" class="ui-glyph ic-eye"></i><h3>核对疑点</h3></li>
-          <li><i aria-hidden="true" class="ui-glyph ic-clipboard-check"></i><h3>人工签收</h3></li>
-        </ol>
       </div>
     </section>
   </main>

@@ -15,7 +15,13 @@ function contractPreview(report, task) {
   panel.setAttribute('aria-label','合同履约速览');
   const receiptCheck=acceptance.inspection_coverage?jump(acceptance,'验收设备','preview-check','inspection'):jump(acceptance,'交付验收','preview-check');
   panel.append(box('preview-checks',jump(signing,'合同生效','preview-check'),receiptCheck));
-  const header=box('preview-plan-head',el('h3','付款安排'),jump(plan,'全部条款','preview-plan-jump'));
+  const payment=PerformanceIndex.groups(findings).find(g=>g.id==='payment');
+  const summary=PerformanceIndex.count(payment);
+  const paymentLink=Team.paperLink(summary,task.id,'scope-preview-link',
+    new URLSearchParams({rev:String(task.rev),view:'payment-checks'}));
+  paymentLink.setAttribute('aria-label','查看分期与付款检查，'+summary);
+  paymentLink.append(glyph('arrows-angle-expand'));
+  const header=box('preview-plan-head',box('scope-preview-heading',el('h3','分期与付款'),paymentLink),jump(plan,'条款完整性','preview-plan-jump'));
   panel.append(header);
   const phases=findings.filter(f=>f.rule==='H04' && f.stage), index=graphIndex(graph);
   if (!phases.length || phases.some(f=>!index.facts.has(f.stage.clause_ref) || !traceReferences(graph,f).includes(f.stage.clause_ref))) return panel;

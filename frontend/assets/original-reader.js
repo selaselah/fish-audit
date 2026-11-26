@@ -18,6 +18,12 @@ const OriginalReader = (() => {
     document.querySelector('#page-content').replaceChildren();
   }
   dialog.addEventListener('close',()=>{ if (!dialog.open) clear(); });
+  dialog.addEventListener('keydown',event=>{
+    if (event.key==='Escape' && !event.defaultPrevented && !event.isComposing &&
+        document.querySelector('dialog[open]:not(#page-dialog)')) {
+      event.preventDefault(); event.stopPropagation(); dialog.close();
+    }
+  });
 
   function sync() {
     if (active && !active.current()) {

@@ -33,11 +33,11 @@ const PaymentProof = (() => {
     }
     return rects;
   }
-  function panel(report) {
-    if (report?.policy.payment_execution!==format || report.graph.payment_execution_sources?.format!==format) return null;
+  function entries(report,findings=report?.findings || []) {
+    if (report?.policy.payment_execution!==format || report.graph.payment_execution_sources?.format!==format) return [];
     const graph=report.graph, index=graphIndex(graph), ledger=graph.payment_execution_sources, all=sources(graph);
     const items=[];
-    for (const finding of report.findings) {
+    for (const finding of findings) {
       const basis=finding.execution_basis;
       if (finding.rule!=='H05' || !basis || !finding.scope.includes(basis.unit)) continue;
       const unit=ledger.units.find(u=>u.unit===basis.unit);
@@ -71,6 +71,10 @@ const PaymentProof = (() => {
       items.push({key:finding.id,clause:picked?.clause_ref,stage:picked?.name,
         name:file+' · '+(picked?picked.name:'期次待核'),state,rows,...PaymentProofCard.pairs(rows,state)});
     }
+    return items;
+  }
+  function panel(report) {
+    const items=entries(report);
     return items.length?PaymentProofCard.render(items,'payment-proof'):null;
   }
   function jump(finding,label='核对扣款凭证') {
@@ -81,5 +85,5 @@ const PaymentProof = (() => {
     button.setAttribute('aria-controls','payment-proof');
     return button;
   }
-  return {panel,jump,sources,rectangles};
+  return {panel,jump,sources,rectangles,entries};
 })();

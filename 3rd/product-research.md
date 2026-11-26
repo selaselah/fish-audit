@@ -143,3 +143,9 @@ Fish Audit 在同一检索范围下提供建议看板与任务台账。卡片据
 2026-11-25 复查。Ramp 的账单页将缺资料、已批准待排期、已发起和已支付列为不同状态。FloQast 的产品说明把经办输出可追溯与人工最终签核列为两项能力。Fish Audit 针对合同履约采用两项判断，分别展示当前付款条件和当时实付时点。日期控件、证据对照以及中文风险文案由项目自行设计。[Ramp 的账单和付款状态](https://support.ramp.com/managing-bills-and-payments-on-bill-pay/) · [FloQast 的人工签核与可追溯输出说明](https://www.floqast.com/) · [项目实拍](../docs/interaction-design/receipt-timeline.webp)
 
 同一验收单既有交付结论又有付款意见时，本项目把两个原件片段并排，保留页码和行号供审计员核查。这个交互借鉴了 Dext 的原件分栏阅读和 Ramp 对审批、支付状态的区分。国内采购控制依据另列于审计方法。[Dext 的原件分栏交互](https://help.dext.com/en/articles/760441-how-to-customise-the-line-item-editor-in-dext) · [Ramp 的账单状态](https://support.ramp.com/managing-bills-and-payments-on-bill-pay/) · [本项目交互](../docs/interaction-design/README.md#验收单上的付款意见)
+
+## 从一项检查回到多份原件
+
+DataSnipper 的 Alwin 复核界面能把结果中的一个单元格定位到来源文件。一个结果对应多处引文时，可以按文件列出证据并切换原页。Fish Audit 的合同履约底稿采用同样的查看顺序。先选本版的一项检查，再选它实际引用的字段或两条需要对照的原行。页图、检查状态和人工确认状态各自标注。[DataSnipper 的任务结果复核说明](https://knowledge.datasnipper.com/en/articles/882479-how-to-review-a-task-s-output-in-alwin)
+
+Fieldguide 允许按状态筛选请求。Fish Audit 的检查面板默认列出待核项，同时保留查看本组全部结果的入口。当两种筛选会返回同一组记录时，界面收起筛选器。[Fieldguide 的请求管理界面](https://help.fieldguide.io/en/articles/7207259-managing-requests)

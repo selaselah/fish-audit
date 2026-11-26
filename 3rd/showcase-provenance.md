@@ -96,6 +96,13 @@ PDF 的 SHA-256 为 `c9751b24f4902a8f18e963b86b3f2c6b1eeaf5562483814be397165e9a0
 | [合同原行](../frontend/assets/showcase-contract-line.png) | `d02/p1/f13`，第 14 行 | `aa535f590439173143a8a0654f3c4ed2f482477502cf247b7b2438277394dfdb` | 120，1236，660，1283 |
 | [验收原行](../frontend/assets/showcase-acceptance-line.png) | `d04/p1/f11`，第 12 行 | `fb4799101ab7c9ee46baa4705ed0712abeede3e50e22d8f0b8aebfb5a9ef27bd` | 121，1096，465，1143 |
 
+2026-11-26 核对 R8 的同一组原件时，两份 PDF 和两张归档页图的 SHA-256 均与上表对应资料一致。首页「交付验收」用 Pillow 从 1547 × 2190 的归档页图等比缩小到 320 × 453，使用 Lanczos 采样、WebP 质量 85。缩略图上的框使用该版字段记录的原行坐标，框外的放大引文取上表的裁片。两条裁片在同一屏宽使用相同的缩放比例。
+
+| 页面缩略图 | SHA-256 |
+| --- | --- |
+| [采购合同](../frontend/assets/temperature-contract-thumb.webp) | `c67e92566bbbafed3ac36b2ddcc1b95048906aa85c7a4b4080ee3c8c41f68ac6` |
+| [验收报告](../frontend/assets/temperature-acceptance-thumb.webp) | `4db7838ac99fd99c00389778077d9638968da482dac35d37f8dc3966d12ab20c` |
+
 2026-11-25 已将以下三个展示文件与归档原件逐字节比对，并与 R7 的 `graph.documents[].sha256` 核对。三份 PDF 均为一页，保留原水印。
 
 | 展示文件 | R7 单据 | 字节数 | SHA-256 |

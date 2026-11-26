@@ -1498,12 +1498,17 @@ async function refresh() {
       if (epoch !== state.epoch) return;
       state.detail = data; state.bundle = rev ? bundle : null;
       const requestedFinding = route.params.get('finding');
+      const requestedView=route.params.get('view');
+      const requestedScope=requestedView?.endsWith('-checks') && state.bundle &&
+        PerformanceIndex.groups(bundle.report.findings).find(g=>g.id+'-checks'===requestedView);
       let focusFinding;
       if (requestedFinding && state.openedCitation!==location.hash && state.bundle?.report.findings.some(f=>f.id===requestedFinding)) {
         state.openedCitation=location.hash; state.traceKey=data.id+'@'+rev; state.traceId=requestedFinding;
         const traced = graphIndex(bundle.report.graph).nodes.has('finding/'+requestedFinding);
         if (traced) graphIndex(bundle.report.graph).graphBrowseMode='findings';
         state.tab=traced?'graph':'report'; focusFinding=traced?'#trace-select':'[data-finding="'+requestedFinding+'"]';
+      } else if (requestedScope && state.openedCitation!==location.hash) {
+        state.openedCitation=location.hash; state.tab='report'; focusFinding='[data-audit-scope="'+requestedScope.id+'"]';
       } else if (route.params.get('view')==='replay' && state.openedCitation!==location.hash && state.bundle) {
         state.openedCitation=location.hash; state.tab='activity'; focusFinding='.rule-replay button';
       } else if (['reinspection','trial'].includes(route.params.get('view')) && state.openedCitation!==location.hash &&
@@ -1546,7 +1551,9 @@ async function refresh() {
       renderCase(Boolean(focusFinding));
       if (focusFinding) {
         const target = $(focusFinding);
-        if (target?.id==='payment-proof') {
+        if (target?.dataset.auditScope) {
+          target.focus(); target.click();
+        } else if (target?.id==='payment-proof') {
           if (route.params.has('receipt')) target.dispatchEvent(new CustomEvent('select-proof',{detail:route.params.get('receipt')}));
           revealPaperTarget(target);
         } else if (target?.id==='signer-timing') {

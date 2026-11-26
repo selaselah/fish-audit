@@ -13,6 +13,7 @@ import {checkSignerTiming,checkSignerClock} from './signer-timing.mjs';
 import {checkPaymentProof} from './payment-proof.mjs';
 import {checkOriginalReader} from './original-reader.mjs';
 import {checkProduct, checkReviewDesign} from './product.mjs';
+import {checkPerformanceIndex,checkPublicTopics} from './performance-index.mjs';
 import {checkEvidenceCompare,checkMandateCompare,checkPhaseEvidence,checkPaymentChange} from './evidence-compare.mjs';
 import {checkPaymentOpinions} from './payment-opinions.mjs';
 import {checkRelease} from './payment-release.mjs';
@@ -118,12 +119,13 @@ const originalCase=caseArgument('--original-reader-case');
 const publicBank=process.argv.includes('--public-bank-acceptance');
 const previewQueue=process.argv.includes('--preview-queue');
 const publicTest=publicProof || publicClock || publicTiming || publicBank || product || ruleCatalog || publicInspection || publicContractComments || publicWordComments || publicSuppliers || publicPdf || publicFolios;
-const seeded = [publicTest,proofCase,signerClock,signerTiming,originalCase,bankAcceptance,previewQueue,contractCommentCase,commentCase,supplierCase,pdfCase,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+const scopeCase=caseArgument('--scope-case'), publicTopics=process.argv.includes('--public-audit-topics');
+const seeded = [publicTopics,scopeCase,publicTest,proofCase,signerClock,signerTiming,originalCase,bankAcceptance,previewQueue,contractCommentCase,commentCase,supplierCase,pdfCase,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
-const root = originalCase ? process.env.AUDIT_READER_ORIGIN || 'http://127.0.0.1:8000' : publicTest ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
+const root = originalCase ? process.env.AUDIT_READER_ORIGIN || 'http://127.0.0.1:8000' : publicTest || publicTopics ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
   recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
-if (originalCase || publicTest || recoveringCase || waitingCase || legacyCase || brokenPayment) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
+if (originalCase || publicTest || publicTopics || recoveringCase || waitingCase || legacyCase || brokenPayment) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
 if (legacyCase || brokenPayment) assert.ok(!['8000','8010'].includes(new URL(root).port));
 const children = [];
 const faults = [];
@@ -184,7 +186,11 @@ try {
   const click = (label, container='document') => evaluate('[...'+container+'.querySelectorAll("button,a")].find(b=>b.textContent==='+JSON.stringify(label)+' && b.getClientRects().length).click()');
   await call('Runtime.enable');
   await call('Page.navigate',{url:product ? root : root+'/app'});
-  if (proofCase || publicProof) {
+  if (scopeCase) {
+    await checkPerformanceIndex({root,call,evaluate,wait},scopeCase,Number(process.env.AUDIT_SCOPE_REV));
+  } else if (publicTopics) {
+    await checkPublicTopics({root,call,evaluate,wait});
+  } else if (proofCase || publicProof) {
     await checkPaymentProof({root,call,evaluate,wait},proofCase);
   } else if (signerClock || publicClock) {
     await checkSignerClock({root,call,evaluate,wait},signerClock,Number(process.env.AUDIT_SIGNER_REV));
@@ -296,8 +302,9 @@ try {
     assert.equal(await evaluate('document.querySelectorAll(".phase-summary li").length'),0);
     const missingPlan=report.findings.find(f=>f.rule==='H03');
     assert.equal(missingPlan.status,'missing');
-    const planButton='.performance-statuses [data-jump-finding="'+missingPlan.id+'"]';
-    assert.ok(await evaluate('document.querySelector('+JSON.stringify(planButton)+').textContent.includes("证据不足")'));
+    await evaluate('document.querySelector("[data-audit-scope=payment]").click()');
+    assert.ok(await evaluate('document.querySelector('+JSON.stringify('.scope-check[data-check="'+missingPlan.id+'"]')+').textContent.includes("证据不足")'));
+    await evaluate('document.querySelector("#performance-index").close()');
     for (const width of [1280, 320]) {
       await call('Emulation.setDeviceMetricsOverride', {width, height:900, deviceScaleFactor:1, mobile:false});
       await call('Page.navigate', {url:root+'/workpaper/'+qualityImageCase+'?'+new URLSearchParams({rev:task.rev,fact:hold.fact})});
@@ -344,9 +351,15 @@ try {
       await evaluate(button+'.click()');
       assert.equal(await evaluate('document.activeElement.dataset.finding'),item.id);
     };
-    for (const f of report.findings.filter(f=>['H01','H02','H03'].includes(f.rule))) await jump(summary,f);
-    const planHeading=plan.status!=='ok'?'付款期次待核':phases.length===1?'单期全额付款':'分 '+phases.length+' 期付款';
-    assert.equal(await evaluate(summary+'.querySelector('+JSON.stringify('[data-jump-finding="'+plan.id+'"] span')+').textContent'),planHeading);
+    for (const f of report.findings.filter(f=>['H01','H02','H03'].includes(f.rule))) {
+      const scope={H01:'contract',H02:'acceptance',H03:'payment'}[f.rule];
+      await evaluate('document.querySelector("[data-audit-scope='+scope+']").click()');
+      await evaluate('document.querySelector(".scope-filters button:last-child").click()');
+      await evaluate('document.querySelector('+JSON.stringify('.scope-check[data-check="'+f.id+'"]')+').click()');
+      assert.equal(await evaluate('document.querySelector(".scope-check-state .tag").dataset.state'),f.status);
+      await evaluate('document.querySelector(".scope-actions button:last-child").click()');
+      assert.equal(await evaluate('document.activeElement.dataset.finding'),f.id);
+    }
     assert.equal(await evaluate(summary+'.querySelectorAll(".phase-summary li").length'),phases.length);
     for (const phase of phases) {
       const row=summary+'.querySelector('+JSON.stringify('[data-phase-finding="'+phase.id+'"]')+')';
