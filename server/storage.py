@@ -929,10 +929,11 @@ class Store:
         chronology = any(f.get("date_checks") for f in paper["findings"])
         invoice_terms_checked = any(f.get("invoice_receipt") for f in paper["findings"])
         model_checked = any(f.get("equipment_models") for f in paper["findings"])
+        inspection_checked = any(f.get("inspection_coverage") for f in paper["findings"])
         folios_checked = any(f.get("contract_folios") for f in paper["findings"])
         multi_transfers = any(f.get("stage_payments") for f in paper["findings"])
         packets_checked = bool(graph.get("receipt_packet_sources",{}).get("packets")) and any(f["rule"]=="H02" for f in paper["findings"])
-        if graph.get("profile")!=BANK and (contract_comments_checked or comments_checked or folios_checked or changed or named_acceptance or chronology or batches or packets_checked or multi_transfers or invoice_terms_checked or model_checked or effect_checked or warranty_checked or windows_checked or reservations_checked or any(f.get("delegations") for f in paper["findings"])):
+        if graph.get("profile")!=BANK and (contract_comments_checked or comments_checked or folios_checked or changed or named_acceptance or chronology or batches or packets_checked or multi_transfers or invoice_terms_checked or model_checked or inspection_checked or effect_checked or warranty_checked or windows_checked or reservations_checked or any(f.get("delegations") for f in paper["findings"])):
             if not payment_sources or len(payment_sources)!=1:
                 raise CaseError("签收前需重新核对合同及所据履约附件原件。",409)
             source = payment_sources[0][0]

@@ -23,11 +23,15 @@ CASES = {
     "hot": "总表记载合格但第四台的柜温超限",
     "summary": "总表写已测四台而没有单机记录",
     "unspecified": "合同只约定抽检且未列最低台数",
+    "named-gap": "已测两台但合同点名的QC-02缺少测温记录",
+    "named-covered": "合同点名的两台设备各有合格测温记录",
+    "named-hot": "一台必检设备缺读数且另一台柜温超限",
 }
 SERIALS = ["QC-01", "QC-02", "QC-03", "QC-04"]
 NEW_FIELDS = {"性能检测要求":"inspection_requirement", "性能实测数量":"tested_quantity", "单机测温":"unit_temperature"}
 STATES = {"short":"short","complete":"covered","sample":"covered","repeat":"repeated","hot":"out_of_limit",
           "summary":"records","unspecified":"terms"}
+NAMED_STATES = {"named-gap":"named_records","named-covered":"covered","named-hot":"out_of_limit"}
 
 
 def generate(seed, mode):
@@ -36,14 +40,20 @@ def generate(seed, mode):
     folder.mkdir(parents=True, exist_ok=True)
     records = documents(code, "complete")
     requirement = "全部交付设备逐台测温"
-    if mode in ("sample", "repeat"):
+    if mode in ("sample", "repeat") or mode in NAMED_STATES:
         requirement = "至少抽检2台测温"
     elif mode == "unspecified":
         requirement = "按到货情况抽检测温"
     records["采购合同"].append(("性能检测要求", requirement))
+    if mode in NAMED_STATES:
+        records["采购合同"].append(("必检设备编号","QC-02、QC-03"))
     observed = [("QC-01","3")] if mode == "short" else [(s,"3") for s in SERIALS]
-    if mode in ("sample","unspecified"):
+    if mode in ("sample","unspecified","named-gap"):
         observed = [("QC-01","3"),("QC-03","2.5")]
+    elif mode == "named-covered":
+        observed = [("QC-02","3"),("QC-03","2.5")]
+    elif mode == "named-hot":
+        observed = [("QC-01","3"),("QC-03","8")]
     elif mode == "repeat":
         observed = [("QC-01","3"),("QC-01","2.5")]
     elif mode == "hot":
@@ -70,11 +80,19 @@ def review(cid, mode, folder, records):
         assert p["sha256"] == nodes[doc["id"]+"/p1"]["sha256"] and normalize(WATERMARK) in normalize(p["text"])
     # Older extractors stored these printed items as general observations.
     fields = NEW_FIELDS if report["policy"].get("inspection_coverage") else {key:"other" for key in NEW_FIELDS}
+    if report["policy"].get("inspection_coverage") == "inspection-coverage-v2":
+        fields = {**fields,"必检设备编号":"inspection_required_serials"}
     reconcile_training_pages(cid,folder,records,case_titles=CASES.values(),row_spacing=28,
                              field_labels={**FIELDS,"验收设备编号":"delivered_serials",**fields})
     report = check_training_watermark(cid,folder,records,confirm_printed_records(cid,folder,records))
     if report["policy"].get("inspection_coverage"):
         procedure = next(f for f in report["findings"] if f["rule"]=="H02")
+        if mode in NAMED_STATES:
+            proof = procedure["inspection_coverage"]
+            if proof["format"] == "inspection-coverage-v2":
+                assert proof["state"] == NAMED_STATES[mode] and proof["tested"] == 2, (mode,proof)
+                assert proof["named"]["missing"] == ([] if mode == "named-covered" else ["QC-02"])
+            return report
         assert procedure["inspection_coverage"]["state"] == STATES[mode], (mode,procedure["inspection_coverage"])
         stages = [f["status"] for f in report["findings"] if f["rule"]=="H04"]
         assert stages[0]=="ok" and (stages[1]=="ok")==(mode in ("complete","sample")), (mode,stages)

@@ -42,6 +42,72 @@ def findings(graph):
 
 
 class InspectionCoverageTests(unittest.TestCase):
+    def test_named_devices_follow_the_contract_and_actual_instalment(self):
+        for ids,readings,state,missing in (
+            ("QC-02、QC-03",[("QC-01","3"),("QC-03","2.5")],"named_records",["QC-02"]),
+            ("QC-02、QC-03",[("QC-02","3"),("QC-03","2.5")],"covered",[]),
+            ("QC-02、QC-03",[("QC-01","3"),("QC-03","8")],"out_of_limit",["QC-02"]),
+            ("QC-02、QC-03",[("QC-02","3"),("QC-02","3")],"repeated",["QC-03"]),
+            ("QC-02、QC-03、QC-04",[("QC-02","3"),("QC-03","3")],"named_records",["QC-04"]),
+        ):
+            with self.subTest(state=state,ids=ids):
+                graph,read = fixture(SAMPLE,2,readings,omissions=[(1,"必检设备编号："+ids)])
+                accepted,phases,payment = findings(graph)
+                check = accepted["inspection_coverage"]
+                self.assertEqual((check["state"],check["named"]["missing"]),(state,missing))
+                row = next(r for r in graph["inspection_coverage_sources"]["rows"] if r["id"]==check["named"]["row"])
+                self.assertEqual((row["facts"],read(row["doc"],row["page"]).splitlines()[row["line"]-1]),([],"必检设备编号："+ids))
+                self.assertEqual(phases[0],"ok")
+                self.assertEqual(phases[1]=="ok",state=="covered")
+                self.assertEqual(payment["status"]=="ok",state=="covered")
+                self.assertIn(row["id"],accepted["evidence"])
+                self.assertIn(row["id"],payment["evidence"])
+                prepay = next(f for f in compute(graph) if f["rule"]=="H04")
+                self.assertNotIn(row["id"],prepay["evidence"])
+
+    def test_unresolved_named_scope_retains_original_lines(self):
+        for additions,state in (
+            ([(1,"必检设备编号：QC-02、QC-02")],"named_scope"),
+            ([(1,"必检设备编号：qc-02")],"named_scope"),
+            ([(1,"指定抽检设备编号：QC-0X")],"named_scope"),
+            ([(1,"必检设备编号：QC-01或QC-03")],"named_scope"),
+            ([(1,"必检设备编号：QC-01"),(1,"必检设备编号：QC-03")],"named_scope"),
+            ([(1,"必检设备编号：QC-01"),(1,"QC-03")],"terms"),
+            ([(1,"设备指定：其中QC-03为必测设备")],"terms"),
+            ([(1,"备注：建议必检设备编号为QC-03")],"terms"),
+            ([(2,"必检设备编号：QC-03")],"terms"),
+            ([(1,"合同设备编号：QC-01、QC-02、QC-03、QC-05"),(1,"必检设备编号：QC-03")],"population"),
+        ):
+            with self.subTest(additions=additions):
+                graph,_=fixture(SAMPLE,2,[("QC-01","3"),("QC-03","3")],omissions=additions)
+                check=findings(graph)[0]["inspection_coverage"]
+                self.assertEqual((check["state"],check["status"]),(state,"missing"))
+                self.assertNotIn("named",check)
+                rows=graph["inspection_coverage_sources"]["rows"]
+                for _,line in additions:
+                    self.assertTrue(any(r["quote"]==line and r["id"] in check["evidence"] for r in rows))
+
+    def test_v1_signed_workpapers_keep_their_original_device_rules(self):
+        for named,affected in (("QC-02、QC-03",True),("QC-01、QC-03",False)):
+            graph,read = fixture(SAMPLE,2,[("QC-01","3"),("QC-03","3")],omissions=[(1,"必检设备编号："+named)])
+            old = inspection.sources(graph,read,version=inspection.LEGACY)
+            graph["inspection_coverage_sources"]=old
+            nodes,edges=inspection.source_graph(old)
+            graph["nodes"]=[n for n in graph["nodes"] if n["type"]!="inspection_line"]+nodes
+            graph["edges"]=[e for e in graph["edges"] if e["type"]!="inspection_coverage_source"]+edges
+            report={"graph":graph,"policy":{**VERSION,"profile":PERFORMANCE,"version":"2026.11.26.18","inspection_coverage":inspection.LEGACY},
+                    "findings":execute(graph,PERFORMANCE)}
+            inspection.verify(report,read)
+            self.assertEqual(findings(graph)[0]["inspection_coverage"]["state"],"covered")
+            if affected:
+                with self.assertRaisesRegex(ValueError,"重新审计"):
+                    inspection.verify(report,read,signing=True)
+                report["findings"]=[f for f in report["findings"] if f.get("stage",{}).get("name")=="第一期"]
+            inspection.verify(report,read,signing=True)
+            report["policy"]["version"]=inspection.NAMED_SINCE
+            with self.assertRaisesRegex(ValueError,"版本"):
+                inspection.verify(report,read)
+
     def test_coverage_and_independent_installments(self):
         for requirement, declared, readings, state, expected in (
             (ALL, 1, [("QC-01","3")], "short", "risk"),
