@@ -1,5 +1,13 @@
 # 本机审计接口
 
+## Word 与影像委托书
+
+从规则 `2026.11.27.04` 起，`policy.mandate_originals` 和 `graph.mandate_original_sources.format` 为 `mandate-original-execution-v1`。每条 `records[]` 绑定委托单元 `unit`、物理文件 `doc`、原件 SHA-256、相关页 `pages` 和签章观察 `fields`。状态 `word_text` 指打印页仅见排印文字，`word_visual` 指含图形等版面元素，`word_review` 指批注、修订或审阅范围待核，`photo` 指影像原件，`review` 指其他待核情况。
+
+`review` 指向这份 Word 的审阅记录，`notes` 列本单元可归属的批注，`unplaced` 为合订件中归属待核的批注数。原生批注正文、来源部件及可定位选区见 `documents[]`。影像通常没有文字层行号，物理页与字段仍可单独引用。
+
+H01 的 `delegations[].mandate_originals` 列出本侧凭证。用 `mandate_original_source` 可从单元追到凭证，用 `mandate_original_comment` 可从凭证追到归属该单元的批注。依赖该凭证的 H04、H05 通过 `supports_result` 引用它。直接批准及复核批准均重验原件。旧肯定判断涉及未经这项检查的委托书、或相关原件在签收期间发生变化时返回 HTTP 409。[核查方法](audit-method.md#word-委托书和拍照件的签发依据)
+
 ## 委托书签发凭证
 
 当 `policy.mandate_pdf` 为 `pdf-mandate-execution-v1` 时，`graph.mandate_pdf_sources.records[]` 逐份记录委托单元 `unit`、物理文件 `doc`、原件摘要 `original_sha256`、相关物理页 `pages`、委托人签章栏观察 `fields` 和嵌入式签名 `signatures`。状态 `typeset` 指仅见排印内容，`visual` 需看图核实，`current` 和 `earlier` 分别指所签的提交版和较早修订，`mismatch` 指签名校验不符，`review` 指未能完整核验。签名记录中的 `certificate_sha256` 用于辨认同一证书。
