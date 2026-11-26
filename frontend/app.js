@@ -872,6 +872,7 @@ function finding(item) {
     if (dates) node.append(dates);
   }
   if (item.payment_acceptance) node.append(PaymentAcceptance.jump(item));
+  if (item.signer_timing) node.append(SignerEvidence.jump(item));
   if (item.contract_comments) node.append(AcceptanceComments.current(state.bundle.report,'contract')?
     evidenceJump('按期核对合同付款批注','contract-comments'):el('span','合同批注来源待核','small'));
   if (item.acceptance_comments) node.append(AcceptanceComments.current(state.bundle.report)?
@@ -1518,6 +1519,9 @@ async function refresh() {
       } else if (route.params.get('view')==='inspection' && state.openedCitation!==location.hash &&
                  bundle?.report.findings.some(f=>f.rule==='H02' && f.inspection_coverage)) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#inspection-coverage';
+      } else if (route.params.get('view')==='signer-timing' && state.openedCitation!==location.hash &&
+                 bundle?.report.findings.some(f=>f.signer_timing)) {
+        state.openedCitation=location.hash; state.tab='report'; focusFinding='#signer-timing';
       } else if (route.params.get('view')==='payment-acceptance' && state.openedCitation!==location.hash &&
                  bundle?.report.findings.some(f=>f.payment_acceptance)) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#payment-acceptance';
@@ -1537,7 +1541,16 @@ async function refresh() {
       renderCase(Boolean(focusFinding));
       if (focusFinding) {
         const target = $(focusFinding);
-        if (target?.id==='payment-acceptance' && route.params.has('receipt')) {
+        if (target?.id==='signer-timing') {
+          const receipt=route.params.get('receipt');
+          if (receipt && bundle.report.findings.some(f=>f.id===receipt && f.signer_timing)) {
+            target.dispatchEvent(new CustomEvent('select-signer-payment',{detail:receipt}));
+          } else if (receipt) {
+            const note=el('p','所选回单的签认时序待核。请核对本版所列的回单。','note');
+            note.setAttribute('role','status'); target.prepend(note);
+          }
+          revealPaperTarget(target);
+        } else if (target?.id==='payment-acceptance' && route.params.has('receipt')) {
           const receipt=route.params.get('receipt');
           if (bundle.report.findings.some(f=>f.id===receipt && f.payment_acceptance)) {
             target.dispatchEvent(new CustomEvent('select-reference',{detail:receipt}));

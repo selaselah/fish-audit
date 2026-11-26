@@ -1,0 +1,62 @@
+{
+  "title": "采购合同",
+  "version": "合成采购 · R8",
+  "case_id": "ed7751a871aa4fb1a8574eddada0254b",
+  "rev": 8,
+  "report_sha256": "b0100d48118210a67d504c09dfad461ce4daaa5b5e3fc8aad1c78a1321ed15f5",
+  "image": "/assets/showcase-contract-page.jpg",
+  "pdf": "/showcase/contract.pdf",
+  "page": 1,
+  "source_sha256": "546d0efde4b8a9bc2bc501c866dedaf60a3ac20ef46cc1af63194aa75e4e1af2",
+  "page_sha256": "aa535f590439173143a8a0654f3c4ed2f482477502cf247b7b2438277394dfdb",
+  "lines": [
+    {
+      "ref": "d02/p1/f15",
+      "line": 16,
+      "label": "第一期",
+      "value": "合同生效后支付30%",
+      "rects": [
+        [
+          0.08209,
+          0.63059,
+          0.40659,
+          0.64749
+        ]
+      ],
+      "rect": "0.08209,0.63059,0.40659,0.64749",
+      "crop": "/assets/installment-clause-16.webp"
+    },
+    {
+      "ref": "d02/p1/f16",
+      "line": 17,
+      "label": "第二期",
+      "value": "最终验收合格后支付60%",
+      "rects": [
+        [
+          0.08209,
+          0.66301,
+          0.45701,
+          0.67945
+        ]
+      ],
+      "rect": "0.08209,0.66301,0.45701,0.67945",
+      "crop": "/assets/installment-clause-17.webp"
+    },
+    {
+      "ref": "d02/p1/f17",
+      "line": 18,
+      "label": "第三期",
+      "value": "质保期满后支付10%",
+      "rects": [
+        [
+          0.08209,
+          0.69498,
+          0.40659,
+          0.71142
+        ]
+      ],
+      "rect": "0.08209,0.69498,0.40659,0.71142",
+      "crop": "/assets/installment-clause-18.webp"
+    }
+  ]
+}

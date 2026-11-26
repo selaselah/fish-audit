@@ -1,0 +1,215 @@
+{
+  "case_id": "00cc3c6b67964491b6f1ba9686440062",
+  "rev": 8,
+  "report_sha256": "96de0424c44b6e4eb4fd30e86423a062865df1a02e752b5edb2ebad0bc6a210e",
+  "documents": [
+    {
+      "title": "采购合同",
+      "version": "合成采购 · R8",
+      "page": 1,
+      "pdf": "/showcase/joint-signing-contract.pdf",
+      "image": "/assets/joint-signing-contract.jpg",
+      "source_sha256": "6b0281b804d5ccea8094b7976aa9c2ad6a5cb5fd65162b0a6e5b4fbdbc423946",
+      "page_sha256": "0a63e93e5b368a76cf730d07ddf91aa394500ade67b209ddec96ed6cd9942fcd",
+      "lines": [
+        {
+          "ref": "d02/p1/f18",
+          "line": 19,
+          "label": "验收签认约定",
+          "value": "终验须由周宁、林岚共同签字确认",
+          "quote": "验收签认约定：终验须由周宁、林岚共同签字确认",
+          "rects": [
+            [
+              0.08145,
+              0.86027,
+              0.63413,
+              0.87671
+            ]
+          ],
+          "rect": "0.08145,0.86027,0.63413,0.87671"
+        },
+        {
+          "ref": "d02/p1/f16",
+          "line": 17,
+          "label": "第二期",
+          "value": "最终验收合格后支付60%",
+          "quote": "第二期：最终验收合格后支付60%",
+          "rects": [
+            [
+              0.08209,
+              0.77945,
+              0.45701,
+              0.79589
+            ]
+          ],
+          "rect": "0.08209,0.77945,0.45701,0.79589"
+        },
+        {
+          "ref": "d02/p1/f2",
+          "line": 3,
+          "label": "合同编号",
+          "value": "YL-LY-F519FBF1",
+          "quote": "合同编号：YL-LY-F519FBF1",
+          "rects": [
+            [
+              0.08145,
+              0.2137,
+              0.39948,
+              0.23059
+            ]
+          ],
+          "rect": "0.08145,0.2137,0.39948,0.23059"
+        }
+      ]
+    },
+    {
+      "title": "银行付款回单",
+      "version": "合成采购 · R8",
+      "page": 1,
+      "pdf": "/showcase/joint-signing-transfer.pdf",
+      "image": "/assets/joint-signing-transfer.jpg",
+      "source_sha256": "79416946395a9a7dbf918d8958e0665fb28da08b18267167ff9f019e46235893",
+      "page_sha256": "7eabfc9984787ceb59e9130a7e21658f23a26ff7aace39bb12fc6f6b82d086b4",
+      "lines": [
+        {
+          "ref": "d03/p1/f8",
+          "line": 9,
+          "label": "付款日期",
+          "value": "2026年9月22日",
+          "quote": "付款日期：2026年9月22日",
+          "rects": [
+            [
+              0.08209,
+              0.45662,
+              0.37492,
+              0.47306
+            ]
+          ],
+          "rect": "0.08209,0.45662,0.37492,0.47306",
+          "crop": "/assets/joint-signing-transfer-l9.webp"
+        },
+        {
+          "ref": "d03/p1/f6",
+          "line": 7,
+          "label": "款项用途",
+          "value": "第二期",
+          "quote": "款项用途：第二期",
+          "rects": [
+            [
+              0.08209,
+              0.3758,
+              0.2799,
+              0.39224
+            ]
+          ],
+          "rect": "0.08209,0.3758,0.2799,0.39224"
+        },
+        {
+          "ref": "d03/p1/f5",
+          "line": 6,
+          "label": "付款金额",
+          "value": "60,000.00",
+          "quote": "付款金额：60,000.00",
+          "rects": [
+            [
+              0.08209,
+              0.33516,
+              0.31739,
+              0.35297
+            ]
+          ],
+          "rect": "0.08209,0.33516,0.31739,0.35297"
+        }
+      ]
+    },
+    {
+      "title": "验收报告",
+      "version": "合成采购 · R8",
+      "page": 1,
+      "pdf": "/showcase/joint-signing-acceptance.pdf",
+      "image": "/assets/joint-signing-acceptance.jpg",
+      "source_sha256": "4f12811a23c04dcb0ebf37a72342459b52c7c40bbdaa1136f9b66c785131ebea",
+      "page_sha256": "ca3673273c1f830e2640ffcccefbc45347f6f3ec68eee5837ed0745d0076d00f",
+      "lines": [
+        {
+          "ref": "d04/p1/f5",
+          "line": 7,
+          "label": "验收日期",
+          "value": "2026年9月20日",
+          "quote": "验收日期：2026年9月20日",
+          "rects": [
+            [
+              0.08145,
+              0.3758,
+              0.37492,
+              0.39224
+            ]
+          ],
+          "rect": "0.08145,0.3758,0.37492,0.39224"
+        },
+        {
+          "ref": "signer-date/d04/p1/l16",
+          "line": 16,
+          "label": "周宁签认日期",
+          "value": "2026年9月20日",
+          "quote": "周宁签认日期：2026年9月20日",
+          "rects": [
+            [
+              0.08145,
+              0.73881,
+              0.42534,
+              0.75571
+            ]
+          ],
+          "rect": "0.08145,0.73881,0.42534,0.75571",
+          "crop": "/assets/joint-signing-acceptance-l16.webp"
+        },
+        {
+          "ref": "signer-date/d04/p1/l17",
+          "line": 17,
+          "label": "林岚签认日期",
+          "value": "2026年9月25日",
+          "quote": "林岚签认日期：2026年9月25日",
+          "rects": [
+            [
+              0.08145,
+              0.77945,
+              0.42534,
+              0.79589
+            ]
+          ],
+          "rect": "0.08145,0.77945,0.42534,0.79589",
+          "crop": "/assets/joint-signing-acceptance-l17.webp"
+        }
+      ]
+    }
+  ],
+  "payment": {
+    "key": "H05-8",
+    "stage": "第二期",
+    "state": "before",
+    "days": -3,
+    "clause": "d02/p1/f18",
+    "term": "d02/p1/f16",
+    "events": [
+      {
+        "label": "周宁签认",
+        "kind": "signer",
+        "day": "2026-09-20",
+        "ref": "signer-date/d04/p1/l16"
+      },
+      {
+        "label": "林岚签认",
+        "kind": "signer",
+        "day": "2026-09-25",
+        "ref": "signer-date/d04/p1/l17"
+      },
+      {
+        "label": "回单付款",
+        "kind": "payment",
+        "day": "2026-09-22",
+        "ref": "d03/p1/f8"
+      }
+    ]
+  }
+}

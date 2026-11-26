@@ -264,3 +264,9 @@ AUDIT_PRODUCT_ORIGIN=http://127.0.0.1:8010 node frontend/tests/workspace.mjs --p
 node frontend/tests/workspace.mjs --sample-desk
 node frontend/tests/workspace.mjs --design-case ed7751a871aa4fb1a8574eddada0254b
 ```
+
+## 共同签认与付款
+
+审计员从任务速览的“签认与付款日”进入固定版底稿。按日期选择验收人或回单，旁边随选项更新原行裁片、原页缩略图和所引位置。“共同签认约定”和“本期付款条款”分别回到合同的两个栏位。选择没有该项回单的期次，会显示该期状态，可以一键回到对应期款。手机使用同一组控件；同日记录放在同一个日期下，以便追查时分。[首页演练](http://127.0.0.1:8000/?scene=signer-timing#workflow) · [同日付款底稿](http://127.0.0.1:8000/workpaper/d70cda968be04a7a8fc0c9e235b151b9?rev=8&view=signer-timing)
+
+首页的分期台账也支持点击合同原行。展开预付款、终验款或质保金即可查看对应的印刷条款，关闭原件后焦点回到该期。全页采用钴蓝选中态与白灰背景，提前付款使用琥珀色及“付款早几天”的文字。[桌面演练截图](joint-signing-landing.webp) · [手机底稿截图](joint-signing-mobile.webp)

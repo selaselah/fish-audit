@@ -1,0 +1,70 @@
+.signer-timeline {
+  container-type:inline-size; min-width:0; border:1px solid var(--line); border-radius:12px;
+  background:var(--surface); color:var(--ink); font-family:var(--font-ui); overflow:clip;
+}
+.signer-head { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:18px 20px 12px; flex-wrap:wrap; }
+.signer-head h3 { margin:0; font:650 1.07rem/1.4 var(--font-ui); letter-spacing:-.02em; }
+.signer-outcome { border-radius:5px; background:var(--soft); color:var(--secondary); padding:4px 8px; font:600 .76rem/1.5 var(--font-ui); }
+.signer-timeline[data-state="before"] .signer-outcome { color:#893c15; background:#fff0df; }
+.signer-timeline[data-state="same_day"] .signer-outcome { color:#755114; background:#fff4d7; }
+.signer-payment-picker { margin:0 18px 10px; max-width:calc(100% - 36px); }
+.signer-body { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,.96fr); border-top:1px solid var(--line); }
+.signer-schedule { min-width:0; padding:15px 14px; }
+.signer-stage,.signer-source-label,.signer-location { color:var(--muted); font:550 .76rem/1.5 var(--font-ui); }
+.signer-stage { margin:0 8px 7px; }
+.signer-events { display:grid; }
+.signer-event {
+  --pin:#717c91; display:grid; grid-template-columns:auto 18px 1fr; align-items:center; gap:8px;
+  width:100%; min-height:43px; border:0; border-radius:6px; padding:5px 8px; background:transparent;
+  color:var(--ink); text-align:left; cursor:pointer; font:550 .86rem/1.4 var(--font-ui); position:relative;
+}
+.signer-event:hover { background:var(--soft); }
+.signer-event[aria-pressed="true"] { background:var(--accent-soft); color:var(--accent-hover); }
+.signer-event[data-kind="payment"] { --pin:var(--accent); }
+.signer-timeline[data-state="before"] .signer-event[data-kind="payment"] { --pin:#ad571a; }
+.signer-stamp { font:600 .83rem/1.3 var(--font-number); font-variant-numeric:tabular-nums; min-width:3.4em; }
+.signer-pin { position:relative; display:grid; place-items:center; align-self:stretch; }
+.signer-pin::before, .signer-pin::after { content:""; position:absolute; }
+.signer-pin::before { width:1px; top:-5px; bottom:-5px; background:var(--line); }
+.signer-event:first-child .signer-pin::before { top:50%; }
+.signer-event:last-child .signer-pin::before { bottom:50%; }
+.signer-pin::after { width:8px; height:8px; border:2px solid var(--surface); background:var(--pin); border-radius:50%; box-shadow:0 0 0 1px var(--pin); }
+.signer-event[data-kind="payment"] .signer-pin::after { border-radius:2px; }
+.signer-preview { min-width:0; padding:17px 20px; background:var(--canvas); border-inline-start:1px solid var(--line); display:flex; align-items:flex-start; justify-content:center; flex-direction:column; gap:5px; }
+.signer-quote { margin:3px 0; font:600 1rem/1.5 var(--font-ui); overflow-wrap:anywhere; }
+.signer-pending { font:600 .95rem/1.5 var(--font-ui); }
+.signer-meta { display:grid; gap:2px; }
+.signer-preview:has(.signer-document-link) { display:grid; grid-template-columns:minmax(0,1fr) auto; align-content:center; column-gap:12px; }
+.signer-preview:has(.signer-document-link) > :not(.signer-document-link) { grid-column:1; }
+.signer-document-link { grid-column:2; grid-row:1; display:grid; justify-items:center; align-self:center; gap:4px; }
+.signer-preview:has(.signer-document-link) > :is(.signer-quote,.signer-strip) { grid-column:1 / -1; }
+.signer-thumbnail { display:block; position:relative; width:54px; overflow:hidden; border:1px solid #cdd3df; border-radius:2px; box-shadow:0 2px 4px rgb(32 36 49 / 9%); }
+.signer-thumbnail img { display:block; width:100%; height:auto; }
+.signer-thumbnail-mark { position:absolute; display:block; box-sizing:border-box; min-height:2px; background:#ffd468; outline:1px solid #94570c; }
+.signer-strip { box-sizing:border-box; display:flex; align-items:center; min-height:45px; width:100%; padding:5px; margin:2px 0; background:var(--surface); border:1px solid var(--line); border-radius:5px; }
+.signer-strip :is(img,canvas) { display:block; max-width:100%; height:auto; max-height:43px; object-fit:contain; }
+.signer-transcript,.signer-day-group .signer-stamp { position:absolute; width:1px; height:1px; min-width:0; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+.signer-day-group { margin:3px 0; padding:4px 5px; border:1px solid var(--line); border-radius:7px; }
+.signer-group-label { display:block; padding:3px 6px; color:var(--muted); font:600 .74rem/1.5 var(--font-ui); }
+.signer-day-group .signer-event { grid-template-columns:18px 1fr; min-height:35px; }
+.signer-day-group .signer-pin::before { display:none; }
+.signer-original,.signer-candidates summary { background:transparent; border:0; padding:7px 0; color:var(--accent-hover); font:600 .8rem/1.4 var(--font-ui); cursor:pointer; text-align:start; text-decoration:underline; text-underline-offset:3px; }
+.signer-original:hover,.signer-original:focus-visible { color:var(--accent); }
+.signer-event:focus-visible,.signer-original:focus-visible,.signer-candidates summary:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+.signer-basis { display:flex; gap:4px 18px; align-items:baseline; flex-wrap:wrap; border-top:1px solid var(--line); padding:3px 20px; }
+.signer-candidates[open] { flex-basis:100%; }
+.signer-candidates .signer-original { display:block; }
+.signer-timeline[data-out-of-stage="true"] :is(.signer-outcome,.signer-body,.signer-basis,.signer-payment-picker) { display:none; }
+.signer-empty:not([hidden]) { display:flex; align-items:center; flex-wrap:wrap; gap:10px; padding:12px 18px; color:var(--secondary); font-size:.86rem; }
+@container (max-width:480px) {
+  .signer-head { padding:12px 14px; }
+  .signer-body { grid-template-columns:1fr; }
+  .signer-schedule { padding:9px; }
+  .signer-preview { padding:12px 16px; border-inline-start:0; border-top:1px solid var(--line); }
+  .signer-thumbnail { width:42px; }
+  .signer-basis { padding-inline:16px; }
+}
+@media (prefers-reduced-motion:no-preference) {
+  .signer-thumbnail { transition:transform 140ms ease,border-color 140ms ease; }
+  .signer-document-link:is(:hover,:focus-visible) .signer-thumbnail { transform:translateY(-2px); border-color:var(--accent); }
+}

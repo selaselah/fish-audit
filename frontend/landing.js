@@ -55,7 +55,7 @@ if (!restoreWorkspaceLink()) {
   const inspectionRoutes={equipment:'inspection',named:'named-inspection',supplier:'suppliers',comments:'word-comments'};
   function sceneAddress(name) {
     const url=new URL(location.href);
-    const scene=name==='inspection'?inspectionRoutes[inspectionExample.value]:name==='folios'?({comments:'contract-comments',reference:'payment-acceptance',folios:'folios'}[paymentExample.value]):name;
+    const scene=name==='inspection'?inspectionRoutes[inspectionExample.value]:name==='folios'?({comments:'contract-comments',reference:'payment-acceptance',timing:'signer-timing',folios:'folios'}[paymentExample.value]):name;
     url.searchParams.set('scene',name==='signing' ? examples[contractExample.value].scene : scene);
     if (url.searchParams.get('scene')==='pdf-signing') url.searchParams.set('pdf',PublicPdfSigning.selected());
     else url.searchParams.delete('pdf');
@@ -66,12 +66,15 @@ if (!restoreWorkspaceLink()) {
   const requested=new URLSearchParams(location.search).get('scene');
   if (['signing','inspection','folios'].includes(requested)) selectScene(document.getElementById('scene-tab-'+requested));
   if (requested==='payment-acceptance') paymentExample.value='reference';
-  if (['contract-comments','payment-acceptance'].includes(requested)) selectScene(document.getElementById('scene-tab-folios'));
+  if (requested==='signer-timing') paymentExample.value='timing';
+  if (['contract-comments','payment-acceptance','signer-timing'].includes(requested)) selectScene(document.getElementById('scene-tab-folios'));
   if (requested==='folios') paymentExample.value='folios';
   const paymentsScene=document.getElementById('scene-folios');
   function showPayments() {
     const comments=paymentExample.value==='comments', slot=document.getElementById('payment-comments');
     const reference=paymentExample.value==='reference',demo=document.getElementById('payment-reference');
+    const timing=document.getElementById('payment-signer-timing');
+    timing.hidden=paymentExample.value!=='timing';
     document.getElementById('payment-folios').hidden=paymentExample.value!=='folios';
     demo.hidden=!reference;
     slot.hidden=!comments;
@@ -80,6 +83,10 @@ if (!restoreWorkspaceLink()) {
     if (reference) {
       edition.textContent=demo.dataset.revision?'合成案例 · R'+demo.dataset.revision:'合成案例';
       if (!paymentsScene.hidden) PublicPaymentAcceptance.open();
+    }
+    if (!timing.hidden) {
+      edition.textContent=timing.dataset.revision?'合成案例 · R'+timing.dataset.revision:'合成案例';
+      if (!paymentsScene.hidden) PublicSignerTiming.open();
     }
     if (comments && !paymentsScene.hidden) PublicAcceptanceComments.open('contract');
   }
@@ -190,6 +197,33 @@ if (!restoreWorkspaceLink()) {
   ledgerSwitch.hidden=false;
 
   const phases=[...document.querySelectorAll('.phase-ledger .phase')];
+  async function showPrintedTerms() {
+    try {
+      const response=await fetch('/assets/installment-originals.json');
+      if (!response.ok) return;
+      const doc=await response.json();
+      for (const [i,phase] of phases.entries()) {
+        const row=doc.lines[i], quote=phase.querySelector('.phase-detail q');
+        if (!row || quote?.textContent!==row.value) continue;
+        const link=document.createElement('a'); link.className='phase-original-clause';
+        link.href=doc.pdf; link.target='_blank'; link.rel='noopener';
+        link.setAttribute('aria-label',row.label+'，'+row.value+'，查看合同原行');
+        link.setAttribute('aria-haspopup','dialog');
+        const image=new Image(); image.alt=''; image.decoding='async';
+        image.onload=()=>{link.append(image);quote.replaceWith(link);};
+        link.addEventListener('click',event=>{
+          if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+          const request=new CustomEvent('inspect-sample-line',{cancelable:true,detail:{doc,ref:row.ref,opener:link}});
+          if (!document.dispatchEvent(request)) event.preventDefault();
+        });
+        image.src=row.crop;
+      }
+    } catch { /* The printed terms remain readable in the markup. */ }
+  }
+  const phaseObserver=new IntersectionObserver(records=>{
+    if (records.some(r=>r.isIntersecting)) {phaseObserver.disconnect();showPrintedTerms();}
+  },{rootMargin:'160px'});
+  phaseObserver.observe(document.querySelector('.phase-ledger'));
   const shares=phases.map(p=>Number.parseFloat(p.querySelector('.phase-share').textContent));
   const dial=document.querySelector('.phase-dial');
   if (shares.every(n=>n>0) && shares.reduce((a,b)=>a+b,0)===100) {

@@ -5,7 +5,7 @@ function contractPreview(report, task) {
   if (!signing || !acceptance || !plan) return null;
   function jump(f,label,cls='preview-finding',view) {
     const query=new URLSearchParams({rev:String(task.rev),...(view?{view}:{finding:f.id})});
-    if (view==='payment-acceptance') query.set('receipt',f.id);
+    if (view==='payment-acceptance' || view==='signer-timing') query.set('receipt',f.id);
     const node=Team.paperLink(label,task.id,cls,query);
     node.dataset.findingId=f.id;
     if (view!=='payment-acceptance') node.append(tag(f.status));
@@ -41,7 +41,8 @@ function contractPreview(report, task) {
     content.replaceChildren(jump(f,'付款条件'));
     for (const r of related) {
       const bank=payments.length>1 && r.rule==='H05' && traceReferences(graph,r).map(ref=>index.facts.get(ref)).find(v=>v?.field==='bank_receipt');
-      content.append(jump(r,r.rule==='H06'?'本期回单合计':bank?.name || '实付时点'));
+      if (r.signer_timing) content.append(jump(r,bank?.name || '签认与付款日','preview-finding','signer-timing'));
+      else content.append(jump(r,r.rule==='H06'?'本期回单合计':bank?.name || '实付时点'));
     }
     const referenced=payments.filter(r=>r.payment_acceptance);
     if (referenced.length) content.append(jump(referenced.find(r=>r.payment_acceptance.state==='other_batch') || referenced[0],

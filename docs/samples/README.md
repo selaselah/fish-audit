@@ -418,3 +418,15 @@ server/.venv/bin/python docs/samples/quality_reinspection.py --run --cases parti
 ### 复验签认与未结项目
 
 运行 `server/.venv/bin/python docs/samples/reinspection_register.py --run`，可在本机工作台提交四组水印资料。冷藏柜探头有原验收、整改记录和复验签认，复验表的另一栏分别记录门封待换、等待试运行、另一缺陷关闭、无未结事项。脚本核对生成件和归档页图摘要，并检查第二期验收款和第三期质保金的状态。
+
+### 两位终验人分日签认
+
+运行 `server/.venv/bin/python docs/samples/acceptance_signers.py --run --cases before same_day after` 可提交三笔带水印的分期采购。三份合同均约定终验合格付 60%，两名验收人分别在 9 月 20 日和 25 日签认。三笔回单分别写 9 月 22、25、26 日。发生器只在演练标记、原件摘要及印刷行核对一致后对虚构签字执行模拟核图，初次识别和每次更正均保留。
+
+| 成功回单 | 时序结果 | 固定版底稿 |
+| --- | --- | --- |
+| 9 月 22 日 | 早 3 天，付款时点列为风险 | [R8](http://127.0.0.1:8000/workpaper/00cc3c6b67964491b6f1ba9686440062?rev=8&view=signer-timing) |
+| 9 月 25 日 | 同日，需核对签认及扣款时分 | [R8](http://127.0.0.1:8000/workpaper/d70cda968be04a7a8fc0c9e235b151b9?rev=8&view=signer-timing) |
+| 9 月 26 日 | 晚 1 天，合同及验收依据继续待核 | [R6](http://127.0.0.1:8000/workpaper/95f293ec9d9140f3857c382e5c5eb676?rev=6&view=signer-timing) |
+
+要从提前付款案例的固定版证据包重建首页时序样本，运行 `server/.venv/bin/python docs/samples/publish_signer_timing.py <证据包.zip> --seed signer-timing-nov26`。脚本将每份已提交原件与水印生成件比对，重绘页面，核对物理行和页图摘要后生成公开材料。

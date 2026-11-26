@@ -9,6 +9,7 @@ import {createHash} from 'node:crypto';
 import {setTimeout as delay} from 'node:timers/promises';
 import {once} from 'node:events';
 import {checkPaymentAcceptance,checkPreviewQueue} from './payment-acceptance.mjs';
+import {checkSignerTiming} from './signer-timing.mjs';
 import {checkOriginalReader} from './original-reader.mjs';
 import {checkProduct, checkReviewDesign} from './product.mjs';
 import {checkEvidenceCompare,checkMandateCompare,checkPhaseEvidence,checkPaymentChange} from './evidence-compare.mjs';
@@ -105,12 +106,14 @@ const qualityImageCase = caseArgument('--quality-image-case');
 const reinspectionGap = caseArgument('--reinspection-gap-case');
 const brokenPayment = caseArgument('--payment-source-case');
 const waitingCase = caseArgument('--waiting-case');
+const signerTiming=caseArgument('--signer-timing-case');
+const publicTiming=process.argv.includes('--public-signer-timing');
 const bankAcceptance=caseArgument('--bank-acceptance-case');
 const originalCase=caseArgument('--original-reader-case');
 const publicBank=process.argv.includes('--public-bank-acceptance');
 const previewQueue=process.argv.includes('--preview-queue');
-const publicTest=publicBank || product || ruleCatalog || publicInspection || publicContractComments || publicWordComments || publicSuppliers || publicPdf || publicFolios;
-const seeded = [publicTest,originalCase,bankAcceptance,previewQueue,contractCommentCase,commentCase,supplierCase,pdfCase,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+const publicTest=publicTiming || publicBank || product || ruleCatalog || publicInspection || publicContractComments || publicWordComments || publicSuppliers || publicPdf || publicFolios;
+const seeded = [publicTest,signerTiming,originalCase,bankAcceptance,previewQueue,contractCommentCase,commentCase,supplierCase,pdfCase,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
 const root = originalCase ? process.env.AUDIT_READER_ORIGIN || 'http://127.0.0.1:8000' : publicTest ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
@@ -176,7 +179,9 @@ try {
   const click = (label, container='document') => evaluate('[...'+container+'.querySelectorAll("button,a")].find(b=>b.textContent==='+JSON.stringify(label)+' && b.getClientRects().length).click()');
   await call('Runtime.enable');
   await call('Page.navigate',{url:product ? root : root+'/app'});
-  if (originalCase) {
+  if (signerTiming || publicTiming) {
+    await checkSignerTiming({root,call,evaluate,wait},signerTiming,Number(process.env.AUDIT_SIGNER_REV));
+  } else if (originalCase) {
     await checkOriginalReader({root,call,evaluate,wait},originalCase,Number(process.env.AUDIT_READER_REV));
   } else if (bankAcceptance || publicBank) {
     await checkPaymentAcceptance({root,call,evaluate,wait},bankAcceptance,Number(process.env.AUDIT_BANK_REV));

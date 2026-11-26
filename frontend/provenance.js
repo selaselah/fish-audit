@@ -85,7 +85,9 @@ function performanceOverview(findings, graph) {
   const dates=ContractCalendar.panel(effect,graph,findings,state.bundle?.report.calls.pages);
   const dateQuestion=effect?.effect_review?.calendar?.some(day=>!['exact','spacing'].includes(day.state));
   const bankReferences=PaymentAcceptance.panel(state.bundle?.report);
+  const signerTiming=SignerEvidence.panel(state.bundle?.report);
   const sections=[
+    {key:'signer-timing',label:'签认时序',icon:'clock-history',content:signerTiming,priority:signerTiming?.dataset.state==='before' || signerTiming?.dataset.state==='same_day'},
     {key:'payment-acceptance',label:'回单所据',icon:'receipt',content:bankReferences,priority:bankReferences?.dataset.referenceState==='other_batch'},
     {key:'contract-comments',label:'期款批注',icon:'journal-text',content:contractNotes,priority:contractNotes && contractNotes.dataset.state!=='ok'},
     {key:'acceptance-comments',label:'验收批注',icon:'journal-text',content:comments,priority:comments && comments.dataset.state!=='ok'},
@@ -219,6 +221,7 @@ function performanceOverview(findings, graph) {
         list.children[i].hidden = i!==position;
       });
       bankReferences?.dispatchEvent(new CustomEvent('inspect-payment-stage',{detail:phases[position].stage}));
+      signerTiming?.dispatchEvent(new CustomEvent('inspect-payment-stage',{detail:phases[position].stage}));
       contractNotes?.dispatchEvent(new CustomEvent('contract-stage-change',{detail:phases[position].stage.clause_ref}));
       list.children[position].querySelector('.proof-opinion:not([hidden])')?.dispatchEvent(new Event('show-opinion'));
       list.children[position].querySelector('.warranty-timeline:not([hidden])')?.dispatchEvent(new Event('show-warranty'));
@@ -230,6 +233,7 @@ function performanceOverview(findings, graph) {
     }
     if (contractSource?.stages) contractNotes.addEventListener('select-contract-phase',event=>selectClause(event.detail));
     bankReferences?.addEventListener('select-contract-phase',event=>selectClause(event.detail));
+    signerTiming?.addEventListener('select-contract-phase',event=>selectClause(event.detail));
     inspection?.addEventListener('select-contract-phase',event=>selectClause(event.detail));
     inspection?.addEventListener('reveal-evidence',()=>{
       const linked=[...inspection.querySelectorAll('.inspection-phase')];
@@ -253,6 +257,10 @@ function performanceOverview(findings, graph) {
     let initial=buttons.findIndex((b,i)=>b.dataset.state===priority && noteButton(i));
     if (initial<0 && activeNotes?.role==='contract') initial=buttons.findIndex((b,i)=>noteButton(i));
     if (initial<0) initial=buttons.findIndex(b=>b.dataset.state===priority);
+    if (remembered<0 && index.readerSection==='signer-timing' && signerTiming) {
+      const linked=phases.findIndex(f=>f.stage.clause_ref===signerTiming.dataset.clause);
+      if (linked>=0) initial=linked;
+    }
     select(remembered>=0?remembered:Math.max(0,initial));
     const shares = phases.map(f=>Number(f.stage.share));
     if (!contractSource?.stages && plan?.status==='ok' && shares.every(n=>Number.isFinite(n) && n>0) && Math.abs(shares.reduce((a,b)=>a+b,0)-100)<.000001) {

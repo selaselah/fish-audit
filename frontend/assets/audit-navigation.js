@@ -24,6 +24,9 @@
         const panel=$('#file-progress'); panel.open=true; jump(panel.querySelector('summary'));
       }, '', '解析 页数 进度');
       if (paper) {
+        if (paper.report.findings.some(f=>f.signer_timing)) add('底稿视图','核对签认与付款日','clock-history',()=>{
+          state.tab='report'; renderCase(true); revealPaperTarget($('#signer-timing'));
+        },'R'+paper.rev,'共同签认 日期 回单 时序');
         if (paper.report.findings.some(f=>f.payment_acceptance)) add('底稿视图','核对回单与验收单号','receipt',()=>{
           state.tab='report'; renderCase(true); jump($('#payment-acceptance'));
         });

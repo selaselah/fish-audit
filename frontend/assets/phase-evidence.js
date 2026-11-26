@@ -49,6 +49,10 @@ const PhaseEvidence = (() => {
       const fact=PaymentAcceptance.observation(row,graph);
       add(row,'验收单号原行','payment_acceptance_reference','bank-acceptance-line/',Boolean(fact) && row.line!==lineHint,fact?.source_line?.rects);
     }
+    for (const row of SignerEvidence.datedRows(graph)) {
+      const fact=SignerEvidence.observation(graph,row);
+      add(row,'具名签认日期','signer_date_source','signer-date-line/',Boolean(fact) && row.line!==lineHint,fact?.source_line.rects);
+    }
     for (const row of PriorInstallment.sources(graph)) {
       const fact=PriorInstallment.observation(row,graph);
       add(row,'前款约定原行','prior_reference','prior-line/',row.line!==lineHint && Boolean(fact),fact?.source_line?.rects);

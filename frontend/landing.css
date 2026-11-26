@@ -158,6 +158,9 @@ h1 em { color: var(--accent); font-style: normal; }
 .phase-detail { margin: 0 clamp(18px,2.4vw,34px) 15px; padding: 2px 0 0 16px; border-left: 2px solid var(--attention-line); }
 .phase:has(.state.ok) .phase-detail { border-color:var(--confirmed-line); }
 .phase-detail q { font-weight: 550; }
+.phase-detail .phase-original-clause { display:inline-flex; max-width:100%; min-height:38px; align-items:center; padding:3px 7px; background:white; border:1px solid var(--line); border-radius:4px; }
+.phase-original-clause img { display:block; max-width:100%; width:auto; height:auto; max-height:32px; }
+.phase-original-clause:hover { border-color:var(--accent); }
 .phase-detail p { margin: 7px 0 1px; color: var(--muted); font-size: .92rem; line-height: 1.75; }
 .workflow { background: #eff2fb; color: var(--ink); }
 .workflow .section-inner { align-content:center; row-gap:clamp(40px,8vh,78px); }
@@ -481,4 +484,8 @@ body:has(#sample-review[open],#sample-compare[open]) { overflow:hidden; }
   .workflow .workflow-demo { grid-area:demo;align-self:center; }
   .workflow .process-list { grid-area:steps;align-self:start;max-width:490px; }
   .workflow .process-list h3 { font:600 .86rem/1.5 var(--font-ui); }
+}
+
+@media (min-width:1100px) {
+  .workflow .section-inner { grid-template-columns:minmax(0,.78fr) minmax(0,1.22fr); column-gap:clamp(32px,4vw,64px); }
 }
