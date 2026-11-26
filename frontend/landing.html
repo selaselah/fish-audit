@@ -25,6 +25,8 @@
     }
   </script>
   <script src="/assets/sample-compare.js" defer></script>
+  <script src="/assets/folio-number.js" defer></script>
+  <script src="/assets/public-folios.js" defer></script>
   <script src="/landing.js" defer></script>
   <script src="/assets/sample-review.js" defer></script>
 </head>
@@ -127,6 +129,7 @@
             <button type="button" id="scene-tab-acceptance" role="tab" aria-selected="true" aria-controls="scene-acceptance">验收读数</button>
             <button type="button" id="scene-tab-signing" role="tab" aria-selected="false" aria-controls="scene-signing" tabindex="-1">合同签章</button>
             <button type="button" id="scene-tab-inspection" role="tab" aria-selected="false" aria-controls="scene-inspection" tabindex="-1">设备抽检</button>
+            <button type="button" id="scene-tab-folios" role="tab" aria-selected="false" aria-controls="scene-folios" tabindex="-1">付款续页</button>
           </div>
           <div id="scene-acceptance" role="tabpanel" aria-labelledby="scene-tab-acceptance">
             <a class="workflow-image open-sample-review" href="/showcase/acceptance.pdf" target="_blank" rel="noopener" aria-label="核对这张合成验收报告"><img src="/assets/review-sample.webp" width="1360" height="819" loading="lazy" alt="核图工作台在验收单上定位到实测柜温 8℃ 的原行"><span><i class="ui-glyph ic-eye" aria-hidden="true"></i>核对这张验收单</span></a>
@@ -145,6 +148,15 @@
             <div class="signing-sample-header"><span><i class="ui-glyph ic-clipboard-check" aria-hidden="true"></i> 采购验收</span><small>合成案例 · R11</small></div>
             <h3>冷藏柜采购 · 第二期验收款</h3>
             <div id="inspection-demo"><a href="/showcase/inspection-acceptance.pdf" target="_blank" rel="noopener">查看演练验收单</a></div>
+          </div>
+          <div id="scene-folios" class="signing-sample public-folios" role="tabpanel" aria-labelledby="scene-tab-folios" hidden>
+            <div class="signing-sample-header"><span><i class="ui-glyph ic-journal-text" aria-hidden="true"></i> 采购合同</span><small>合成案例 · R10</small></div>
+            <div class="public-folio-head"><h3>续页引用的合同号不同</h3><label class="folio-highlight" hidden><input type="checkbox" checked role="switch">标出差异</label></div>
+            <div class="public-folio-rows" data-visual>
+              <a href="/showcase/payment-folios.pdf#page=1" target="_blank" rel="noopener"><small>正文 · 第 1 页</small><strong>YL-LY-D1094C6B</strong><span class="public-folio-thumb" aria-hidden="true"><img src="/assets/showcase-payment-folio-1-thumb.webp" alt="" width="150" height="212" loading="lazy"><i></i></span><i aria-hidden="true" class="ui-glyph ic-arrows-angle-expand"></i></a>
+              <a href="/showcase/payment-folios.pdf#page=2" target="_blank" rel="noopener"><small>续页 · 第 2 页</small><strong>YL-OTHER-D1094C6B</strong><span class="public-folio-thumb" aria-hidden="true"><img src="/assets/showcase-payment-folio-2-thumb.webp" alt="" width="150" height="212" loading="lazy"><i></i></span><i aria-hidden="true" class="ui-glyph ic-arrows-angle-expand"></i></a>
+            </div>
+            <p><span class="finding-dot risk"></span>三期付款条件均待核对</p>
           </div>
         </div>
         <ol class="process-list">

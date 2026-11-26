@@ -1,0 +1,72 @@
+{
+  "revision": 10,
+  "source_sha256": "053f0ca1aec9a45b5ddef9eacc7e5f8d85b0caa39b73b908bda0bb814aec9ad9",
+  "pages": [
+    {
+      "title": "合同正文",
+      "version": "合成采购 · R10",
+      "image": "/assets/showcase-payment-folio-1.jpg",
+      "pdf": "/showcase/payment-folios.pdf#page=1",
+      "page": 1,
+      "sha256": "cbc975856a4d495ff284bc08ea87b17bc7dce175363949d3c9d5e39d8b785f16",
+      "focus": "contract-folio/d02/p1/l3",
+      "lines": [
+        {
+          "ref": "contract-folio/d02/p1/l2",
+          "label": "合同标题",
+          "value": "采购合同",
+          "rect": "0.08274,0.13059,0.25663,0.16027",
+          "line": "2"
+        },
+        {
+          "ref": "contract-folio/d02/p1/l3",
+          "label": "正文合同号",
+          "value": "YL-LY-D1094C6B",
+          "rect": "0.08145,0.2137,0.40724,0.23059",
+          "line": "3"
+        },
+        {
+          "ref": "contract-folio/d02/p1/l16",
+          "label": "第一期",
+          "value": "合同生效后支付30%",
+          "rect": "0.08209,0.64612,0.40659,0.66301",
+          "line": "16"
+        }
+      ],
+      "thumbnail": "/assets/showcase-payment-folio-1-thumb.webp"
+    },
+    {
+      "title": "付款续页",
+      "version": "合成采购 · R10",
+      "image": "/assets/showcase-payment-folio-2.jpg",
+      "pdf": "/showcase/payment-folios.pdf#page=2",
+      "page": 2,
+      "sha256": "14c1c671cf8a7907825c7d62133f95d02703e0ae52fcb77984fe51f296a0c876",
+      "focus": "contract-folio/d02/p2/l3",
+      "lines": [
+        {
+          "ref": "contract-folio/d02/p2/l3",
+          "label": "续页引用编号",
+          "value": "YL-OTHER-D1094C6B",
+          "rect": "0.08145,0.21416,0.51519,0.23059",
+          "line": "3"
+        },
+        {
+          "ref": "contract-folio/d02/p2/l4",
+          "label": "第二期",
+          "value": "最终验收合格后支付60%",
+          "rect": "0.08209,0.24703,0.45701,0.26393",
+          "line": "4"
+        },
+        {
+          "ref": "contract-folio/d02/p2/l5",
+          "label": "第三期",
+          "value": "质保期满后支付10%",
+          "rect": "0.08209,0.28082,0.40659,0.2968",
+          "line": "5"
+        }
+      ],
+      "thumbnail": "/assets/showcase-payment-folio-2-thumb.webp"
+    }
+  ]
+}

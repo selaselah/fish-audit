@@ -48,7 +48,7 @@ if (!restoreWorkspaceLink()) {
   const sceneTabs = [...scenes.querySelectorAll('[role="tab"]')];
   const selectScene = enableTabs(sceneTabs);
   const requested=new URLSearchParams(location.search).get('scene');
-  if (['signing','inspection'].includes(requested)) selectScene(document.getElementById('scene-tab-'+requested));
+  if (['signing','inspection','folios'].includes(requested)) selectScene(document.getElementById('scene-tab-'+requested));
   const inspectionScene=document.getElementById('scene-inspection');
   let loadingInspection=false;
   async function showInspection() {

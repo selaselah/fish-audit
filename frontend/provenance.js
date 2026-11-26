@@ -70,6 +70,8 @@ function performanceOverview(findings, graph) {
   }
   overview.setAttribute('aria-label','履约结论与期次');
   overview.append(summary);
+  const folios=ContractFolios.panel(plan,graph,state.bundle?.report.calls.pages,state.bundle?.report.findings.find(f=>f.rule==='E01'));
+  if (folios) overview.append(folios);
   const effect=findings.find(f=>f.rule==='H01');
   const parties=SigningParties.panel(effect,graph,phases);
   if (parties) overview.append(parties);
@@ -119,6 +121,10 @@ function performanceOverview(findings, graph) {
     const sum=findings.find(f=>f.stage_payments && sameStage(f));
     if (sum) results.append(performanceJump(sum,'本期回单合计'));
     row.append(box('phase-contract',source,el('q',revised?revised.quote:stage.clause)),results);
+    if (plan?.contract_folios?.standalone) {
+      const independent=ContractFolios.independentLink(phase,graph);
+      if (independent) row.append(independent);
+    }
     const prior=PriorInstallment.panel(phase,matched,graph);
     if (prior) row.append(prior);
     const evidence=PhaseEvidence.panel(phase,matched,findings,graph);

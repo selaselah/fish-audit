@@ -1,5 +1,9 @@
 # 审计与会计软件的公开界面
 
+## 在合同正文和付款续页之间定位
+
+Adobe Acrobat 的页面缩略图用于在长文档中识别和切换物理页。Fish Audit 保留真实页形，缩略图旁列出各页载明的期次。发现编号不符时，正文与续页的号码同时显示，审计员可切换原图与字符差异，打开所据页和行。全部展示素材均为本项目的水印演练件。[Adobe Acrobat 页面缩略图与书签](https://helpx.adobe.com/acrobat/using/page-thumbnails-bookmarks-pdfs.html) · [本例原件登记](showcase-provenance.md#付款续页案例-r10)
+
 ## 选择审计范围和核对运行时段
 
 Caseware Cloud 的立项入口先选业务应用，再填写项目资料。IBM Carbon 的单选卡片允许整块选择，并保留单选标识。Fish Audit 把四种范围直接放在「新建审计」中，每块仅显示业务名称和所核凭证。产品首页的合同案例入口预选履约审计，资料要求可按需展开。[Caseware 项目创建流程](https://www.caseware.com/docs/en/cloud/caseware-cloud/engagement-management/planning/create-and-set-up-an-engagement-file) · [IBM Carbon 单选卡片](https://www.carbondesignsystem.com/building-blocks/core/components/tile/guidelines)

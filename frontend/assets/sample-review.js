@@ -45,7 +45,7 @@
     row=next; mode=scale;
     for (const r of rows) r.setAttribute('aria-pressed',String(r===row));
     for (const m of modes) m.setAttribute('aria-pressed',String(m.dataset.scale===mode));
-    const location='第 1 页 · 第 '+row.dataset.line+' 行';
+    const location='第 '+(sample.page || 1)+' 页 · 第 '+row.dataset.line+' 行';
     dialog.querySelector('output').textContent=location;
     canvas.setAttribute('aria-label',sample.title+location+'，'+row.querySelector('span').textContent+'，'+row.querySelector('strong').textContent);
     draw();

@@ -22,6 +22,7 @@ import {checkSigningParties} from './signing-parties.mjs';
 import {checkReinspectionTrail} from './reinspection-trail.mjs';
 import {checkReinspectionTiming} from './reinspection-timing.mjs';
 import {checkTrialLog,checkIntakeScopes} from './trial-log.mjs';
+import {checkFolios,checkPublicFolios} from './contract-folios.mjs';
 import {checkEntityBrowser} from './entity-browser.mjs';
 
 const scratch = await mkdtemp(join(tmpdir(), 'fish-ui-'));
@@ -31,6 +32,7 @@ const port = socket.address().port;
 await new Promise(resolve => socket.close(resolve));
 const sampleDesk = process.argv.includes('--sample-desk');
 const product = process.argv.includes('--product');
+const publicFolios=process.argv.includes('--public-folios');
 function caseArgument(name) {
   const index = process.argv.indexOf(name);
   if (index < 0) return null;
@@ -69,6 +71,7 @@ const signingCase = caseArgument('--signing-party-case');
 const priorCase=caseArgument('--prior-installment-case');
 const trailCase=caseArgument('--reinspection-trail-case');
 const timingCase=caseArgument('--reinspection-time-case');
+const folioCase=caseArgument('--folio-case');
 const trialCase=caseArgument('--trial-case');
 const intakeScopes=process.argv.includes('--intake-scopes');
 const entityCase=caseArgument('--entity-case');
@@ -81,12 +84,12 @@ const qualityImageCase = caseArgument('--quality-image-case');
 const reinspectionGap = caseArgument('--reinspection-gap-case');
 const brokenPayment = caseArgument('--payment-source-case');
 const waitingCase = caseArgument('--waiting-case');
-const seeded = [priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,product,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+const seeded = [publicFolios,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,product,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
-const root = product ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
+const root = product || publicFolios ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
   recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
-if (product || recoveringCase || waitingCase || legacyCase || brokenPayment) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
+if (product || publicFolios || recoveringCase || waitingCase || legacyCase || brokenPayment) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
 if (legacyCase || brokenPayment) assert.ok(!['8000','8010'].includes(new URL(root).port));
 const children = [];
 const faults = [];
@@ -147,10 +150,14 @@ try {
   const click = (label, container='document') => evaluate('[...'+container+'.querySelectorAll("button,a")].find(b=>b.textContent==='+JSON.stringify(label)+' && b.getClientRects().length).click()');
   await call('Runtime.enable');
   await call('Page.navigate',{url:product ? root : root+'/app'});
-  if (product) {
+  if (publicFolios) {
+    await checkPublicFolios({root,call,evaluate,wait});
+  } else if (product) {
     await checkProduct({root,call,evaluate,wait});
   } else if (intakeScopes) {
     await checkIntakeScopes({root,call,evaluate,wait});
+  } else if (folioCase) {
+    await checkFolios({root,call,evaluate,wait},folioCase,Number(process.env.AUDIT_FOLIO_REV));
   } else if (trialCase) {
     await checkTrialLog({root,call,evaluate,wait},trialCase,Number(process.env.AUDIT_TRIAL_REV));
   } else if (entityCase) {

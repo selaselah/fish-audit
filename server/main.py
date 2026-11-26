@@ -283,7 +283,7 @@ def create_app(store, worker):
     @app.get("/showcase/<filename>")
     def showcase_document(filename):
         if filename not in {"contract.pdf", "acceptance.pdf", "transfer.pdf", "signing-contract.pdf",
-                            "inspection-contract.pdf", "inspection-acceptance.pdf"}:
+                            "inspection-contract.pdf", "inspection-acceptance.pdf", "payment-folios.pdf"}:
             raise CaseError("没有这份演练原件。", 404)
         return send_file(FRONTEND / "showcase" / filename, mimetype="application/pdf")
 

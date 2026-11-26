@@ -2,6 +2,9 @@
 
 首页采用 Fish Audit 自制的冷藏柜采购演练。采购方「青禾演练采购中心」、供应方「云桥演练设备中心」、金额、温度、签认和回单均为虚构数据。每份原件第 1 行均印有「合成演练资料　仅供系统测试　无交易效力」。4℃ 是这份合同约定的柜温上限，8℃ 是这份验收报告填写的实测值。[水印和主体的生成定义](../docs/samples/generate.py) · [项目演练说明](../docs/samples/README.md#验收的是哪一种设备)
 
+## 付款续页案例 R10
+
+首页「付款续页」引用虚构合同正文的 `YL-LY-D1094C6B` 和续页的 `YL-OTHER-D1094C6B`，分别是同一份 PDF 第 1 页和第 2 页的第 3 行。两页都印有合成演练水印。公开 PDF 的 SHA-256 为 `053f0ca1aec9a45b5ddef9eacc7e5f8d85b0caa39b73b908bda0bb814aec9ad9`。两张完整 JPEG 直接取自 R10 证据包。缩略图由页图按比例缩至 150 像素宽，标记位置取自该版的原行坐标。公开演示只使用随项目发布的静态资料。[两页合同](../frontend/showcase/payment-folios.pdf) · [各页摘要和六处原行坐标](../frontend/assets/showcase-payment-folios.json) · [本机 R10](http://127.0.0.1:8000/workpaper/9c91f77a45f84a8496cfeb09d1fcf8ba?rev=10&view=contract-pages)
 
 ## 首页双原件同步缩放
 
