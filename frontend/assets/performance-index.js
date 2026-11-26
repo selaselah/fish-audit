@@ -53,12 +53,13 @@ const PerformanceIndex = (() => {
       if (!doc?.sha256 || doc.sha256!==fact.source_sha256 || index.nodes.get(doc.id)?.sha256!==doc.sha256 ||
         page?.type!=='page' || !page.sha256 || fact.page_sha256!==page.sha256 || !links.has(pageId+' '+ref)) continue;
       const loc=fact.source_line;
-      const exact=page.layer!=='image' && !MandateOriginals.images.has(doc.ext) && ['anchored','confirmed'].includes(fact.status) &&
+      const printed=page.layer!=='image' && !MandateOriginals.images.has(doc.ext) && ['anchored','confirmed'].includes(fact.status) &&
         Number.isSafeInteger(loc?.number) && loc.number>0 &&
-        typeof loc.text==='string' && loc.text.normalize('NFKC').includes(fact.quote.normalize('NFKC')) &&
+        typeof loc.text==='string' && loc.text.trim() &&
         Array.isArray(loc.rects) && loc.rects.length && loc.rects.every(rect=>Array.isArray(rect) &&
           rect.length===4 && rect.every(n=>Number.isFinite(n) && n>=0 && n<=1) && rect[0]<rect[2] && rect[1]<rect[3]);
-      sources.push({fact,doc,line:exact?loc.number:null});
+      const exact=printed && loc.text.normalize('NFKC').includes(fact.quote.normalize('NFKC'));
+      sources.push({fact,doc,line:exact?loc.number:null,printedLine:printed?loc.number:null});
     }
     return sources;
   }
@@ -502,7 +503,7 @@ const PerformanceIndex = (() => {
       const mandates=mandateEvidence(item,state.bundle.report);
       const paired=pairView(item,state.bundle.report,receipts);
       const roster=AcceptanceRoster.bind(item,state.bundle.report);
-      const batch=BatchPhase.resolve(item,findings.find(f=>f.rule==='H02'),graph);
+      const batch=BatchPhase.resolve(item,findings.find(f=>f.rule==='H02'),graph,state.bundle.report.calls?.pages);
       detail.dataset.batch=String(Boolean(batch));
       detail.replaceChildren(box('scope-check-state',el('span',item.id,'mono'),tag(item.status)),heading);
       for (const mandate of mandates) detail.append(mandatePanel(mandate));

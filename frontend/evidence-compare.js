@@ -1,6 +1,6 @@
 // Display only observations connected to the selected finding in its issued graph.
 const EvidenceCompare = (() => {
-  function presets(finding, facts, graph) {
+  function presets(finding, facts, graph, report) {
     const result = WarrantyTickets.pairs(finding,graph).filter(p=>facts.some(f=>f.id===p.left.id) && facts.some(f=>f.id===p.right.id));
     const unit = fact => fact.unit || fact.doc;
     function unique(field, units) {
@@ -125,29 +125,31 @@ const EvidenceCompare = (() => {
         add('reading', change ? '适用标准与实测' : '合同标准与实测', applied, actual);
         if (change) add('basis', '适用标准与验收依据', applied, basis);
       }
-      if (!change || finding.batch_acceptance?.records.some(r => r.standard)) {
+      const versioned=finding.batch_acceptance?.records.some(r=>r.standard);
+      let candidates;
+      if (finding.batch_acceptance) {
         const records = finding.batch_acceptance?.records || [];
         for (const batch of finding.batch_acceptance?.batches || []) {
           if (batch.records.length !== 1) continue;
           const record = records.find(r => r.unit === batch.records[0] && r.index === batch.index);
           const reading = record && unique('measured_result', [record.unit]);
-          if (record?.standard) {
-            const standard=record.standard;
-            if (standard.criterion_ref) {
-              add('batch-'+batch.index, batch.label+'实测', facts.find(f=>f.id===standard.criterion_ref),
-                facts.find(f=>f.id===standard.reading_ref));
-            } else if (standard.effective_on && standard.date_ref && change.buyer_sealed_on!==change.seller_sealed_on) {
-              const seal=['buyer_sealed_on','seller_sealed_on'].find(field=>change[field]===standard.effective_on);
-              if (seal) add('batch-'+batch.index,batch.label+'日期',unique(seal,change.units),facts.find(f=>f.id===standard.date_ref));
-            } else {
-              add('batch-'+batch.index,batch.label+'原单',facts.find(f=>f.id===standard.date_ref),facts.find(f=>f.id===standard.reading_ref));
+          if (versioned || change) {
+            const phases=report?.graph===graph && report.findings.filter(f=>f.rule==='H04' && f.stage?.batch_index===batch.index);
+            const model=record?.standard && phases?.length===1 && BatchPhase.resolve(phases[0],finding,graph,report.calls?.pages)?.standard;
+            const pair=BatchStandard.pair(model,batch.index);
+            if (pair && byRef(pair.left.id) && byRef(pair.right.id)) result.push({...pair,phase:phases[0].id});
+            if (model?.original && model.revised) candidates=model;
+            if (!model?.chosen && (!report || report.graph===graph)) {
+              const receipt=BatchStandard.receipt(finding,batch,graph,report?.calls?.pages);
+              if (receipt?.basis && receipt.reading) add('receipt-batch-'+batch.index,batch.label+'报告原行',receipt.basis,receipt.reading);
             }
-          } else if (!record?.scope_unclear && reading && record.evidence.includes(reading.id)) {
+          } else if (record && !record.scope_unclear && reading && record.evidence.includes(reading.id)) {
             add('batch-' + batch.index, batch.label + '实测', original, reading);
           }
         }
       }
-      add('versions', '新旧标准', original, revised);
+      if (versioned || change && finding.batch_acceptance) add('versions','新旧标准',candidates?.original,candidates?.revised);
+      else add('versions', '新旧标准', original, revised);
     }
     if (change?.effective_on && change.accepted_on && change.buyer_sealed_on !== change.seller_sealed_on) {
       const seal = ['buyer_sealed_on','seller_sealed_on'].find(field => change[field] === change.effective_on);
@@ -342,8 +344,9 @@ const EvidenceCompare = (() => {
     toggle.addEventListener('change',sync);
     const announcement = el('output','','visually-hidden');
     const selection = [null,null];
+    let selectedKey;
     const finder = citationFinder(facts,index,(i,fact) => {
-      selection[i]=fact; paint(i); sync();
+      selectedKey=null; selection[i]=fact; paint(i); sync();
     });
     const sides = ['左侧','右侧'].map((side,i) => {
       const pick = action('',() => finder.open(i,selection[i],selection[1-i]),'compare-pick');
@@ -392,7 +395,8 @@ const EvidenceCompare = (() => {
     }
     function sync() {
       const [left,right] = selection;
-      const selected = pairs.find(p => p.left.id === left?.id && p.right.id === right?.id);
+      const matches=pairs.filter(p=>p.left.id===left?.id && p.right.id===right?.id);
+      const selected=matches.find(p=>p.key===selectedKey) || (matches.length===1?matches[0]:null);
       for (const button of shortcuts.children) button.setAttribute('aria-pressed',String(button.dataset.pair === selected?.key));
       if (selected?.signing?.different) SigningParties.markQuotes(selected,sides.map(s=>s.sheet.querySelector('blockquote')));
       else {
@@ -411,16 +415,18 @@ const EvidenceCompare = (() => {
         if (selected?.status) versionNote.replaceChildren(tag(selected.status));
       }
       if (finding.quality_change) {
-        const batch=finding.batch_acceptance?.batches.find(b=>'batch-'+b.index===selected?.key);
-        const record=batch?.records.length===1 && finding.batch_acceptance.records.find(r=>r.unit===batch.records[0]);
-        const state=record?.standard?.state || finding.quality_change.state;
-        const label=record?.standard ? batch.label : ['applied','original'].includes(state) ? '本次' : '';
+        const batch=selected?.version && finding.batch_acceptance?.batches.find(b=>'batch-'+b.index===selected.key);
+        let state=selected?.version || finding.quality_change.state;
+        if (!batch && finding.batch_acceptance && !finding.quality_change.quantity &&
+            (selected?.key.startsWith('receipt-batch-') || state!=='by_batch')) state='pending';
+        const label=batch ? batch.label : ['applied','original'].includes(state) ? '本次' : '';
         versionNote.replaceChildren(glyph('layers'),el('span',label+versionLabels[state]));
         versionNote.dataset.state=state;
       }
       announcement.textContent = selection.map(fact => fact?.quote || '未选引文').join(' / ');
     }
     function use(pair) {
+      selectedKey=pair?.key;
       selection[0] = pair?.left; selection[1] = pair?.right;
       paint(0); paint(1); sync();
     }
@@ -442,8 +448,8 @@ const EvidenceCompare = (() => {
     if (note) root.append(note);
     root.append(box('compare-spread',...sides.map(s => s.node)),announcement,finder.dialog);
     const batches=finding.batch_acceptance?.batches || [];
-    const changed=batches.filter(b=>finding.batch_acceptance.records.some(r=>b.records.includes(r.unit) && r.standard?.state==='applied'));
-    const initial=[...priorityFindings(batches),...changed].map(b=>pairs.find(p=>p.key==='batch-'+b.index)).find(Boolean);
+    const initial=priorityFindings(batches).map(b=>pairs.find(p=>p.key==='batch-'+b.index)).find(Boolean) ||
+      pairs.find(p=>p.version==='applied');
     const focus = pairs.find(p=>p.key==='retest-'+finding.reinspection?.focus);
     use(focus || initial || pairs[0]);
     return root;

@@ -14,12 +14,7 @@ const BatchPhase = (() => {
     const refs = [...clean(text).matchAll(/第([\d零一二两三四五六七八九十]+)批/gu)];
     return refs.length === 1 && refs[0].index === 0 && [String(index), ordinal, ordinal.replace(/二/g, '两')].includes(refs[0][1]);
   }
-  function cited(item, graph) {
-    return new Map(PerformanceIndex.originals(item, graph)
-      .filter(source => source.line && item.evidence.includes(source.fact.id))
-      .map(source => [source.fact.id, source.fact]));
-  }
-  function resolve(phase, acceptance, graph) {
+  function resolve(phase, acceptance, graph, pages) {
     const stage = phase?.stage, index = stage?.batch_index;
     if (phase?.rule !== 'H04' || (index == null && !/^第[\d零一二两三四五六七八九十]+批/u.test(clean(stage?.clause)))) return null;
     const validIndex = Number.isSafeInteger(index) && index >= 1 && index <= 99;
@@ -28,7 +23,11 @@ const BatchPhase = (() => {
     if (!validIndex || !Array.isArray(ledger?.batches) || !Array.isArray(ledger.records)) return pending;
     const matches = ledger.batches.filter(batch => batch.index === index);
     if (matches.length !== 1) return pending;
-    const batch = matches[0], stages = cited(phase, graph), accepted = cited(acceptance, graph);
+    const batch = matches[0];
+    if (![phase,acceptance,batch].every(f=>Array.isArray(f.evidence) && Array.isArray(f.scope))) return pending;
+    const stageRows=PerformanceIndex.originals(phase,graph), acceptedRows=PerformanceIndex.originals(acceptance,graph);
+    const lines=rows=>new Map(rows.filter(s=>s.line).map(s=>[s.fact.id,s.fact]));
+    const stages=lines(stageRows), accepted=lines(acceptedRows);
     const clause = stages.get(stage.clause_ref), allocation = stages.get(batch.clause_ref);
     const kinds = graph.documents_by_kind || {};
     if (clause?.field !== 'payment_stage' || allocation?.field !== 'delivery_batch' ||
@@ -43,7 +42,10 @@ const BatchPhase = (() => {
     const rows = ledger.records.filter(row => row.index === index && row.role !== 'final');
     if (!sameIds(batch.records, rows.map(row => row.unit))) return pending;
     const evidence = new Set(batch.evidence), records = [];
-    let quality = null;
+    let quality = null, standard = null;
+    const changed=Boolean(acceptance.quality_change && !acceptance.quality_change.quantity || rows.some(r=>r.standard));
+    if (changed && rows.some(r=>ledger.records.filter(other=>other.unit===r.unit).length!==1 ||
+        ledger.batches.filter(other=>other.records?.includes(r.unit)).length!==1)) return pending;
     const receipts = [...(kinds.acceptance || []), ...(kinds.reinspection || [])];
     for (const row of rows) {
       const scope = stages.get(row.scope_ref);
@@ -55,8 +57,12 @@ const BatchPhase = (() => {
       const dates = fields.filter(f => f.field === 'accepted_on' && row.date && PhaseEvidence.dateOn(f) === row.date);
       const numbers = fields.filter(f => f.field === 'acceptance_number' && row.number &&
         (!row.number_ref || f.id === row.number_ref) && clean(printed(f)) === clean(row.number));
-      records.push({scope, number: numbers.length === 1 ? numbers[0] : null, date: dates.length === 1 ? dates[0] : null});
-      if (batch.status === 'issue' && row.status === 'issue' && rows.length === 1) {
+      if (changed && rows.length===1) {
+        standard=BatchStandard.resolve({phase,acceptance,graph,pages,batch,row,clause,allocation,stages,accepted,stageRows,acceptedRows});
+      }
+      const date=changed?standard?.date:dates.length===1?dates[0]:null;
+      records.push({scope, number: numbers.length === 1 ? numbers[0] : null, date});
+      if (!changed && batch.status === 'issue' && row.status === 'issue' && rows.length === 1) {
         const criteria = [...stages.values()].filter(f => f.field === 'acceptance_criteria' && unit(f) === unit(clause) &&
           evidence.has(f.id) && accepted.has(f.id));
         const readings = fields.filter(f => f.field === 'measured_result');
@@ -85,7 +91,10 @@ const BatchPhase = (() => {
         ((Number.isSafeInteger(r.index) && r.index > 0) || r.role === 'final')));
     const missingReceipt = !records.length && batch.status === 'missing' && accountedFor &&
       batch.detail.includes('缺少对应本批的验收原件');
-    return {index, status: batch.status, verified: true, detail: batch.detail, clause, allocation, records, missingReceipt, quality};
+    const uncertain=changed && (!standard || standard.state==='pending' && rows[0]?.standard?.state!=='pending' ||
+      batch.status==='ok' && !standard.chosen);
+    return {index, status:uncertain?'missing':batch.status, verified:true,
+      detail:uncertain?'本批适用标准的原件关系待核。':batch.detail, clause, allocation, records, missingReceipt, quality, standard};
   }
 
   function panel(proof, stage) {
@@ -96,13 +105,15 @@ const BatchPhase = (() => {
       root.append(el('p', '本期条款与批次原件的引用关系待核。'));
       return root;
     }
-    function source(title, fact) {
-      const button = action('', () => openPage(fact.doc, fact.page, fact.id), 'batch-phase-source');
+    function source(title, fact, note, open) {
+      const button = action('', open || (() => openPage(fact.doc, fact.page, fact.id)), 'batch-phase-source');
       const place = '第 ' + fact.page + ' 页 · 第 ' + fact.source_line.number + ' 行';
       button.dataset.fact = fact.id;
+      button.title = fact.name + ' · ' + place;
       button.setAttribute('aria-haspopup', 'dialog'); button.setAttribute('aria-controls', 'page-dialog');
-      button.setAttribute('aria-label', [title, printed(fact), place, fact.name].join('，'));
-      button.append(el('small', title), el('strong', printed(fact)), el('span', place), glyph('arrows-angle-expand'));
+      const caption=el('small',title);
+      if (note) caption.append(el('em',note));
+      button.append(caption, el('strong', printed(fact)), el('span', place), glyph('arrows-angle-expand'));
       return button;
     }
     function file(name, ...rows) {
@@ -129,6 +140,7 @@ const BatchPhase = (() => {
     const modes = box('batch-phase-modes');
     modes.setAttribute('role', 'group'); modes.setAttribute('aria-label', label(proof) + '凭据');
     const views = [['contract', '合同约定', contract], ['receipt', '验收凭证', receipts]];
+    if (proof.standard) views.push(['standard','标准核对',BatchStandard.panel(proof.standard,source)]);
     if (proof.quality) {
       const {criterion, reading} = proof.quality;
       const comparison = box('batch-phase-comparison', source('合同标准', criterion), source('本批实测', reading));
@@ -153,12 +165,12 @@ const BatchPhase = (() => {
     root.append(modes, ...views.map(view => view[2]));
     if (proof.status !== 'ok') {
       const reason = proof.detail.trim(), first = reason.indexOf('。') + 1 || reason.length;
-      if (proof.records.length && !proof.quality) root.append(el('p', reason.slice(0, first), 'batch-phase-reason'));
-      if (proof.quality || reason.length > first || (!proof.missingReceipt && !proof.records.length))
+      if (proof.records.length && !proof.quality && !proof.standard) root.append(el('p', reason.slice(0, first), 'batch-phase-reason'));
+      if (proof.standard || proof.quality || reason.length > first || (!proof.missingReceipt && !proof.records.length))
         root.append(fold('本批检查依据', el('p', reason)));
     }
-    select(proof.quality ? 'quality' : 'receipt');
+    select(proof.standard?'standard':proof.quality?'quality':'receipt');
     return root;
   }
-  return {resolve, panel, label};
+  return {resolve, panel, label, batchPrefix};
 })();

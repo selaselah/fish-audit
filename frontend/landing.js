@@ -76,13 +76,15 @@ if (!restoreWorkspaceLink()) {
     sceneTabs[i].querySelector('small').textContent=select.options.length+' 个场景';
   }
   const examples={company:{scene:'signing',revision:9},word:{scene:'word-signing',revision:6},calendar:{scene:'contract-dates',revision:6},pdf:{scene:'pdf-signing'}};
-  const inspectionRoutes={readings:'acceptance',signers:'acceptance-signers',equipment:'inspection',named:'named-inspection',supplier:'suppliers',comments:'word-comments'};
+  const inspectionRoutes={readings:'acceptance',standards:'batch-standards',signers:'acceptance-signers',equipment:'inspection',named:'named-inspection',supplier:'suppliers',comments:'word-comments'};
   function sceneAddress(name) {
     const url=new URL(location.href);
     const scene=name==='inspection'?inspectionRoutes[inspectionExample.value]:name==='folios'?({comments:'contract-comments',reference:'payment-acceptance',timing:'signer-timing',clock:'signer-clock',proof:'payment-proof',folios:'folios'}[paymentExample.value]):name;
     url.searchParams.set('scene',name==='signing' ? examples[contractExample.value].scene : scene);
     if (url.searchParams.get('scene')==='pdf-signing') url.searchParams.set('pdf',PublicPdfSigning.selected());
     else url.searchParams.delete('pdf');
+    if (scene==='batch-standards') PublicBatchStandards.address(url);
+    else { url.searchParams.delete('edition'); url.searchParams.delete('batch'); }
     url.hash='workflow';
     history.replaceState(history.state,'',url);
   }
@@ -155,8 +157,10 @@ if (!restoreWorkspaceLink()) {
     const choice=inspectionExample.value;
     for (const key of Object.keys(inspectionRoutes)) document.getElementById('inspection-'+key).hidden=key!==choice;
     const version=document.getElementById('inspection-version');
+    version.hidden=choice==='standards';
     version.textContent=inspectionRevisions[choice]?'合成案例 · R'+inspectionRevisions[choice]:'合成案例';
     if (inspectionScene.hidden || choice==='readings') return;
+    if (choice==='standards') { PublicBatchStandards.open(); return; }
     if (choice==='supplier') {PublicSuppliers.open();return;}
     if (choice==='comments') {PublicAcceptanceComments.open();return;}
     if (choice==='signers') {

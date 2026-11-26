@@ -87,9 +87,22 @@ export async function checkEvidenceCompare({root,call,evaluate,wait},caseId,requ
       assert.equal(change[byId.get(left).field],change.effective_on);
       assert.equal(byId.get(right).field,'accepted_on');
     }
+    if (pair.startsWith('receipt-batch-')) {
+      const batch=h.batch_acceptance.batches.find(b=>b.index===Number(pair.slice('receipt-batch-'.length)));
+      const lines=[byId.get(left),byId.get(right)];
+      assert.deepEqual(lines.map(f=>f.field),['inspection_basis','measured_result']);
+      assert.ok(lines.every(f=>batch.records.includes(f.unit || f.doc) && batch.evidence.includes(f.id)));
+      assert.equal(await evaluate($('.compare-version')+'.dataset.state'),'pending');
+    }
     if (pair.startsWith('batch-')) {
       const batch=h.batch_acceptance.batches.find(b=>b.index===Number(pair.slice(6)));
-      assert.ok(batch.records.includes(byId.get(right).unit || byId.get(right).doc));
+      const selected=h.batch_acceptance.records.find(r=>batch.records.includes(r.unit))?.standard;
+      if (byId.get(right).field==='revised_criterion') {
+        assert.equal(selected.state,'pending');
+        assert.equal(byId.get(left).field,'acceptance_criteria');
+        assert.ok(change.units.includes(byId.get(right).unit || byId.get(right).doc));
+      } else assert.ok(batch.records.includes(byId.get(right).unit || byId.get(right).doc));
+      if (selected) assert.equal(await evaluate($('.compare-version')+'.dataset.state'),selected.state);
     }
   }
   if (defaultPair) await evaluate($('[data-pair="'+defaultPair+'"]')+'.click()');

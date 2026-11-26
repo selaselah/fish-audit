@@ -171,7 +171,7 @@ function openPage(docId, pageNumber, highlight, lineHint, registerPair, rawRef) 
   if (item) OriginalReader.open(item,pageNumber,{highlight,lineHint,registerPair,rawRef});
 }
 
-function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,rawRef}, selected, pageUrl, signal) {
+function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,rawRef,printedSource}, selected, pageUrl, signal) {
   const docId = item.id;
   const image = el('img', '', 'page-image');
   image.alt = item.name + ' 第 ' + pageNumber + ' 页';
@@ -214,7 +214,7 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
   const word=WordSigning.resolve(paper?.findings.find(f=>f.rule==='H01'),paper?.graph,paper?.calls.pages);
   const registerRefs=ReinspectionTrail.pageReferences(paper?.findings.find(f=>f.rule==='H02'),paper?.graph,docId,pageNumber);
   const timingRows=ReinspectionTiming.pageReferences(paper?.findings.find(f=>f.rule==='H02'),paper?.graph,docId,pageNumber);
-  const otherRefs = [...registerRefs, ...boardRefs, ...repairRefs, ...PhaseEvidence.pageReferences(paper?.graph,docId,pageNumber,pageFacts,lineHint,paper?.calls.pages)];
+  const otherRefs = [...(printedSource?[printedSource]:[]), ...registerRefs, ...boardRefs, ...repairRefs, ...PhaseEvidence.pageReferences(paper?.graph,docId,pageNumber,pageFacts,lineHint,paper?.calls.pages)];
   const timingRefs=timingRows.filter(s=>!otherRefs.some(r=>r.rawLine===s.rawLine));
   const contractRefs=[...ContractFolios.pageReferences(docId,pageNumber),...ContractCalendar.pageReferences(docId,pageNumber)];
   const preferred=[...contractRefs,...otherRefs].find(r=>r.ref===rawRef);
@@ -562,13 +562,14 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
     const label = {inspection_reference:'设备检验原行',contract_signing_reference:'合同签章原行',payment_release_reference:'放行依据原行',acceptance_opinion_reference:'付款意见原行',payment_amendment_reference:'付款变更所据原行',invoice_receipt_reference:'收票条件所据原行',repair_completion_reference:'整改记录原行',equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',approval_reference:'董事会审批记录原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
     const timingRow=timingRefs.find(r=>r.rawLine===gap.line);
     const raw = rawLines.find(source => source.rawLine === gap.line);
-    const heading=contractRefs.includes(raw) || ['acceptance_clock_source','signer_date_source','payment_execution_source'].includes(raw?.quality)
+    const heading=contractRefs.includes(raw) || ['acceptance_clock_source','signer_date_source','payment_execution_source','batch_stamp_source'].includes(raw?.quality)
       ? raw.label : timingRow?.label || (gap.quality==='register_reference'?'复验附注':label);
-    const section = box('evidence-row',el('h4',heading+' · 第 '+gap.line+' 行'),el('blockquote',gap.quote));
+    const quote=raw?.quality==='batch_stamp_source'?raw.quote:gap.quote;
+    const section = box('evidence-row',el('h4',heading+' · 第 '+gap.line+' 行'),el('blockquote',quote));
     section.dataset.gapLine = String(gap.line);
     if (raw) {
       section.dataset.sourceRef = raw.ref;
-      section.prepend(indexButton(raw.ref,heading+' · 第 '+gap.line+' 行',gap.quote));
+      section.prepend(indexButton(raw.ref,heading+' · 第 '+gap.line+' 行',quote));
       if (boardRefs.includes(raw)) section.dataset.boardRef = raw.ref;
     }
     if (gap.line===lineHint) {
@@ -954,19 +955,24 @@ function finding(item) {
   const packets=state.bundle.report.graph.receipt_packet_sources?.packets;
   if (item.rule==='H02' && packets?.length) node.append(receiptPacketPanel(packets,state.bundle.report.graph));
   if (item.batch_acceptance) {
-    const {graph,findings}=state.bundle.report;
-    node.append(deliveryBatchPanel(item.batch_acceptance,graph,findings.filter(f=>f.rule==='H04')));
+    const {graph,findings,calls}=state.bundle.report;
+    node.append(deliveryBatchPanel(item,graph,findings.filter(f=>f.rule==='H04'),calls?.pages));
   }
   if (item.stage_payments) node.append(stagePaymentsPanel(item,state.bundle.report.graph,state.bundle.report.findings));
   if (item.stage?.batch_index && !item.stage_payments) {
-    const {findings}=state.bundle.report;
-    const batch=findings.find(f=>f.batch_acceptance)?.batch_acceptance;
+    const {findings,graph,calls}=state.bundle.report;
+    const acceptance=findings.find(f=>f.rule==='H02' && f.batch_acceptance), batch=acceptance?.batch_acceptance;
     const record=batch?.batches.find(b=>b.index===item.stage.batch_index);
-    const sources=(record?.records || []).map(unit=>batch.records.find(r=>r.unit===unit)?.scope_ref).filter(Boolean);
-    const evidence=box('flow',el('strong','第'+item.stage.batch_index+'批验收'),el('span',item.stage.batch_date || '合格日期待核','small'));
-    if (record) evidence.append(citation(record.clause_ref));
+    const versioned=item.rule==='H04' && (acceptance?.quality_change && !acceptance.quality_change.quantity || batch?.records.some(r=>r.standard));
+    const proof=versioned && BatchPhase.resolve(item,acceptance,graph,calls?.pages);
+    const sources=versioned?(proof?.records || []).map(r=>r.scope.id):
+      (record?.records || []).map(unit=>batch.records.find(r=>r.unit===unit)?.scope_ref).filter(Boolean);
+    const allocation=versioned?proof?.allocation?.id:record?.clause_ref;
+    const qualified=(!versioned || proof?.status==='ok') && item.stage.batch_date;
+    const evidence=box('flow',el('strong','第'+item.stage.batch_index+'批验收'),el('span',qualified || '合格日期待核','small'));
+    if (allocation) evidence.append(citation(allocation));
     for (const ref of sources) evidence.append(citation(ref));
-    if (record?.signing_requirement) evidence.append(evidenceJump('核对'+record.label+'签认','batch-signing-'+record.index));
+    if (record?.signing_requirement && allocation) evidence.append(evidenceJump('核对'+record.label+'签认','batch-signing-'+record.index));
     node.append(evidence);
   }
   if (item.rule.startsWith('H')) {

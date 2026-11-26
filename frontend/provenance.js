@@ -109,7 +109,7 @@ function performanceOverview(findings, graph) {
   const authorityPairs=signing ? EvidenceCompare.presets(signing,
     traceReferences(graph,signing).map(id=>index.facts.get(id)).filter(Boolean),graph).filter(p=>p.authority && p.status) : [];
   const pairs=acceptance && (acceptance.reinspection || batches?.records.some(r=>r.standard)) ? EvidenceCompare.presets(acceptance,
-    traceReferences(graph,acceptance).map(id=>index.facts.get(id)).filter(Boolean),graph) : [];
+    traceReferences(graph,acceptance).map(id=>index.facts.get(id)).filter(Boolean),graph,state.bundle.report) : [];
   const paymentLabel = f => {
     const document = f.evidence.map(ref=>index.facts.get(ref)).find(fact=>fact?.field==='bank_receipt');
     return document?.name || f.id;
@@ -157,15 +157,10 @@ function performanceOverview(findings, graph) {
       const jump=action('对照签约授权',()=>showFindingPath(signing,true,authority.key),'compare-jump');
       jump.dataset.authorityPair=authority.key; row.append(jump);
     }
-    const batch=batches?.batches.find(b=>b.index===stage.batch_index);
-    const record=batch?.records.length===1 && batches.records.find(r=>r.unit===batch.records[0]);
-    if (record?.standard) {
-      const version={original:'按原合同',applied:'按补充协议',pending:'适用版本待核'}[record.standard.state];
-      const review=box('flow',el('strong',version),el('span',record.standard.criterion || record.date || '验收日期待核','small'));
-      const pair=pairs.find(p=>p.key==='batch-'+batch.index);
-      if (pair) review.append(action('对照本批原件',()=>showFindingPath(acceptance,true,pair.key),'compare-jump'));
-      else if (record.scope_ref) review.append(citation(record.scope_ref));
-      row.append(review);
+    const pair=pairs.find(p=>p.phase===phase.id && p.key==='batch-'+stage.batch_index);
+    if (pair) {
+      const label=pair.version!=='pending'?'对照本批标准与实测':pair.right.field==='accepted_on'?'对照同日原件':'对照候选标准';
+      row.append(action(label,()=>showFindingPath(acceptance,true,pair.key),'compare-jump'));
     }
     if (acceptance?.reinspection) {
       const candidates=pairs.filter(p=>p.key.startsWith('retest-') && [p.left.id,p.right.id].every(ref=>phase.evidence.includes(ref)));
@@ -464,7 +459,8 @@ function phaseRemarks(finding, batches, graph) {
   return group;
 }
 
-function deliveryBatchPanel(entry, graph, phases) {
+function deliveryBatchPanel(finding, graph, phases, pages) {
+  const entry=finding.batch_acceptance;
   const {facts,documents}=graphIndex(graph);
   const ledger=graph.delivery_batch_sources;
   const panel=el('section','','delivery-batches');
@@ -485,10 +481,10 @@ function deliveryBatchPanel(entry, graph, phases) {
     if (entry.completion_on) panel.append(el('p','按合同达到终验条件 · '+entry.completion_on,'batch-final'));
     else if (!entry.deemed_final) panel.append(el('p',rule && /另行(组织最终验收|终验)/.test(rule.quote)?'合同约定另行终验，待核终验原件。':'各批验收与最终验收的关系待核。','batch-final'));
   }
-  function receipt(r) {
+  function receipt(r,day=r.date) {
     const group=box('batch-receipt');
     const scope=facts.get(r.scope_ref);
-    const head=box('flow',el('strong',r.number || '验收单号待核'),el('span',r.date || '日期待核','small'));
+    const head=box('flow',el('strong',r.number || '验收单号待核'),el('span',day || '日期待核','small'));
     if (scope) head.append(citation(r.scope_ref));
     group.append(head);
     const summary=[r.count!=null?'实收 '+r.count+r.unit_name:'实收数量待核',...r.serials].join(' · ');
@@ -569,13 +565,29 @@ function deliveryBatchPanel(entry, graph, phases) {
     section.dataset.deliveryIndex=String(b.index);
     const title=box('flow',el('h5',b.label),tag(b.status));
     const due=phases.filter(f=>f.stage?.batch_index===b.index).map(f=>f.stage.name+' '+f.stage.share+'%');
+    const versioned=finding.quality_change && !finding.quality_change.quantity || b.records.some(unit=>records.get(unit)?.standard);
+    const raw=versioned && BatchStandard.receipt(finding,b,graph,pages);
     if (due.length) title.append(el('span',due.join('、'),'batch-payment'));
     section.append(title,sourceRow(b.clause_ref));
-    for (const unit of b.records) section.append(receipt(records.get(unit)));
+    for (const unit of b.records) {
+      const record=records.get(unit);
+      if (record && (!versioned || raw)) section.append(receipt(record,raw?PhaseEvidence.dateOn(raw.date):record.date));
+    }
     if (b.signing_requirement) section.append(signingPanel(b,b.index,'本批',b.label+'验收签认'));
     if (!b.records.some(unit=>records.get(unit)?.signing?.detail===b.detail)) section.append(el('p',b.detail,'batch-detail'));
-    const refs=b.evidence.filter(ref=>proofFields.has(facts.get(ref)?.field));
-    if (refs.length) section.append(lazyFold('核对标准、实测与签认原文',()=>refs.map(sourceRow)));
+    const refs=b.evidence.filter(ref=>{
+      const f=facts.get(ref);
+      return proofFields.has(f?.field) && (!versioned || raw?.fields?.has(ref) &&
+        !['acceptance_criteria','inspection_basis','measured_result','accepted_on'].includes(f.field));
+    });
+    if (refs.length || versioned) section.append(lazyFold('核对标准、实测与签认原文',()=>{
+      if (!versioned) return refs.map(sourceRow);
+      const bound=phases.filter(f=>f.stage?.batch_index===b.index);
+      const standard=bound.length===1 && BatchPhase.resolve(bound[0],finding,graph,pages)?.standard;
+      const standards=standard?.chosen?[standard.chosen]:[standard?.original,standard?.revised];
+      const sources=[...standards,raw?.basis,raw?.reading,raw?.date].filter(Boolean);
+      return [...sources.map(f=>sourceRow(f.id)),...refs.map(sourceRow)];
+    }));
     panel.append(section);
   }
   for (const r of entry.records.filter(r=>!matched.has(r.unit))) {
@@ -1528,7 +1540,7 @@ function provenancePanel(report) {
     const rule=index.nodes.get(control);
     const references=traceReferences(graph,f);
     const facts=references.map(ref=>index.facts.get(ref)).filter(Boolean);
-    const pairs=EvidenceCompare.presets(f,facts,graph);
+    const pairs=EvidenceCompare.presets(f,facts,graph,report);
     buildComparison=facts.length>=2 ? ()=>EvidenceCompare.panel(f,facts,pairs,index) : null;
     modeButtons.hidden=!buildComparison;
     compare.replaceChildren();

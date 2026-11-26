@@ -156,7 +156,7 @@ export async function checkPublicTopics(ctx) {
   const {root,call,evaluate,wait}=ctx;
   const routes=[
     ['signing',['signing','word-signing','contract-dates','pdf-signing'],'signing-example',['company','word','calendar','pdf']],
-    ['inspection',['acceptance','acceptance-signers','inspection','named-inspection','suppliers','word-comments'],'inspection-example',['readings','signers','equipment','named','supplier','comments']],
+    ['inspection',['acceptance','batch-standards','acceptance-signers','inspection','named-inspection','suppliers','word-comments'],'inspection-example',['readings','standards','signers','equipment','named','supplier','comments']],
     ['folios',['contract-comments','payment-proof','signer-clock','signer-timing','payment-acceptance','folios'],'payment-example',['comments','proof','clock','timing','reference','folios']],
   ];
   for (const [tab,scenes,pick,values] of routes) {
@@ -198,5 +198,5 @@ export async function checkPublicTopics(ctx) {
     await wait('document.activeElement==='+q('#compare-inspection'),'back to comparison button');
     assert.equal(await evaluate('performance.getEntriesByType("resource").some(r=>new URL(r.name).pathname.startsWith("/api/"))'),false);
   }
-  console.log('PASS · 16 public scenario addresses in three topics, watermarked original and revision, responsive and keyboard focus');
+  console.log('PASS · '+routes.reduce((count,route)=>count+route[1].length,0)+' public scenario addresses in three topics, watermarked original and revision, responsive and keyboard focus');
 }

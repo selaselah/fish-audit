@@ -1,0 +1,577 @@
+{
+  "case_id": "7e3e44b82d394ed4a9324a0d3be0f8b7",
+  "default_rev": 15,
+  "docs": [
+    {
+      "id": "d04",
+      "kind": "contract",
+      "title": "采购合同",
+      "version": "合成采购 · R15 / R14",
+      "page": 1,
+      "pdf": "/showcase/batch-version-contract.pdf",
+      "image": "/assets/batch-version-contract.jpg",
+      "width": 1547,
+      "height": 2190,
+      "source_sha256": "aa0fb4bc0b52a18bd168e32466bd236fa812081f311876a7a9c0d26f6e4db967",
+      "page_sha256": "bdc029056782cfa73179db07b786483ee4e496d7b92783c10d605a13291c8209",
+      "lines": [
+        {
+          "ref": "d04/p1/f13",
+          "field": "acceptance_criteria",
+          "label": "约定验收标准",
+          "value": "柜温不高于4℃",
+          "quote": "约定验收标准：柜温不高于4℃",
+          "line": 14,
+          "rect": [
+            0.08209,
+            0.57991,
+            0.42211,
+            0.59635
+          ],
+          "rects": [
+            [
+              0.08209,
+              0.57991,
+              0.42211,
+              0.59635
+            ]
+          ]
+        },
+        {
+          "ref": "d04/p1/f19",
+          "field": "payment_stage",
+          "label": "第二期",
+          "value": "第一批验收合格后支付35%",
+          "quote": "第二期：第一批验收合格后支付35%",
+          "line": 20,
+          "rect": [
+            0.08209,
+            0.77945,
+            0.48222,
+            0.79589
+          ],
+          "rects": [
+            [
+              0.08209,
+              0.77945,
+              0.48222,
+              0.79589
+            ]
+          ]
+        },
+        {
+          "ref": "d04/p1/f20",
+          "field": "payment_stage",
+          "label": "第三期",
+          "value": "第二批验收合格后支付35%",
+          "quote": "第三期：第二批验收合格后支付35%",
+          "line": 21,
+          "rect": [
+            0.08209,
+            0.81233,
+            0.48222,
+            0.82922
+          ],
+          "rects": [
+            [
+              0.08209,
+              0.81233,
+              0.48222,
+              0.82922
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "d05",
+      "kind": "addendum",
+      "title": "采购合同补充协议",
+      "version": "合成采购 · R15 / R14",
+      "page": 1,
+      "pdf": "/showcase/batch-version-addendum.pdf",
+      "image": "/assets/batch-version-addendum.jpg",
+      "width": 1547,
+      "height": 2190,
+      "source_sha256": "5a525725b8beab76b16352b99172d90d219cdcbb24dca17c64bef1f3e6cd5151",
+      "page_sha256": "480084dc0719ba3ebcba9a18b79be094d942117b242aafdb4267c03da7837edd",
+      "lines": [
+        {
+          "ref": "d05/p1/f8",
+          "field": "previous_criterion",
+          "label": "原验收标准",
+          "value": "柜温不高于4℃",
+          "quote": "原验收标准：柜温不高于4℃",
+          "line": 9,
+          "rect": [
+            0.08209,
+            0.4137,
+            0.3969,
+            0.43014
+          ],
+          "rects": [
+            [
+              0.08209,
+              0.4137,
+              0.3969,
+              0.43014
+            ]
+          ]
+        },
+        {
+          "ref": "d05/p1/f9",
+          "field": "revised_criterion",
+          "label": "变更后验收标准",
+          "value": "柜温不高于2℃",
+          "quote": "变更后验收标准：柜温不高于2℃",
+          "line": 10,
+          "rect": [
+            0.08145,
+            0.44703,
+            0.44732,
+            0.46347
+          ],
+          "rects": [
+            [
+              0.08145,
+              0.44703,
+              0.44732,
+              0.46347
+            ]
+          ]
+        },
+        {
+          "ref": "d05/p1/f10",
+          "field": "change_timing",
+          "label": "变更适用时点",
+          "value": "仅适用于本协议生效后进行的验收",
+          "quote": "变更适用时点：仅适用于本协议生效后进行的验收",
+          "line": 11,
+          "rect": [
+            0.08145,
+            0.47991,
+            0.63413,
+            0.49635
+          ],
+          "rects": [
+            [
+              0.08145,
+              0.47991,
+              0.63413,
+              0.49635
+            ]
+          ]
+        },
+        {
+          "ref": "d05/p1/f11",
+          "field": "change_effect_clause",
+          "label": "协议生效条款",
+          "value": "本协议自双方盖章之日起生效",
+          "quote": "协议生效条款：本协议自双方盖章之日起生效",
+          "line": 12,
+          "rect": [
+            0.08209,
+            0.51324,
+            0.58371,
+            0.52968
+          ],
+          "rects": [
+            [
+              0.08209,
+              0.51324,
+              0.58371,
+              0.52968
+            ]
+          ]
+        },
+        {
+          "ref": "d05/p1/f12",
+          "field": "buyer_sealed_on",
+          "label": "甲方盖章日期",
+          "value": "2026年9月10日",
+          "quote": "甲方盖章日期：2026年9月10日",
+          "line": 13,
+          "rect": [
+            0.08403,
+            0.54658,
+            0.42534,
+            0.56301
+          ],
+          "rects": [
+            [
+              0.08403,
+              0.54658,
+              0.42534,
+              0.56301
+            ]
+          ]
+        },
+        {
+          "ref": "d05/p1/f13",
+          "field": "seller_sealed_on",
+          "label": "乙方盖章日期",
+          "value": "2026年9月12日",
+          "quote": "乙方盖章日期：2026年9月12日",
+          "line": 14,
+          "rect": [
+            0.08468,
+            0.57991,
+            0.42534,
+            0.59635
+          ],
+          "rects": [
+            [
+              0.08468,
+              0.57991,
+              0.42534,
+              0.59635
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "d01",
+      "kind": "acceptance",
+      "title": "第一批验收报告",
+      "version": "合成采购 · R15 / R14",
+      "page": 1,
+      "pdf": "/showcase/batch-version-first.pdf",
+      "image": "/assets/batch-version-first.jpg",
+      "width": 1547,
+      "height": 2190,
+      "source_sha256": "600871cbc767edb642f34c34f1c03c281158bd1c653927dbe557da3f791884d5",
+      "page_sha256": "80f75686d86baaa0afa68bd556585cc194b506d462c5179685308cf51e1328e2",
+      "lines": [
+        {
+          "ref": "d01/p1/f6",
+          "field": "accepted_on",
+          "label": "验收日期",
+          "value": "2026年9月10日",
+          "quote": "验收日期：2026年9月10日",
+          "line": 7,
+          "rect": [
+            0.08145,
+            0.34703,
+            0.37492,
+            0.36347
+          ],
+          "rects": [
+            [
+              0.08145,
+              0.34703,
+              0.37492,
+              0.36347
+            ]
+          ]
+        },
+        {
+          "ref": "d01/p1/f10",
+          "field": "inspection_basis",
+          "label": "检验依据",
+          "value": "柜温不高于4℃",
+          "quote": "检验依据：柜温不高于4℃",
+          "line": 11,
+          "rect": [
+            0.08145,
+            0.48037,
+            0.37169,
+            0.49635
+          ],
+          "rects": [
+            [
+              0.08145,
+              0.48037,
+              0.37169,
+              0.49635
+            ]
+          ],
+          "crop": "/assets/batch-version-first-basis.webp"
+        },
+        {
+          "ref": "d01/p1/f11",
+          "field": "measured_result",
+          "label": "实测结果",
+          "value": "柜温3℃",
+          "quote": "实测结果：柜温3℃",
+          "line": 12,
+          "rect": [
+            0.08274,
+            0.5137,
+            0.29606,
+            0.52968
+          ],
+          "rects": [
+            [
+              0.08274,
+              0.5137,
+              0.29606,
+              0.52968
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "id": "d02",
+      "kind": "acceptance",
+      "title": "第二批验收报告",
+      "version": "合成采购 · R15 / R14",
+      "page": 1,
+      "pdf": "/showcase/batch-version-second.pdf",
+      "image": "/assets/batch-version-second.jpg",
+      "width": 1547,
+      "height": 2190,
+      "source_sha256": "529acac6b062a4ee943cc4f10b8dbd9763835404f3e00f473630ff1863a39ff3",
+      "page_sha256": "65f00f192c31138426b0610b238d95fd47f75c6c0a00cf7fe7eb63885cc8eaf2",
+      "lines": [
+        {
+          "ref": "d02/p1/f6",
+          "field": "accepted_on",
+          "label": "验收日期",
+          "value": "2026年9月20日",
+          "quote": "验收日期：2026年9月20日",
+          "line": 7,
+          "rect": [
+            0.08145,
+            0.34703,
+            0.37492,
+            0.36347
+          ],
+          "rects": [
+            [
+              0.08145,
+              0.34703,
+              0.37492,
+              0.36347
+            ]
+          ]
+        },
+        {
+          "ref": "d02/p1/f10",
+          "field": "inspection_basis",
+          "label": "检验依据",
+          "value": "柜温不高于4℃",
+          "quote": "检验依据：柜温不高于4℃",
+          "line": 11,
+          "rect": [
+            0.08145,
+            0.48037,
+            0.37169,
+            0.49635
+          ],
+          "rects": [
+            [
+              0.08145,
+              0.48037,
+              0.37169,
+              0.49635
+            ]
+          ],
+          "crop": "/assets/batch-version-second-basis.webp"
+        },
+        {
+          "ref": "d02/p1/f11",
+          "field": "measured_result",
+          "label": "实测结果",
+          "value": "柜温3℃",
+          "quote": "实测结果：柜温3℃",
+          "line": 12,
+          "rect": [
+            0.08274,
+            0.5137,
+            0.29606,
+            0.52968
+          ],
+          "rects": [
+            [
+              0.08274,
+              0.5137,
+              0.29606,
+              0.52968
+            ]
+          ]
+        }
+      ]
+    }
+  ],
+  "change": {
+    "original_ref": "d04/p1/f13",
+    "previous_criterion": {
+      "ref": "d05/p1/f8",
+      "value": "柜温不高于4℃"
+    },
+    "revised_criterion": {
+      "ref": "d05/p1/f9",
+      "value": "柜温不高于2℃"
+    },
+    "change_timing": {
+      "ref": "d05/p1/f10",
+      "value": "仅适用于本协议生效后进行的验收"
+    },
+    "change_effect_clause": {
+      "ref": "d05/p1/f11",
+      "value": "本协议自双方盖章之日起生效"
+    },
+    "buyer_sealed_on": {
+      "ref": "d05/p1/f12",
+      "value": "2026年9月10日"
+    },
+    "seller_sealed_on": {
+      "ref": "d05/p1/f13",
+      "value": "2026年9月12日"
+    }
+  },
+  "batches": [
+    {
+      "index": 1,
+      "label": "第一批",
+      "unit": "d01",
+      "date": "2026-09-10",
+      "accepted_on": {
+        "ref": "d01/p1/f6",
+        "value": "2026年9月10日"
+      },
+      "inspection_basis": {
+        "ref": "d01/p1/f10",
+        "value": "柜温不高于4℃"
+      },
+      "measured_result": {
+        "ref": "d01/p1/f11",
+        "value": "柜温3℃"
+      }
+    },
+    {
+      "index": 2,
+      "label": "第二批",
+      "unit": "d02",
+      "date": "2026-09-20",
+      "accepted_on": {
+        "ref": "d02/p1/f6",
+        "value": "2026年9月20日"
+      },
+      "inspection_basis": {
+        "ref": "d02/p1/f10",
+        "value": "柜温不高于4℃"
+      },
+      "measured_result": {
+        "ref": "d02/p1/f11",
+        "value": "柜温3℃"
+      }
+    }
+  ],
+  "editions": [
+    {
+      "rev": 15,
+      "report_sha256": "3b62ab68e3d8a370f8ac6d4349b4af44d0da34edffc1ca94bc8a25516c22ef73",
+      "rule_version": "2026.11.27.04",
+      "quality_change": {
+        "state": "pending",
+        "detail": "需分别核对原合同生效依据、补充协议双方签章原页和各自的盖章日期。",
+        "effective_on": null
+      },
+      "batches": [
+        {
+          "index": 1,
+          "status": "missing",
+          "detail": "本批验收所据标准版本待核。 验收 PDF 仅见排印内容，未检出嵌入式电子签名。需核对带签认痕迹的验收原件或对应签署记录。",
+          "standard": {
+            "state": "pending",
+            "criterion": null,
+            "criterion_ref": null,
+            "date_ref": "d01/p1/f6",
+            "reading_ref": "d01/p1/f11",
+            "effective_on": null
+          },
+          "stage": {
+            "name": "第二期",
+            "share": "35",
+            "clause": "第一批验收合格后支付35%",
+            "clause_ref": "d04/p1/f19",
+            "id": "H04-6",
+            "status": "missing",
+            "detail": "合同签署或约定生效条件尚待核实。"
+          }
+        },
+        {
+          "index": 2,
+          "status": "missing",
+          "detail": "本批验收所据标准版本待核。 验收 PDF 仅见排印内容，未检出嵌入式电子签名。需核对带签认痕迹的验收原件或对应签署记录。",
+          "standard": {
+            "state": "pending",
+            "criterion": null,
+            "criterion_ref": null,
+            "date_ref": "d02/p1/f6",
+            "reading_ref": "d02/p1/f11",
+            "effective_on": null
+          },
+          "stage": {
+            "name": "第三期",
+            "share": "35",
+            "clause": "第二批验收合格后支付35%",
+            "clause_ref": "d04/p1/f20",
+            "id": "H04-7",
+            "status": "missing",
+            "detail": "合同签署或约定生效条件尚待核实。"
+          }
+        }
+      ]
+    },
+    {
+      "rev": 14,
+      "report_sha256": "eeaa92a4c3d534eb224de7cea10ae63cc5a832baa833157d068ba21226aafcbb",
+      "rule_version": "2026.11.25.20",
+      "quality_change": {
+        "state": "by_batch",
+        "detail": "协议仅变更验收标准，双方于 2026-09-12 完成盖章。逐批核对验收日期及当时适用的标准。",
+        "effective_on": "2026-09-12"
+      },
+      "batches": [
+        {
+          "index": 1,
+          "status": "ok",
+          "detail": "本批验收记录的质量、日期及签认相符。",
+          "standard": {
+            "state": "original",
+            "criterion": "柜温不高于4°C",
+            "criterion_ref": "d04/p1/f13",
+            "date_ref": "d01/p1/f6",
+            "reading_ref": "d01/p1/f11",
+            "effective_on": "2026-09-12"
+          },
+          "stage": {
+            "name": "第二期",
+            "share": "35",
+            "clause": "第一批验收合格后支付35%",
+            "clause_ref": "d04/p1/f19",
+            "id": "H04-6",
+            "status": "ok",
+            "detail": "第1批 · 本批验收记录的质量、日期及签认相符。"
+          }
+        },
+        {
+          "index": 2,
+          "status": "issue",
+          "detail": "合同要求“柜温不高于2°C”，验收原页记载“柜温3°C”，实测值超出约定限值。 验收报告所引检验依据同时需核对。",
+          "standard": {
+            "state": "applied",
+            "criterion": "柜温不高于2°C",
+            "criterion_ref": "d05/p1/f9",
+            "date_ref": "d02/p1/f6",
+            "reading_ref": "d02/p1/f11",
+            "effective_on": "2026-09-12"
+          },
+          "stage": {
+            "name": "第三期",
+            "share": "35",
+            "clause": "第二批验收合格后支付35%",
+            "clause_ref": "d04/p1/f20",
+            "id": "H04-7",
+            "status": "risk",
+            "detail": "第2批 · 合同要求“柜温不高于2°C”，验收原页记载“柜温3°C”，实测值超出约定限值。 验收报告所引检验依据同时需核对。"
+          }
+        }
+      ]
+    }
+  ]
+}

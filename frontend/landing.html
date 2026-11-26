@@ -33,6 +33,7 @@
   <link rel="stylesheet" href="/assets/acceptance-roster.css">
   <script src="/assets/acceptance-roster-card.js" defer></script>
   <script src="/assets/public-acceptance-roster.js" defer></script>
+  <script src="/assets/public-batch-standards.js" defer></script>
   <link rel="stylesheet" href="/assets/payment-reference.css">
   <script src="/assets/payment-reference-card.js" defer></script>
   <script src="/assets/public-payment-acceptance.js" defer></script>
@@ -225,7 +226,7 @@
           <div id="scene-inspection" class="inspection-sample" role="tabpanel" aria-labelledby="scene-tab-inspection">
             <div class="signing-sample-header"><span><i class="ui-glyph ic-clipboard-check" aria-hidden="true"></i> 采购验收</span>
               <label id="inspection-example-choice" hidden><span class="sr-only">选择采购验收案例</span>
-                <select id="inspection-example"><option value="readings">实测温度超限</option><option value="signers">验收签字人</option><option value="equipment">设备抽检</option><option value="named">合同指定抽检</option><option value="supplier">供货主体</option><option value="comments">Word 审阅批注</option></select></label>
+                <select id="inspection-example"><option value="readings">实测温度超限</option><option value="standards">分批验收标准变更</option><option value="signers">验收签字人</option><option value="equipment">设备抽检</option><option value="named">合同指定抽检</option><option value="supplier">供货主体</option><option value="comments">Word 审阅批注</option></select></label>
               <small id="inspection-version">合成案例 · R8</small></div>
             <div id="inspection-readings">
               <h3>合同标准与验收实测</h3>
@@ -250,6 +251,13 @@
             <div id="inspection-comments" hidden><a href="/showcase/acceptance-review.docx">下载含批注的水印验收单</a></div>
             <div id="inspection-signers" hidden><a href="/showcase/acceptance-roster-receipt.pdf" target="_blank" rel="noopener">查看水印验收报告签字栏</a></div>
             <div id="inspection-supplier" hidden><a href="/showcase/supplier-contract.pdf" target="_blank" rel="noopener">查看含签署原因的演练合同</a></div>
+            <div id="inspection-standards" data-integrity="sha256-AFkrCvkS4rckcDTUITueXuV4Avs5kxgG34yPFJidhmM=" hidden>
+              <div class="public-standard-fallback">
+                <h3>分批验收标准变更</h3>
+                <a href="/showcase/batch-version-addendum.pdf" target="_blank" rel="noopener">查看水印补充协议 ↗</a>
+                <a href="/showcase/batch-version-second.pdf" target="_blank" rel="noopener">查看第二批验收报告 ↗</a>
+              </div>
+            </div>
           </div>
           <div id="scene-folios" class="signing-sample public-folios" role="tabpanel" aria-labelledby="scene-tab-folios" hidden>
             <div class="signing-sample-header"><span><i class="ui-glyph ic-journal-text" aria-hidden="true"></i> 付款核对</span>

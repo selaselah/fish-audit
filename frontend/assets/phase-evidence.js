@@ -113,7 +113,7 @@ const PhaseEvidence = (() => {
     if (plan && plan.status!=='ok') point('schedule','付款约定','layers',plan.status,null,inspect(plan));
     const accepted=findings.find(f=>f.rule==='H02');
     const relevant=accepted?.evidence.some(ref=>inPhase.has(ref) && ['accepted_on','acceptance_result','acceptance_scope'].includes(facts.get(ref)?.field));
-    const batchProof=BatchPhase.resolve(phase,accepted,graph);
+    const batchProof=BatchPhase.resolve(phase,accepted,graph,state.bundle.report.calls?.pages);
     const batchPanel=batchProof && BatchPhase.panel(batchProof,phase.stage);
     if (batchProof) {
       const label=BatchPhase.label(batchProof);
@@ -276,7 +276,7 @@ const PhaseEvidence = (() => {
     function linked(item,key,label,destination=tools,rightRef) {
       if (!shortcuts.has(item)) {
         const traced=traceReferences(graph,item).map(id=>facts.get(id)).filter(Boolean);
-        shortcuts.set(item,new Map(EvidenceCompare.presets(item,traced,graph).map(p=>[p.key,p])));
+        shortcuts.set(item,new Map(EvidenceCompare.presets(item,traced,graph,state.bundle.report).map(p=>[p.key,p])));
       }
       const pair=shortcuts.get(item).get(key);
       if (!pair || rightRef && pair.right.id!==rightRef) return;

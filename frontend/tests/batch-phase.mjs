@@ -10,7 +10,7 @@ function alteredBatch(id) {
   const results = {};
   for (const change of ['original', 'batch-link', 'payment-link', 'page', 'support', 'other-batch', 'combined-scope',
     'clause', 'ledger-unit', 'duplicate', 'date-hash', 'criterion-link', 'bad-index', 'missing-index']) {
-    const {findings, graph} = structuredClone(state.bundle.report);
+    const {findings, graph, calls} = structuredClone(state.bundle.report);
     const phase = findings.find(f => f.id === id), acceptance = findings.find(f => f.rule === 'H02');
     const ledger = acceptance.batch_acceptance, batch = ledger.batches.find(b => b.index === phase.stage.batch_index);
     const record = ledger.records.find(r => batch.records.includes(r.unit));
@@ -32,7 +32,7 @@ function alteredBatch(id) {
     }
     if (change === 'bad-index') phase.stage.batch_index = '2';
     if (change === 'missing-index') delete phase.stage.batch_index;
-    const proof = BatchPhase.resolve(phase, acceptance, graph), ui = BatchPhase.panel(proof, phase.stage);
+    const proof = BatchPhase.resolve(phase, acceptance, graph, calls?.pages), ui = BatchPhase.panel(proof, phase.stage);
     results[change] = [proof.verified, proof.status, ui.querySelectorAll('[data-fact]').length];
   }
   return results;
@@ -72,10 +72,12 @@ export async function checkBatchPhase(ctx, id, revision) {
       await openStage(phase);
       const batch = ledger.batches.find(b => b.index === phase.stage.batch_index);
       const recordUnits = batch.records, name = String(batch.index);
-      const compared = batch.status === 'issue' && batch.detail.includes('实测值超出约定限值。') ?
+      const versioned = ledger.records.some(r=>r.standard && recordUnits.includes(r.unit));
+      const compared = !versioned && batch.status === 'issue' && batch.detail.includes('实测值超出约定限值。') ?
         ['acceptance_criteria', 'measured_result'].map(field => facts.find(f => f.field === field && batch.evidence.includes(f.id))) : [];
       assert.equal(await evaluate(q(evidence) + '.dataset.verified'), 'true', phase.id + ' at R' + rev);
       assert.equal(await evaluate(q(evidence + ' .tag') + '.dataset.state'), batch.status);
+      if (versioned) assert.equal(await evaluate(q(evidence+' [data-source=standard]')+'.getAttribute("aria-pressed")'),'true');
       if (compared.length) assert.ok(await evaluate(q(evidence + ' [data-source=quality]') + '?.getAttribute("aria-pressed")==="true"'));
       assert.ok(await evaluate(q(scope) + '.scrollWidth<=' + q(scope) + '.clientWidth+1'));
       if (phase === phases.at(-1)) await inspect(ctx, width, evidence, 'batch-' + id.slice(0, 6));
@@ -83,7 +85,7 @@ export async function checkBatchPhase(ctx, id, revision) {
         await evaluate(q(evidence + ' [data-source=receipt]') + '.focus()'); await key('Home');
         assert.equal(await evaluate('document.activeElement.dataset.source'), 'contract');
         await key('End');
-        assert.equal(await evaluate('document.activeElement.dataset.source'), compared.length ? 'quality' : 'receipt');
+        assert.equal(await evaluate('document.activeElement.dataset.source'), versioned ? 'standard' : compared.length ? 'quality' : 'receipt');
       }
       for (const mode of ['receipt', 'contract', ...(compared.length ? ['quality'] : [])]) {
         const switcher = q(evidence + ' [data-source="' + mode + '"]');
@@ -152,17 +154,17 @@ export async function checkBatchPhase(ctx, id, revision) {
   }
   for (const phase of phases) {
     const probe = await evaluate('(' + function (id) {
-      const {findings, graph} = structuredClone(state.bundle.report);
+      const {findings, graph, calls} = structuredClone(state.bundle.report);
       const phase = findings.find(f => f.id === id), h2 = findings.find(f => f.rule === 'H02');
-      const proof = BatchPhase.resolve(phase, h2, graph);
+      const proof = BatchPhase.resolve(phase, h2, graph, calls?.pages);
       if (proof.missingReceipt) {
         graph.documents.push({id:'unclassified', name:'待辨附件'});
-        return BatchPhase.resolve(phase, h2, graph).missingReceipt;
+        return BatchPhase.resolve(phase, h2, graph, calls?.pages).missingReceipt;
       }
       if (proof.quality) {
         const reloaded = structuredClone(graph);
         reloaded.facts.find(f => f.id === proof.quality.reading.id).source_line.rects = [];
-        return Boolean(BatchPhase.resolve(phase, h2, reloaded).quality);
+        return Boolean(BatchPhase.resolve(phase, h2, reloaded, calls?.pages).quality);
       }
       return false;
     }.toString() + ')(' + JSON.stringify(phase.id) + ')');

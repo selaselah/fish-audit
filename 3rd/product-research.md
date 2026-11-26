@@ -1,5 +1,9 @@
 # 审计与会计软件的公开界面
 
+## 采购协议的版本和履约明细
+
+Microsoft Dynamics 365 的采购协议可以保留每次确认的版本，履约明细可以打开相关采购行和发票行。Workiva 的文档历史可以打开指定修订版，比较两次修订。Fish Audit 在分批验收中保留当前批次，审计员切换底稿版本后能就地核对当时引用的原行和所影响的期款。盖章栏日期、适用范围与生效条件分别取自本案原件。[Dynamics 365 采购协议及版本历史](https://learn.microsoft.com/en-us/dynamics365/supply-chain/procurement/purchase-agreements#confirmations-and-version-history-for-purchase-agreements) · [Workiva 文档修订记录](https://support.workiva.com/hc/en-us/articles/360036002651-Revisions-and-history-in-Documents)
+
 ## 验收决定与原件
 
 Ramp Bill Pay 的审阅流程允许审批人在手机上查看单据、选择处理结果，并在退回时写明原因。Fish Audit 将这种直接操作用于底稿验收。选定「退回补件」后，表单显示「需补资料与原因」。财务人员另行点确认，决定和意见一同归入当前底稿版本。原图核验有单独的字段级记录。[Ramp 官方审批说明](https://support.ramp.com/bill-pay-approvals/)

@@ -15,12 +15,14 @@ import {checkPaymentProof} from './payment-proof.mjs';
 import {checkOriginalReader,checkCitedOriginal} from './original-reader.mjs';
 import {checkProduct, checkReviewDesign} from './product.mjs';
 import {checkPurchasePreview,checkIntakeEntry} from './purchase-preview.mjs';
+import {checkPublicBatchStandards} from './public-batch-standards.mjs';
 import {checkPerformanceIndex,checkPublicTopics} from './performance-index.mjs';
 import {checkAcceptanceRoster,checkAcceptancePdf} from './acceptance-roster.mjs';
 import {checkEvidenceCompare,checkMandateCompare,checkPhaseEvidence,checkPaymentChange} from './evidence-compare.mjs';
 import {checkPaymentOpinions} from './payment-opinions.mjs';
 import {checkRelease} from './payment-release.mjs';
 import {checkBatchPhase} from './batch-phase.mjs';
+import {checkBatchStandard} from './batch-standard.mjs';
 import {checkMandateCalendar} from './mandate-calendar.mjs';
 import {checkMandatePdf} from './mandate-pdf.mjs';
 import {checkMandateOriginal} from './mandate-original.mjs';
@@ -52,6 +54,7 @@ await new Promise(resolve => socket.close(resolve));
 const sampleDesk = process.argv.includes('--sample-desk');
 const product = process.argv.includes('--product');
 const publicPurchase=process.argv.includes('--public-purchase-preview');
+const publicStandards=process.argv.includes('--public-batch-standards');
 const isolatedEntry=process.argv.includes('--isolated-intake-entry');
 const publicFolios=process.argv.includes('--public-folios');
 const ruleCatalog=process.argv.includes('--rule-catalog');
@@ -114,6 +117,7 @@ const entityCase=caseArgument('--entity-case');
 const navCase=caseArgument('--navigation-case');
 const phaseEvidenceCase = caseArgument('--phase-evidence-case');
 const batchCase = caseArgument('--batch-phase-case');
+const batchStandardCase = caseArgument('--batch-standard-case');
 const paymentChangeCase = caseArgument('--payment-change-case');
 const paymentOpinionCase = caseArgument('--payment-opinion-case');
 const releaseCase = caseArgument('--release-case');
@@ -134,9 +138,9 @@ const publicBank=process.argv.includes('--public-bank-acceptance');
 const previewQueue=process.argv.includes('--preview-queue');
 const acceptanceRoster=process.argv.includes('--acceptance-roster'), publicRoster=process.argv.includes('--public-acceptance-roster');
 const receiptPdf=caseArgument('--acceptance-pdf-case');
-const publicTest=publicPurchase || publicRoster || publicProof || publicClock || publicTiming || publicBank || product || ruleCatalog || publicInspection || publicContractComments || publicWordComments || publicSuppliers || publicPdf || publicFolios;
+const publicTest=publicStandards || publicPurchase || publicRoster || publicProof || publicClock || publicTiming || publicBank || product || ruleCatalog || publicInspection || publicContractComments || publicWordComments || publicSuppliers || publicPdf || publicFolios;
 const scopeCase=caseArgument('--scope-case'), publicTopics=process.argv.includes('--public-audit-topics');
-const seeded = [mandateOriginalCase,mandatePdfCase,batchCase,receiptPdf,acceptanceRoster,publicTopics,scopeCase,publicTest,proofCase,signerClock,signerTiming,originalCase,citedOriginal,bankAcceptance,previewQueue,contractCommentCase,commentCase,supplierCase,pdfCase,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+const seeded = [batchStandardCase,mandateOriginalCase,mandatePdfCase,batchCase,receiptPdf,acceptanceRoster,publicTopics,scopeCase,publicTest,proofCase,signerClock,signerTiming,originalCase,citedOriginal,bankAcceptance,previewQueue,contractCommentCase,commentCase,supplierCase,pdfCase,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 reviewDecisionCase,invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
 const root = originalCase ? process.env.AUDIT_READER_ORIGIN || 'http://127.0.0.1:8000' : publicTest || publicTopics ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
@@ -201,10 +205,12 @@ try {
   };
   const click = (label, container='document') => evaluate('[...'+container+'.querySelectorAll("button,a")].find(b=>b.textContent==='+JSON.stringify(label)+' && b.getClientRects().length).click()');
   await call('Runtime.enable');
-  await call('Page.navigate',{url:product || publicPurchase || isolatedEntry ? root : root+'/app'});
+  await call('Page.navigate',{url:product || publicStandards || publicPurchase || isolatedEntry ? root : root+'/app'});
   if (isolatedEntry) {
     assert.ok(!seeded && !['8000','8010'].includes(new URL(root).port));
     await checkIntakeEntry({root,call,evaluate,wait,entry,click});
+  } else if (publicStandards) {
+    await checkPublicBatchStandards({root,call,evaluate,wait});
   } else if (publicPurchase) {
     await checkPurchasePreview({root,call,evaluate,wait});
   } else if (receiptPdf) {
@@ -274,6 +280,9 @@ try {
     await checkNavigation({root,call,evaluate,wait},navCase);
   } else if (designCase) {
     await checkReviewDesign({root,call,evaluate,wait},designCase);
+  } else if (batchStandardCase) {
+    const {values}=parseArgs({options:{'batch-standard-case':{type:'string'},rev:{type:'string'},'compare-rev':{type:'string'}}});
+    await checkBatchStandard({root,call,evaluate,wait},batchStandardCase,Number(values.rev),Number(values['compare-rev']));
   } else if (batchCase) {
     await checkBatchPhase({root,call,evaluate,wait},batchCase,process.env.AUDIT_BATCH_REV);
   } else if (phaseEvidenceCase) {
