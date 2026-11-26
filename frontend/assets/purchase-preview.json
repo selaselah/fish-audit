@@ -1,0 +1,246 @@
+{
+  "revision": 8,
+  "report_sha256": "b0100d48118210a67d504c09dfad461ce4daaa5b5e3fc8aad1c78a1321ed15f5",
+  "documents": {
+    "contract": {
+      "title": "采购合同",
+      "version": "合成采购 · R8",
+      "page": 1,
+      "pdf": "/showcase/contract.pdf",
+      "image": "/assets/showcase-contract-page.jpg",
+      "thumb": "/assets/purchase-contract-thumb.webp",
+      "size": [
+        1547,
+        2190
+      ],
+      "source_sha256": "546d0efde4b8a9bc2bc501c866dedaf60a3ac20ef46cc1af63194aa75e4e1af2",
+      "page_sha256": "aa535f590439173143a8a0654f3c4ed2f482477502cf247b7b2438277394dfdb",
+      "finding": "H01-2",
+      "lines": [
+        {
+          "ref": "d02/p1/f9",
+          "label": "生效条款",
+          "value": "本合同自双方盖章之日起生效",
+          "line": 10,
+          "rects": [
+            [
+              0.08209,
+              0.43836,
+              0.53329,
+              0.45479
+            ]
+          ],
+          "pixels": [
+            122,
+            957,
+            829,
+            999
+          ],
+          "crop": "/assets/purchase-contract-line-10.webp"
+        },
+        {
+          "ref": "d02/p1/f10",
+          "label": "甲方签章",
+          "value": "青禾演练采购中心（已盖章）",
+          "line": 11,
+          "rects": [
+            [
+              0.08403,
+              0.47078,
+              0.52489,
+              0.4895
+            ]
+          ],
+          "pixels": [
+            125,
+            1028,
+            817,
+            1076
+          ],
+          "crop": "/assets/purchase-contract-line-11.webp"
+        },
+        {
+          "ref": "d02/p1/f11",
+          "label": "乙方签章",
+          "value": "云桥演练设备中心（已盖章）",
+          "line": 12,
+          "rects": [
+            [
+              0.08468,
+              0.50274,
+              0.52489,
+              0.52146
+            ]
+          ],
+          "pixels": [
+            126,
+            1098,
+            817,
+            1145
+          ],
+          "crop": "/assets/purchase-contract-line-12.webp"
+        }
+      ]
+    },
+    "acceptance": {
+      "title": "验收报告",
+      "version": "合成采购 · R8",
+      "page": 1,
+      "pdf": "/showcase/acceptance.pdf",
+      "image": "/assets/showcase-acceptance-page.png",
+      "thumb": "/assets/purchase-acceptance-thumb.webp",
+      "size": [
+        1547,
+        2190
+      ],
+      "source_sha256": "587d052e348bf67e32399f0daafc1a065d061a13f669f08396ce75875b4153cf",
+      "page_sha256": "fb4799101ab7c9ee46baa4705ed0712abeede3e50e22d8f0b8aebfb5a9ef27bd",
+      "finding": "H02-3",
+      "lines": [
+        {
+          "ref": "d04/p1/f11",
+          "label": "实测结果",
+          "value": "柜温8℃",
+          "line": 12,
+          "rects": [
+            [
+              0.08274,
+              0.50274,
+              0.29606,
+              0.51918
+            ]
+          ],
+          "pixels": [
+            123,
+            1098,
+            463,
+            1141
+          ],
+          "crop": "/assets/purchase-acceptance-line-12.webp"
+        },
+        {
+          "ref": "d04/p1/f8",
+          "label": "验收结论",
+          "value": "合格",
+          "line": 9,
+          "rects": [
+            [
+              0.08145,
+              0.40639,
+              0.25663,
+              0.42283
+            ]
+          ],
+          "pixels": [
+            122,
+            886,
+            402,
+            929
+          ],
+          "crop": "/assets/purchase-acceptance-line-9.webp"
+        },
+        {
+          "ref": "d04/p1/f10",
+          "label": "检验依据",
+          "value": "柜温不高于4℃",
+          "line": 11,
+          "rects": [
+            [
+              0.08145,
+              0.47078,
+              0.37169,
+              0.48721
+            ]
+          ],
+          "pixels": [
+            122,
+            1028,
+            580,
+            1070
+          ],
+          "crop": "/assets/purchase-acceptance-line-11.webp"
+        }
+      ]
+    },
+    "transfer": {
+      "title": "银行付款回单",
+      "version": "合成采购 · R8",
+      "page": 1,
+      "pdf": "/showcase/transfer.pdf",
+      "image": "/assets/showcase-transfer-page.jpg",
+      "thumb": "/assets/purchase-transfer-thumb.webp",
+      "size": [
+        1547,
+        2190
+      ],
+      "source_sha256": "8b0087142d831b111eea4cf1c77913b8df67a96a26a1da1a288a9875744df586",
+      "page_sha256": "4bdfdb8d34bf2c683274b4578b753f669014618b4807bb9e2374713639148092",
+      "finding": "H05-8",
+      "lines": [
+        {
+          "ref": "d03/p1/f6",
+          "label": "款项用途",
+          "value": "第二期",
+          "line": 7,
+          "rects": [
+            [
+              0.08209,
+              0.34247,
+              0.2799,
+              0.3589
+            ]
+          ],
+          "pixels": [
+            122,
+            747,
+            438,
+            789
+          ],
+          "crop": "/assets/purchase-transfer-line-7.webp"
+        },
+        {
+          "ref": "d03/p1/f7",
+          "label": "交易状态",
+          "value": "交易成功",
+          "line": 8,
+          "rects": [
+            [
+              0.08274,
+              0.37489,
+              0.30511,
+              0.39087
+            ]
+          ],
+          "pixels": [
+            123,
+            818,
+            477,
+            860
+          ],
+          "crop": "/assets/purchase-transfer-line-8.webp"
+        },
+        {
+          "ref": "d03/p1/f8",
+          "label": "付款日期",
+          "value": "2026年9月21日",
+          "line": 9,
+          "rects": [
+            [
+              0.08209,
+              0.40685,
+              0.37492,
+              0.42283
+            ]
+          ],
+          "pixels": [
+            122,
+            888,
+            585,
+            929
+          ],
+          "crop": "/assets/purchase-transfer-line-9.webp"
+        }
+      ]
+    }
+  }
+}

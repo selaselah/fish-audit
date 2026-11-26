@@ -9,6 +9,23 @@ function restoreWorkspaceLink() {
 if (!restoreWorkspaceLink()) {
   document.documentElement.classList.add('m-enter');
   window.addEventListener('hashchange', restoreWorkspaceLink);
+  const startForm=document.querySelector('.audit-start'), startPreview=startForm.querySelector('.start-preview');
+  function showStartProfile() {
+    const choice=startForm.querySelector('input:checked'), profile=IntakeProfiles.find(p=>p.key===choice?.value);
+    if (!profile) { startPreview.hidden=true; return; }
+    startPreview.querySelector('h3').textContent=profile.label;
+    for (const [selector,entries,icon] of [['.start-materials',profile.documents,'file-earmark-text'],['.start-checks',profile.checks,'clipboard-check']]) {
+      startPreview.querySelector(selector+' ul').replaceChildren(...entries.map(entry=>{
+        const row=document.createElement('li'), mark=document.createElement('i');
+        mark.className='ui-glyph ic-'+icon; mark.setAttribute('aria-hidden','true');
+        row.append(mark,entry); return row;
+      }));
+    }
+    startPreview.hidden=false;
+  }
+  startForm.addEventListener('change',showStartProfile);
+  window.addEventListener('pageshow',showStartProfile);
+  showStartProfile();
   const menu = document.querySelector('.mobile-menu');
   menu.addEventListener('click', event => {
     if (event.target.closest('a')) menu.open = false;
@@ -276,9 +293,19 @@ if (!restoreWorkspaceLink()) {
       draw();
     }
     phases.forEach((p,i)=>{
-      p.id='sample-phase-'+(i+1);
       p.addEventListener('toggle',()=>{ if (p.open) choose(i); else draw(); });
     });
+    function showLinkedPhase(hash) {
+      const index=phases.findIndex(p=>'#'+p.id===hash);
+      if (index<0) return;
+      selectLedger(ledgerModes[0]); choose(index);
+      phases[index].querySelector('summary').focus({preventScroll:true});
+    }
+    document.querySelector('.phase-jump').addEventListener('click',event=>{
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) showLinkedPhase(event.currentTarget.hash);
+    });
+    window.addEventListener('hashchange',()=>showLinkedPhase(location.hash));
+    showLinkedPhase(location.hash);
     dial.setAttribute('aria-controls',phases.map(p=>p.id).join(' '));
     dial.addEventListener('click',()=>choose((selected()+1)%phases.length));
     dial.addEventListener('keydown',event=>{

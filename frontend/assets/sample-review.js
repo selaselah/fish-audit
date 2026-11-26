@@ -32,10 +32,14 @@
   const canvas=dialog.querySelector('canvas'), status=dialog.querySelector('[role=status]');
   const context=canvas.getContext('2d');
   if (!context) return;
-  let page, sample, start, end;
+  let page, sample, start, end, pageView;
+  const pickHint=dialog.querySelector('.page-pick-hint');
   const rectangles=new Map();
   let opener, row=rows.find(r=>r.getAttribute('aria-pressed')==='true'), mode='line';
   function draw() {
+    pageView=null;
+    pickHint.hidden=true;
+    canvas.style.cursor=''; canvas.removeAttribute('title');
     if (!dialog.open || !page?.naturalWidth) return;
     const width=canvas.clientWidth, height=canvas.clientHeight;
     if (!width || !height) return;
@@ -55,6 +59,17 @@
     const y=origin(height,h*scale,(top+bottom)*h*scale/2);
     context.fillStyle='#e9edf3'; context.fillRect(0,0,width,height);
     context.drawImage(page,x,y,w*scale,h*scale);
+    if (mode==='page') {
+      pageView={x,y,width:w*scale,height:h*scale};
+      context.strokeStyle='#3659a3'; context.lineWidth=1.25; context.setLineDash([3,2]);
+      for (const [button,areas] of rectangles) {
+        if (button===row) continue;
+        for (const [l,t,r,b] of areas)
+          context.strokeRect(x+l*pageView.width,y+t*pageView.height,(r-l)*pageView.width,(b-t)*pageView.height);
+      }
+      context.setLineDash([]);
+      pickHint.hidden=false;
+    }
     context.fillStyle='rgba(255,196,49,.25)'; context.strokeStyle='#935d10'; context.lineWidth=1.5;
     for (const [l,t,r,b] of spans) {
       const area=[x+l*w*scale,y+t*h*scale,(r-l)*w*scale,(b-t)*h*scale];
@@ -71,6 +86,30 @@
     canvas.setAttribute('aria-label',sample.title+location+'，'+row.querySelector('span').textContent+'，'+row.querySelector('strong').textContent);
     draw();
   }
+  function markedRow(event) {
+    if (!pageView) return;
+    const screen=canvas.getBoundingClientRect();
+    const x=(event.clientX-screen.left-pageView.x)/pageView.width, y=(event.clientY-screen.top-pageView.y)/pageView.height;
+    const dx=2/pageView.width, dy=2/pageView.height;
+    let hit;
+    for (const [button,areas] of rectangles) {
+      if (areas.some(([l,t,r,b])=>x>=l-dx && x<=r+dx && y>=t-dy && y<=b+dy)) {
+        if (hit) return; // Overlapping citations can be selected unambiguously in the field list.
+        hit=button;
+      }
+    }
+    return hit;
+  }
+  canvas.addEventListener('pointermove',event=>{
+    const hit=markedRow(event);
+    canvas.style.cursor=hit?'zoom-in':'';
+    if (hit) canvas.title=hit.querySelector('span').textContent+' · 第 '+hit.dataset.line+' 行';
+    else canvas.removeAttribute('title');
+  });
+  canvas.addEventListener('click',event=>{
+    const hit=markedRow(event);
+    if (hit) { select(hit,'line'); hit.focus({preventScroll:true}); }
+  });
   records.addEventListener('click',event=>{
     const button=event.target.closest('button[data-ref]');
     if (button) select(button,mode);

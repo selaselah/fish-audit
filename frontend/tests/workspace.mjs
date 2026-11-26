@@ -13,6 +13,7 @@ import {checkSignerTiming,checkSignerClock} from './signer-timing.mjs';
 import {checkPaymentProof} from './payment-proof.mjs';
 import {checkOriginalReader} from './original-reader.mjs';
 import {checkProduct, checkReviewDesign} from './product.mjs';
+import {checkPurchasePreview,checkIntakeEntry} from './purchase-preview.mjs';
 import {checkPerformanceIndex,checkPublicTopics} from './performance-index.mjs';
 import {checkAcceptanceRoster,checkAcceptancePdf} from './acceptance-roster.mjs';
 import {checkEvidenceCompare,checkMandateCompare,checkPhaseEvidence,checkPaymentChange} from './evidence-compare.mjs';
@@ -45,6 +46,8 @@ const port = socket.address().port;
 await new Promise(resolve => socket.close(resolve));
 const sampleDesk = process.argv.includes('--sample-desk');
 const product = process.argv.includes('--product');
+const publicPurchase=process.argv.includes('--public-purchase-preview');
+const isolatedEntry=process.argv.includes('--isolated-intake-entry');
 const publicFolios=process.argv.includes('--public-folios');
 const ruleCatalog=process.argv.includes('--rule-catalog');
 const publicContractComments=process.argv.includes('--public-contract-comments');
@@ -121,7 +124,7 @@ const publicBank=process.argv.includes('--public-bank-acceptance');
 const previewQueue=process.argv.includes('--preview-queue');
 const acceptanceRoster=process.argv.includes('--acceptance-roster'), publicRoster=process.argv.includes('--public-acceptance-roster');
 const receiptPdf=caseArgument('--acceptance-pdf-case');
-const publicTest=publicRoster || publicProof || publicClock || publicTiming || publicBank || product || ruleCatalog || publicInspection || publicContractComments || publicWordComments || publicSuppliers || publicPdf || publicFolios;
+const publicTest=publicPurchase || publicRoster || publicProof || publicClock || publicTiming || publicBank || product || ruleCatalog || publicInspection || publicContractComments || publicWordComments || publicSuppliers || publicPdf || publicFolios;
 const scopeCase=caseArgument('--scope-case'), publicTopics=process.argv.includes('--public-audit-topics');
 const seeded = [receiptPdf,acceptanceRoster,publicTopics,scopeCase,publicTest,proofCase,signerClock,signerTiming,originalCase,bankAcceptance,previewQueue,contractCommentCase,commentCase,supplierCase,pdfCase,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
@@ -188,8 +191,13 @@ try {
   };
   const click = (label, container='document') => evaluate('[...'+container+'.querySelectorAll("button,a")].find(b=>b.textContent==='+JSON.stringify(label)+' && b.getClientRects().length).click()');
   await call('Runtime.enable');
-  await call('Page.navigate',{url:product ? root : root+'/app'});
-  if (receiptPdf) {
+  await call('Page.navigate',{url:product || publicPurchase || isolatedEntry ? root : root+'/app'});
+  if (isolatedEntry) {
+    assert.ok(!seeded && !['8000','8010'].includes(new URL(root).port));
+    await checkIntakeEntry({root,call,evaluate,wait,entry,click});
+  } else if (publicPurchase) {
+    await checkPurchasePreview({root,call,evaluate,wait});
+  } else if (receiptPdf) {
     await checkAcceptancePdf({root,call,evaluate,wait},receiptPdf,Number(process.env.AUDIT_RECEIPT_REV));
   } else if (acceptanceRoster || publicRoster) {
     await checkAcceptanceRoster({root,call,evaluate,wait},publicRoster);

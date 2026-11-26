@@ -51,6 +51,7 @@
   <script src="/assets/acceptance-roster-card.js" defer></script>
   <script src="/assets/acceptance-roster.js" defer></script>
   <script src="/assets/performance-index.js" defer></script>
+  <script src="/assets/intake-profiles.js" defer></script>
   <script src="/assets/contract-folios.js" defer></script>
   <script src="/assets/trial-log.js" defer></script>
   <script src="/assets/reinspection-timing.js" defer></script>
@@ -180,7 +181,7 @@
   </dialog>
   <dialog id="upload-dialog" aria-labelledby="upload-heading">
     <form id="upload-form">
-      <div class="dialog-head"><h2 id="upload-heading">新建审计</h2><button class="icon-button" type="button" data-close aria-label="关闭资料提交"><i aria-hidden="true" class="ui-glyph ic-x-lg"></i></button></div>
+      <div class="dialog-head"><div><h2 id="upload-heading">新建审计</h2><small id="intake-workspace" class="small"></small></div><button class="icon-button" type="button" data-close aria-label="关闭资料提交"><i aria-hidden="true" class="ui-glyph ic-x-lg"></i></button></div>
       <div class="intake-fields"><label>任务名称<input id="upload-title" required maxlength="100" placeholder="例如 档案柜采购 · 十月验收"></label>
       <label>审计范围<select id="upload-profile">
         <option value="cn-procurement-full-settlement/v1" data-icon="inboxes" data-scope="发票与全额结算">采购与付款</option>

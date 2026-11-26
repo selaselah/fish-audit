@@ -42,6 +42,8 @@
   <link rel="stylesheet" href="/assets/payment-proof.css">
   <script src="/assets/payment-proof-card.js" defer></script>
   <script src="/assets/public-payment-proof.js" defer></script>
+  <script src="/assets/intake-profiles.js" defer></script>
+  <script src="/assets/purchase-preview.js" defer></script>
   <script src="/landing.js" defer></script>
   <script src="/assets/sample-review.js" defer></script>
 </head>
@@ -50,19 +52,19 @@
     <div class="wrap nav-row nav__bar">
       <a class="skip skip-link" href="#main">跳到正文</a>
       <a class="fish-wordmark" href="/" aria-label="Fish Audit 产品首页"><img src="/assets/fish-mark.png" width="36" height="36" alt="">Fish Audit</a>
-      <nav class="section-nav" aria-label="产品导航"><a href="#payments">分期案例</a><a href="#workflow">审计案例</a></nav>
+      <nav class="section-nav" aria-label="产品导航"><a href="#payments">分期案例</a><a href="#workflow">审计案例</a><a href="#start">新建审计</a></nav>
       <div class="nav-actions"><a class="login-link" href="/app#account">企业登录</a><a class="button compact" href="/app">进入工作台</a>
-        <details class="mobile-menu"><summary>菜单</summary><nav aria-label="移动产品导航"><a href="#payments">分期案例</a><a href="#workflow">审计案例</a><a href="/app#account">企业登录</a></nav></details>
+        <details class="mobile-menu"><summary>菜单</summary><nav aria-label="移动产品导航"><a href="#payments">分期案例</a><a href="#workflow">审计案例</a><a href="#start">新建审计</a><a href="/app#account">企业登录</a></nav></details>
       </div>
     </div>
   </header>
   <main id="main">
-    <section class="hero" data-enter aria-labelledby="hero-title">
-      <div class="wrap hero-inner">
-        <div class="hero-copy hero-text">
+    <section class="hero hero--split" data-enter aria-labelledby="hero-title">
+      <div class="wrap"><div class="hero-text hero-inner">
+        <div class="hero-copy">
           <h1 id="hero-title">中小企业的<br><em>AI 财务审计</em></h1>
-          <p class="lead">核对合同生效、交付验收和分期付款。每项发现都可回到原件。</p>
-          <div class="hero-actions"><a class="button" href="/app">进入工作台</a><a class="text-link" href="#workflow">试核采购原件 <i aria-hidden="true" class="ui-glyph ic-arrows-angle-expand"></i></a></div>
+          <p class="lead">逐项核对合同效力、交付验收和分期付款依据。</p>
+          <div class="hero-actions"><a class="button" href="/app">进入工作台</a><a class="text-link open-sample-review" href="/showcase/acceptance.pdf" target="_blank" rel="noopener" data-ref="d04/p1/f11">试核验收原件 <i aria-hidden="true" class="ui-glyph ic-arrows-angle-expand"></i></a></div>
           <p class="formats" aria-label="支持上传的资料格式">PDF（含扫描件） · 照片 · Word</p>
         </div>
         <div class="specimen document-mat app-frame" data-visual id="sample" role="region" aria-label="交互演示，切换文件核对证据">
@@ -73,6 +75,9 @@
             <button type="button" id="tab-transfer" role="tab" aria-selected="false" aria-controls="sheet-transfer" tabindex="-1"><i class="ui-glyph ic-receipt" aria-hidden="true"></i>付款回单</button>
           </div>
           <div class="evidence-paper" role="tabpanel" id="sheet-acceptance" aria-labelledby="tab-acceptance" tabindex="0">
+            <div class="purchase-locator" data-document="acceptance">
+              <a class="purchase-original" href="/showcase/acceptance.pdf" target="_blank" rel="noopener" aria-label="看原页，验收报告"><span class="purchase-sheet"><img src="/assets/purchase-acceptance-thumb.webp" width="420" height="595" alt=""><i hidden></i></span><span class="purchase-page-action">看原页 <i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i></span></a>
+            </div>
             <div class="paper-sheet"><div class="compare-paper-title"><p class="paper-title">四门冷藏柜验收报告</p><button type="button" id="compare-sample" aria-haspopup="dialog" aria-controls="sample-compare" hidden><i class="ui-glyph ic-layout-sidebar-inset-reverse" aria-hidden="true"></i>原件对照</button></div>
             <p class="paper-id">YL-LY-32EED203 <span>· 第 1 页</span></p>
             <div class="reading-switch" role="group" aria-label="验收证据展示方式" hidden><button type="button" aria-controls="temperature-readings" aria-pressed="true">读数对照</button><button type="button" aria-controls="source-strips" aria-pressed="false">看原行</button><button type="button" aria-controls="acceptance-excerpt" aria-pressed="false">原文摘录</button></div>
@@ -89,6 +94,9 @@
             <div class="evidence-note"><div><span class="finding-dot issue"></span>实测超出合同上限</div><p>第二期验收款需复核。</p><a class="open-sample-review" href="/showcase/acceptance.pdf" target="_blank" rel="noopener">查看验收原件</a></div>
           </div>
           <div class="evidence-paper" role="tabpanel" id="sheet-contract" aria-labelledby="tab-contract" tabindex="0" hidden>
+            <div class="purchase-locator" data-document="contract">
+              <a class="purchase-original" href="/showcase/contract.pdf" target="_blank" rel="noopener" aria-label="看原页，采购合同"><span class="purchase-sheet"><img src="/assets/purchase-contract-thumb.webp" width="420" height="595" alt=""><i hidden></i></span><span class="purchase-page-action">看原页 <i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i></span></a>
+            </div>
             <div class="paper-sheet"><div class="paper-meta"><span>合同原文摘录</span><span>第 1 页</span></div>
             <p class="paper-title">四门冷藏柜采购合同</p>
             <p class="paper-id">YL-LY-32EED203</p>
@@ -96,14 +104,17 @@
             <div class="evidence-note"><div><span class="finding-dot risk"></span>签署凭证待核</div><p>双方签章栏为排印文字，首期付款条件待核。</p><a href="/showcase/contract.pdf" target="_blank" rel="noopener">查看合同原件<span class="sr-only">，在新标签页打开 PDF</span></a><a class="pdf-hero-jump" href="/?scene=pdf-signing#workflow">试核电子签名 <i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i></a></div>
           </div>
           <div class="evidence-paper" role="tabpanel" id="sheet-transfer" aria-labelledby="tab-transfer" tabindex="0" hidden>
+            <div class="purchase-locator" data-document="transfer">
+              <a class="purchase-original" href="/showcase/transfer.pdf" target="_blank" rel="noopener" aria-label="看原页，银行回单"><span class="purchase-sheet"><img src="/assets/purchase-transfer-thumb.webp" width="420" height="595" alt=""><i hidden></i></span><span class="purchase-page-action">看原页 <i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i></span></a>
+            </div>
             <div class="paper-sheet"><div class="paper-meta"><span>回单原文摘录</span><span>第 1 页</span></div>
             <p class="paper-title">银行付款回单</p>
             <p class="paper-id">YL-LY-32EED203</p>
             <dl class="paper-lines"><div><dt>付款日期</dt><dd>2026 年 9 月 21 日</dd></div><div><dt>款项用途</dt><dd>第二期</dd></div><div><dt>交易状态</dt><dd>交易成功</dd></div><div class="marked"><dt>付款金额</dt><dd><strong>60,000.00</strong></dd></div></dl></div>
-            <div class="evidence-note"><div><span class="finding-dot risk"></span>已付款，履约条件待核</div><a href="/showcase/transfer.pdf" target="_blank" rel="noopener">查看回单原件<span class="sr-only">，在新标签页打开 PDF</span></a></div>
+            <div class="evidence-note"><div><span class="finding-dot risk"></span>已付款，履约条件待核</div><a href="/showcase/transfer.pdf" target="_blank" rel="noopener">查看回单原件<span class="sr-only">，在新标签页打开 PDF</span></a><a class="phase-jump" href="#sample-phase-2">核对第二期付款条件 <span aria-hidden="true">→</span></a></div>
           </div>
         </div>
-      </div>
+      </div></div>
     </section>
     <section class="payments" id="payments" aria-labelledby="payments-title">
       <div class="wrap section-inner">
@@ -123,9 +134,9 @@
             <div class="total"><span>合同含税总额</span><strong><small>¥</small>100,000<small>.00</small></strong></div>
             <button type="button" class="phase-dial" hidden><span class="dial-share"></span><span class="dial-label">约定占比</span></button>
           </div>
-          <details name="payment" class="phase"><summary><span class="phase-share">30<small>%</small></span><span class="phase-name">生效预付款</span><span class="state risk">签署待核</span><i aria-hidden="true"></i></summary><div class="phase-detail"><q>合同生效后支付30%</q><p>签章栏仅见排印文字，需补充双方签署凭证。</p><a href="/showcase/contract.pdf" target="_blank" rel="noopener">采购合同 · 第 1 页</a></div></details>
-          <details name="payment" class="phase" open><summary><span class="phase-share">60<small>%</small></span><span class="phase-name">终验款</span><span class="state risk">付款待核</span><i aria-hidden="true"></i></summary><div class="phase-detail"><q>最终验收合格后支付60%</q><p>签署凭证待核，验收实测 8℃ 超出合同上限 4℃。需查整改和复验记录。</p><a href="/showcase/acceptance.pdf" target="_blank" rel="noopener">验收报告 · 第 1 页</a></div></details>
-          <details name="payment" class="phase"><summary><span class="phase-share">10<small>%</small></span><span class="phase-name">质保金</span><span class="state risk">起算待核</span><i aria-hidden="true"></i></summary><div class="phase-detail"><q>质保期满后支付10%</q><p>合同签署待核，终验温度超限，质保期起算仍需核实。</p><a href="/showcase/contract.pdf" target="_blank" rel="noopener">采购合同 · 第 1 页</a></div></details>
+          <details id="sample-phase-1" name="payment" class="phase"><summary><span class="phase-share">30<small>%</small></span><span class="phase-name">生效预付款</span><span class="state risk">签署待核</span><i aria-hidden="true"></i></summary><div class="phase-detail"><q>合同生效后支付30%</q><p>签章栏仅见排印文字，需补充双方签署凭证。</p><a href="/showcase/contract.pdf" target="_blank" rel="noopener">采购合同 · 第 1 页</a></div></details>
+          <details id="sample-phase-2" name="payment" class="phase" open><summary><span class="phase-share">60<small>%</small></span><span class="phase-name">终验款</span><span class="state risk">付款待核</span><i aria-hidden="true"></i></summary><div class="phase-detail"><q>最终验收合格后支付60%</q><p>签署凭证待核，验收实测 8℃ 超出合同上限 4℃。需查整改和复验记录。</p><a href="/showcase/acceptance.pdf" target="_blank" rel="noopener">验收报告 · 第 1 页</a></div></details>
+          <details id="sample-phase-3" name="payment" class="phase"><summary><span class="phase-share">10<small>%</small></span><span class="phase-name">质保金</span><span class="state risk">起算待核</span><i aria-hidden="true"></i></summary><div class="phase-detail"><q>质保期满后支付10%</q><p>合同签署待核，终验温度超限，质保期起算仍需核实。</p><a href="/showcase/contract.pdf" target="_blank" rel="noopener">采购合同 · 第 1 页</a></div></details>
           </div>
           <ol class="sample-dates" id="sample-dates" aria-label="三份原件记载的日期" hidden>
             <li><a href="/showcase/contract.pdf" title="采购合同 · 第 1 页" target="_blank" rel="noopener"><time datetime="2026-09-01"><small>2026.09</small>01</time><span><strong>记载生效日</strong><small>双方签署待核</small></span><i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i><span class="sr-only">查看合同原件，在新标签页打开</span></a></li>
@@ -265,7 +276,7 @@
     <div class="sample-review-body">
       <div class="sample-document">
         <div class="sample-review-toolbar"><output id="sample-location" aria-live="polite"></output><div class="reading-switch" role="group" aria-label="页图视图"><button type="button" data-scale="line" aria-pressed="true">看原行</button><button type="button" data-scale="page" aria-pressed="false">整页</button></div></div>
-        <div class="sample-canvas"><canvas role="img" aria-label="验收报告第 1 页"></canvas><p role="status">正在载入原页…</p></div>
+        <div class="sample-canvas"><canvas role="img" aria-label="验收报告第 1 页"></canvas><small class="page-pick-hint" hidden>点标线看原行</small><p role="status">正在载入原页…</p></div>
       </div>
       <div class="sample-records" role="group" aria-label="选择验收原行">
         <button type="button" data-ref="d04/p1/f8" data-line="9" data-rect="0.08145,0.40639,0.25663,0.42283" aria-pressed="false"><span>验收结论</span><strong>合格</strong></button>
@@ -275,10 +286,26 @@
       </div>
     </div>
   </dialog>
-  <footer class="closing">
-    <div class="wrap footer-row">
-      <div><a class="fish-wordmark" href="#main"><img src="/assets/fish-mark.png" width="36" height="36" alt="">Fish Audit</a></div>
-      <nav aria-label="页脚导航"><a href="/app#rules">查看审计规则</a></nav>
+  <footer class="closing" id="start" aria-labelledby="start-title">
+    <div class="wrap close-content">
+      <form class="audit-start" action="/app" method="get">
+        <div class="start-choice">
+          <h2 id="start-title">新建审计</h2>
+          <fieldset class="start-options"><legend>选择审计范围</legend>
+            <label><input type="radio" name="new" value="contract" checked><i class="ui-glyph ic-journal-text" aria-hidden="true"></i><span>合同履约与分期</span></label>
+            <label><input type="radio" name="new" value="purchase"><i class="ui-glyph ic-inboxes" aria-hidden="true"></i><span>采购与付款</span></label>
+            <label><input type="radio" name="new" value="travel"><i class="ui-glyph ic-receipt" aria-hidden="true"></i><span>差旅报销</span></label>
+            <label><input type="radio" name="new" value="payment"><i class="ui-glyph ic-card-checklist" aria-hidden="true"></i><span>付款回单核对</span></label>
+          </fieldset>
+          <button class="button" type="submit">进入工作台上传资料 <span aria-hidden="true">→</span></button>
+        </div>
+        <div class="start-preview" hidden aria-live="polite">
+          <h3></h3><div class="start-materials"><h4>准备资料</h4><ul></ul></div>
+          <div class="start-checks"><h4>核对事项</h4><ul></ul></div>
+        </div>
+      </form>
+      <div class="footer-row"><a class="fish-wordmark" href="#main"><img src="/assets/fish-mark.png" width="36" height="36" alt="">Fish Audit</a>
+        <nav aria-label="页脚导航"><a href="/app#rules">查看审计规则</a></nav></div>
     </div>
   </footer>
 </body>

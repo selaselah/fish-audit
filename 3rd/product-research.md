@@ -1,5 +1,9 @@
 # 审计与会计软件的公开界面
 
+## 在单据上选择字段
+
+DataSnipper 将工作底稿的检查项目链接到原始凭证，复核人可以沿链接重看证据。Dext 按单据类型说明哪些字段可以提取，审阅时可以把提取值与原件对照。Fish Audit 将这两种操作用于同一笔采购。在合同、验收单和银行回单之间切换时，页签下方列出这份文件可定位的原行。查看整页后也可以直接点选标线。页面上的图和读数都取自本项目的水印演练资料。[DataSnipper 审计程序与原始凭证](https://knowledge.datasnipper.com/en/articles/685955-how-to-document-your-audit-procedures-with-datasnipper) · [Dext 单据类型和提取字段](https://help.dext.com/en/articles/416691-what-information-does-dext-extract-from-costs-and-sales-documents) · [演练原件登记](showcase-provenance.md#首屏三份原件与九个字段)
+
 ## 从审计引文翻到相邻原页
 
 DataSnipper Alwin 把证据片段在当前组里的位置放在阅读器中，点击位置可展开清单，再回到对应片段。Adobe Acrobat 提供逐页翻阅、按页码直达和返回先前视图。Fish Audit 采用可展开的页码控件，同一份原件连续翻页，一键回到进入时的审计引文。[DataSnipper 任务结果复核](https://knowledge.datasnipper.com/en/articles/882479-how-to-review-a-task-s-output-in-alwin) · [Adobe Acrobat 页间导航](https://helpx.adobe.com/acrobat/desktop/get-started/learn-the-basics/navigation.html)

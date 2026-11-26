@@ -65,7 +65,7 @@ const Team = {
   },
   async logout() {
     await post('/api/auth/logout',{});
-    Desk.reset(); resetIntake(); this.authMode = 'login'; this.freshInvite = null;
+    Desk.reset(); resetIntake(); this.authMode = 'login'; this.freshInvite = null; this.returnTo = null;
     this.session = null; this.current = null; state.bundle = null; state.detail = null; state.cases = [];
     for (const id of ['case-panel','case-list','team-panel']) $('#'+id).replaceChildren();
     location.hash = 'account'; await refresh();
@@ -74,6 +74,7 @@ const Team = {
   account(invite) {
     const panel = $('#account-panel'); panel.replaceChildren();
     const session = this.session;
+    const intake=invite ? null : requestedIntakeProfile();
     $('#account-title').textContent = invite ? '加入企业' : '企业工作区';
     if (session.user) {
       const user = session.user;
@@ -85,21 +86,26 @@ const Team = {
           const data = await post('/api/workspaces/join',{invite}); await this.load(); this.go(data.selected);
         }); current.append(form);
       }
-      const list = box('panel',el('h2','我的企业'));
+      const choosing=intake && session.mode==='saas' && !this.current && session.workspaces.length>1;
+      const list = box('panel',el('h2',choosing?'选择本次审计所属企业':'我的企业'));
+      if (choosing) list.append(el('p',intake.label,'small'));
       for (const space of session.workspaces) list.append(box('line panel-head',
         box('',el('strong',space.name),el('small',this.roles[space.role],'small')),
-        link('进入工作区','#w/'+space.id+'/desk','button')));
+        link(choosing?'在此新建':'进入工作区','#w/'+space.id+'/desk','button')));
       if (!session.workspaces.length) list.append(el('p','可创建企业或打开管理员发给你的邀请链接。'));
       const form = el('form'); this.field(form,'企业名称','name');
       this.submit(form,'创建企业',async data => {
         const result = await post('/api/workspaces',data); await this.load(); this.go(result.selected);
       });
-      list.append(fold('创建新的企业工作区',form)); panel.append(box('account-grid',current,list));
+      list.append(fold('创建新的企业工作区',form));
+      if (choosing) list.append(link('取消新建','/app#account','text-button'));
+      panel.append(box('account-grid',current,list));
       return;
     }
     const registering = this.authMode === 'register';
     const form = el('form','','panel auth-card');
     form.append(el('h2',registering ? (invite ? '注册并加入企业' : '开通企业工作区') : '登录工作区'));
+    if (intake) form.append(el('p','登录后继续新建「'+intake.label+'」审计。','small'));
     if (registering && !invite) this.field(form,'企业名称','workspace');
     if (registering) this.field(form,'姓名','name',{max:50,auto:'name'});
     this.field(form,'登录名','login',{min:3,auto:'username'});
@@ -116,7 +122,8 @@ const Team = {
       const wanted = this.returnTo;
       this.returnTo = null;
       if (wanted && info.workspaces.some(w=>wanted.startsWith('#w/'+w.id+'/'))) location.hash = wanted;
-      else if (next) this.go(next); else { location.hash = 'account'; await refresh(); }
+      else if (next && !(intake && info.mode==='saas' && info.workspaces.length>1)) this.go(next);
+      else { location.hash = 'account'; await refresh(); }
     });
     form.append(action(registering?'已有账号，去登录':(invite?'创建账号并接受邀请':'创建企业账号'),()=>{
       this.authMode = registering?'login':'register'; this.account(invite);

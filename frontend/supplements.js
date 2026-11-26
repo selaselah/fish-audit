@@ -39,6 +39,7 @@ function openIntake(parent=null) {
       profileChanged(); renderIntakeLimits();
     }
   }
+  $('#intake-workspace').textContent=Team.current?.name || '本机工作区';
   $('#upload-dialog').showModal();
 }
 

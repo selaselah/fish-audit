@@ -15,7 +15,7 @@ const tabs = {report: '审计结论', evidence: '原件与引文', graph: '知�
 const travelProfile = 'cn-travel-reimbursement/v1';
 const bankProfile = 'cn-bank-contract-payment/v1';
 const performanceProfile = 'cn-contract-performance/v1';
-const profileName = profile => ({[travelProfile]:'差旅报销',[bankProfile]:'付款回单核对',[performanceProfile]:'合同履约与分期','cn-procurement-full-settlement/v1':'采购与付款'}[profile] || profile);
+const profileName = profile => IntakeProfiles.find(p=>p.id===profile)?.label || profile;
 const tone = {ready: 'risk', in_review: 'risk', closed: 'ok', failed: 'issue', pass: 'ok', review: 'risk', reject: 'issue',
   visual: 'risk', unsupported: 'issue', disputed: 'issue', confirmed: 'ok', anchored: 'ok'};
 const statusName = value => labels[value] || value;
@@ -1470,7 +1470,8 @@ async function refresh() {
       if (!session.user) Team.returnTo = location.hash;
       view = 'account';
     } else if (!route.id && session.mode === 'saas' && view !== 'account' && (view !== 'rules' || session.user)) {
-      if (session.workspaces.length) {
+      const chooseCompany=view==='desk' && requestedIntakeProfile() && session.workspaces.length>1;
+      if (session.workspaces.length && !chooseCompany) {
         const query=route.params.toString();
         location.replace(Team.hash('w/'+session.workspaces[0].id+'/'+route.page)+(query?'?'+query:''));
         return;
@@ -1597,11 +1598,12 @@ async function refresh() {
     } else {
       await Desk.load(epoch); if (epoch !== state.epoch) return; interval = 5000;
       const entry=new URL(location.href);
-      if (entry.searchParams.get('new')==='contract') {
+      const intakeProfile=requestedIntakeProfile();
+      if (intakeProfile) {
         entry.searchParams.delete('new');
         history.replaceState(history.state,'',entry);
         openIntake();
-        scopeSelect.value=performanceProfile;
+        scopeSelect.value=intakeProfile.id;
         profileChanged();
       }
     }
@@ -1924,16 +1926,7 @@ function profileChanged() {
   state.key = null;
   scopeGroup.closest('fieldset').disabled=scopeSelect.disabled;
   for (const radio of scopeGroup.querySelectorAll('input')) radio.checked=radio.value===scopeSelect.value;
-  if ($('#upload-profile').value === performanceProfile) {
-    $('#profile-note').textContent = '上传合同、验收单及注明期次的付款回单。分批交付时请附各批验收单。涉及代理、审批、整改或质保时，可附授权委托书、审批记录、复验报告及质保期满确认单。';
-    return;
-  }
-  if ($('#upload-profile').value === bankProfile) {
-    $('#profile-note').textContent = '每个任务上传一份合同和一张银行回单。可核对收款账户、重复流水及全额差额，分期付款可与本企业已签收的回单累计比较。';
-    return;
-  }
-  $('#profile-note').textContent = $('#upload-profile').value === travelProfile ?
-    '按一份差旅报销单和所附具名发票勾稽，检查票号、实际发生日期和申请金额。' : '核对合同签署、交付验收与付款约定，并勾稽发票及全额结算资料。';
+  $('#profile-note').textContent = IntakeProfiles.find(p=>p.id===scopeSelect.value)?.note || '';
 }
 $('#upload-profile').addEventListener('change', profileChanged);
 $('#upload-form').addEventListener('submit', async event => {
