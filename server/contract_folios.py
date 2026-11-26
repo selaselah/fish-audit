@@ -154,7 +154,7 @@ def classify(raw, facts, first, version, transcription):
 
 
 def sources(graph, read_text, version=FORMAT, *, calls=None):
-    from advance_guarantee import scoped
+    from advance_guarantee import scoped_terms
     from graph import compact, index_lines
     from warranty_terms import dedicated as warranty_clause
 
@@ -183,7 +183,7 @@ def sources(graph, read_text, version=FORMAT, *, calls=None):
                 continue
         pages, lines = [], []
         relevant = False
-        guarantee = scoped(graph,doc)
+        guarantees = {(r["page"],r["line"],r["quote"]) for r in scoped_terms(graph,doc)}
         for n, page in sorted(candidates):
             native = page.get("layer") == "text"
             physical = []
@@ -247,7 +247,7 @@ def sources(graph, read_text, version=FORMAT, *, calls=None):
                 facts = located[i]
                 comparison = comparisons.get(i)
                 detail = classify(raw, facts, n == 1, version, comparison)
-                if guarantee and detail=={"kind":"qualification"} and (n,i,raw)==(guarantee["page"],guarantee["line"],guarantee["quote"]):
+                if detail=={"kind":"qualification"} and (n,i,raw) in guarantees:
                     detail=None
                 if len(candidates) == 1 and detail == {"kind": "qualification"} and warranty_clause(raw) and any(
                     f["field"] in ("warranty_period", "warranty_condition") and f["status"] in ("anchored", "confirmed")

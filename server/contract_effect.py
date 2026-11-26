@@ -97,7 +97,7 @@ def approval_field(raw, fact):
 
 
 def sources(graph,read_text,format=FORMAT,*,calls=None):
-    from advance_guarantee import scoped
+    from advance_guarantee import scoped_terms
     def effect_signal(raw):
         if not relevant(raw):
             return False
@@ -150,10 +150,10 @@ def sources(graph,read_text,format=FORMAT,*,calls=None):
             text=read_text(doc,page)
             if not isinstance(text,str) or hashlib.sha256(text.encode()).hexdigest()!=node.get("text_sha256"):
                 raise ValueError("合同生效条件所据的整页文字与底稿不符")
-            guarantee = scoped(graph,unit)
+            guarantees = {(r["doc"],r["page"],r["line"],r["quote"]) for r in scoped_terms(graph,unit)}
             for number,raw in enumerate(text.splitlines(),1):
                 matches=by_line[number,raw]
-                if guarantee and (doc,page,number,raw)==(guarantee["doc"],guarantee["page"],guarantee["line"],guarantee["quote"]):
+                if (doc,page,number,raw) in guarantees:
                     continue
                 if format == FORMAT and not board:
                     date_row = contract_calendar.row(place,raw,number,matches,graph,node.get("sha256"),

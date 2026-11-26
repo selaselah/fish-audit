@@ -802,6 +802,12 @@ class Store:
                 named = {ref for f in checks for ref in f["evidence"]}
                 units = {d["id"]:d.get("source", d["id"]) for d in graph.get("audit_documents", graph["documents"])}
                 originals = {units[unit] for finding in checks for unit in finding["scope"]}
+                if any(f.get("advance_guarantee",{}).get("period") for f in checks):
+                    # The period comparison also checked other submitted pages for a supplement or extension.
+                    submitted={r[0] for r in db.execute("SELECT id FROM docs WHERE case_id=?",(case_id,))}
+                    if submitted!={d["id"] for d in graph["documents"]}:
+                        raise CaseError("保函期间所据的完整提交资料与出具清单不符。",409)
+                    originals.update(submitted)
                 originals.update(p["doc"] for p in packets)
                 originals.update(p["doc"] for p in timing_pages)
                 originals.update(p["doc"] for p in folio_pages)

@@ -6,6 +6,7 @@ from collections import Counter, defaultdict
 from datetime import date
 from math import isfinite
 
+import guarantee_period
 from contract_folios import complete_number, line_numbers, verify_page_geometry
 from delegation import is_page_marker
 from payment_execution import BANK_TITLES
@@ -13,7 +14,8 @@ from payment_reference import masked_value
 from stage_payments import LABELS as BANK_LABELS, RIDER as BANK_QUALIFIER
 
 
-FORMAT = "advance-payment-guarantee-v1"
+LEGACY = "advance-payment-guarantee-v1"
+FORMAT = guarantee_period.FORMAT
 SINCE = "2026.11.27.05"
 KEY = "advance_guarantee_sources"
 RECTS = "advance_guarantee_rects"
@@ -89,12 +91,24 @@ def literal_day(raw):
     return None
 
 
-def sources(graph, read_text, read_layout=None):
+def joined_clause_quotes(rows):
+    """The model can transcribe both complete adjacent contract lines as one observation."""
+    pairs=set()
+    for a,b in zip(rows,rows[1:]):
+        if not a["line"] or b["line"]!=a["line"]+1 or {a["field"],b["field"]}!={"clause","period_clause"}:
+            continue
+        rider,period=(a,b) if a["field"]=="clause" else (b,a)
+        if (RIDER.fullmatch(rider["quote"].strip()) or inline_stage(rider["quote"])) and guarantee_period.CLAUSE.fullmatch(period["quote"].strip()):
+            pairs.update(a["quote"].strip()+sep+b["quote"].strip() for sep in (""," ","\n","\r\n"))
+    return pairs
+
+
+def sources(graph, read_text, read_layout=None, *, version=FORMAT):
     """Read the original text separately from the model transcription; resolve rows within their own unit."""
     kinds = graph.get("documents_by_kind", {})
     contracts = set(kinds.get("contract", ()))
     amendments = set(kinds.get("contract_addendum", ()))
-    ledger = {"format":FORMAT, "rows":[], "pages":[]}
+    ledger = {"format":version, "rows":[], "pages":[]}
     if not contracts:
         return ledger
     banks = set(kinds.get("bank_receipt", ()))
@@ -109,6 +123,9 @@ def sources(graph, read_text, read_layout=None):
             num = int(suffix)
             pages.append((doc,num,sections.get((doc,num),doc),n))
     page_counts = Counter(p[0] for p in pages)
+    known = {u for units in kinds.values() for u in units}
+    extended = version==FORMAT
+    check_attachments = False
 
     def scan(page, contract=False):
         doc,num,unit,node = page
@@ -120,6 +137,9 @@ def sources(graph, read_text, read_layout=None):
                 raise ValueError("预付款保函所据原页文字与出具摘要不符")
             physical = text.splitlines()
         facts = observations[doc,num]
+        name = docs[doc].get("name","")
+        attachment_hint = check_attachments and any(guarantee_period.EXTENSION.search(t) or guarantee_period.SUPPLEMENT.search(t) or guarantee_period.PERIOD_HINT.search(t)
+                                                    for t in [name,*physical,*(f["quote"] for f in facts)])
         printed_titles = [TITLES[q.strip()] for q in physical if q.strip() in TITLES]
         if contract:
             role = "contract"
@@ -129,12 +149,15 @@ def sources(graph, read_text, read_layout=None):
             role = "payment"
         else:
             hints = [TITLES[f["quote"].strip()] for f in facts if f["quote"].strip() in TITLES]
-            name = docs[doc].get("name","")
-            if not hints and "预付款保函" in name:
+            if not hints and "预付款保函" in name and not attachment_hint:
                 hints = ["receipt" if "签收" in name else "guarantee"]
-            if not hints:
+            if hints:
+                role = hints[0]
+            elif check_attachments and (attachment_hint or unit not in known or page_counts[doc]>1 or not native or node.get("clause_text_only") is not True
+                                        or any(g["doc"]==doc and g["page"]==num and g.get("quality") in ("unreadable","partial") for g in graph.get("gaps",()))):
+                role = "extension"
+            else:
                 return
-            role = hints[0]
         address = {"doc":doc,"unit":unit,"page":num,"original_sha256":docs[doc]["sha256"],"page_sha256":node["sha256"]}
         clean = native and node.get("clause_text_only") is True
         severe = any(g["doc"]==doc and g["page"]==num and g.get("quality") not in ("uncovered","uncovered_title")
@@ -177,8 +200,23 @@ def sources(graph, read_text, read_layout=None):
             literal = q.strip()
             label = re.split(r"[:：]",literal,maxsplit=1)[0].strip()
             field = COLUMNS.get(label)
-            if contract and CLAUSE_HINT.search(q):
-                add("clause",q,i,located[i],"clause",True)
+            if extended and unit in contracts and CLAUSE_HINT.search(q) and guarantee_period.EXTENSION.search(q):
+                add("extension_note",q,i,located[i],"clause",True)
+            elif extended and guarantee_period.EXTENSION.search(q):
+                add("extension_note",q,i,located[i],role if role=="guarantee" else "extension",True)
+                if role in ("receipt","payment") or role=="guarantee" and not guarantee_period.APPLICATION.fullmatch(literal):
+                    clean=False
+            elif contract and (CLAUSE_HINT.search(q) or extended and guarantee_period.PERIOD_HINT.search(q)):
+                add(guarantee_period.clause_field(q) if extended else "clause",q,i,located[i],"clause",True)
+            elif extended and role=="guarantee" and label in guarantee_period.FIELDS:
+                date=literal_day(body(q))
+                conflicting = any(observed and date and observed!=date for f in located[i]
+                                  if (observed:=literal_day(body(f["value"]))))
+                add(guarantee_period.FIELDS[label],q,i,located[i],role,not conflicting)
+            elif extended and role=="guarantee" and guarantee_period.PERIOD_HINT.search(q):
+                add("period_note",q,i,located[i],role,True)
+                if not literal.startswith("保函有效期"):
+                    clean=False
             elif contract and FIRST_NAME.fullmatch(label):
                 add("payment_stage",q,i,located[i],role,True)
             elif literal in TITLES and role in ("receipt","guarantee") or role=="payment" and literal in BANK_TITLES:
@@ -186,7 +224,7 @@ def sources(graph, read_text, read_layout=None):
                 # supplies no title evidence. The original's exact heading has its own geometry.
                 title_facts=[f for f in located[i] if f["field"] in ("other","bank_receipt") or f["status"]=="disputed"]
                 add("title",q,i,title_facts,role,True)
-            elif field in FIELDS[role] or role=="payment" and field=="transfer_ref":
+            elif field in FIELDS.get(role,()) or role=="payment" and field=="transfer_ref":
                 add(field,q,i,located[i],role,True)
             elif role=="guarantee" and field=="issuer" and legible_name(body(q)):
                 add(field,q,i,located[i],role,True)
@@ -198,12 +236,28 @@ def sources(graph, read_text, read_layout=None):
             elif role=="payment" and label not in BANK_METADATA:
                 clean = False
         if contract:
+            merged=joined_clause_quotes(rows) if extended else set()
             for f in facts:
                 if CLAUSE_HINT.search(f["quote"]) and f["quote"] not in physical:
-                    add("clause",f["quote"],None,[f],"clause",False)
+                    if (f["quote"] in merged and f["field"]=="other" and f["status"] not in ("unsupported","disputed")
+                            and f.get("visual_check") not in ("unreadable","conflict")):
+                        continue
+                    add(guarantee_period.clause_field(f["quote"]) if extended else "clause",f["quote"],None,[f],"clause",False)
         elif role in ("guarantee","receipt") and not printed_titles:
             hint = next((f for f in facts if f["quote"].strip() in TITLES),None)
             add("title",hint["quote"] if hint else docs[doc]["name"],None,[hint] if hint else [],role,False)
+        if extended:
+            for f in facts:
+                if f["quote"] in physical:
+                    continue
+                label=re.split(r"[:：]",f["quote"].strip(),maxsplit=1)[0]
+                if role=="guarantee" and label in guarantee_period.FIELDS:
+                    add(guarantee_period.FIELDS[label],f["quote"],None,[f],role,False)
+                elif guarantee_period.EXTENSION.search(f["quote"]):
+                    add("extension_note",f["quote"],None,[f],"extension",False)
+            if role=="extension" or unit in amendments or guarantee_period.EXTENSION.search(name) or guarantee_period.SUPPLEMENT.search(name):
+                if not any(r["role"]=="extension" or r["field"]=="extension_note" for r in rows):
+                    add("extension_note" if guarantee_period.EXTENSION.search(name) else "attachment",name,None,[],"extension",False)
         if role in ("receipt","guarantee","payment"):
             clean = clean and any(r["field"]=="title" and r["line"] for r in rows)
             if not clean:
@@ -216,7 +270,8 @@ def sources(graph, read_text, read_layout=None):
         if p[2] in contracts|amendments:
             scan(p,contract=True)
     if not any(r["role"]=="clause" and ADVANCE_HINT.search(r["quote"]) for r in ledger["rows"]):
-        return {"format":FORMAT,"pages":[],"rows":[]}
+        return {"format":version,"pages":[],"rows":[]}
+    check_attachments = extended and any(r["field"]=="period_clause" for r in ledger["rows"])
     for p in pages:
         if p[2] not in contracts|amendments:
             scan(p)
@@ -237,25 +292,34 @@ def terms(graph, unit=None):
     return [r for r in graph.get(KEY,{}).get("rows",()) if r["role"]=="clause" and (unit is None or r["unit"]==unit)]
 
 
-def scoped(graph, unit):
+def scoped_terms(graph, unit):
     rows = terms(graph)
+    period = [r for r in rows if r["field"]=="period_clause"]
+    if (len(period)==1 and period[0]["unit"]==unit and period[0]["line"] and
+            guarantee_period.CLAUSE.fullmatch(period[0]["quote"].strip())):
+        rows = [r for r in rows if r is not period[0]]
     if len(rows)!=1 or rows[0]["unit"]!=unit or unit not in graph["documents_by_kind"].get("contract",()) or not rows[0]["line"]:
-        return None
+        return ()
     row=rows[0]
     if any(not p["clean"] for p in graph[KEY]["pages"] if p["unit"]==unit):
-        return None
+        return ()
     inline = inline_stage(row["quote"])
     if not inline and not RIDER.fullmatch(row["quote"].strip()):
-        return None
+        return ()
     targets=[r for r in graph[KEY]["rows"] if r["unit"]==unit and (r["field"]=="payment_stage" or inline and r is row)]
     if len(targets)!=1 or not targets[0]["line"] or not (inline or EFFECT_STAGE.fullmatch(value(targets[0]))):
-        return None
+        return ()
     t=targets[0]
     anchored=[f for f in graph["facts"] if f["id"] in t["facts"] and f["field"]=="payment_stage" and
               f["status"] in ("anchored","confirmed") and f["quote"]==t["quote"] and f["value"] in (t["quote"],value(t)) and
               f.get("unit",f["doc"])==unit and f.get("page_sha256")==t["page_sha256"] and f.get("source_sha256")==t["original_sha256"] and
               any(e["type"]=="payment_stage" and e["from"]==unit and e["evidence"]==[f["id"]] for e in graph["edges"])]
-    return row if len(anchored)==1 else None
+    return (row,*period) if len(anchored)==1 else ()
+
+
+def scoped(graph, unit):
+    bound=scoped_terms(graph,unit)
+    return bound[0] if bound else None
 
 
 def bounded_units(graph):
@@ -310,13 +374,23 @@ def assessment(graph, phase, payment=None):
     c=selected("contract",owner)
     g=selected("guarantee")
     r=selected("receipt")
+    if ledger["format"]==FORMAT and any(row["field"]=="period_clause" for row in rules):
+        sources.extend(row for row in all_rows if row["role"]=="extension")
     issued=received=paid=None
     first=scoped(graph,owner)
     def finish(state, detail, status="missing"):
         items=list({s["id"]:s for s in sources}.values())
         evidence=list(dict.fromkeys(ref for s in items for ref in (s["id"],s["doc"],f"{s['doc']}/p{s['page']}",*s["facts"])))
-        return {"state":state,"status":status,"detail":detail,"issued_on":issued,"received_on":received,"paid_on":paid,
-                "sources":items,"evidence":evidence,"units":list(dict.fromkeys(s["unit"] for s in items))}
+        proof={"state":state,"status":status,"detail":detail,"issued_on":issued,"received_on":received,"paid_on":paid,
+               "sources":items,"evidence":evidence,"units":list(dict.fromkeys(s["unit"] for s in items))}
+        if ledger["format"]==FORMAT and any(row["field"]=="period_clause" for row in rules):
+            stage_ref=phase["stage"]["clause_ref"]
+            bound_stage=first is not None and any(s["unit"]==owner and s["line"] and stage_ref in s["facts"]
+                and (s["field"]=="payment_stage" or s is first and inline_stage(s["quote"])) for s in items)
+            period=guarantee_period.compare(proof,payment=payment is not None,scoped=bound_stage)
+            if period:
+                proof["period"]=period
+        return proof
     if payment:
         banks=set(payment["scope"]) & set(graph["documents_by_kind"].get("bank_receipt",()))
         if len(banks)==1:
@@ -392,6 +466,10 @@ def apply(graph,findings):
             f.update(status=proof["status"],detail=proof["detail"])
         else:
             f["detail"]+=" "+proof["detail"]
+        if period:=proof.get("period"):
+            if SEVERITY[period["status"]]>SEVERITY[f["status"]]:
+                f["status"]=period["status"]
+            f["detail"]+=" "+period["detail"]
 
 
 def verify(report,read_text,*,signing=False,read_layout=None):
@@ -403,27 +481,33 @@ def verify(report,read_text,*,signing=False,read_layout=None):
     calls=report.get("calls",{}).get("pages",[])
     methods=policy.get("code_sha256",{})
     if marker is None:
-        if (policy.get("version","")>=SINCE or "advance_guarantee.py" in methods or KEY in graph or nodes or edges or claims
+        if (policy.get("version","")>=SINCE or "advance_guarantee.py" in methods or "guarantee_period.py" in methods or KEY in graph or nodes or edges or claims
                 or any(RECTS in c for c in calls)):
             raise ValueError("底稿缺少预付款保函程序标记")
         if signing and any(f["status"]=="ok" and f["rule"] in ("H04","H05") and first_stage(f) for f in report["findings"]):
-            if sources(graph,read_text,read_layout)["rows"]:
+            if sources(graph,read_text,read_layout,version=LEGACY)["rows"]:
                 raise ValueError("旧版已通过的首期付款尚未核对预付款保函及签收原件，请重审后签收。")
         return
-    if marker!=FORMAT or policy.get("version","")<SINCE or "code_sha256" in policy and "advance_guarantee.py" not in methods:
+    current=policy.get("version","")>=guarantee_period.SINCE
+    if (marker!=(FORMAT if current else LEGACY) or policy.get("version","")<SINCE or
+            "code_sha256" in policy and ("advance_guarantee.py" not in methods or ("guarantee_period.py" in methods)!=current)):
         raise ValueError("预付款保函程序与出具版本不符")
     by_page={(c["doc"],c["page"]):c for c in calls}
     layout=read_layout
     if layout is None and "calls" in report:
         def layout(doc,page):
             return {"lines":by_page.get((doc,page),{}).get(RECTS,{})}
-    actual=sources(graph,read_text,layout)
+    actual=sources(graph,read_text,layout,version=marker)
     if actual!=graph.get(KEY) or (nodes,edges)!=source_graph(actual):
         raise ValueError("预付款保函原件、原行或来源关系与归档不符")
     expected = {f["id"]:p for f,p in assessed_findings(graph,report["findings"])} if actual["rows"] else {}
-    if ({f["id"] for f in claims}!=expected.keys() or any(f["advance_guarantee"]!=expected[f["id"]] or
-            SEVERITY[f["status"]]<SEVERITY[expected[f["id"]]["status"]] for f in claims)):
+    if {f["id"] for f in claims}!=expected.keys():
         raise ValueError("预付款保函或付款先后结论与本期原行不符")
+    for f in claims:
+        proof=expected[f["id"]]
+        severity=max(SEVERITY[proof["status"]],SEVERITY[proof.get("period",{}).get("status","ok")])
+        if f["advance_guarantee"]!=proof or SEVERITY[f["status"]]<severity:
+            raise ValueError("预付款保函或付款先后结论与本期原行不符")
     if "calls" in report:
         if any(by_page.get((p["doc"],p["page"]),{}).get("page_sha256")!=p["page_sha256"] for p in actual["pages"]):
             raise ValueError("预付款保函所据原页摘要与分页记录不符")

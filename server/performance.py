@@ -536,7 +536,7 @@ def stage_terms(text):
     return ratio[0] if len(ratio) == 1 else "", "", ""
 
 
-def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=(),release_terms=(),prior_terms=(),folio_sources=None, guarantee=None):
+def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=(),release_terms=(),prior_terms=(),folio_sources=None, guarantees=()):
     fields = ("payment_term","payment_stage","adjustment")
     refs = contract.evidence("contract",*fields)
     rows, counts, issues = [], set(), []
@@ -546,8 +546,9 @@ def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=
         if line in seen_lines:
             continue
         seen_lines.add(line)
-        if guarantee and fact["id"] in guarantee["facts"] and (fact.get("source_line") or {}).get("text")==guarantee["quote"]:
-            if advance_guarantee.RIDER.fullmatch(guarantee["quote"].strip()):
+        guarantee=next((s for s in guarantees if fact["id"] in s["facts"] and (fact.get("source_line") or {}).get("text")==s["quote"]),None)
+        if guarantee:
+            if guarantee["field"]=="period_clause" or advance_guarantee.RIDER.fullmatch(guarantee["quote"].strip()):
                 continue
             inline=advance_guarantee.inline_stage(guarantee["quote"])
             if inline and fact["field"]=="payment_stage":
@@ -613,8 +614,8 @@ def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=
         issues.append("付款条款存在变更或原页覆盖缺口")
     uncovered = [n for n in contract.notes if re.search(r"分期|分[两二三四五六七八九十\d]+期|预付|尾款|质保金|保留款|第.+期|补充协议|另附|另行约定",n["quote"])
                  and norm(n["quote"]) not in seen_lines and not (warranty_checks and warranty_terms.dedicated(n["quote"]))
-                 and not (guarantee and n["page_id"]==f"{guarantee['doc']}/p{guarantee['page']}" and
-                          (n["line"],n["quote"])==(guarantee["line"],guarantee["quote"]) and sum(r["index"]==1 for r in rows)==1)
+                 and not (sum(r["index"]==1 for r in rows)==1 and any(n["page_id"]==f"{s['doc']}/p{s['page']}" and
+                          (n["line"],n["quote"])==(s["line"],s["quote"]) for s in guarantees))
                  and not any(s["supported"] and s["unit"]==contract.unit and s["quote"]==n["quote"] and
                              s["doc"]==n["doc"] and s["line"]==n["line"] and n["page_id"]==f"{s['doc']}/p{s['page']}"
                              and sum(row["kind"]=="acceptance" for row in rows)==1 for s in prior_terms)
@@ -804,8 +805,8 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         accepted_on = day(receipts[0].single("accepted_on")) if accepted["status"]=="ok" else None
     ledger = graph.get("invoice_receipt_sources") if version==FORMAT else None
     invoice_terms = [s for s in ledger["lines"] if s["role"]=="clause"] if ledger else []
-    guarantee = advance_guarantee.scoped(graph,contract.unit) if version==FORMAT else None
-    plan, rows = schedule(contract, warranty_checks=version in WARRANTY_FORMATS, deadlines=version in PAYMENT_WINDOW_FORMATS,release_terms=cash.get("lines",[]),guarantee=guarantee,
+    guarantees = advance_guarantee.scoped_terms(graph,contract.unit) if version==FORMAT else ()
+    plan, rows = schedule(contract, warranty_checks=version in WARRANTY_FORMATS, deadlines=version in PAYMENT_WINDOW_FORMATS,release_terms=cash.get("lines",[]),guarantees=guarantees,
                           prior_terms=graph.get("prior_installment_sources",{}).get("lines",[]) if version==FORMAT else (),
                           folio_sources=graph.get("contract_folio_sources") if version==FORMAT else None,
                           invoice_terms=[s for s in invoice_terms if s["unit"]==contract.unit])
@@ -1139,7 +1140,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         refs = bank.evidence("bank_receipt","contract_id","payment_designation","paid_on","transfer_status","payer","payee")
         scope = [contract.unit,bank.unit]
         matching = [(r,s) for r,s in stages if matches_stage(designation,r)]
-        if not matching and guarantee and advance_guarantee.FIRST_NAME.fullmatch(designation):
+        if not matching and guarantees and advance_guarantee.FIRST_NAME.fullmatch(designation):
             matching = [(r,s) for r,s in stages if r["index"]==1 and advance_guarantee.FIRST_NAME.fullmatch(r["label"])]
         if version == FIRST_FORMAT:
             matching = [(r,s) for r,s in stages if designation and designation == s["stage"]["name"]]

@@ -84,7 +84,7 @@ def sources(graph,read_text):
     ledger["banks"] = [u["id"] for u in units if u["id"] in banks]
     ledger["ambiguous_units"]=[u for u in ledger["banks"] if counts[u]>1 or u in repeated]
     known={u for k,group in kinds.items() if k!="contract_addendum" for u in group}
-    from advance_guarantee import bounded_units, scoped
+    from advance_guarantee import bounded_units, scoped_terms
     known.update(bounded_units(graph))
     from warranty_service import classified
     ticket_units,bounded_tickets=classified(graph.get("warranty_sources",{}))
@@ -93,8 +93,7 @@ def sources(graph,read_text):
     coverage=covered_rows(graph,read_text,set(kinds.get("contract",[])),CONTRACT,is_printed,"分期合同")
     covered_terms = {(r["doc"], r["page"], r["line"], r["quote"]) for r in prior_terms if r["supported"] or r.get("credit_only")}
     for unit in kinds.get("contract", ()):
-        if r:=scoped(graph,unit):
-            covered_terms.add((r["doc"],r["page"],r["line"],r["quote"]))
+        covered_terms.update((r["doc"],r["page"],r["line"],r["quote"]) for r in scoped_terms(graph,unit))
     for page in coverage:
         page["uncovered"] = [r for r in page["uncovered"]
                              if (page["doc"], page["page"], r["line"], r["quote"]) not in covered_terms]
