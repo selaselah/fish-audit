@@ -1,5 +1,13 @@
 # 本机审计接口
 
+## 合同付款条款的 Word 批注
+
+规则 `2026.11.26.18` 在 `policy.contract_word_reviews` 和 `graph.contract_word_reviews.format` 登记 `word-contract-payment-comments-v1`。物理原件、审阅部件、选区和页图的结构沿用 Word 验收审阅格式。合同的 `location.printed` 另存打印层完整原行，允许汉字与随后数字之间因排版出现的单个 ASCII 空格。数字内部的空格、缺字或重复匹配都会使行定位失去依据。
+
+分期安排 H03 的 `contract_comments` 带有 `status`、`whole`、`documents`、`notes`、`clauses` 和 `evidence`。`clauses` 按批注 ID 记录对应的付款条款字段，未知为 null。已定位到一个已核付款条件、且全文明确限定为该期拟增加签认单据的批注，只进入该期的 H04、对应的 H05 和适用的 H06。范围未明、扩展审阅记录和不可读取的合同进入整份付款安排复核。计算沿用正文中可核实的比例。已有提前支付或其他更严重的疑点继续保留。
+
+`contract_word_review_source`、`contract_word_review_comment` 和 `contract_word_review_anchor` 连接物理原件、审阅记录、批注及页。每项发现以 `supports_result` 引用自己的依据。当前版离线复算、直接签收和复核签收均从实际 Word 原件重建审阅记录。旧版可以按出具版本复算，旧相符结论涉及尚未核清的合同批注时，签收需要重新审计。[完整演练](acceptance.md#合同分期付款批注)
+
 ## Word 验收审阅记录
 
 规则 `2026.11.26.17` 在 `policy.acceptance_word_reviews` 和 `graph.acceptance_word_reviews.format` 记录 `word-acceptance-comments-v1`。验收和复验的 Word 文档逐份登记。每个 `documents[]` 记录绑定物理文件、所属审查单元、原件摘要、支持范围和批注总数。可读的 DOCX 同时登记正文 XML 摘要，有批注时还登记关联部件及其摘要。

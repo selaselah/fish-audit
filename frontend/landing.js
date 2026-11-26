@@ -7,6 +7,7 @@ function restoreWorkspaceLink() {
   return false;
 }
 if (!restoreWorkspaceLink()) {
+  document.documentElement.classList.add('m-enter');
   window.addEventListener('hashchange', restoreWorkspaceLink);
   const menu = document.querySelector('.mobile-menu');
   menu.addEventListener('click', event => {
@@ -49,11 +50,12 @@ if (!restoreWorkspaceLink()) {
   const sceneTabs = [...scenes.querySelectorAll('[role="tab"]')];
   const contractExample=document.getElementById('signing-example');
   const inspectionExample=document.getElementById('inspection-example');
+  const paymentExample=document.getElementById('payment-example');
   const examples={company:{scene:'signing',revision:9},word:{scene:'word-signing',revision:6},calendar:{scene:'contract-dates',revision:6},pdf:{scene:'pdf-signing'}};
   const inspectionRoutes={equipment:'inspection',supplier:'suppliers',comments:'word-comments'};
   function sceneAddress(name) {
     const url=new URL(location.href);
-    const scene=name==='inspection'?inspectionRoutes[inspectionExample.value]:name;
+    const scene=name==='inspection'?inspectionRoutes[inspectionExample.value]:name==='folios' && paymentExample.value==='comments'?'contract-comments':name;
     url.searchParams.set('scene',name==='signing' ? examples[contractExample.value].scene : scene);
     if (url.searchParams.get('scene')==='pdf-signing') url.searchParams.set('pdf',PublicPdfSigning.selected());
     else url.searchParams.delete('pdf');
@@ -63,6 +65,21 @@ if (!restoreWorkspaceLink()) {
   const selectScene = enableTabs(sceneTabs,tab=>sceneAddress(tab.id.slice('scene-tab-'.length)));
   const requested=new URLSearchParams(location.search).get('scene');
   if (['signing','inspection','folios'].includes(requested)) selectScene(document.getElementById('scene-tab-'+requested));
+  if (requested==='contract-comments') selectScene(document.getElementById('scene-tab-folios'));
+  if (requested==='folios') paymentExample.value='folios';
+  const paymentsScene=document.getElementById('scene-folios');
+  function showPayments() {
+    const comments=paymentExample.value==='comments', slot=document.getElementById('payment-comments');
+    document.getElementById('payment-folios').hidden=comments;
+    slot.hidden=!comments;
+    const edition=document.getElementById('payment-version');
+    edition.textContent=comments?(slot.dataset.revision?'合成案例 · R'+slot.dataset.revision:'合成合同'):'合成案例 · R10';
+    if (comments && !paymentsScene.hidden) PublicAcceptanceComments.open('contract');
+  }
+  new MutationObserver(showPayments).observe(paymentsScene,{attributes:true,attributeFilter:['hidden']});
+  paymentExample.addEventListener('change',()=>{showPayments();sceneAddress('folios');});
+  document.getElementById('payment-example-choice').hidden=false;
+  showPayments();
   function selectContractExample() {
     for (const key of Object.keys(examples)) document.getElementById('signing-'+key).hidden=key!==contractExample.value;
     const edition=document.getElementById('signing-example-version');

@@ -4,6 +4,9 @@ const PhaseEvidence = (() => {
   function combined(items) {
     return priority.find(status=>items.some(item=>item.status===status)) || 'missing';
   }
+  function sameStage(left,right) {
+    return left && right && ['clause_ref','name','clause','share'].every(key=>left[key]===right[key]);
+  }
   function dateOn(fact) {
     const line=fact?.source_line;
     if (!line?.rects?.length || !['anchored','confirmed'].includes(fact.status)) return '';
@@ -318,5 +321,5 @@ const PhaseEvidence = (() => {
     select(index.phaseViews.get(phase.id) || initial);
     return root;
   }
-  return {combined,panel,pageReferences,amendmentLines,amendmentFact,dateOn};
+  return {combined,sameStage,panel,pageReferences,amendmentLines,amendmentFact,dateOn};
 })();

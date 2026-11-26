@@ -63,3 +63,42 @@ button.word-impact:hover { background:var(--accent-soft); }
   .word-view-switch button[aria-selected=true] { border:2px solid Highlight; }
   .word-quote mark { text-decoration:underline double; }
 }
+
+.contract-review { color:var(--ink); min-width:0; container-type:inline-size; }
+.contract-sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
+.contract-index-head { display:flex; align-items:baseline; gap:10px; margin:0 0 7px; }
+.contract-index-head strong { font:600 .97rem/1.4 var(--font-ui); }
+.contract-index-head > span,.contract-clause-label { color:var(--secondary); font-size:.78rem; }
+.contract-index { display:flex; gap:5px; overflow:auto; padding:3px; margin:-3px -3px 8px; }
+.contract-index .contract-stage { position:relative; display:grid; grid-template-columns:1fr auto; align-items:center; flex:1 0 75px; min-height:66px; padding:9px 11px; gap:4px; text-align:left; border:1px solid var(--line); border-radius:8px; background:var(--surface); color:var(--secondary); cursor:pointer; }
+.contract-stage > span:first-child { font:540 .79rem/1.2 var(--font-ui); }
+.contract-stage > strong { grid-row:2; grid-column:1 / -1; color:var(--ink); font:600 1.38rem/1 var(--font-number,var(--font-ui)); letter-spacing:-.04em; font-variant-numeric:tabular-nums; }
+.contract-index .contract-stage[aria-selected=true] { color:var(--accent-hover); border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); background:var(--accent-soft); }
+.contract-stage[aria-selected=true] > strong { color:var(--accent-hover); }
+.contract-note-count { display:inline-flex; align-items:center; justify-self:end; gap:3px; padding:2px 5px; font:600 .72rem/1.1 var(--font-ui); color:#73430e; background:#ffebc5; border-radius:4px; }
+.contract-printed-clause { display:flex; align-items:center; flex-wrap:wrap; gap:10px; padding:16px; border:1px solid var(--line); border-radius:10px; background:var(--surface); }
+.contract-clause-label { width:100%; display:flex; align-items:center; gap:7px; }
+.contract-clause-label small { font-size:inherit; margin-left:auto; }
+.contract-printed-clause p { width:100%; margin:0 0 3px; overflow-wrap:anywhere; font:580 1.05rem/1.6 var(--font-ui); }
+.contract-printed-clause .word-page-jump { display:inline-flex; align-items:center; gap:6px; width:auto; }
+.contract-printed-clause .word-file { margin-left:auto; }
+@container (max-width:340px) {
+  .contract-index .contract-stage { flex-basis:66px; min-height:62px; padding:8px 6px; }
+  .contract-clause-label { flex-wrap:wrap; }
+  .contract-printed-clause { padding:12px; }
+}
+.paper-contract-index { margin:16px 0 6px; }
+.paper-contract-index .contract-index-head { margin:0 0 2px; }
+.paper-contract-index .contract-note-count { grid-column:2; grid-row:1; }
+.performance-overview:has(> #contract-comments, #reader-view-contract-comments:not([hidden])) .phase-summary [data-shared-contract-source] .phase-contract,
+.performance-overview:has(> #contract-comments, #reader-view-contract-comments:not([hidden])) .phase-summary .word-phase-link[aria-controls="contract-comments"] { display:none; }
+.performance-overview:has(> #contract-comments, #reader-view-contract-comments:not([hidden])) .phase-summary [data-shared-contract-source] .phase-results { justify-content:flex-start; }
+@media (max-width:650px) {
+  .paper-contract-index .phase-choice { position:relative; }
+  .paper-contract-index .contract-note-count { position:absolute; right:5px; top:5px; }
+}
+#payment-comments { margin-top:14px; }
+#payment-comments .word-review-card { border:0; border-top:1px solid var(--line); border-radius:0; background:transparent; }
+#payment-comments .word-review-head { padding-inline:0; }
+#payment-comments .word-view-switch { margin-inline:0; }
+#payment-comments .word-review-pane,#payment-comments .word-review-tools,#payment-comments .word-proof { padding-inline:0; }

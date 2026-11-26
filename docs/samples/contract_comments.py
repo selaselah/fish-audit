@@ -51,7 +51,7 @@ def materials(seed, mode):
 
 def reconcile_rows(cid, title, originals, report):
     endpoint = "/api/cases/" + cid
-    fields = {"付款条款": "payment_term", "第一期": "payment_stage", "第二期": "payment_stage",
+    fields = {"供应方": "seller", "付款条款": "payment_term", "第一期": "payment_stage", "第二期": "payment_stage",
               "第三期": "payment_stage", "验收范围": "acceptance_scope"}
     for name, (digest, page) in originals.items():
         if name not in {"采购合同.docx", "验收报告.pdf"}:
@@ -108,6 +108,8 @@ def run(seed, modes, upload):
         record, = paper["graph"]["contract_word_reviews"]["documents"]
         assert record["coverage"] == "complete" and record["count"] == int(mode != "clean")
         assert plan["status"] == ("ok" if mode == "clean" else "missing"), plan["detail"]
+        acceptance, = [f for f in paper["findings"] if f["rule"] == "H02"]
+        assert acceptance["status"] == "ok", acceptance["detail"]
         if mode != "clean":
             note, = record["notes"]
             stage = CASES[mode]

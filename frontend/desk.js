@@ -1,3 +1,63 @@
+function contractPreview(report, task) {
+  if (task.profile!=='cn-contract-performance/v1' || report.case_id!==task.id || report.policy?.profile!==task.profile) return null;
+  const findings=report.findings, graph=report.graph;
+  const signing=findings.find(f=>f.rule==='H01'), acceptance=findings.find(f=>f.rule==='H02'), plan=findings.find(f=>f.rule==='H03');
+  if (!signing || !acceptance || !plan) return null;
+  function jump(f,label,cls='preview-finding') {
+    const node=Team.paperLink(label,task.id,cls,new URLSearchParams({rev:String(task.rev),finding:f.id}));
+    node.dataset.findingId=f.id; node.append(tag(f.status),glyph('arrows-angle-expand'));return node;
+  }
+  const panel=el('section','','preview-contract');
+  panel.setAttribute('aria-label','合同履约速览');
+  panel.append(box('preview-checks',jump(signing,'合同生效','preview-check'),jump(acceptance,'交付验收','preview-check')));
+  const header=box('preview-plan-head',el('h3','付款安排'),jump(plan,'全部条款','preview-plan-jump'));
+  panel.append(header);
+  const phases=findings.filter(f=>f.rule==='H04' && f.stage), index=graphIndex(graph);
+  if (!phases.length || phases.some(f=>!index.facts.has(f.stage.clause_ref) || !traceReferences(graph,f).includes(f.stage.clause_ref))) return panel;
+  const stages=phases.map(f=>{
+    const refs=traceReferences(graph,f);
+    const related=findings.filter(r=>['H05','H06'].includes(r.rule) && PhaseEvidence.sameStage(f.stage,r.stage) && traceReferences(graph,r).includes(f.stage.clause_ref));
+    const noted=f.contract_comments?.notes.some(n=>refs.includes(n)) || false;
+    return {f,related,noted,status:PhaseEvidence.combined([f,...related])};
+  });
+  const content=el('div','','preview-phase-detail');
+  const pick=stages.length>4?el('select'):box('preview-phase-tabs');
+  if (pick.tagName==='SELECT') pick.setAttribute('aria-label','选择付款期次');
+  else {pick.setAttribute('role','tablist');pick.setAttribute('aria-label','查看付款期次');content.setAttribute('role','tabpanel');}
+  content.id='preview-selected-phase';
+  function select(i) {
+    const {f,related}=stages[i];
+    if (pick.tagName==='SELECT') pick.selectedIndex=i;
+    else {
+      [...pick.children].forEach((tab,n)=>{tab.tabIndex=n===i?0:-1;tab.setAttribute('aria-selected',String(n===i));});
+      content.setAttribute('aria-labelledby',pick.children[i].id);
+    }
+    const payments=related.filter(r=>r.rule==='H05');
+    content.replaceChildren(jump(f,'付款条件'));
+    for (const r of related) {
+      const bank=payments.length>1 && r.rule==='H05' && traceReferences(graph,r).map(ref=>index.facts.get(ref)).find(v=>v?.field==='bank_receipt');
+      content.append(jump(r,r.rule==='H06'?'本期回单合计':bank?.name || '实付时点'));
+    }
+    if (!payments.length) content.append(el('span','本期未关联回单','preview-no-receipt'));
+  }
+  stages.forEach(({f},i)=>{
+    const {name,share}=f.stage, percent=share?share+'%':'比例待核';
+    if (pick.tagName==='SELECT') {pick.append(el('option',name+' · '+percent));return;}
+    const tab=action('',()=>select(i),'preview-phase-tab');
+    tab.id='preview-phase-'+i;tab.setAttribute('role','tab');tab.setAttribute('aria-controls',content.id);
+    tab.append(el('span',name),el('strong',percent));pick.append(tab);
+    tab.addEventListener('keydown',event=>{
+      const target={ArrowRight:(i+1)%stages.length,ArrowLeft:(i+stages.length-1)%stages.length,Home:0,End:stages.length-1}[event.key];
+      if (target!==undefined) {event.preventDefault();select(target);pick.children[target].focus();}
+    });
+  });
+  if (pick.tagName==='SELECT') pick.addEventListener('change',()=>select(pick.selectedIndex));
+  const priority=PhaseEvidence.combined(stages), attention=stages.findIndex(s=>s.status===priority && s.noted);
+  const receipt=stages.findIndex(s=>s.status===priority && s.related.some(r=>r.rule==='H05'));
+  select(attention>=0?attention:receipt>=0?receipt:Math.max(0,stages.findIndex(s=>s.status===priority)));
+  panel.append(pick,content); return panel;
+}
+
 const Desk = {
   page: 1, libraryPage: 1, search: '', status: 'verified', fingerprint: '', debounce: 0,
   previewRequest: null, view:'board', verdict:'', lane:'', queryKey:'',
@@ -175,10 +235,22 @@ const Desk = {
       const signed=task.decisions.find(d=>d.rev===task.rev);
       if (signed) result.append(el('p','人工决定 · '+statusName(signed.decision),'small'));
       const priorities=priorityFindings(report.findings);
+      const contract=contractPreview(report,task);
+      let list=result;
+      if (contract) {
+        result.append(contract);
+        if (priorities.length) {
+          list=el('details','','preview-other');
+          list.append(el('summary','优先核对 · '+Math.min(3,priorities.length)+' 项'));result.append(list);
+        }
+        const documents=el('details','','preview-other');
+        documents.append(el('summary','原始资料 · '+task.documents.length+' 份'),files);
+        sources.replaceChildren(documents);
+      }
       for (const item of priorities.slice(0,3)) {
         const target=Team.paperLink(item.stage ? item.stage.name+' · '+item.title : item.title,task.id,'preview-finding',
           new URLSearchParams({rev:String(task.rev),finding:item.id}));
-        target.append(tag(item.status)); result.append(target);
+        target.append(tag(item.status)); list.append(target);
       }
       content.insertBefore(result,sources);
     } catch (error) {

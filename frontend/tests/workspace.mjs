@@ -26,6 +26,7 @@ import {checkFolios,checkPublicFolios} from './contract-folios.mjs';
 import {checkWordSigning} from './word-signing.mjs';
 import {checkCalendar} from './contract-calendar.mjs';
 import {checkRuleCatalog} from './rule-catalog.mjs';
+import {checkContractComments} from './contract-comments.mjs';
 import {checkWordComments,checkPublicWordComments} from './acceptance-comments.mjs';
 import {checkSupplierPages,checkPublicSuppliers} from './supplier-pages.mjs';
 import {checkPdfCase,checkPublicPdf} from './pdf-signatures.mjs';
@@ -40,6 +41,8 @@ const sampleDesk = process.argv.includes('--sample-desk');
 const product = process.argv.includes('--product');
 const publicFolios=process.argv.includes('--public-folios');
 const ruleCatalog=process.argv.includes('--rule-catalog');
+const publicContractComments=process.argv.includes('--public-contract-comments');
+const contractCommentCase=caseArgument('--contract-comment-case');
 const publicWordComments=process.argv.includes('--public-word-comments');
 const publicSuppliers=process.argv.includes('--public-suppliers');
 const publicPdf=process.argv.includes('--public-pdf');
@@ -99,12 +102,12 @@ const qualityImageCase = caseArgument('--quality-image-case');
 const reinspectionGap = caseArgument('--reinspection-gap-case');
 const brokenPayment = caseArgument('--payment-source-case');
 const waitingCase = caseArgument('--waiting-case');
-const seeded = [ruleCatalog,publicWordComments,commentCase,publicSuppliers,supplierCase,publicPdf,pdfCase,publicFolios,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,product,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+const seeded = [publicContractComments,contractCommentCase,ruleCatalog,publicWordComments,commentCase,publicSuppliers,supplierCase,publicPdf,pdfCase,publicFolios,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,product,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
-const root = product || ruleCatalog || publicWordComments || publicSuppliers || publicPdf || publicFolios ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
+const root = product || ruleCatalog || publicContractComments || publicWordComments || publicSuppliers || publicPdf || publicFolios ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
   recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
-if (product || ruleCatalog || publicWordComments || publicSuppliers || publicPdf || publicFolios || recoveringCase || waitingCase || legacyCase || brokenPayment) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
+if (product || ruleCatalog || publicContractComments || publicWordComments || publicSuppliers || publicPdf || publicFolios || recoveringCase || waitingCase || legacyCase || brokenPayment) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
 if (legacyCase || brokenPayment) assert.ok(!['8000','8010'].includes(new URL(root).port));
 const children = [];
 const faults = [];
@@ -167,6 +170,8 @@ try {
   await call('Page.navigate',{url:product ? root : root+'/app'});
   if (ruleCatalog) {
     await checkRuleCatalog({root,call,evaluate,wait});
+  } else if (publicContractComments || contractCommentCase) {
+    await checkContractComments({root,call,evaluate,wait},contractCommentCase);
   } else if (commentCase) {
     await checkWordComments({root,call,evaluate,wait},commentCase,Number(process.env.AUDIT_COMMENT_REV));
   } else if (publicWordComments) {

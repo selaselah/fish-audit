@@ -1354,3 +1354,27 @@ button.mandate-day.signing-day[aria-pressed=true] { box-shadow:inset 0 0 0 1px c
 .expert-group > summary > i:last-child { margin-left:auto; font-size:.8rem; }
 .expert-group[open] > summary > i:last-child { transform:rotate(180deg); }
 .expert-group .procedure-title { font-size:.88rem; overflow-wrap:anywhere; }
+
+.preview-contract { margin-block:14px 8px; min-width:0; }
+.preview-checks { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.preview-check { display:grid; grid-template-columns:1fr auto; gap:7px 4px; align-items:center; padding:10px 12px; min-height:60px; border:1px solid var(--line); border-radius:8px; color:var(--ink); font-size:.91rem; font-weight:600; text-decoration:none; }
+.preview-check .tag { grid-row:2; grid-column:1 / -1; justify-self:start; }
+.preview-check .ui-glyph { grid-column:2; grid-row:1; color:var(--muted); font-size:.75rem; }
+.preview-plan-head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:12px; }
+.preview-plan-head h3 { margin:0; }
+.preview-plan-jump { display:inline-flex; align-items:center; gap:6px; min-height:42px; font-size:.79rem; }
+.preview-plan-jump .tag { font-size:.72rem; }
+.preview-phase-tabs { display:grid; grid-auto-flow:column; grid-auto-columns:minmax(0,1fr); gap:4px; }
+.preview-phase-tab { display:grid; gap:4px; min-width:0; min-height:57px; padding:7px 9px; color:var(--secondary); text-align:left; }
+.preview-phase-tab > span { font-size:.79rem; overflow-wrap:anywhere; }
+.preview-phase-tab strong { font:600 1.25rem/1.1 var(--font-number); color:var(--ink); font-variant-numeric:tabular-nums; }
+.preview-phase-tab[aria-selected=true] { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); background:var(--accent-soft); }
+.preview-phase-tab[aria-selected=true] strong { color:var(--accent-hover); }
+.preview-contract select { width:100%; min-height:44px; }
+.preview-phase-detail { padding-inline:2px; }
+.preview-phase-detail .preview-finding { justify-content:flex-start; gap:8px; }
+.preview-phase-detail .preview-finding .tag { margin-left:auto; }
+.preview-finding .ui-glyph { color:var(--accent); font-size:.74rem; }
+.preview-no-receipt { display:block; font-size:.79rem; padding:10px 0 2px; color:var(--muted); }
+.preview-other > summary { cursor:pointer; min-height:40px; align-content:center; font-size:.88rem; color:var(--secondary); font-weight:550; }
+.preview-check:is(:hover,:focus-visible),.preview-phase-tab:hover { border-color:var(--accent); }

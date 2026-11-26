@@ -1,0 +1,240 @@
+{
+  "case_id": "4835381f3a7f4d22991601c2ffa4d114",
+  "revision": 8,
+  "report_sha256": "b52e17cd4a35bb04ed12ce8fbc552db6e2c9ac7b37b21617fb87aaa6a6e470c7",
+  "status": "missing",
+  "stages": [
+    {
+      "ref": "d01/p1/f15",
+      "name": "第一期",
+      "share": "30",
+      "line": 16,
+      "quote": "第一期：合同生效后支付 30%",
+      "page": 1,
+      "notes": []
+    },
+    {
+      "ref": "d01/p1/f16",
+      "name": "第二期",
+      "share": "60",
+      "line": 17,
+      "quote": "第二期：最终验收合格后支付 60%",
+      "page": 1,
+      "notes": [
+        "contract-word/d01/n1"
+      ]
+    },
+    {
+      "ref": "d01/p1/f17",
+      "name": "第三期",
+      "share": "10",
+      "line": 18,
+      "quote": "第三期：质保期满后支付 10%",
+      "page": 1,
+      "notes": []
+    }
+  ],
+  "document": {
+    "body_sha256": "ed23bafda16c7b934fbd55112b5033ea2713bdcc106b426a401a3f52f56b0533",
+    "count": 1,
+    "coverage": "complete",
+    "doc": "d01",
+    "id": "contract-word/d01",
+    "limitations": [],
+    "notes": [
+      {
+        "anchor": {
+          "end": 11,
+          "paragraph": 17,
+          "quote": "第二期：最终验收合格后支付60%",
+          "selected": "最终验收合格后",
+          "start": 4
+        },
+        "author": "演练合同复核员",
+        "date": "2026-09-02T02:00:00Z",
+        "id": "contract-word/d01/n1",
+        "key": "0",
+        "location": {
+          "facts": [
+            "d01/p1/f16"
+          ],
+          "line": 17,
+          "page": 1,
+          "page_sha256": "34e26ebbf68012592ebe5b835247ad0f682e66ee1406372ea27ac8a59241168c",
+          "printed": "第二期：最终验收合格后支付 60%",
+          "text_sha256": "a164518aa495d4edc76e2485072bd3c0a931026c21ab40d9c51176422b64e75b",
+          "unit": "d01"
+        },
+        "shortened": false,
+        "text": "建议本期付款前取得双方签认的技术终验单，待双方签订补充协议。",
+        "ref": "d01/p1/f16",
+        "related": [
+          {
+            "kind": "condition",
+            "id": "H04-6",
+            "name": "第二期",
+            "share": "60",
+            "status": "missing",
+            "doc": "d01",
+            "ref": "d01/p1/f16"
+          },
+          {
+            "kind": "payment",
+            "id": "H05-8",
+            "name": "第二期",
+            "share": "60",
+            "status": "missing",
+            "doc": "d03",
+            "ref": "d03/p1/f6"
+          }
+        ]
+      }
+    ],
+    "original_sha256": "2ad51ea0d650e14c8c5f812ec24c4dde7a5fc33b9df5f2d9d87c730c896a8759",
+    "part": "word/comments.xml",
+    "part_sha256": "2406b2767a2a7c0e338b22a5ba5b7d26339455dfe72f347d13603ec642226d6f",
+    "units": [
+      "d01"
+    ],
+    "name": "采购合同.docx",
+    "original": "/showcase/contract-payment-review.docx"
+  },
+  "sources": {
+    "d01": {
+      "title": "采购合同",
+      "version": "合成采购 · R8",
+      "page": 1,
+      "original": "/showcase/contract-payment-review.docx",
+      "image": "/assets/contract-payment-review-page.jpg",
+      "source_sha256": "2ad51ea0d650e14c8c5f812ec24c4dde7a5fc33b9df5f2d9d87c730c896a8759",
+      "page_sha256": "34e26ebbf68012592ebe5b835247ad0f682e66ee1406372ea27ac8a59241168c",
+      "lines": [
+        {
+          "ref": "d01/p1/f15",
+          "line": 16,
+          "rect": "0.14824,0.66893,0.36244,0.6835",
+          "rects": [
+            [
+              0.14824,
+              0.66893,
+              0.36244,
+              0.6835
+            ],
+            [
+              0.36746,
+              0.67039,
+              0.3995,
+              0.68107
+            ]
+          ],
+          "label": "第一期",
+          "value": "合同生效后支付 30%"
+        },
+        {
+          "ref": "d01/p1/f16",
+          "line": 17,
+          "rect": "0.14824,0.70631,0.36181,0.72087",
+          "rects": [
+            [
+              0.14824,
+              0.70631,
+              0.36181,
+              0.72087
+            ],
+            [
+              0.36432,
+              0.7068,
+              0.40138,
+              0.72087
+            ],
+            [
+              0.40704,
+              0.70777,
+              0.43844,
+              0.71845
+            ]
+          ],
+          "label": "第二期",
+          "value": "最终验收合格后支付 60%"
+        },
+        {
+          "ref": "d01/p1/f17",
+          "line": 18,
+          "rect": "0.14824,0.74369,0.36244,0.75777",
+          "rects": [
+            [
+              0.14824,
+              0.74369,
+              0.36244,
+              0.75777
+            ],
+            [
+              0.36809,
+              0.74466,
+              0.3995,
+              0.75534
+            ]
+          ],
+          "label": "第三期",
+          "value": "质保期满后支付 10%"
+        }
+      ]
+    },
+    "d03": {
+      "title": "银行付款回单",
+      "version": "合成采购 · R8",
+      "page": 1,
+      "pdf": "/showcase/contract-payment-transfer.pdf",
+      "image": "/assets/contract-payment-transfer-page.jpg",
+      "source_sha256": "3df4b0c3fcfa6f0729817a4609e565572e210e95f2730e8c7e81107dbda15b5b",
+      "page_sha256": "bd4bbe3c1eb69f6d541d601aa3a982f4bcf44e293802cb7a6e460e661ea2c2ad",
+      "lines": [
+        {
+          "ref": "d03/p1/f6",
+          "line": 7,
+          "rect": "0.08209,0.3758,0.2799,0.39224",
+          "rects": [
+            [
+              0.08209,
+              0.3758,
+              0.2799,
+              0.39224
+            ]
+          ],
+          "label": "款项用途",
+          "value": "第二期"
+        },
+        {
+          "ref": "d03/p1/f7",
+          "line": 8,
+          "rect": "0.08274,0.41644,0.30511,0.43242",
+          "rects": [
+            [
+              0.08274,
+              0.41644,
+              0.30511,
+              0.43242
+            ]
+          ],
+          "label": "交易状态",
+          "value": "交易成功"
+        },
+        {
+          "ref": "d03/p1/f8",
+          "line": 9,
+          "rect": "0.08209,0.45662,0.37492,0.47306",
+          "rects": [
+            [
+              0.08209,
+              0.45662,
+              0.37492,
+              0.47306
+            ]
+          ],
+          "label": "付款日期",
+          "value": "2026年9月21日"
+        }
+      ]
+    }
+  }
+}

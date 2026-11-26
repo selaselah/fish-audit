@@ -50,7 +50,7 @@
         <div class="hero-copy hero-text">
           <h1 id="hero-title">中小企业的<br><em>AI 财务审计</em></h1>
           <p class="lead">上传合同、验收单和回单，核对生效条件、验收结果与每期付款依据。</p>
-          <div class="hero-actions"><a class="button" href="/app">进入工作台</a><a class="text-link" href="/?scene=word-comments#workflow">试核一份验收单</a></div>
+          <div class="hero-actions"><a class="button" href="/app">进入工作台</a><a class="text-link" href="/?scene=contract-comments#workflow">试核第二期付款</a></div>
           <p class="formats"><i aria-hidden="true" class="ui-glyph ic-paperclip"></i>支持电子与扫描 PDF、照片、Word</p>
         </div>
         <div class="specimen document-mat app-frame" data-visual id="sample" role="region" aria-label="交互演示，切换文件核对证据">
@@ -131,7 +131,7 @@
             <button type="button" id="scene-tab-acceptance" role="tab" aria-selected="true" aria-controls="scene-acceptance">验收读数</button>
             <button type="button" id="scene-tab-signing" role="tab" aria-selected="false" aria-controls="scene-signing" tabindex="-1">合同生效</button>
             <button type="button" id="scene-tab-inspection" role="tab" aria-selected="false" aria-controls="scene-inspection" tabindex="-1">采购验收</button>
-            <button type="button" id="scene-tab-folios" role="tab" aria-selected="false" aria-controls="scene-folios" tabindex="-1">付款续页</button>
+            <button type="button" id="scene-tab-folios" role="tab" aria-selected="false" aria-controls="scene-folios" tabindex="-1">付款条款</button>
           </div>
           <div id="scene-acceptance" role="tabpanel" aria-labelledby="scene-tab-acceptance">
             <a class="workflow-image open-sample-review" href="/showcase/acceptance.pdf" target="_blank" rel="noopener" aria-label="核对这张合成验收报告"><img src="/assets/review-sample.webp" width="1360" height="819" loading="lazy" alt="核图工作台在验收单上定位到实测柜温 8℃ 的原行"><span><i class="ui-glyph ic-eye" aria-hidden="true"></i>核对这张验收单</span></a>
@@ -199,13 +199,18 @@
             <div id="inspection-supplier" hidden><a href="/showcase/supplier-contract.pdf" target="_blank" rel="noopener">查看含签署原因的演练合同</a></div>
           </div>
           <div id="scene-folios" class="signing-sample public-folios" role="tabpanel" aria-labelledby="scene-tab-folios" hidden>
-            <div class="signing-sample-header"><span><i class="ui-glyph ic-journal-text" aria-hidden="true"></i> 采购合同</span><small>合成案例 · R10</small></div>
+            <div class="signing-sample-header"><span><i class="ui-glyph ic-journal-text" aria-hidden="true"></i> 付款核对</span>
+              <label id="payment-example-choice" hidden><span class="sr-only">选择付款条款案例</span><select id="payment-example">
+                <option value="comments">分期付款批注</option><option value="folios">合同续页</option></select></label><small id="payment-version">合成案例 · R10</small></div>
+            <div id="payment-comments" hidden><a href="/showcase/contract-payment-review.docx">下载含批注的水印合同</a></div>
+            <div id="payment-folios">
             <div class="public-folio-head"><h3>续页引用的合同号不同</h3><label class="folio-highlight" hidden><input type="checkbox" checked role="switch">标出差异</label></div>
             <div class="public-folio-rows" data-visual>
               <a href="/showcase/payment-folios.pdf#page=1" target="_blank" rel="noopener"><small>正文 · 第 1 页</small><strong>YL-LY-D1094C6B</strong><span class="public-folio-thumb" aria-hidden="true"><img src="/assets/showcase-payment-folio-1-thumb.webp" alt="" width="150" height="212" loading="lazy"><i></i></span><i aria-hidden="true" class="ui-glyph ic-arrows-angle-expand"></i></a>
               <a href="/showcase/payment-folios.pdf#page=2" target="_blank" rel="noopener"><small>续页 · 第 2 页</small><strong>YL-OTHER-D1094C6B</strong><span class="public-folio-thumb" aria-hidden="true"><img src="/assets/showcase-payment-folio-2-thumb.webp" alt="" width="150" height="212" loading="lazy"><i></i></span><i aria-hidden="true" class="ui-glyph ic-arrows-angle-expand"></i></a>
             </div>
             <p><span class="finding-dot risk"></span>三期付款条件均待核对</p>
+            </div>
           </div>
         </div>
         <ol class="process-list">

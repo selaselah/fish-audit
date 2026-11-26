@@ -11,6 +11,7 @@ from config import PERFORMANCE
 from controls import VERSION, execute
 from performance import verify_findings
 from test_performance import BANK_DOC, CONTRACT, RECEIPT, WARRANTY, material
+from test_stage_payments import fixture as split_transfers
 
 SOURCE = (Path(__file__).resolve().parents[2] / "frontend/showcase/contract-payment-review.docx").read_bytes()
 W = word.W
@@ -31,13 +32,17 @@ def rewrite(part, fn):
 
 def report(raw=SOURCE, edit=None):
     graph = material([CONTRACT, RECEIPT, WARRANTY, BANK_DOC], edit=edit)
+    text = "\n".join((label + "：" if label else "") + (edit(1, field, label, value) if edit else value)
+                     for field, label, value in CONTRACT)
+    return with_review(graph, raw, text)
+
+
+def with_review(graph, raw, text):
     doc = graph["documents"][0]
     doc.update(ext=".docx", sha256=word.digest(raw))
     for fact in graph["facts"]:
         if fact["doc"] == doc["id"]:
             fact["source_sha256"] = doc["sha256"]
-    text = "\n".join((label + "：" if label else "") + (edit(1, field, label, value) if edit else value)
-                     for field, label, value in CONTRACT)
     ledger = review.sources(graph, lambda d: raw, lambda d, n: text)
     graph["contract_word_reviews"] = ledger
     nodes, edges = review.source_graph(ledger)
@@ -107,6 +112,19 @@ class ContractWordReviewTests(unittest.TestCase):
         previous, = [f for f in strip_new_records(first)["findings"] if f["rule"] == "H05"]
         self.assertEqual(payment, previous)
         self.assertNotIn("contract_comments", payment)
+
+    def test_two_transfers_can_balance_while_their_payment_condition_needs_review(self):
+        graph = split_transfers()
+        rows = {f["source_line"]["number"]: f["source_line"]["text"] for f in graph["facts"] if f["doc"] == "d01"}
+        paper, _ = with_review(graph, SOURCE, "\n".join(rows[n] for n in sorted(rows)))
+        transfers = [f for f in paper["findings"] if f["rule"] == "H05"]
+        total, = [f for f in paper["findings"] if f["rule"] == "H06"]
+        self.assertEqual(len(transfers), 2)
+        evidence = total["stage_payments"]
+        self.assertEqual((evidence["state"], evidence["seen"], evidence["expected"]), ("balanced", "60000.00", "60000.00"))
+        self.assertEqual([t["status"] for t in evidence["timing"]], ["missing", "missing"])
+        note, = paper["graph"]["contract_word_reviews"]["documents"][0]["notes"]
+        self.assertTrue(all(f["status"] == "missing" and note["id"] in f["evidence"] for f in [*transfers,total]))
 
     def test_replay_and_signing_rebuild_from_the_original(self):
         paper, text = report()

@@ -613,6 +613,7 @@ function citation(ref) {
     return Team.paperLink(label,prior.case_id,'button ref',new URLSearchParams({rev:String(prior.rev),fact:prior.fact}));
   }
   const source = index?.nodes.get(ref);
+  if (['contract_word_review','contract_word_comment'].includes(source?.type)) return AcceptanceComments.citation(ref,'contract');
   if (['acceptance_word_review','acceptance_word_comment'].includes(source?.type)) return AcceptanceComments.citation(ref);
   if (source?.type==='supplier_page_inspection') {
     const page=SupplierPages.current(state.bundle.report)?.pages.find(p=>p.id===ref);
@@ -818,6 +819,8 @@ function finding(item) {
     const dates = dateEvidencePanel(item,state.bundle.report.graph);
     if (dates) node.append(dates);
   }
+  if (item.contract_comments) node.append(AcceptanceComments.current(state.bundle.report,'contract')?
+    evidenceJump('按期核对合同付款批注','contract-comments'):el('span','合同批注来源待核','small'));
   if (item.acceptance_comments) node.append(AcceptanceComments.current(state.bundle.report)?
     evidenceJump('对照验收正文与 Word 批注','acceptance-comments'):el('span','验收批注来源待核','small'));
   if (item.reinspection) node.append(evidenceJump('核对整改复验原件','equipment-reinspection-trail'));
@@ -1447,6 +1450,8 @@ async function refresh() {
       } else if (route.params.get('view')==='signatures' && state.openedCitation!==location.hash &&
                  bundle?.report.findings.some(f=>f.rule==='H01' && f.effect_review?.pdf_execution)) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#pdf-signatures';
+      } else if (route.params.get('view')==='contract-comments' && state.openedCitation!==location.hash && AcceptanceComments.current(bundle?.report,'contract')) {
+        state.openedCitation=location.hash; state.tab='report'; focusFinding='#contract-comments';
       } else if (route.params.get('view')==='acceptance-comments' && state.openedCitation!==location.hash && AcceptanceComments.current(bundle?.report)) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#acceptance-comments';
       } else if (route.params.get('view')==='suppliers' && state.openedCitation!==location.hash && SupplierPages.current(bundle?.report)) {
@@ -1466,7 +1471,7 @@ async function refresh() {
           target.open=true;
           $('#trail-tab-final')?.click();
           revealPaperTarget($('#reinspection-wait'));
-        } else if (target?.dataset.finding || ['equipment-reinspection-trail','case-entity-browser','contract-pages','word-signatures','pdf-signatures','contract-calendar','supplier-pages','acceptance-comments'].includes(target?.id)) revealPaperTarget(target);
+        } else if (target?.dataset.finding || ['equipment-reinspection-trail','case-entity-browser','contract-pages','word-signatures','pdf-signatures','contract-calendar','supplier-pages','acceptance-comments','contract-comments'].includes(target?.id)) revealPaperTarget(target);
         else target?.focus();
       }
       const target = route.params.get('fact');

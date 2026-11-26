@@ -61,7 +61,7 @@ function performanceOverview(findings, graph) {
   }
   const plan = findings.find(f=>f.rule==='H03');
   if (plan) {
-    let label = '付款期次待核';
+    let label = plan.contract_comments && !plan.contract_comments.whole ? '付款安排' : '付款期次待核';
     if (plan.status==='ok') {
       if (phases.length>1) label = '分 '+phases.length+' 期付款';
       else if (phases.length===1 && Number(phases[0].stage.share)===100) label = '单期全额付款';
@@ -77,12 +77,15 @@ function performanceOverview(findings, graph) {
   const parties=SigningParties.panel(effect,graph,phases);
   const acceptance=findings.find(f=>f.rule==='H02');
   const commentSource=acceptance && AcceptanceComments.current(state.bundle.report);
+  const contractSource=plan && AcceptanceComments.current(state.bundle.report,'contract');
+  const contractNotes=contractSource && AcceptanceComments.panel(state.bundle.report,'contract');
   const comments=commentSource && AcceptanceComments.panel(state.bundle.report);
   const supplier=acceptance && SupplierPages.panel(state.bundle.report);
   const inspection=InspectionCoverage.panel(acceptance,graph);
   const dates=ContractCalendar.panel(effect,graph,findings,state.bundle?.report.calls.pages);
   const dateQuestion=effect?.effect_review?.calendar?.some(day=>!['exact','spacing'].includes(day.state));
   const sections=[
+    {key:'contract-comments',label:'期款批注',icon:'journal-text',content:contractNotes,priority:contractNotes && contractNotes.dataset.state!=='ok'},
     {key:'acceptance-comments',label:'验收批注',icon:'journal-text',content:comments,priority:comments && comments.dataset.state!=='ok'},
     {key:'suppliers',label:'供货主体',icon:'layers',content:supplier,priority:supplier && supplier.dataset.state!=='ok'},
     {key:'signatures',label:'签署凭证',icon:'journal-text',content:signatures,priority:!dateQuestion && Boolean(signatures)},
@@ -100,7 +103,8 @@ function performanceOverview(findings, graph) {
       expandedMandate ||= calendar.open;
     }
   }
-  overview.append(workpaperEvidence(sections,graph));
+  const reader=workpaperEvidence(sections,graph);
+  overview.append(reader);
   const list = el('ol','','phase-summary');
   list.setAttribute('role','presentation');
   const choices = box('phase-choices');
@@ -129,7 +133,7 @@ function performanceOverview(findings, graph) {
     const source = originalNumber || (fact ? action(heading,()=>openPage(fact.doc,fact.page,fact.id),'phase-source') : el('strong',heading));
     if (fact && !originalNumber) source.setAttribute('aria-label',heading+(revised?'，查看变更后付款条款':'，查看合同原文'));
     const results = box('phase-results',performanceJump(phase,edition?.applies==='amended'?'现行付款条件':'付款条件'));
-    const sameStage = f=>f.stage && ['name','clause_ref','clause','share'].every(k=>f.stage[k]===stage[k]);
+    const sameStage = f=>PhaseEvidence.sameStage(stage,f.stage);
     const matched = payments.filter(sameStage);
     if (matched.length) {
       for (const item of matched) results.append(performanceJump(item,matched.length===1?'实付时点':paymentLabel(item)));
@@ -141,6 +145,8 @@ function performanceOverview(findings, graph) {
     row.append(box('phase-contract',source,el('q',revised?revised.quote:stage.clause)),results);
     const noteLink=AcceptanceComments.phaseLink(phase,commentSource);
     if (noteLink) row.append(noteLink);
+    const contractLink=AcceptanceComments.phaseLink(phase,contractSource);
+    if (contractLink) row.append(contractLink);
     if (plan?.contract_folios?.standalone) {
       const independent=ContractFolios.independentLink(phase,graph);
       if (independent) row.append(independent);
@@ -185,6 +191,16 @@ function performanceOverview(findings, graph) {
     choice.setAttribute('role','tab'); choice.setAttribute('aria-controls',row.id);
     choice.append(el('span',stage.name),el('strong',stage.share ? stage.share+'%' : '比例待核'),tag(state),
       el('span','。付款条件'+statusName(phase.status)+(matched.length?'，实付时点'+statusName(PhaseEvidence.combined(matched)):''),'visually-hidden'));
+    const noted=contractSource?.stages?.find(s=>s.ref===stage.clause_ref);
+    if (noted) {
+      if (!edition && !originalNumber) row.dataset.sharedContractSource='true';
+      choice.dataset.noted=String(noted.notes.length>0);
+      if (noted.notes.length) {
+        const marker=el('span',String(noted.notes.length),'contract-note-count');
+        marker.prepend(glyph('journal-text')); marker.append(el('span',' 条合同批注','visually-hidden'));
+        choice.append(marker);
+      }
+    }
     row.setAttribute('aria-labelledby',choice.id);
     choices.append(choice);
     list.append(row);
@@ -198,10 +214,15 @@ function performanceOverview(findings, graph) {
         button.tabIndex = i===position ? 0 : -1;
         list.children[i].hidden = i!==position;
       });
+      contractNotes?.dispatchEvent(new CustomEvent('contract-stage-change',{detail:phases[position].stage.clause_ref}));
       list.children[position].querySelector('.proof-opinion:not([hidden])')?.dispatchEvent(new Event('show-opinion'));
       list.children[position].querySelector('.warranty-timeline:not([hidden])')?.dispatchEvent(new Event('show-warranty'));
       list.children[position].querySelector('.ticket-review:not([hidden])')?.dispatchEvent(new Event('show-tickets'));
     }
+    if (contractSource?.stages) contractNotes.addEventListener('select-contract-phase',event=>{
+      const i=phases.findIndex(f=>f.stage.clause_ref===event.detail);
+      if (i>=0) select(i);
+    });
     buttons.forEach((button,i)=>{
       button.addEventListener('click',()=>select(i));
       button.addEventListener('keydown',event=>{
@@ -212,12 +233,14 @@ function performanceOverview(findings, graph) {
     });
     const priority=PhaseEvidence.combined(buttons.map(b=>({status:b.dataset.state})));
     const remembered=phases.findIndex(p=>p.id===index.activePhase);
-    const withComment=commentSource?.status!=='ok' && index.readerSection==='acceptance-comments'
-      ? buttons.findIndex((b,i)=>b.dataset.state===priority && list.children[i].querySelector('.word-phase-link')) : -1;
-    const initial=withComment>=0?withComment:buttons.findIndex(b=>b.dataset.state===priority);
+    const activeNotes=[contractSource,commentSource].find(m=>m && m.status!=='ok' && m.id===index.readerSection);
+    const noteButton=i=>activeNotes && list.children[i].querySelector('.word-phase-link[aria-controls="'+activeNotes.id+'"]');
+    let initial=buttons.findIndex((b,i)=>b.dataset.state===priority && noteButton(i));
+    if (initial<0 && activeNotes?.role==='contract') initial=buttons.findIndex((b,i)=>noteButton(i));
+    if (initial<0) initial=buttons.findIndex(b=>b.dataset.state===priority);
     select(remembered>=0?remembered:Math.max(0,initial));
     const shares = phases.map(f=>Number(f.stage.share));
-    if (plan?.status==='ok' && shares.every(n=>Number.isFinite(n) && n>0) && Math.abs(shares.reduce((a,b)=>a+b,0)-100)<.000001) {
+    if (!contractSource?.stages && plan?.status==='ok' && shares.every(n=>Number.isFinite(n) && n>0) && Math.abs(shares.reduce((a,b)=>a+b,0)-100)<.000001) {
       const bar=box('share-strip');
       bar.setAttribute('aria-hidden','true');
       for (const [i,share] of shares.entries()) {
@@ -227,7 +250,12 @@ function performanceOverview(findings, graph) {
       }
       overview.append(bar);
     }
-    overview.append(choices,list);
+    if (contractSource?.stages) {
+      const indexHead=box('contract-index-head',el('strong','合同期款'),el('span','正文比例'));
+      const indexPanel=box('paper-contract-index',indexHead,choices);
+      overview.insertBefore(indexPanel,reader);
+      overview.append(list);
+    } else overview.append(choices,list);
   }
   for (const item of payments.filter(f=>!f.stage)) overview.append(performanceJump(item,'回单期次待核 · '+paymentLabel(item)));
   for (const item of findings.filter(f=>f.stage_payments && !f.stage)) overview.append(performanceJump(item,'分笔款项归属待核'));

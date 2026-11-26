@@ -192,9 +192,9 @@ h1 em { color: var(--accent); font-style: normal; }
 .public-calendar-dates span,.public-calendar-dates small { font-size:.82rem; color:var(--secondary); }
 .public-calendar-dates small { color:var(--accent-hover); }
 @media(max-width:370px) { .public-calendar-dates { grid-template-columns:1fr; } }
-:is(#signing-example-choice,#inspection-example-choice) { margin-left:auto; }
-:is(#signing-example,#inspection-example) { font:inherit; font-size:.86rem; color:var(--ink); padding:5px 7px; min-height:44px; border:1px solid var(--line); border-radius:5px; background:var(--surface); }
-:is(#scene-signing,#scene-inspection) .signing-sample-header { flex-wrap:wrap; gap:5px 10px; }
+:is(#signing-example-choice,#inspection-example-choice,#payment-example-choice) { margin-left:auto; }
+:is(#signing-example,#inspection-example,#payment-example) { font:inherit; font-size:.86rem; color:var(--ink); padding:5px 7px; min-height:44px; border:1px solid var(--line); border-radius:5px; background:var(--surface); }
+:is(#scene-signing,#scene-inspection,#scene-folios) .signing-sample-header { flex-wrap:wrap; gap:5px 10px; }
 #inspection-supplier { margin-top:14px; }
 .word-sample-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 0; }
 .word-sample-heading h3 { margin: 0; }
@@ -255,8 +255,8 @@ body:has(#sample-review[open],#sample-compare[open]) { overflow:hidden; }
 .footer-row { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); min-height:90px; gap:24px; }
 .footer-row nav { text-align:right; }
 @media (prefers-reduced-motion:no-preference) {
-  .hero[data-enter] :is(.hero-copy,.specimen) { animation: settle .6s ease-out backwards; }
-  .hero[data-enter] .specimen { animation-delay: .06s; }
+  .m-enter .hero[data-enter] :is(.hero-copy,.specimen) { animation: settle .42s ease-out backwards; }
+  .m-enter .hero[data-enter] .specimen { animation-delay: .06s; }
   @keyframes settle { from { transform: translateY(8px); } to { transform: none; } }
 }
 @media (max-width:940px) {

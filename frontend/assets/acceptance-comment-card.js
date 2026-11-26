@@ -82,9 +82,9 @@ const WordCommentCard = (() => {
     for (const item of items) {
       const row=item.open?button('',event=>item.open(event.currentTarget),'word-impact'):element('div','','word-impact');
       row.dataset.findingId=item.id;
-      const value=element('strong',item.kind==='payment'?'回单':item.share?item.share+'%':'款项','word-share');
+      const value=element('strong',item.kind==='payment'?'回单':item.kind==='total'?'合计':item.share?item.share+'%':'款项','word-share');
       const name=element('span','','word-phase');
-      name.append(element('strong',item.name),element('small',item.kind==='payment'?'实付时点':'付款条件'));
+      name.append(element('strong',item.name),element('small',item.kind==='payment'?'实付时点':item.kind==='total'?'回单汇总':'付款条件'));
       const status=element('span',item.statusName,'word-outcome');
       status.dataset.state=item.status;
       row.append(value,name,status);
@@ -96,7 +96,7 @@ const WordCommentCard = (() => {
   function render(model) {
     const root=element('section','','word-review-card');
     root.id=model.id; root.tabIndex=-1; root.dataset.state=model.status;
-    root.setAttribute('aria-label','Word 验收批注');
+    root.setAttribute('aria-label',model.role==='contract'?'合同付款条款批注':'Word 验收批注');
     const choices=model.documents.flatMap(doc=>doc.notes.length?doc.notes.map(note=>({doc,note})):[{doc,note:null}]);
     let selected=choices.findIndex(c=>c.note || c.doc.coverage!=='complete');
     if (selected<0) selected=0;
@@ -167,5 +167,72 @@ const WordCommentCard = (() => {
     });
     draw(); return root;
   }
-  return {render};
+  function panel(model) {
+    if (!model.stages?.length) return render(model);
+    const doc=model.documents[0], stages=model.stages;
+    const root=element('section','','contract-review');
+    root.id=model.id; root.tabIndex=-1; root.dataset.state=model.status;
+    root.setAttribute('aria-label','按期次核对合同批注');
+    const top=element('div','','contract-index-head');
+    top.append(element('strong','合同期款'),element('span','正文比例'));
+    const tabs=element('div','','contract-index'), body=element('div','','contract-index-body');
+    tabs.setAttribute('role','tablist'); tabs.setAttribute('aria-label','选择合同期次');
+    body.id=model.id+'-selection'; body.setAttribute('role',model.externalStages?'group':'tabpanel');
+    const choices=[];
+    function select(i,noteRef) {
+      const stage=stages[i];
+      choices.forEach((tab,j)=>{
+        tab.setAttribute('aria-selected',String(i===j)); tab.tabIndex=i===j?0:-1;
+      });
+      if (model.externalStages) body.setAttribute('aria-label',stage.name+'合同原文及批注');
+      else body.setAttribute('aria-labelledby',choices[i].id);
+      const notes=doc.notes.filter(n=>stage.notes.includes(n.id));
+      if (notes.length) {
+        const card=render({...model,id:model.id+'-source',documents:[{...doc,notes}]});
+        body.replaceChildren(card);
+        if (noteRef) card.dispatchEvent(new CustomEvent('word-review-select',{detail:noteRef}));
+        return;
+      }
+      const line=element('div','','contract-printed-clause'), lead=element('div','','contract-clause-label');
+      lead.append(icon('journal-text'),element('span','合同原文'),element('small','本期未关联批注'));
+      const jump=button('第 '+stage.page+' 页 · 第 '+stage.line+' 行',event=>stage.open(event.currentTarget),'word-page-jump');
+      jump.append(icon('arrows-angle-expand'));
+      line.append(lead,element('p',stage.quote),jump,fromFile('下载原件',doc)); body.replaceChildren(line);
+    }
+    if (!model.externalStages) stages.forEach((stage,i)=>{
+      const tab=button('',()=>select(i),'contract-stage');
+      tab.id=model.id+'-stage-'+i;
+      tab.setAttribute('role','tab'); tab.setAttribute('aria-controls',body.id);
+      tab.dataset.noted=String(stage.notes.length>0);
+      const name=element('span',stage.name), number=element('strong',stage.share?stage.share+'%':'待核');
+      tab.append(name,number);
+      if (stage.notes.length) {
+        const count=element('span',String(stage.notes.length),'contract-note-count');
+        count.prepend(icon('journal-text')); count.setAttribute('aria-hidden','true'); tab.append(count);
+      }
+      tab.append(element('span','，'+stage.notes.length+' 条关联批注','contract-sr-only'));
+      tab.addEventListener('keydown',event=>{
+        const next={ArrowRight:(i+1)%stages.length,ArrowLeft:(i+stages.length-1)%stages.length,Home:0,End:stages.length-1}[event.key];
+        if (next===undefined) return;
+        event.preventDefault();select(next);choices[next].focus();
+      });
+      choices.push(tab);tabs.append(tab);
+    });
+    root.addEventListener('word-review-select',event=>{
+      const i=stages.findIndex(s=>s.notes.includes(event.detail));
+      const target=i>=0?i:event.detail===doc.id?Math.max(0,stages.findIndex(s=>s.notes.length)):-1;
+      if (target<0) return;
+      if (model.externalStages) root.dispatchEvent(new CustomEvent('select-contract-phase',{detail:stages[target].ref}));
+      select(target,event.detail);
+    });
+    if (model.externalStages) root.addEventListener('contract-stage-change',event=>{
+      const i=stages.findIndex(s=>s.ref===event.detail);
+      if (i>=0) select(i);
+    });
+    else root.append(top,tabs);
+    root.append(body);
+    select(Math.max(0,stages.findIndex(s=>s.notes.length)));
+    return root;
+  }
+  return {render,panel};
 })();

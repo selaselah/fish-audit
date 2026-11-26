@@ -1,11 +1,11 @@
 const PublicAcceptanceComments = (() => {
-  let pending=false;
-  async function open() {
-    const slot=document.getElementById('inspection-comments');
-    if (pending || slot.querySelector('.word-review-card')) return;
-    pending=true;
+  const pending=new Set();
+  async function open(role='acceptance') {
+    const contract=role==='contract', slot=document.getElementById(contract?'payment-comments':'inspection-comments');
+    if (pending.has(role) || slot.dataset.revision) return;
+    pending.add(role);
     try {
-      const response=await fetch('/assets/acceptance-comment-sample.json');
+      const response=await fetch('/assets/'+role+'-comment-sample.json');
       if (!response.ok) throw new Error('演练案例暂时无法载入');
       const sample=await response.json(), doc=sample.document, source=sample.sources[doc.doc];
       if (doc.original_sha256!==source.source_sha256) throw new Error('原件未对应');
@@ -19,11 +19,18 @@ const PublicAcceptanceComments = (() => {
         return {...note,rects:line.rects,open:inspect(source,note.ref),thumbnail:source.image,
           related:note.related.map(f=>({...f,statusName:statusNames[f.status],open:inspect(sample.sources[f.doc],f.ref)}))};
       });
-      slot.replaceChildren(WordCommentCard.render({id:'public-acceptance-comments',status:sample.status,documents:[{...doc,notes}]}));
+      const stages=contract && sample.stages.map(s=>{
+        const line=source.lines.find(l=>l.ref===s.ref);
+        if (!line || line.line!==s.line || s.quote!==line.label+'：'+line.value) throw new Error('期款原行未对应');
+        return {...s,open:inspect(source,s.ref)};
+      });
+      slot.replaceChildren(WordCommentCard.panel({id:'public-'+role+'-comments',role,stages,status:sample.status,documents:[{...doc,notes}]}));
+      slot.dataset.revision=String(sample.revision);
+      if (contract && !slot.hidden) document.getElementById('payment-version').textContent='合成案例 · R'+sample.revision;
     } catch {
       const anchor=slot.querySelector('a');
       if (anchor) anchor.textContent='查看水印 Word 原件';
-    } finally {pending=false;}
+    } finally {pending.delete(role);}
   }
   return {open};
 })();
