@@ -122,7 +122,7 @@ export async function checkBatchPhase(ctx, id, revision) {
         await wait(q('#review-dialog') + '.open && document.activeElement===' + q('#review-note'), 'draft supplement');
         const note = await evaluate(q('#review-note') + '.value');
         assert.ok(note.includes(phase.stage.clause) && note.includes('第 ' + name + ' 批') && note.includes(phase.stage.name));
-        assert.equal(await evaluate(q('#review-decision') + '.value'), 'return');
+        assert.equal(await evaluate(q('#review-decision input:checked') + '.value'), 'return');
         await key('Escape'); await wait(q(scope) + '.open && document.activeElement===' + draft, 'cancel unsent supplement');
         drafted = true;
       }

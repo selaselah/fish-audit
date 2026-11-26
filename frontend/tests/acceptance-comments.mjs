@@ -76,7 +76,7 @@ export async function checkWordComments(ctx,id,revision) {
   assert.ok(await evaluate(q(card+' .word-proof dl')+'.innerText.includes('+JSON.stringify(doc.part_sha256)+')'));
   if (task.rev===rev && task.status==='ready') {
     await evaluate(q(card+' .word-request')+'.click()'); await wait(q('#review-dialog')+'.open','supplement draft');
-    assert.equal(await evaluate(q('#review-decision')+'.value'),'return');
+    assert.equal(await evaluate(q('#review-decision input:checked')+'.value'),'return');
     assert.match(await evaluate(q('#review-note')+'.value'),/第 1 页第 9 行.*终验/);
     await evaluate(q('#review-dialog [data-close]')+'.click()');
   }

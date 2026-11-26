@@ -135,5 +135,5 @@ const AcceptanceComments = (() => {
     if (!doc) return el('span','Word 批注来源待核','small');
     return action(doc.name+(doc.id===ref?' · 审阅记录':' · 原文批注'),()=>show(ref,model.id),'ref');
   }
-  return {current,resolve,panel,citation,phaseLink};
+  return {current,resolve,panel,citation,phaseLink,validAnchor,printedKey};
 })();

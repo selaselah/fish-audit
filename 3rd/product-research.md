@@ -1,5 +1,11 @@
 # 审计与会计软件的公开界面
 
+## 验收决定与原件
+
+Ramp Bill Pay 的审阅流程允许审批人在手机上查看单据、选择处理结果，并在退回时写明原因。Fish Audit 将这种直接操作用于底稿验收。选定「退回补件」后，表单显示「需补资料与原因」。财务人员另行点确认，决定和意见一同归入当前底稿版本。原图核验有单独的字段级记录。[Ramp 官方审批说明](https://support.ramp.com/bill-pay-approvals/)
+
+决定卡使用同名的原生单选输入。Tab 进入和离开选项组，方向键可切换选项，触屏可点整张卡片。系统给出的审计建议另行展示，打开验收表单时由审计员选择本次决定。[W3C 单选组键盘模式](https://www.w3.org/WAI/ARIA/apg/patterns/radio/) · [手机验收实拍](../docs/interaction-design/signoff-decisions-mobile.webp)
+
 ## 从本期付款查到本批收货
 
 Microsoft Dynamics 365 Finance 允许应付会计选择采购收货单，再打开匹配明细。Fish Audit 将这一做法用于分批履约。审计员先选付款期，再在合同约定、本批验收单之间切换。每个可核字段保留文件、页码和行号。该参考用于交互设计，审计依据来自具体底稿的原件。[Microsoft Dynamics 365 Finance 采购收货匹配流程](https://learn.microsoft.com/en-us/dynamics365/finance/accounts-payable/tasks/record-vendor-invoice-match-against-received-quantity)

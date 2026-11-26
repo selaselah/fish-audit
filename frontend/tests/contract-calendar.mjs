@@ -68,7 +68,7 @@ export async function checkCalendar({root,call,evaluate,wait},id,version) {
   const pending=report.findings.filter(f=>['issue','risk','missing'].includes(f.status));
   if (!['exact','spacing'].includes(effective.state) && rev===detail.rev) {
     await evaluate(q('#calendar-effect_on')+'.click();'+q('.calendar-draft')+'.click()');
-    assert.equal(await evaluate(q('#review-decision')+'.value'),'return');
+    assert.equal(await evaluate(q('#review-decision input:checked')+'.value'),'return');
     const draft=await evaluate(q('#review-note')+'.value');
     for (const ref of effective.rows) {
       const r=rows.find(r=>r.id===ref);

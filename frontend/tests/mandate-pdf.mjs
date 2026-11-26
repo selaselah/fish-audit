@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {inspect,size} from './review-screen.mjs';
+import {browserInput,inspect,size} from './review-screen.mjs';
 
 const q=selector=>'document.querySelector('+JSON.stringify(selector)+')';
 const all=selector=>'[...document.querySelectorAll('+JSON.stringify(selector)+')]';
@@ -142,20 +142,7 @@ export async function checkMandatePdf(ctx,id,requested,expected) {
     assert.ok(proofs.length && (!expected || proofs.some(p=>p.record.state===expected)),'expected an issued '+(expected || 'mandate')+' proof');
   }
   const prefix='mandate-'+id+'-r'+rev+'-'+(legacy?'legacy':proofs.map(p=>p.record.state).join('-'));
-  const key=async name=>{
-    const codes={Escape:27,Enter:13,Tab:9,Space:32};
-    for (const type of ['keyDown','keyUp']) await call('Input.dispatchKeyEvent',{type,key:name==='Space'?' ':name,
-      code:name,windowsVirtualKeyCode:codes[name],...(type==='keyDown' && name==='Enter'?{text:'\r'}:{})});
-  };
-  async function pointAt(control) {
-    return evaluate('(()=>{const el='+control+';el.scrollIntoView({block:"nearest",behavior:"instant"});'+
-      'const r=el.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()');
-  }
-  async function tap(control) {
-    const point=await pointAt(control);
-    await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});
-    await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
-  }
+  const {key,pointAt,tap}=browserInput(ctx);
   const checked=new Set();
   async function verifyBytes(url,sha) {
     if (checked.has(url)) return;

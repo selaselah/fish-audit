@@ -206,7 +206,8 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
   const right = box('viewer-facts', el('h3', '本页引文'));
   left.id = 'viewer-original'; right.id = 'viewer-facts';
   left.tabIndex = right.tabIndex = -1;
-  const pageFacts = (state.bundle?.report.graph.facts || []).filter(fact => fact.doc === docId && fact.page === pageNumber);
+  const pageFacts = (state.bundle?.report.graph.facts || []).filter(fact => fact.doc === docId && fact.page === pageNumber)
+    .map(fact=>MandateOriginals.images.has(item.ext) && fact.source_line?{...fact,source_line:null}:fact);
   const boardRefs = boardPageReferences(state.bundle?.report.graph, docId, pageNumber, pageFacts);
   const repairRefs = repairPageReferences(state.bundle?.report.graph, docId, pageNumber, pageFacts);
   const paper=state.bundle?.report;
@@ -455,7 +456,6 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
       row.append(el('small',unchecked?'核对整张回单的流水栏、页脚和备注后，可在核图意见中记录展示范围。':
         pending?'核对这条说明后可重新审计。':'取得完整流水后可查找相同回单、复算累计付款。','small'));
       if (editable && unchecked) row.append(action('记录流水展示范围',()=>{
-        $('#page-dialog').close();
         openReview([fact.id],true);
       },'ref'));
     }
@@ -593,7 +593,7 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
   }
   if (!pageFacts.length && !rawLines.length) right.append(el('p', '本页尚无可展示的提取记录。', 'muted'));
   const submit = action('记录所选引文的核图意见', () => {
-    $('#page-dialog').close(); openReview([...selected]);
+    openReview([...selected]);
   }, 'primary');
   submit.disabled = true;
   selectionText();
@@ -652,7 +652,7 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
     focusRow.scrollIntoView({block: 'nearest'});
   }
 }
-function citation(ref) {
+function citation(ref,finding) {
   const index = state.bundle && graphIndex(state.bundle.report.graph);
   const prior = index?.prior.get(ref);
   if (prior) {
@@ -661,6 +661,9 @@ function citation(ref) {
   }
   const source = index?.nodes.get(ref);
   if (ref.startsWith('mandate-pdf/') && state.bundle) return PerformanceIndex.mandateCitation(state.bundle.report,ref);
+  if (ref.startsWith('mandate-original/') || ref.startsWith('mandate-word/')) {
+    return PerformanceIndex.mandateCitation(state.bundle.report,ref,finding);
+  }
   if (source?.type==='acceptance_pdf_inspection') {
     return PerformanceIndex.receiptCitation(state.bundle.report.graph,ref) || el('span','验收 PDF 签署来源待核','small');
   }
@@ -987,7 +990,7 @@ function finding(item) {
     if (sources.length) node.append(lazyFold('核对前案签收依据（'+sources.length+'）',()=>sources.map(row=>
       signedInvoiceSource(row,item.invoice_lookup?.candidates.find(c=>c.id===row.id)?.comparison))));
   }
-  if (item.evidence.length) node.append(lazyFold('查看本项全部引文（'+item.evidence.length+'）',()=>[box('chips',...item.evidence.map(citation))]));
+  if (item.evidence.length) node.append(lazyFold('查看本项全部引文（'+item.evidence.length+'）',()=>[box('chips',...item.evidence.map(ref=>citation(ref,item)))]));
   if (graphIndex(state.bundle.report.graph).nodes.has('finding/'+item.id))
     node.append(action('查看证据路径',()=>showFindingPath(item),'text-button'));
   const policy = state.bundle.report.policy;
@@ -1651,10 +1654,8 @@ function showPaymentSourceError(container, problem) {
   container.replaceChildren(el('strong',problem.message),anchor);
 }
 
-function showInvoiceReviewConflict(container,problem,choice) {
+function showInvoiceReviewConflict(container,problem) {
   const history = problem.invoiceHistory;
-  choice.querySelector('option[value="approve"]').disabled=true;
-  choice.value='';
   const list = el('ul','','invoice-changes');
   const partial=problem.incompleteNumbers;
   if (partial) {
@@ -1700,23 +1701,79 @@ function canReviewCurrentPaper() {
 function draftSupplement(note) {
   if (!canReviewCurrentPaper()) return;
   openReview();
-  const decision=$('#review-decision');
-  decision.value='return'; decision.dispatchEvent(new Event('change'));
+  $('#review-decision input[value=return]').click();
   $('#review-note').value=note;
   $('#review-note').focus();
 }
+
+const reviewDecisions = {
+  approve: {label:'通过', icon:'shield-check', note:'签收依据', submit:'确认签收通过'},
+  return: {label:'退回补件', icon:'folder2-open', note:'需补资料与原因', submit:'确认退回补件'},
+  escalate: {label:'提交复核', icon:'layers', note:'需复核的事项', submit:'确认提交复核'},
+  confirm: {label:'原图与引文一致', icon:'clipboard-check', note:'核图依据', submit:'保存核图记录'},
+  dispute: {label:'字段或引文有异议', icon:'exclamation-diamond', note:'异议内容与依据', submit:'记录字段异议'},
+};
+function updateReviewDecision() {
+  const value = $('#review-form').elements.decision.value;
+  const choice = reviewDecisions[value];
+  const visibility = $('#review-visibility');
+  visibility.hidden = !visibility.childElementCount || value!=='confirm';
+  $('#review-note-label').textContent = choice?.note || '核验依据与处理意见';
+  $('#submit-review').textContent = choice?.submit || '保存核验记录';
+}
+$('#review-dialog').addEventListener('keydown',event=>{
+  if (event.key==='Escape' && !event.defaultPrevented && !event.isComposing && $('#page-dialog').open) {
+    event.preventDefault(); event.stopPropagation(); event.currentTarget.close();
+  }
+});
+
+function reviewContext(facts) {
+  const {rev,report} = state.bundle;
+  const context = $('#review-context');
+  const version = el('span','R'+rev,'review-version');
+  version.setAttribute('aria-label','底稿版本 R'+rev);
+  context.replaceChildren(box('review-case-heading',glyph('journal-text'),el('strong',state.detail.title),version));
+  if (facts) {
+    const chosen = el('ul','','review-source-list');
+    const index = graphIndex(report.graph);
+    for (const id of facts) {
+      const fact = index.facts.get(id);
+      const row = el('li');
+      if (fact) {
+        const source = Team.paperLink(fact.name+' · 第 '+fact.page+' 页 ↗',state.detail.id,'source-jump',
+          new URLSearchParams({rev:String(rev),fact:id}));
+        source.target='_blank'; source.rel='noopener';
+        row.append(el('strong',fact.label || fact.field),el('span',fact.quote),source);
+      } else row.append(el('span',id));
+      chosen.append(row);
+    }
+    context.append(fold('核对所选 '+facts.length+' 条引文',chosen));
+    return;
+  }
+  const result = report.result;
+  const line = box('review-recommendation',el('span','系统建议'),tag(result.verdict));
+  const counts = ['issue','risk','missing'].filter(key=>result.counts?.[key]>0)
+    .map(key=>result.counts[key]+' 项'+statusName(key));
+  if (counts.length) line.append(el('span',counts.join(' · '),'review-counts'));
+  context.append(line);
+}
+
 function openReview(facts,reviewVisibility=false) {
   state.review = {id: state.detail.id, rev: state.bundle.rev, facts};
   $('#review-error').textContent = '';
   $('#review-title').textContent = facts ? '记录原图核验' : '人工验收';
-  $('#review-context').textContent = state.detail.title + ' · R' + state.bundle.rev + ' · ' +
-    (facts ? facts.join('、') : '系统' + statusName(state.bundle.report.result.verdict));
-  const select = $('#review-decision'); select.replaceChildren();
-  const choices = facts ? {confirm:'已对照原图，所选引文准确', dispute:'引文或字段有异议'} :
-    {approve:'通过', return:'退回补件', escalate:'提交复核'};
-  select.add(new Option('请选择决定', '', true, true)); select.required = true;
-  for (const [value, label] of Object.entries(choices)) select.add(new Option(label, value));
-  if (reviewVisibility) select.value='confirm';
+  reviewContext(facts);
+  const decisions = $('#review-decision'); decisions.replaceChildren();
+  decisions.closest('fieldset').disabled=false;
+  $('#review-legend').textContent = facts ? '原图核验决定' : '验收决定';
+  for (const value of facts ? ['confirm','dispute'] : ['approve','return','escalate']) {
+    const {label,icon} = reviewDecisions[value];
+    const radio = el('input'); radio.type='radio'; radio.name='decision'; radio.value=value; radio.required=true;
+    radio.checked=reviewVisibility && value==='confirm';
+    const tile = el('label','','review-choice');
+    tile.append(glyph(icon),radio,el('span',label)); decisions.append(tile);
+  }
+  decisions.onchange=updateReviewDecision;
   const visibility=$('#review-visibility');
   visibility.replaceChildren();
   const graph=state.bundle.report.graph;
@@ -1739,9 +1796,8 @@ function openReview(facts,reviewVisibility=false) {
       visibility.append(label,original);
     }
   }
-  const updateVisibility=()=>{visibility.hidden=!visibility.childElementCount || select.value!=='confirm';};
-  select.onchange=updateVisibility;
-  updateVisibility();
+  $('#submit-review').disabled=false;
+  updateReviewDecision();
   $('#reviewer').value=Team.current ? Team.session.user.name : ''; $('#reviewer').readOnly=!!Team.current;
   $('#review-note').value = '';
   $('#review-dialog').showModal();
@@ -1805,25 +1861,36 @@ $('#amend-form').addEventListener('submit', async event => {
 $('#review-form').addEventListener('submit', async event => {
   event.preventDefault();
   const pending = state.review; if (!pending) return;
-  const button = $('#submit-review'); button.disabled = true;
-  const label = button.textContent;
-  if (pending.facts && $('#review-decision').value==='confirm') button.textContent='正在核对原件与页图…';
+  const button = $('#submit-review'); if (button.disabled) return;
+  const decision = event.currentTarget.elements.decision.value;
+  if (!decision) return;
+  button.disabled = true;
+  const choices=$('#review-decision').closest('fieldset'); choices.disabled=true;
+  button.textContent = decision==='confirm' ? '正在核对原件与页图…' : '正在保存…';
   try {
     const visibility={};
     if (!$('#review-visibility').hidden)
       for (const input of $('#review-visibility').querySelectorAll('select')) if (input.value) visibility[input.dataset.reference]=input.value;
     await post(Team.cases() + '/' + pending.id + (pending.facts ? '/attest' : '/signoff'), {rev: pending.rev,
-      reviewer: $('#reviewer').value, note: $('#review-note').value, decision: $('#review-decision').value,
+      reviewer: $('#reviewer').value, note: $('#review-note').value, decision,
       facts: pending.facts,...(Object.keys(visibility).length?{reference_visibility:visibility}:{})});
-    $('#review-dialog').close(); chooseRevision(); await refresh();
+    if (pending===state.review) {
+      $('#review-dialog').close();
+      if (pending.facts) $('#page-dialog').close();
+      chooseRevision(); await refresh();
+    }
   } catch (error) {
+    if (pending!==state.review) return;
     const message = $('#review-error');
     if (error.paymentSource) {
       showPaymentSourceError(message,error);
       return;
     }
     if (error.invoiceHistory || error.incompleteNumbers) {
-      showInvoiceReviewConflict(message,error,$('#review-decision'));
+      const approve=$('#review-decision input[value=approve]');
+      approve.checked=false; approve.disabled=true;
+      updateReviewDecision();
+      showInvoiceReviewConflict(message,error);
       message.append(action('保留 R'+pending.rev+' 并重新审计',async e=>{
         const rerun = e.currentTarget; rerun.disabled = true;
         try {
@@ -1835,10 +1902,14 @@ $('#review-form').addEventListener('submit', async event => {
     }
     message.textContent = error.message;
     if (error.status === 409) message.append(' ',action('查看最新执行记录',async()=>{
-      $('#review-dialog').close(); chooseRevision(); state.tab='activity'; await refresh();
+      $('#review-dialog').close();
+      if (pending.facts) $('#page-dialog').close();
+      chooseRevision(); state.tab='activity'; await refresh();
     },'text-button'));
   }
-  finally { button.disabled = false; button.textContent=label; }
+  finally {
+    if (pending===state.review) { button.disabled=false; choices.disabled=false; updateReviewDecision(); }
+  }
 });
 $('#new-case').addEventListener('click', () => openIntake());
 $('#supplement-fields').addEventListener('input',()=>{state.key=null; renderIntakeLimits();});

@@ -23,6 +23,8 @@ import {checkRelease} from './payment-release.mjs';
 import {checkBatchPhase} from './batch-phase.mjs';
 import {checkMandateCalendar} from './mandate-calendar.mjs';
 import {checkMandatePdf} from './mandate-pdf.mjs';
+import {checkMandateOriginal} from './mandate-original.mjs';
+import {checkReviewDecisions} from './review-decisions.mjs';
 import {checkWarrantyTimeline} from './warranty-timeline.mjs';
 import {checkWarrantyTickets} from './warranty-tickets.mjs';
 import {checkWarrantyPhotos} from './warranty-photos.mjs';
@@ -90,6 +92,8 @@ const compareCase = caseArgument('--compare-case');
 const mandateCase = caseArgument('--mandate-case');
 const mandateCalendarCase = caseArgument('--mandate-calendar-case');
 const mandatePdfCase = caseArgument('--mandate-pdf-case');
+const mandateOriginalCase = caseArgument('--mandate-original-case');
+const reviewDecisionCase = caseArgument('--review-controls-case');
 const warrantyCase = caseArgument('--warranty-case');
 const ticketCase = caseArgument('--ticket-case');
 const photoCase = caseArgument('--warranty-photo-case');
@@ -132,8 +136,8 @@ const acceptanceRoster=process.argv.includes('--acceptance-roster'), publicRoste
 const receiptPdf=caseArgument('--acceptance-pdf-case');
 const publicTest=publicPurchase || publicRoster || publicProof || publicClock || publicTiming || publicBank || product || ruleCatalog || publicInspection || publicContractComments || publicWordComments || publicSuppliers || publicPdf || publicFolios;
 const scopeCase=caseArgument('--scope-case'), publicTopics=process.argv.includes('--public-audit-topics');
-const seeded = [mandatePdfCase,batchCase,receiptPdf,acceptanceRoster,publicTopics,scopeCase,publicTest,proofCase,signerClock,signerTiming,originalCase,citedOriginal,bankAcceptance,previewQueue,contractCommentCase,commentCase,supplierCase,pdfCase,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
-                invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
+const seeded = [mandateOriginalCase,mandatePdfCase,batchCase,receiptPdf,acceptanceRoster,publicTopics,scopeCase,publicTest,proofCase,signerClock,signerTiming,originalCase,citedOriginal,bankAcceptance,previewQueue,contractCommentCase,commentCase,supplierCase,pdfCase,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+                reviewDecisionCase,invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
 const root = originalCase ? process.env.AUDIT_READER_ORIGIN || 'http://127.0.0.1:8000' : publicTest || publicTopics ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
   recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
@@ -280,6 +284,11 @@ try {
     await checkPaymentOpinions({root,call,evaluate,wait},paymentOpinionCase,process.env.AUDIT_OPINION_REV);
   } else if (releaseCase) {
     await checkRelease({root,call,evaluate,wait},releaseCase,process.env.AUDIT_RELEASE_REV);
+  } else if (reviewDecisionCase) {
+    await checkReviewDecisions({root,call,evaluate,wait},reviewDecisionCase);
+  } else if (mandateOriginalCase) {
+    const {values}=parseArgs({options:{'mandate-original-case':{type:'string'},rev:{type:'string'},expect:{type:'string'}}});
+    await checkMandateOriginal({root,call,evaluate,wait},mandateOriginalCase,values.rev,values.expect);
   } else if (mandatePdfCase) {
     const {values}=parseArgs({options:{'mandate-pdf-case':{type:'string'},rev:{type:'string'},expect:{type:'string'}}});
     await checkMandatePdf({root,call,evaluate,wait},mandatePdfCase,values.rev,values.expect);
@@ -1459,11 +1468,11 @@ try {
     await call('Page.navigate',{url:root+'/workpaper/'+legacyCase+'?rev=1'});
     await wait('[...document.querySelectorAll("button")].some(b=>b.textContent==="填写验收意见")','legacy review available');
     await click('填写验收意见');
-    await evaluate('document.querySelector("#reviewer").value="演练核验员";document.querySelector("#review-decision").value="approve";document.querySelector("#review-note").value="已核对本次演练的旧底稿。";document.querySelector("#review-form").requestSubmit()');
+    await evaluate('document.querySelector("#reviewer").value="演练核验员";document.querySelector("#review-decision input[value=approve]").click();document.querySelector("#review-note").value="已核对本次演练的旧底稿。";document.querySelector("#review-form").requestSubmit()');
     await wait('document.querySelectorAll("#review-error a").length==='+fields.length,'original masked references');
     const links=await evaluate('[...document.querySelectorAll("#review-error a")].map(a=>a.href)');
     assert.deepEqual(links.map(url=>new URL(url).searchParams.get('fact')).sort(),fields.map(f=>f.id).sort());
-    assert.ok(await evaluate('document.querySelector("#review-decision option[value=approve]").disabled && document.querySelector("#review-note").value==="已核对本次演练的旧底稿。"'));
+    assert.ok(await evaluate('document.querySelector("#review-decision input[value=approve]").disabled && document.querySelector("#review-note").value==="已核对本次演练的旧底稿。"'));
     for (const width of [1440,1024,820,768,390,320]) {
       await call('Emulation.setDeviceMetricsOverride',{width,height:860,deviceScaleFactor:1,mobile:false});
       assert.ok(await evaluate('document.querySelector("#review-dialog").scrollWidth<=document.querySelector("#review-dialog").clientWidth+1'),'legacy approval at '+width);
@@ -1485,7 +1494,7 @@ try {
     await call('Page.navigate',{url:root+'/workpaper/'+brokenPayment+'?rev='+task.rev});
     await wait('[...document.querySelectorAll("button")].some(b=>b.textContent==="填写验收意见")','initial review');
     await click('填写验收意见');
-    await evaluate('document.querySelector("#reviewer").value="回单演练员";document.querySelector("#review-decision").value="approve";document.querySelector("#review-note").value="复核前案成功流水。";document.querySelector("#review-form").requestSubmit()');
+    await evaluate('document.querySelector("#reviewer").value="回单演练员";document.querySelector("#review-decision input[value=approve]").click();document.querySelector("#review-note").value="复核前案成功流水。";document.querySelector("#review-form").requestSubmit()');
     await wait('document.querySelector("#review-error a") && document.querySelector("#review-error").textContent.includes("原件核验失败")','missing original with its pinned reference');
     const link=new URL(await evaluate('document.querySelector("#review-error a").href'));
     assert.equal(link.pathname,'/workpaper/'+prior.case_id);
@@ -1740,10 +1749,10 @@ try {
     await call('Page.navigate',{url:root+'/workpaper/'+invoiceConflict+'?rev=1'});
     await wait('!![...document.querySelectorAll("button")].find(b=>b.textContent==="填写验收意见")','workpaper ready for signoff');
     await click('填写验收意见');
-    await evaluate('document.querySelector("#reviewer").value="网页演练审计员";document.querySelector("#review-note").value="复核同票签收保护。";document.querySelector("#review-decision").value="approve";document.querySelector("#review-form").requestSubmit()');
+    await evaluate('document.querySelector("#reviewer").value="网页演练审计员";document.querySelector("#review-note").value="复核同票签收保护。";document.querySelector("#review-decision input[value=approve]").click();document.querySelector("#review-form").requestSubmit()');
     const jump=await wait('document.querySelector("#review-error .invoice-changes a")?.href','newly signed invoice citation');
     assert.ok(await evaluate('document.querySelector("#review-dialog").open && document.querySelector("#review-note").value==="复核同票签收保护。"'));
-    assert.ok(await evaluate('document.querySelector("#review-decision option[value=approve]").disabled && !document.querySelector("#review-decision option[value=return]").disabled'));
+    assert.ok(await evaluate('document.querySelector("#review-decision input[value=approve]").disabled && !document.querySelector("#review-decision input[value=return]").disabled'));
     const link=new URL(jump),prior=link.pathname.split('/').at(-1);
     assert.equal(prior,peer.id);
     const original=await (await fetch(root+'/api/cases/'+prior+'/reports/'+link.searchParams.get('rev'))).json();
@@ -1823,7 +1832,7 @@ try {
       assert.ok(report.graph.facts.some(f=>f.field==='invoice_id' && f.status==='anchored' && f.value==='YL-LV-'+code));
       await wait('[...document.querySelectorAll("button")].some(b=>b.textContent==="填写验收意见")','single claim pending signature');
       await click('填写验收意见');
-      await evaluate('document.querySelector("#reviewer").value="演练初审陆平";document.querySelector("#review-decision").value="approve";document.querySelector("#review-note").value="已对照水印住宿发票和差旅报销单，金额均为 636 元。";document.querySelector("#review-form").requestSubmit()');
+      await evaluate('document.querySelector("#reviewer").value="演练初审陆平";document.querySelector("#review-decision input[value=approve]").click();document.querySelector("#review-note").value="已对照水印住宿发票和差旅报销单，金额均为 636 元。";document.querySelector("#review-form").requestSubmit()');
     } else if (process.argv.includes('--live')) {
       assert.ok(task.title.startsWith('合成演练 · 补齐差旅报销单 · ') && task.status==='in_review' && task.rev===1);
       const {report}=await get('/reports/1');
@@ -2287,7 +2296,7 @@ try {
         await wait('document.querySelector("#page-dialog")?.open && !!document.querySelector(".located input:enabled")','invoice to confirm');
         await evaluate('document.querySelector(".located input").click()');
         await click('记录所选引文的核图意见','document.querySelector("#page-dialog")');
-        await evaluate('document.querySelector("#review-decision").value="confirm";document.querySelector("#review-note").value="合成演练，已核对第二页所列发票号码。";');
+        await evaluate('document.querySelector("#review-decision input[value=confirm]").click();document.querySelector("#review-note").value="合成演练，已核对第二页所列发票号码。";');
         const originalFile = join(scratch,'data','cases',path[3],'d01','original.pdf');
         const bytes = await readFile(originalFile);
         assert.equal(createHash('sha256').update(bytes).digest('hex'),bill.source_sha256);
@@ -2313,7 +2322,7 @@ try {
         await wait('document.querySelector("#page-dialog")?.open && !!document.querySelector(".located input:enabled")','printed payment term');
         await evaluate('document.querySelector(".located input").click()');
         await click('记录所选引文的核图意见','document.querySelector("#page-dialog")');
-        await evaluate('document.querySelector("#review-decision").value="dispute";document.querySelector("#review-note").value="合成演练，审计员对该合同结算条款的取值提出异议。";document.querySelector("#review-form").requestSubmit()');
+        await evaluate('document.querySelector("#review-decision input[value=dispute]").click();document.querySelector("#review-note").value="合成演练，审计员对该合同结算条款的取值提出异议。";document.querySelector("#review-form").requestSubmit()');
         revision++;
         await wait('document.querySelector("#version").value==='+JSON.stringify(String(revision))+' && document.querySelector("#case-status").textContent==="待验收"','recalculated workpaper after dispute',240000);
         const revised = await evaluate('fetch("/api/w/'+path[1]+'/cases/'+path[3]+'/reports/'+revision+'").then(r=>r.json()).then(b=>b.report)');
@@ -2323,7 +2332,7 @@ try {
       }
       await click('填写验收意见');
       const note = disputeTerm ? '合成演练，对结算条款取值有异议，请复核。' : '合成演练，请复核合同生效与终验签认的依据。';
-      await evaluate('document.querySelector("#review-decision").value="escalate";document.querySelector("#review-note").value='+JSON.stringify(note)+';document.querySelector("#review-form").requestSubmit()');
+      await evaluate('document.querySelector("#review-decision input[value=escalate]").click();document.querySelector("#review-note").value='+JSON.stringify(note)+';document.querySelector("#review-form").requestSubmit()');
       await wait('document.querySelector("#case-status").textContent==="待复核"','auditor referral');
       assert.equal(await evaluate('fetch("/api/w/'+path[1]+'/cases/'+path[3]+'").then(r=>r.json()).then(c=>c.decisions.at(-1).decision)'),'escalate');
       const usageUrl = '/api/workspaces/'+path[1]+'/team';

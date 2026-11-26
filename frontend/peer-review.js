@@ -88,7 +88,10 @@ const PeerReview = {
           return;
         }
         if (failure.invoiceHistory || failure.incompleteNumbers) {
-          showInvoiceReviewConflict(error,failure,$('#peer-decision'));
+          const decision=$('#peer-decision');
+          decision.querySelector('option[value=approve]').disabled=true;
+          decision.value='';
+          showInvoiceReviewConflict(error,failure);
           error.append(action('选择退回补件',()=>{
             $('#peer-decision').value='return'; $('#peer-note').focus();
           },'text-button'));

@@ -50,6 +50,7 @@
   <link rel="stylesheet" href="/assets/acceptance-roster.css">
   <script src="/assets/acceptance-roster-card.js" defer></script>
   <script src="/assets/acceptance-roster.js" defer></script>
+  <script src="/assets/mandate-originals.js" defer></script>
   <script src="/assets/performance-index.js" defer></script>
   <script src="/assets/intake-profiles.js" defer></script>
   <script src="/assets/contract-folios.js" defer></script>
@@ -211,14 +212,14 @@
     <div id="reader-navigation" hidden></div>
     <div id="page-content"></div>
   </dialog>
-  <dialog id="review-dialog">
+  <dialog id="review-dialog" aria-labelledby="review-title">
     <form id="review-form">
-      <div class="dialog-head"><h2 id="review-title">人工验收</h2><button class="plain" type="button" data-close>关闭</button></div>
-      <div id="review-context" class="note"></div>
-      <label>核验决定<select id="review-decision"></select></label>
+      <div class="dialog-head"><h2 id="review-title">人工验收</h2><button class="icon-button" type="button" data-close aria-label="关闭核验窗口"><i class="ui-glyph ic-x-lg" aria-hidden="true"></i></button></div>
+      <div id="review-context"></div>
+      <fieldset class="review-decisions"><legend id="review-legend">验收决定</legend><div id="review-decision"></div></fieldset>
       <div id="review-visibility" hidden></div>
       <label>审计人员<input id="reviewer" required maxlength="50" autocomplete="name"></label>
-      <label>核验依据与处理意见<textarea id="review-note" rows="4" required maxlength="2000"></textarea></label>
+      <label><span id="review-note-label">核验依据与处理意见</span><textarea id="review-note" rows="3" required maxlength="2000"></textarea></label>
       <div id="review-error" role="alert"></div>
       <div class="actions"><button class="primary" id="submit-review">保存核验记录</button></div>
     </form>

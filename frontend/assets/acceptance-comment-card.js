@@ -34,13 +34,15 @@ const WordCommentCard = (() => {
       const line=element('p','','word-quote');
       line.append(letters.slice(0,anchor.start).join(''),element('mark',anchor.selected),letters.slice(anchor.end).join(''));
       content.append(line);
-      if (!note.open) content.append(element('span','打印页位置待核','word-caption'));
+      if (!note.open && !note.openPage) content.append(element('span','打印页位置待核','word-caption'));
     } else content.append(element('p','批注位置需在 Word 中核对。','word-unknown'));
-    if (!note.open || !location) return content;
-    const jump=button('',event=>note.open(event.currentTarget),'word-page-jump');
-    jump.setAttribute('aria-label',doc.name+' · 第 '+location.page+' 页第 '+location.line+' 行，打开原页');
+    const open=note.open || note.openPage;
+    if (!open || !location) return content;
+    const place='第 '+location.page+' 页'+(note.open?' · 第 '+location.line+' 行':' · 核对整页');
+    const jump=button('',event=>open(event.currentTarget),'word-page-jump');
+    jump.setAttribute('aria-label',doc.name+' · 第 '+location.page+' 页'+(note.open?'第 '+location.line+' 行':'')+'，打开原页');
     jump.setAttribute('aria-haspopup','dialog');
-    jump.append(icon('eye'),element('span','第 '+location.page+' 页 · 第 '+location.line+' 行'),icon('arrows-angle-expand'));
+    jump.append(icon('eye'),element('span',place),icon('arrows-angle-expand'));
     content.append(jump);
     if (!note.thumbnail) return content;
     const miniature=button('',event=>note.open(event.currentTarget),'word-mini');
@@ -234,5 +236,5 @@ const WordCommentCard = (() => {
     select(Math.max(0,stages.findIndex(s=>s.notes.length)));
     return root;
   }
-  return {render,panel};
+  return {render,panel,compare};
 })();

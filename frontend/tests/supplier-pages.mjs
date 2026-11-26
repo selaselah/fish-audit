@@ -105,7 +105,7 @@ export async function checkSupplierPages(ctx,id,revision) {
     if (canDraft) {
       await evaluate(draft+'.click()');
       await wait(q('#review-dialog')+'.open','supplement draft');
-      assert.equal(await evaluate(q('#review-decision')+'.value'),'return');
+      assert.equal(await evaluate(q('#review-decision input:checked')+'.value'),'return');
       assert.match(await evaluate(q('#review-note')+'.value'),check.status==='risk'?/委托交付/:label==='reason'?/签署原因/:/批注/);
       await inspect(ctx,width,label+'-draft','#review-dialog');
       await evaluate(q('#review-dialog [data-close]')+'.click()');

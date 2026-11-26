@@ -77,7 +77,7 @@ export async function checkWordSigning({root,call,evaluate,wait},id,version) {
     }
     if (detail.rev===rev) {
       await evaluate(q('.word-draft')+'.click()');
-      assert.equal(await evaluate(q('#review-decision')+'.value'),'return');
+      assert.equal(await evaluate(q('#review-decision input:checked')+'.value'),'return');
       assert.ok((await evaluate(q('#review-note')+'.value')).includes(detail.documents.find(d=>d.id===check.pages[0].split('/')[0]).name));
       await evaluate(q('#review-dialog [data-close]')+'.click()');
     } else assert.equal(await evaluate('!!'+q('.word-draft')),false);

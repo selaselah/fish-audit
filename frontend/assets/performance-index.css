@@ -94,6 +94,16 @@
 .scope-mandate-page:is(:hover,:focus-visible) { border-color:var(--accent-line); background:var(--accent-soft); }
 .scope-mandate-record details { margin:0; }
 .scope-mandate-record summary { align-content:center; min-height:44px; width:fit-content; font-size:.82rem; color:var(--accent-hover); cursor:pointer; }
+.scope-mandate-word-tools { display:flex; align-items:baseline; flex-wrap:wrap; gap:0 14px; }
+.scope-mandate-word-tools details[open] { width:100%; }
+.scope-mandate-file,.scope-mandate-comment .word-page-jump { display:inline-flex; min-height:44px; gap:5px; align-items:center; color:var(--accent-hover); font-size:.82rem; }
+.scope-mandate-file { text-underline-offset:3px; }
+.scope-mandate-comment .word-page-jump { padding:0 3px; border:0; background:transparent; }
+.scope-mandate-comment .word-credit { flex-wrap:wrap; }
+.scope-mandate-comment .word-credit small { color:var(--secondary); font-size:inherit; }
+.scope-mandate-word-tools .scope-mandate-advice { margin:3px 0 7px; font-size:.84rem; color:var(--secondary); }
+.scope-mandate-word-tools select { max-width:100%; min-height:44px; }
+.scope-mandate-comment .word-quote { margin:0; font-size:.93rem; line-height:1.55; overflow-wrap:anywhere; }
 .scope-mandate-note { margin:9px 0 0; padding-top:8px; border-top:1px solid var(--line); color:var(--secondary); font-size:.84rem; line-height:1.65; overflow-wrap:anywhere; }
 .scope-mandate-note:has(.scope-mandate-scope) { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:center; }
 .scope-mandate-note .scope-mandate-scope { min-height:44px; padding:0 4px; font-size:.82rem; }

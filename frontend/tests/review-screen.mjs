@@ -3,6 +3,23 @@ import {readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 
 const q=s=>'document.querySelector('+JSON.stringify(s)+')';
+export function browserInput({call,evaluate}) {
+  async function key(name) {
+    const codes={Escape:27,Enter:13,Tab:9,Space:32};
+    for (const type of ['keyDown','keyUp']) await call('Input.dispatchKeyEvent',{type,key:name==='Space'?' ':name,
+      code:name,windowsVirtualKeyCode:codes[name],...(type==='keyDown' && name==='Enter'?{text:'\r'}:{})});
+  }
+  async function pointAt(control) {
+    return evaluate('(()=>{const el='+control+';el.scrollIntoView({block:"nearest",behavior:"instant"});'+
+      'const r=el.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};})()');
+  }
+  async function tap(control) {
+    const point=await pointAt(control);
+    await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});
+    await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  }
+  return {key,pointAt,tap};
+}
 export async function size(ctx,width) {
   await ctx.call('Emulation.setDeviceMetricsOverride',{width,height:width<600?844:950,deviceScaleFactor:1,mobile:width<600});
   await ctx.evaluate('document.fonts.ready.then(()=>true)');
