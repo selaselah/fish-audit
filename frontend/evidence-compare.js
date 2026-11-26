@@ -319,6 +319,15 @@ const EvidenceCompare = (() => {
     return drawExcerpt(await pageImage(fact,index),rects,true);
   }
 
+  async function pageThumbnail(fact,index) {
+    const original=await pageImage(fact,index), canvas=el('canvas');
+    const scale=Math.min(1,128/original.naturalWidth,200/original.naturalHeight);
+    canvas.width=Math.max(1,Math.round(original.naturalWidth*scale));
+    canvas.height=Math.max(1,Math.round(original.naturalHeight*scale));
+    canvas.getContext('2d').drawImage(original,0,0,canvas.width,canvas.height);
+    return canvas;
+  }
+
   function panel(finding, facts, pairs, index) {
     const root = box('evidence-compare');
     const versionLabels={applied:'按补充协议',original:'按原合同',by_batch:'按各批验收日核对',pending:'适用版本待核'};
@@ -439,5 +448,5 @@ const EvidenceCompare = (() => {
     use(focus || initial || pairs[0]);
     return root;
   }
-  return {presets,panel,lineExcerpt};
+  return {presets,panel,lineExcerpt,pageThumbnail};
 })();

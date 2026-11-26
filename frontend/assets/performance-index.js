@@ -74,7 +74,18 @@ const PerformanceIndex = (() => {
       H01:['effect_clause','buyer_signature','seller_signature'], H02:['acceptance_result','acceptance_scope','acceptance_criteria'],
       H03:['payment_stage','payment_term'], H05:['payment_designation','transfer_status','paid_on'],
     }[item.rule] || [];
-    const initial=rows.findIndex(row=>row.fact.id===item.stage?.clause_ref && item.rule==='H04');
+    let initial=rows.findIndex(row=>row.fact.id===item.stage?.clause_ref && item.rule==='H04');
+    const authority=item.rule==='H02' && item.acceptance_authority;
+    if (authority && item.status!=='ok') {
+      const ledger=graph.acceptance_authority_sources;
+      const clues=[...(ledger?.clauses || []).filter(s=>!s.native && s.facts?.some(id=>authority.clause_evidence?.includes(id))),
+        ...(ledger?.signatures || []).filter(s=>!s.confirmed && authority.records.some(r=>r.unit===s.unit))];
+      for (const clue of clues) {
+        const hit=rows.findIndex(({fact})=>clue.facts?.includes(fact.id) && fact.doc===clue.doc &&
+          fact.page===clue.page && (fact.unit || fact.doc)===clue.unit && fact.quote===clue.quote);
+        if (hit>=0) { initial=hit; break; }
+      }
+    }
     const first=preferred.map(field=>rows.findIndex(row=>row.fact.field===field)).find(i=>i>=0);
     pick.value=String(initial>=0?initial:first??0);
     const quote=el('blockquote'), place=el('span'), quality=box('scope-source-quality'), crop=box('scope-source-crop');
@@ -203,12 +214,18 @@ const PerformanceIndex = (() => {
       if (jump) jump.addEventListener('click',()=>dialog.close(),{capture:true});
       const actions=box('scope-actions',...(jump?[jump]:[]),complete);
       const paired=pairView(item,state.bundle.report);
+      const roster=AcceptanceRoster.bind(item,state.bundle.report);
       detail.replaceChildren(box('scope-check-state',el('span',item.id,'mono'),tag(item.status)),heading);
-      if (!paired && item.detail) {
+      if (roster) {
+        if (item.status==='issue' && item.detail) detail.append(el('p',item.detail.split('。')[0]+'。','scope-reason'));
+        detail.append(AcceptanceRosterCard.render(roster,'scope-signers','page-dialog'));
+        if (item.detail) detail.append(fold('本项检查结论',el('p',item.detail,'scope-reason')));
+      } else if (!paired && item.detail) {
         const reason=el('p',item.detail,'scope-reason');
         detail.append(item.detail.length<=100?reason:fold('阅读本项结论',reason));
       }
-      detail.append(paired || sourceView(item,graph),actions);
+      const fields=roster?lazyFold('其他字段引文',()=>[sourceView(item,graph)]):null;
+      detail.append(paired || fields || sourceView(item,graph),actions);
     }
     function filter(pending) {
       shown=pending?priorityFindings(group.pending).concat(group.pending.filter(f=>!['risk','issue','missing'].includes(f.status))):group.items;

@@ -1,0 +1,150 @@
+{
+  "rev": 5,
+  "case_id": "a305bb228b69454ebd334ca975820262",
+  "report_sha256": "a6b00b153a04a724839699588df670c755397026217058b0e67d4cb351c4e9eb",
+  "documents": [
+    {
+      "title": "采购合同",
+      "version": "合成采购 · R5",
+      "page": 1,
+      "pdf": "/showcase/acceptance-roster-contract.pdf",
+      "image": "/assets/acceptance-roster-contract.jpg",
+      "thumb": "/assets/acceptance-roster-contract-thumb.webp",
+      "lines": [
+        {
+          "ref": "d02/p1/f17",
+          "line": 19,
+          "label": "验收签认约定",
+          "value": "终验须由周宁、林岚共同签字确认",
+          "quote": "验收签认约定：终验须由周宁、林岚共同签字确认",
+          "rects": [
+            [
+              0.08145,
+              0.86027,
+              0.63413,
+              0.87671
+            ]
+          ],
+          "crop": "/assets/acceptance-roster-contract-19.webp"
+        },
+        {
+          "ref": "d02/p1/f15",
+          "line": 17,
+          "label": "第二期",
+          "value": "最终验收合格后支付60%",
+          "quote": "第二期：最终验收合格后支付60%",
+          "rects": [
+            [
+              0.08209,
+              0.77945,
+              0.45701,
+              0.79589
+            ]
+          ]
+        },
+        {
+          "ref": "d02/p1/f16",
+          "line": 18,
+          "label": "第三期",
+          "value": "质保期满后支付10%",
+          "quote": "第三期：质保期满后支付10%",
+          "rects": [
+            [
+              0.08209,
+              0.82009,
+              0.40659,
+              0.83607
+            ]
+          ]
+        }
+      ],
+      "source_sha256": "2f3fb0c9f03a97d31d335c2c5d72914b5cb6cbff8dc75216024c40836a179946",
+      "page_sha256": "2b5baeb2ee57786bd80aed980169bacb689bd1a84f6f922482e2205c0b8800c1"
+    },
+    {
+      "title": "验收报告",
+      "version": "合成采购 · R5",
+      "page": 1,
+      "pdf": "/showcase/acceptance-roster-receipt.pdf",
+      "image": "/assets/acceptance-roster-receipt.jpg",
+      "thumb": "/assets/acceptance-roster-receipt-thumb.webp",
+      "lines": [
+        {
+          "ref": "d04/p1/f12",
+          "line": 14,
+          "label": "验收签认",
+          "value": "周宁（已签字）",
+          "quote": "验收签认：周宁（已签字）",
+          "rects": [
+            [
+              0.08145,
+              0.65845,
+              0.37363,
+              0.67717
+            ]
+          ],
+          "crop": "/assets/acceptance-roster-receipt-14.webp"
+        },
+        {
+          "ref": "d04/p1/hc2447ee587d0",
+          "line": 15,
+          "label": "验收签认",
+          "value": "何平（已签字）",
+          "quote": "验收签认：何平（已签字）",
+          "rects": [
+            [
+              0.08145,
+              0.69863,
+              0.37363,
+              0.71735
+            ]
+          ],
+          "crop": "/assets/acceptance-roster-receipt-15.webp"
+        }
+      ],
+      "source_sha256": "d6236ecccce9596f9ca373736a3ab84e41f46f3f0046d05f31d6bece5727d558",
+      "page_sha256": "04309353875348a229b791dc9fde9f118f2f143e4a763f42bdb6b251c55cf2c4"
+    }
+  ],
+  "roster": {
+    "mode": "joint",
+    "required": [
+      "周宁",
+      "林岚"
+    ],
+    "contract": "d02/p1/f17",
+    "records": [
+      {
+        "unit": "d04",
+        "role": "acceptance",
+        "file": "验收报告.pdf",
+        "status": "risk",
+        "detail": "核图签字人何平与本条款指定人员不符，请核查代签授权或其他依据。",
+        "signed": [
+          {
+            "name": "周宁",
+            "confirmed": true,
+            "ref": "d04/p1/f12"
+          },
+          {
+            "name": "何平",
+            "confirmed": true,
+            "ref": "d04/p1/hc2447ee587d0"
+          }
+        ],
+        "phases": [
+          {
+            "name": "第二期",
+            "status": "risk",
+            "ref": "d02/p1/f15"
+          },
+          {
+            "name": "第三期",
+            "status": "risk",
+            "ref": "d02/p1/f16"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -2,6 +2,12 @@
 
 首页采用 Fish Audit 自制的冷藏柜采购演练。采购方「青禾演练采购中心」、供应方「云桥演练设备中心」、金额、温度、签认和回单均为虚构数据。每份原件第 1 行均印有「合成演练资料　仅供系统测试　无交易效力」。4℃ 是这份合同约定的柜温上限，8℃ 是这份验收报告填写的实测值。[水印和主体的生成定义](../docs/samples/generate.py) · [项目演练说明](../docs/samples/README.md#验收的是哪一种设备)
 
+## 验收签字人
+
+公开场景使用合成采购案 `a305bb228b69454ebd334ca975820262` 的 R5，底稿 SHA-256 为 `a6b00b153a04a724839699588df670c755397026217058b0e67d4cb351c4e9eb`。合同第 19 行列周宁、林岚。验收报告第 14 和 15 行分别列周宁、何平。H04 的第二、三期引用该合同条款和这两处签字栏。第一次付款的条件是合同生效。[归档底稿](http://127.0.0.1:8000/workpaper/a305bb228b69454ebd334ca975820262?rev=5&view=acceptance-checks) · [公开字段及摘要](../frontend/assets/acceptance-roster.json)
+
+发布脚本只接受上述固定底稿，逐份比对本项目生成的水印 PDF，从原件重绘归档页，并用相同像素坐标生成行图和缩略图。公开页面读取项目内的静态样本。重新生成时可运行 `server/.venv/bin/python docs/samples/publish_acceptance_roster.py <R5证据包.zip>`。[生成程序](../docs/samples/publish_acceptance_roster.py) · [水印合同](../frontend/showcase/acceptance-roster-contract.pdf) · [水印验收报告](../frontend/showcase/acceptance-roster-receipt.pdf)
+
 ## 合同指定抽检
 
 首页「采购验收 / 合同指定抽检」取自水印演练 `e562d30e190b4b388bd4e7cec42a565a` 的 R9。底稿 SHA-256 为 `eb96070257e8687e05f2ce5f7e78f7e5be6e3e4086336c8db403ad09026a70ad`。合同第 19 行约定至少抽检两台，第 20 行点名 QC-02 和 QC-03。验收第 15 行列四台设备，第 17、18 行分别是 QC-01 和 QC-03 的读数。[固定底稿](http://127.0.0.1:8000/workpaper/e562d30e190b4b388bd4e7cec42a565a?rev=9&view=inspection) · [首页数据与原行坐标](../frontend/assets/named-inspection.json)

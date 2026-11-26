@@ -59,7 +59,7 @@ if (!restoreWorkspaceLink()) {
     sceneTabs[i].querySelector('small').textContent=select.options.length+' 个场景';
   }
   const examples={company:{scene:'signing',revision:9},word:{scene:'word-signing',revision:6},calendar:{scene:'contract-dates',revision:6},pdf:{scene:'pdf-signing'}};
-  const inspectionRoutes={readings:'acceptance',equipment:'inspection',named:'named-inspection',supplier:'suppliers',comments:'word-comments'};
+  const inspectionRoutes={readings:'acceptance',signers:'acceptance-signers',equipment:'inspection',named:'named-inspection',supplier:'suppliers',comments:'word-comments'};
   function sceneAddress(name) {
     const url=new URL(location.href);
     const scene=name==='inspection'?inspectionRoutes[inspectionExample.value]:name==='folios'?({comments:'contract-comments',reference:'payment-acceptance',timing:'signer-timing',clock:'signer-clock',proof:'payment-proof',folios:'folios'}[paymentExample.value]):name;
@@ -142,6 +142,11 @@ if (!restoreWorkspaceLink()) {
     if (inspectionScene.hidden || choice==='readings') return;
     if (choice==='supplier') {PublicSuppliers.open();return;}
     if (choice==='comments') {PublicAcceptanceComments.open();return;}
+    if (choice==='signers') {
+      const rev=document.getElementById('inspection-signers').dataset.revision;
+      if (rev) version.textContent='合成案例 · R'+rev;
+      PublicAcceptanceRoster.open(); return;
+    }
     if (loadedInspections.has(choice)) return;
     loadedInspections.add(choice);
     const named=choice==='named';

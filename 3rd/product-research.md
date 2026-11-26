@@ -146,6 +146,8 @@ Fish Audit 在同一检索范围下提供建议看板与任务台账。卡片据
 
 ## 从一项检查回到多份原件
 
+核对验收人时，我们参考了 FloQast 采购复核画面中人员、签核状态及附件的位置，以及 DataSnipper 从单元格定位文档原行的方式。Fish Audit 把合同点名和本单签字栏排在同一行，保留原件切换。共同签字中的每个人有自己的核对状态，复验使用另一份单据。[FloQast 采购复核及附件示例](https://www.floqast.com/risk-compliance/products/audit-readiness) · [DataSnipper 底稿与对应原件的复核](https://knowledge.datasnipper.com/en/articles/685955-how-to-document-your-audit-procedures-with-datasnipper) · [Fish Audit 签字核对](../docs/interaction-design/README.md#验收签字核对)
+
 DataSnipper 的 Alwin 复核界面能把结果中的一个单元格定位到来源文件。一个结果对应多处引文时，可以按文件列出证据并切换原页。Fish Audit 的合同履约底稿采用同样的查看顺序。先选本版的一项检查，再选它实际引用的字段或两条需要对照的原行。页图、检查状态和人工确认状态各自标注。[DataSnipper 的任务结果复核说明](https://knowledge.datasnipper.com/en/articles/882479-how-to-review-a-task-s-output-in-alwin)
 
 Fieldguide 允许按状态筛选请求。Fish Audit 的检查面板默认列出待核项，同时保留查看本组全部结果的入口。当两种筛选会返回同一组记录时，界面收起筛选器。[Fieldguide 的请求管理界面](https://help.fieldguide.io/en/articles/7207259-managing-requests)

@@ -1,0 +1,55 @@
+.acceptance-roster { container-type:inline-size; min-width:0; color:var(--ink); font-family:var(--font-ui); }
+.roster-head,.roster-locator,.roster-name { display:flex; align-items:center; gap:9px; }
+.roster-head { justify-content:space-between; flex-wrap:wrap; }
+.acceptance-roster .roster-title { margin:0; font:650 1.04rem/1.5 var(--font-ui); color:var(--ink); }
+.roster-requirement { padding:3px 8px; border-radius:4px; background:var(--soft); color:var(--secondary); font:550 .76rem/1.5 var(--font-ui); }
+.roster-document { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:5px 0 12px; color:var(--muted); font:.8rem/1.5 var(--font-ui); }
+.roster-formats { display:flex; gap:2px; padding:2px; border:1px solid var(--line); border-radius:7px; background:var(--canvas); }
+.roster-formats button { min-height:29px; min-width:42px; margin:0; padding:3px 9px; border:1px solid transparent; border-radius:4px; font:600 .78rem/1.4 var(--font-ui); color:var(--muted); background:transparent; cursor:pointer; }
+.roster-formats button[aria-pressed=true] { border-color:var(--line); background:white; color:var(--accent-hover); box-shadow:0 1px 2px #152b4712; }
+.roster-formats button:focus-visible { outline:2px solid var(--focus); }
+.roster-picker { min-height:38px; max-width:100%; padding:5px 26px 5px 9px; font:inherit; color:var(--ink); }
+.roster-people { --roster-columns:minmax(72px,1.15fr) minmax(58px,1fr) minmax(68px,1fr); min-width:0; margin:0; padding:0; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+.roster-columns,.roster-row { display:grid; grid-template-columns:var(--roster-columns); align-items:center; gap:5px; padding:0 12px; text-align:left; }
+.roster-columns { min-height:30px; background:var(--canvas); color:var(--muted); font:.75rem/1.4 var(--font-ui); }
+.roster-row { min-height:44px; margin:0; border-top:1px solid var(--line); background:white; color:var(--secondary); font:500 .86rem/1.5 var(--font-ui); cursor:pointer; overflow-wrap:anywhere; }
+.roster-row:hover { background:var(--canvas); }
+.roster-row:has(:checked) { background:var(--accent-soft); box-shadow:inset 3px 0 var(--accent); }
+.roster-row:has(:focus-visible) { outline:2px solid var(--focus); outline-offset:-3px; }
+.roster-name { min-width:0; color:var(--ink); }
+.roster-name input[type=radio] { appearance:auto; width:15px; height:15px; min-height:0; flex:none; margin:0; padding:0; accent-color:var(--accent); }
+.roster-name input[type=radio]:focus-visible { outline:none; box-shadow:none; }
+.roster-discrepancy { justify-self:start; border-radius:4px; background:var(--attention-soft); color:var(--attention); padding:1px 5px; }
+.roster-evidence { display:grid; gap:6px; margin-top:10px; }
+.acceptance-roster .roster-review-note { margin:8px 0 0; padding-left:9px; border-left:2px solid var(--attention-line); color:var(--attention); font:.82rem/1.55 var(--font-ui); }
+.roster-source { min-width:0; display:grid; align-items:center; gap:9px; width:100%; background:white; border:1px solid var(--line); border-radius:6px; padding:8px 10px; text-align:left; text-decoration:none; white-space:normal; color:var(--ink); cursor:pointer; }
+.roster-source-body { display:grid; gap:5px; min-width:0; }
+.acceptance-roster[data-format=image] .roster-source.with-sheet { grid-template-columns:minmax(0,1fr) 32px; }
+.roster-sheet { position:relative; display:block; width:32px; line-height:0; background:white; box-shadow:0 0 0 1px var(--line),0 1px 3px #283a531c; }
+.roster-sheet :is(img,canvas) { display:block; width:100%; height:auto; }
+.roster-sheet i { position:absolute; outline:1px solid var(--attention); background:#ffd86e88; }
+.acceptance-roster[data-format=text] :is(.roster-strip,.roster-sheet) { display:none; }
+.roster-quote mark { padding:0 1px; background:#ffe4a5; color:var(--ink); }
+.roster-source:is(:hover,:focus-visible) { border-color:var(--accent); }
+.roster-source:focus-visible,.roster-picker:focus-visible { outline:2px solid var(--focus); outline-offset:1px; }
+.roster-locator { font:.78rem/1.4 var(--font-ui); }
+.roster-locator small { margin-left:auto; color:var(--muted); font-size:.74rem; }
+.roster-locator i { color:var(--accent); font-size:.78rem; }
+.roster-copy-label { color:var(--muted); font-size:.72rem; }
+[data-crop=true] .roster-copy-label,.acceptance-roster[data-format=text] .roster-copy-label { display:none; }
+.roster-strip:empty { display:none; }
+.roster-strip :is(canvas,img) { display:block; width:auto; max-width:100%; height:auto; max-height:35px; }
+.roster-quote,.roster-absent { color:var(--secondary); font:.9rem/1.55 var(--font-ui); overflow-wrap:anywhere; }
+.acceptance-roster .roster-absent { margin:0; padding:12px; border:1px dashed var(--attention-line); border-radius:6px; color:var(--attention); }
+.roster-sr,.acceptance-roster[data-format=image] [data-crop=true] .roster-quote { position:absolute; width:1px; height:1px; margin:-1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; border:0; }
+.scope-detail > .acceptance-roster { margin:12px 0; }
+.acceptance-roster .roster-phases { margin:8px 0 0; color:var(--secondary); font:.8rem/1.4 var(--font-ui); }
+.roster-phases summary { padding:7px 0; cursor:pointer; }
+.roster-phase-list { display:grid; gap:5px; }
+#inspection-signers .acceptance-roster { margin:15px 0 0; }
+@container (max-width:340px) {
+  .roster-columns,.roster-row { padding-inline:8px; }
+  .roster-name { gap:5px; }
+  .roster-picker { min-height:44px; }
+  .roster-formats button { min-width:44px; min-height:36px; }
+}
