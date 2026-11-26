@@ -15,7 +15,7 @@ from run import get, submit, wait
 TITLE = "合成演练 · Word 合同验收款的两个数字之间留有空格"
 
 
-def contract_file(path, rows):
+def word_file(path, rows, title_text="采购合同"):
     document = Document()
     document.core_properties.author = "Fish Audit 合成演练"
     document.core_properties.last_modified_by = document.core_properties.author
@@ -25,7 +25,7 @@ def contract_file(path, rows):
     style.font.size = Pt(12)
     style.paragraph_format.space_after = Pt(5)
     document.add_paragraph(WATERMARK).runs[0].font.color.rgb = RGBColor.from_string("555555")
-    title = document.add_paragraph("采购合同", style="Title")
+    title = document.add_paragraph(title_text, style="Title")
     title.runs[0].font.color.rgb = RGBColor.from_string("101010")
     title.runs[0].font.size = Pt(21)
     properties = document.styles["Title"].element.get_or_add_pPr()
@@ -33,6 +33,10 @@ def contract_file(path, rows):
         properties.remove(border)
     for label, value in rows:
         document.add_paragraph(label + "：" + value)
+    save_document(document, path)
+
+
+def save_document(document, path):
     buffer = BytesIO()
     document.save(buffer)
     with ZipFile(buffer) as package, ZipFile(path, "w") as output:
@@ -48,7 +52,7 @@ def materials(seed, *, split=True):
     records = documents(code, "complete")
     rows = [(k, "最终验收合格后支付6 0%" if split and k == "第二期" else v) for k, v in records.pop("采购合同")]
     contract = folder / "演练采购合同.docx"
-    contract_file(contract, rows)
+    word_file(contract, rows)
     font = embedded_font("WordPercentageCJK")
     paths = [contract]
     for title, rows in records.items():

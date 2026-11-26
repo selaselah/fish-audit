@@ -36,6 +36,7 @@ from pdf_execution import FORMAT as PDF_EXECUTION
 from supplier_pages import FORMAT as SUPPLIER_PAGE_INSPECTION
 from warranty_terms import FORMAT as WARRANTY_CHECKS
 from payment_windows import FORMAT as PAYMENT_WINDOWS
+from acceptance_comments import FORMAT as WORD_REVIEWS
 from acceptance_reservations import FORMAT as RESERVATIONS
 from payment_releases import FORMAT as PAYMENT_RELEASES
 from contract_changes import FORMAT as ADDENDUM_FORMAT
@@ -67,7 +68,7 @@ CATALOG = {
     "T05": ("出差人员关联", "对照报销单与具名票据中的出差人，缺姓名、别名和不一致均交人工。"),
 }
 VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING, "performance_checks":PERFORMANCE_FORMAT,
-           "invoice_receipt_conditions":INVOICE_RECEIPT, "acceptance_reservations":RESERVATIONS, "payment_releases":PAYMENT_RELEASES, "equipment_models":EQUIPMENT_MODELS, "repair_completion":REPAIR_COMPLETION, "reinspection_wait": REINSPECTION_WAIT, "contract_folios": CONTRACT_FOLIOS, "inspection_coverage":INSPECTION_COVERAGE, "prior_installment":PRIOR_INSTALLMENT,
+           "invoice_receipt_conditions":INVOICE_RECEIPT, "acceptance_reservations":RESERVATIONS, "acceptance_word_reviews":WORD_REVIEWS, "payment_releases":PAYMENT_RELEASES, "equipment_models":EQUIPMENT_MODELS, "repair_completion":REPAIR_COMPLETION, "reinspection_wait": REINSPECTION_WAIT, "contract_folios": CONTRACT_FOLIOS, "inspection_coverage":INSPECTION_COVERAGE, "prior_installment":PRIOR_INSTALLMENT,
            "quality_number_classification":QUALITY_NUMBER_FORMAT, "quality_references":QUALITY_REFERENCE_FORMAT,
            "delegation_checks":DELEGATION_FORMAT, "quality_addenda":ADDENDUM_FORMAT, "acceptance_authority":ACCEPTANCE_AUTHORITY,"delivery_batches":DELIVERY_BATCHES,"receipt_packets":RECEIPT_PACKETS,"stage_payments":STAGE_PAYMENTS,
            "supplier_page_inspection": SUPPLIER_PAGE_INSPECTION, "pdf_execution": PDF_EXECUTION, "contract_effect":CONTRACT_EFFECT,"warranty_checks":WARRANTY_CHECKS,"payment_windows":PAYMENT_WINDOWS,"sources": SOURCES, "rule_sources": MAPPING, "invoice_sources": INVOICE_SOURCE_FORMAT,
@@ -142,7 +143,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
     def with_performance():
         for item in performance:
             record(item["rule"],item["status"],item["detail"],item["evidence"],item["scope"])
-            for key in ("stage","reinspection","delegations","quality_change","acceptance_authority","date_checks","batch_acceptance","effect_review","warranty_check","warranty_payment","payment_window","invoice_receipt","payment_change","payment_opinion","acceptance_reservations","stage_payments","equipment_models","inspection_coverage","prior_installment","contract_folios"):
+            for key in ("stage","reinspection","delegations","quality_change","acceptance_authority","date_checks","batch_acceptance","effect_review","warranty_check","warranty_payment","payment_window","invoice_receipt","payment_change","payment_opinion","acceptance_reservations","acceptance_comments","stage_payments","equipment_models","inspection_coverage","prior_installment","contract_folios"):
                 if key in item:
                     findings[-1][key] = item[key]
         return findings

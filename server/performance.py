@@ -25,6 +25,7 @@ import warranty_service
 import payment_windows
 import invoice_conditions
 import payment_amendments
+import acceptance_comments
 import acceptance_reservations
 import inspection_register
 import acceptance_payments
@@ -937,6 +938,14 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         timing = reinspection_wait.assess(graph["reinspection_wait_sources"], accepted, contract.unit, graph)
         if timing and reinspection_wait.apply(accepted, timing):
             accepted_on = None
+    if version == FORMAT:
+        closed = accepted.get("reinspection", {}).get("state") == "closed"
+        if acceptance_comments.apply(accepted, graph, set(accepted["scope"])):
+            accepted_on = None
+            if closed:
+                original = evaluate(contract, receipts)
+                if original["status"] == "issue":
+                    accepted.update(status="issue", detail=original["detail"] + " " + accepted["detail"])
     if payment_change and not scoped_change:
         payment_amendments.attach(plan,payment_change)
     if version == FORMAT and (batch or scoped_change):
@@ -1206,6 +1215,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("payment_opinion") != entry.get("payment_opinion")
                 or saved.get("invoice_receipt") != entry.get("invoice_receipt")
                 or saved.get("payment_window") != entry.get("payment_window")
+                or saved.get("acceptance_comments") != entry.get("acceptance_comments")
                 or saved.get("acceptance_reservations") != entry.get("acceptance_reservations")
                 or (saved.get("id"),saved.get("version"),saved.get("title"),saved.get("basis")) !=
                 (f"{rule}-{position}",policy["version"],*RULES[rule])):

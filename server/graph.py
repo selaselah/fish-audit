@@ -33,6 +33,7 @@ import warranty_service
 import payment_windows
 import invoice_conditions
 import payment_amendments
+import acceptance_comments
 import acceptance_reservations
 import payment_releases
 import repair_completion
@@ -333,6 +334,11 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     reservations = acceptance_reservations.sources(graph,lambda doc,number:texts[doc,number])
     graph["acceptance_reservation_sources"] = reservations
     graph["edges"].extend(acceptance_reservations.edges(reservations))
+    reviews = acceptance_comments.sources(graph, read_original, lambda doc, number: texts[doc, number])
+    graph["acceptance_word_reviews"] = reviews
+    nodes, edges = acceptance_comments.source_graph(reviews)
+    graph["nodes"].extend(nodes)
+    graph["edges"].extend(edges)
     inspection = inspection_coverage.sources(graph,lambda doc,number:texts[doc,number])
     graph["inspection_coverage_sources"] = inspection
     lines,links = inspection_coverage.source_graph(inspection)
