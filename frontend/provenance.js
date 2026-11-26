@@ -108,8 +108,9 @@ function performanceOverview(findings, graph) {
     const edition=phase.payment_change;
     const revised=edition?.applies==='amended' && PhaseEvidence.amendmentFact(graph,phase,edition.revised_ref);
     const fact = revised || index.facts.get(stage.clause_ref);
-    const source = fact ? action(heading,()=>openPage(fact.doc,fact.page,fact.id),'phase-source') : el('strong',heading);
-    if (fact) source.setAttribute('aria-label',heading+(revised?'，查看变更后付款条款':'，查看合同原文'));
+    const originalNumber=ContractFolios.numeralLink(phase,graph);
+    const source = originalNumber || (fact ? action(heading,()=>openPage(fact.doc,fact.page,fact.id),'phase-source') : el('strong',heading));
+    if (fact && !originalNumber) source.setAttribute('aria-label',heading+(revised?'，查看变更后付款条款':'，查看合同原文'));
     const results = box('phase-results',performanceJump(phase,edition?.applies==='amended'?'现行付款条件':'付款条件'));
     const sameStage = f=>f.stage && ['name','clause_ref','clause','share'].every(k=>f.stage[k]===stage[k]);
     const matched = payments.filter(sameStage);

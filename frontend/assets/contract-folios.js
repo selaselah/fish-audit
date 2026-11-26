@@ -1,25 +1,40 @@
 const ContractFolios = (() => {
   const states = {
     continued:'原页已对应', foreign:'合同号不一致', provisional:'条款待确认', attachment:'附表待确认',
-    duplicate:'期次或标题重复', identity:'合同号待核', source:'原页待核', terms:'期次待归入', scope:'条款范围待核',
+    duplicate:'期次或标题重复', numeral:'比例书写待核', identity:'合同号待核', source:'原页待核', terms:'期次待归入', scope:'条款范围待核',
   };
-  const priority = ['foreign','provisional','attachment','duplicate','source','identity','terms','scope'];
+  const priority = ['foreign','provisional','attachment','duplicate','numeral','source','identity','terms','scope'];
   const labels = {
     root_id:'正文合同号', related_id:'续页引用编号', stage:'付款期次', title:'合同标题', heading:'续页标题',
-    provisional:'确认状态', qualification:'附加说明', unlocated:'待定位引文', attachment:'附件记载', independent:'首款独立约定',
+    provisional:'确认状态', qualification:'附加说明', unlocated:'待定位引文', attachment:'附件记载', independent:'首款独立约定', transcription:'已对照转录',
   };
-  const labelsFor = row => row.kind === 'stage' ? row.label : labels[row.kind];
+  function labelsFor(row) {
+    if (row.kind === 'stage') return row.label;
+    if (row.kind === 'transcription') return row.quote.split(/[:：]/u,1)[0];
+    if (row.kind === 'qualification' && /^(?:甲方|乙方)签章[:：]/u.test(row.quote)) return row.quote.slice(0,4);
+    return labels[row.kind];
+  }
+
+  function ambiguousBody(quote) {
+    const match=/^[^:：、]+[:：、](.*)$/u.exec(quote.trim());
+    if (!match) return null;
+    const body=match[1];
+    const special=[...body].some(c => c.codePointAt(0)>127 && (/^\p{Nd}$/u.test(c) || /^[0-9]+$/u.test(c.normalize('NFKC'))));
+    return special || /[0-9]\s+[0-9.]|[0-9]\.\s+[0-9]|[-+]\s+[0-9]/u.test(body) ? body : null;
+  }
   const bodyNumber = row => row?.quote.match(/^[^：:]+[:：](.*)$/u)?.[1].trim();
   const stateOf = issues => priority.find(s => issues.includes(s)) || 'continued';
   const rectValid = r => Array.isArray(r) && r.length === 4 && r.every(x => Number.isFinite(x) && x >= 0 && x <= 1) && r[2] > r[0] && r[3] > r[1];
 
   function resolve(finding, graph, calls) {
     const check = finding?.contract_folios, ledger = graph?.contract_folio_sources;
-    if (!check || ledger?.format !== 'contract-payment-folios-v1' || !Array.isArray(ledger.pages) ||
+    const v2 = ledger?.format === 'contract-payment-folios-v2';
+    if (!check || !v2 && ledger?.format !== 'contract-payment-folios-v1' || !Array.isArray(ledger.pages) ||
         !Array.isArray(ledger.lines) || !Array.isArray(check.pages) || !Array.isArray(finding.evidence)) return null;
     const index = graphIndex(graph), cited = new Set(traceReferences(graph,finding)), unit = check.unit;
     const pages = ledger.pages.filter(p => p.unit === unit), rows = ledger.lines.filter(r => r.unit === unit);
-    if (pages.length < 2 || pages.length !== check.pages.length || !index.documents.has(unit)) return null;
+    if (!pages.length || pages.length === 1 && !(v2 && rows.some(r=>r.ambiguous_body)) ||
+        pages.length !== check.pages.length || !index.documents.has(unit)) return null;
     const edges = new Map(graph.edges.filter(e=>e.type === 'contract_folio_basis').map(e=>[e.to,e]));
     const callsByPage = new Map((calls || []).filter(c=>c.doc === unit).map(c=>[c.page,c]));
     const table = new Map(), doc = index.documents.get(unit);
@@ -49,6 +64,14 @@ const ContractFolios = (() => {
         if (!Array.isArray(rects) || !rects.every(rectValid)) return null;
         const anchored = r.facts.map(id=>index.facts.get(id)).filter(f=>f.source_line?.text===r.quote && f.source_line.number===r.line);
         if (anchored.some(f=>JSON.stringify(f.source_line.rects)!==JSON.stringify(rects))) return null;
+        if (r.transcription && (!v2 || !rects.length || !FolioTranscriptions.verified(r,index.facts.get(r.transcription.ref),call,doc,node)) ||
+            r.kind === 'transcription' && !r.transcription) return null;
+        if (v2 && r.kind === 'stage') {
+          const broken = ambiguousBody(r.quote);
+          if (!Array.isArray(r.observations) || (r.ambiguous_body ?? null) !== broken ||
+              Boolean(broken && p.native && p.text_only) !== v.issues.some(s=>s.state==='numeral' && s.ref===r.id) ||
+              !r.transcription && r.observations.some(id=>index.facts.get(id)?.quote !== r.quote)) return null;
+        }
         table.set(r.id,{...r,rects});
       }
       if (v.focus && !v.lines.includes(v.focus) || v.issues.some(issue=>!priority.includes(issue.state) || issue.ref && !v.lines.includes(issue.ref)) ||
@@ -62,7 +85,7 @@ const ContractFolios = (() => {
     if (state==='foreign' && !rows.some(r=>r.page>1 && r.kind==='related_id' && r.supported && r.number &&
         r.number===bodyNumber(r) && r.number!==root.number && check.pages.some(p=>p.issues.some(s=>s.state==='foreign' && s.ref===r.id)))) return null;
     if (state==='continued' && (pages.some(p=>!p.native || !p.text_only) || rows.some(r=>!r.supported ||
-        !['root_id','related_id','stage','heading','title','independent'].includes(r.kind) ||
+        !['root_id','related_id','stage','heading','title','independent','transcription'].includes(r.kind) ||
         r.kind==='related_id' && (r.number!==root.number || r.number!==bodyNumber(r))))) return null;
     return {check,table,doc,root};
   }
@@ -138,7 +161,8 @@ const ContractFolios = (() => {
     if (!finding?.contract_folios) return null;
     const data = resolve(finding,graph,calls), card=el('section','','folio-card');
     card.id='contract-pages'; card.tabIndex=-1; card.setAttribute('aria-label','合同付款续页');
-    const title=el('h3','合同付款续页');
+    const name=finding.contract_folios.pages?.length===1?'合同分期原文':'合同付款续页';
+    const title=el('h3',name); card.setAttribute('aria-label',name);
     if (!data) {
       card.dataset.folioState='unverified';
       card.append(box('folio-head',title,el('span','证据关系待核','folio-state'))); return card;
@@ -165,6 +189,9 @@ const ContractFolios = (() => {
         const b=action(label,()=>{comparing=i===1;show(choose.value);}); modes.append(b); return b;
       });
       choose.setAttribute('aria-label','选择本页核对原行');
+      choose.id='folio-line-'+doc.id+'-'+page.page;
+      const lineLabel=el('label','原行','folio-input-label');
+      lineLabel.htmlFor=choose.id;
       choices.forEach(r=>choose.add(new Option(labelsFor(r)+(r.line?' · 第 '+r.line+' 行':''),r.id)));
       function show(id) {
         choose.value=id;
@@ -177,8 +204,14 @@ const ContractFolios = (() => {
         if (r.kind==='related_id' && root?.id!==r.id && root) source.append(excerpt(root,index,null,pair && comparing ? r.number : null));
         source.append(excerpt(r,index,null,pair && comparing ? root.number : null));
       }
-      choose.addEventListener('change',()=>show(choose.value));
-      body.append(box('folio-reading-top',el('strong',i===0?'合同正文':'合同续页'),modes,choose),source);
+      const transcript=FolioTranscriptions.reader(choices,open,show,()=>choose.value);
+      choose.addEventListener('change',()=>{
+        show(choose.value);
+        if (table.get(choose.value)?.transcription) transcript?.show(choose.value);
+        else if (transcript) transcript.details.open=false;
+      });
+      body.append(box('folio-reading-top',el('strong',i===0?'合同正文':'合同续页'),modes,box('folio-input',lineLabel,choose)),source);
+      if (transcript) body.append(transcript.details);
       show(page.focus || choices[0].id);
     }
     check.pages.forEach((p,i)=>{
@@ -186,9 +219,10 @@ const ContractFolios = (() => {
       pic.alt=''; pic.loading='lazy'; pic.decoding='async'; pic.src=workpaperSource(doc.id,'pages/'+p.page);
       pic.addEventListener('error',()=>pic.replaceWith(glyph('file-earmark-text')),{once:true});
       const name='第 '+p.page+' 页', scope=p.stages.join('、') || (i===0?'合同正文':'补充记载');
-      b.append(box('folio-thumb',pic),box('folio-page-copy',el('strong',name),el('small',scope)),el('i','','folio-dot'));
+      const summary=p.stages.length>2?'共 '+p.stages.length+' 期':scope;
+      b.append(box('folio-thumb',pic),box('folio-page-copy',el('strong',name),el('small',summary)),el('i','','folio-dot'));
       b.dataset.folioPage=String(p.page); b.dataset.issue=String(p.state!=='continued');
-      b.setAttribute('aria-label',name+'，'+scope+'，'+states[p.state]);
+      b.setAttribute('aria-label',[name,summary,...(summary===scope?[]:[scope]),states[p.state]].join('，'));
       b.addEventListener('keydown',event=>{
         const target={ArrowRight:(i+1)%buttons.length,ArrowDown:(i+1)%buttons.length,ArrowLeft:(i+buttons.length-1)%buttons.length,
           ArrowUp:(i+buttons.length-1)%buttons.length,Home:0,End:buttons.length-1}[event.key];
@@ -199,7 +233,7 @@ const ContractFolios = (() => {
     card.append(box('folio-layout',box('folio-rail',file,picker),body),position);
     const attachments=unassigned(finding,coverage,graph);
     if (attachments) card.append(attachments);
-    select(check.state==='continued'?1:firstProblem);
+    select(check.state==='continued' && check.pages.length>1?1:firstProblem);
     return card;
   }
   function independentLink(phase,graph) {
@@ -210,5 +244,17 @@ const ContractFolios = (() => {
     const b=action('首款独立约定',()=>open(row),'compare-jump');
     b.dataset.folioIndependent=row.id; return b;
   }
-  return {panel,pageReferences,citation,independentLink};
+  function numeralLink(phase,graph) {
+    const data=current(), stage=phase.stage;
+    if (!data || !stage || stage.share !== '' || !phase.scope.includes(data.doc.id)) return null;
+    const fact=graphIndex(graph).facts.get(stage.clause_ref), refs=new Set(traceReferences(graph,phase));
+    const matches=[...data.table.values()].filter(r=>r.supported && r.ambiguous_body && r.label===stage.name &&
+      r.ambiguous_body===stage.clause && refs.has(r.id) && refs.has(stage.clause_ref) && fact?.doc===r.doc &&
+      fact.page===r.page && fact.source_line?.number===r.line && fact.source_line.text===r.quote);
+    if (matches.length!==1) return null;
+    const source=action('核对比例原行',()=>open(matches[0]),'phase-source');
+    source.dataset.folioNumeral=matches[0].id;
+    return source;
+  }
+  return {panel,pageReferences,citation,independentLink,numeralLink};
 })();

@@ -20,9 +20,9 @@ export async function checkFolios({root,call,evaluate,wait},cid,revision) {
   const initial=check.state==='continued'?p2:check.pages.find(p=>p.state===check.state);
   assert.equal(await evaluate(q('.folio-reading')+'.dataset.folioPage'),String(initial.page));
   const buttonFor = p => q('.folio-page[data-folio-page="'+p.page+'"]');
-  async function original(id,width) {
-    const row=ledger.lines.find(s=>s.id===id), btn=q('.folio-excerpt[data-folio-ref="'+id+'"]');
-    await evaluate(btn+'.click()');
+  async function original(id,width,selector) {
+    const row=ledger.lines.find(s=>s.id===id), btn=q(selector || '.folio-excerpt[data-folio-ref="'+id+'"]');
+    await evaluate(btn+'.focus();'+btn+'.click()');
     await wait(q('#page-dialog .located blockquote')+'?.textContent==='+JSON.stringify(row.quote)+' && '+q('#page-dialog .page-image')+'?.naturalWidth>0','exact physical row '+id);
     const selected=await evaluate(q('#page-dialog .located')+'.dataset.gapLine');
     assert.equal(selected,String(row.line));
@@ -45,7 +45,7 @@ export async function checkFolios({root,call,evaluate,wait},cid,revision) {
       const shot=await call('Page.captureScreenshot',{format:'png',clip:bounds,captureBeyondViewport:true});
       await writeFile(join(process.env.AUDIT_UI_SHOTS,'folio-'+cid.slice(0,5)+'-'+width+'.png'),Buffer.from(shot.data,'base64'));
     }
-    for (const p of [p1,p2]) {
+    for (const p of check.pages) {
       await evaluate(buttonFor(p)+'.click()');
       const id=await evaluate(q('.folio-select')+'.value');
       assert.equal(id,p.focus);
@@ -63,13 +63,60 @@ export async function checkFolios({root,call,evaluate,wait},cid,revision) {
       }
       if (id && ledger.lines.find(s=>s.id===id)?.line) await original(id,width);
       const stage=ledger.lines.find(s=>s.page===p.page && s.kind==='stage' && s.unit===check.unit);
+      if (!stage) continue;
       await evaluate(q('.folio-select')+'.value='+JSON.stringify(stage.id)+';'+q('.folio-select')+'.dispatchEvent(new Event("change"))');
       await original(stage.id,width);
+      const proofs=ledger.lines.filter(s=>s.unit===check.unit && s.page===p.page && s.transcription);
+      if (proofs.length) {
+        const details=q('.folio-transcripts'), choose=q('.folio-reading-top select'), toggle=q('.folio-spaces input');
+        assert.equal(await evaluate(details+'.open'),false);
+        await evaluate(details+'.querySelector("summary").focus()');
+        await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',text:'\r',windowsVirtualKeyCode:13});
+        await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+        await wait(details+'.open','keyboard opens transcript comparison');
+        assert.equal(await evaluate(details+'.querySelector("summary small").textContent'),String(proofs.length));
+        await evaluate(choose+'.value='+JSON.stringify(proofs[0].id)+';'+choose+'.dispatchEvent(new Event("change"))');
+        for (const [index,row] of proofs.entries()) {
+          if (index) await evaluate(q('.folio-transcript-step:last-child')+'.click()');
+          assert.equal(await evaluate(details+'.dataset.folioTranscript'),row.id);
+          assert.equal(await evaluate(choose+'.value'),row.id);
+          assert.equal(await evaluate(q('.folio-evidence .folio-excerpt')+'.dataset.folioRef'),row.id);
+          assert.equal(await evaluate(q('.folio-transcript-position')+'.textContent'),(index+1)+' / '+proofs.length);
+          const expected=[row.quote,row.transcription.quote,row.transcription.value];
+          const visible='[...document.querySelectorAll(".folio-literal")].map(el=>el.textContent)';
+          assert.deepEqual(await evaluate(visible),expected);
+          await evaluate(toggle+'.click()');
+          assert.deepEqual(await evaluate(visible),expected.map(s=>s.replaceAll(' ','·')));
+          if (row.transcription.form==='temperature' && process.env.AUDIT_UI_SHOTS && [390,1440].includes(width)) {
+            const clip=await evaluate('(()=>{const r='+card+'.getBoundingClientRect();return {x:r.x+scrollX,y:r.y+scrollY,width:r.width,height:r.height,scale:1}})()');
+            const image=await call('Page.captureScreenshot',{format:'png',clip,captureBeyondViewport:true});
+            await writeFile(join(process.env.AUDIT_UI_SHOTS,'transcript-'+cid.slice(0,5)+'-'+width+'.png'),Buffer.from(image.data,'base64'));
+          }
+          await evaluate(toggle+'.click()');
+          await original(row.id,width,'.folio-source-link');
+          assert.equal(await evaluate('document.activeElement==='+q('.folio-source-link')),true);
+        }
+        assert.equal(await evaluate(q('.folio-transcript-step:last-child')+'.disabled'),true);
+        if (proofs.length>1) {
+          await evaluate(q('.folio-transcript-step:first-child')+'.click()');
+          assert.equal(await evaluate(choose+'.value'),proofs.at(-2).id);
+        }
+        await evaluate(details+'.querySelector("summary").click()');
+      }
     }
-    await evaluate(buttonFor(p2)+'.focus()');
+    await evaluate(buttonFor(p2 || p1)+'.focus()');
     await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Home',code:'Home',windowsVirtualKeyCode:36});
     await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Home',code:'Home',windowsVirtualKeyCode:36});
     assert.equal(await evaluate('document.activeElement.dataset.folioPage'),String(p1.page));
+  }
+  if (check.state==='numeral') {
+    const bad=ledger.lines.find(r=>r.ambiguous_body);
+    const phase=report.findings.find(f=>f.rule==='H04' && f.stage?.name===bad.label);
+    assert.equal(phase.stage.share,'');
+    const tab=q('[data-phase-choice="'+phase.id+'"]');
+    assert.equal(await evaluate(tab+'.querySelector("strong").textContent'),'比例待核');
+    await evaluate(tab+'.click()');
+    await original(bad.id,1440,'.installment-list [data-folio-numeral],li[data-phase-finding] [data-folio-numeral]');
   }
   if (check.standalone) {
     await evaluate(q('[data-folio-independent]')+'.click()');
@@ -84,9 +131,19 @@ export async function checkFolios({root,call,evaluate,wait},cid,revision) {
     assert.equal(await evaluate(q('#page-dialog .located blockquote')+'.textContent'),f.quote);
     await evaluate(q('#page-dialog [data-close]')+'.click()');
   }
-  for (const mutate of ['g.edges=g.edges.filter(e=>e.type!=="contract_folio_basis")','g.contract_folio_sources.lines[0].page_sha256+="x"',
+  const corrupt=['g.edges=g.edges.filter(e=>e.type!=="contract_folio_basis")','g.contract_folio_sources.lines[0].page_sha256+="x"',
                         'c.pages[0].contract_folio_rects={};c.pages.find(p=>p.doc===f.contract_folios.unit).contract_folio_rects={}',
-                        'f.contract_folios.state="wrong"','delete f.contract_folios.pages[0].issues','g.contract_folio_sources.lines.find(r=>r.kind==="stage").label="第五期"']) {
+                        'f.contract_folios.state="wrong"','delete f.contract_folios.pages[0].issues','g.contract_folio_sources.lines.find(r=>r.kind==="stage").label="第五期"'];
+  const proof=ledger.lines.find(r=>r.transcription?.basis==='visual_check');
+  if (proof) {
+    const row='g.contract_folio_sources.lines.find(r=>r.id==='+JSON.stringify(proof.id)+')';
+    const fact='g.facts.find(f=>f.id==='+JSON.stringify(proof.transcription.ref)+')';
+    const call='c.pages.find(p=>p.doc==='+JSON.stringify(proof.doc)+' && p.page==='+proof.page+')';
+    corrupt.push(row+'.transcription.form="other"',row+'.transcription.value+="1"',row+'.transcription.basis="field_receipt"',
+      fact+'.check_response_id="x"',call+'.check.input=[]',call+'.check.output.checks=[]');
+  }
+  if (check.state==='numeral') corrupt.push('delete g.contract_folio_sources.lines.find(r=>r.ambiguous_body).ambiguous_body');
+  for (const mutate of corrupt) {
     const state=await evaluate('(()=>{const g=structuredClone(state.bundle.report.graph),c=structuredClone(state.bundle.report.calls),'+
       'f=structuredClone(state.bundle.report.findings.find(f=>f.rule==="H03"));'+mutate+';'+
       'const card=ContractFolios.panel(f,g,c.pages);return [card.dataset.folioState,card.querySelectorAll(".folio-excerpt").length]})()');

@@ -153,8 +153,23 @@ class FolioTranscriptionTests(unittest.TestCase):
         for rule in ("H04", "H05"):
             phase, = [f for f in rows(report, rule) if f.get("stage", {}).get("name") == "第二期"]
             self.assertEqual((phase["status"], phase["stage"]["share"]), ("missing", ""))
-            self.assertIsNone((phase.get("stage_payment") or {}).get("expected"))
         self.assertEqual([f["status"] for f in rows(report, "H01") + rows(report, "H02")], ["ok", "ok"])
+
+    def test_two_actual_transfers_cannot_supply_the_missing_contract_percentage(self):
+        denomination = [("currency", "币种", "人民币"), ("unit", "金额单位", "元")]
+        agreement = [*CONTRACT, ("total", "含税总额", "100000.00"), *denomination]
+        banks = [[*BANK_DOC, ("transfer_amount", "付款金额", amount), ("transfer_ref", "交易流水号", ref), *denomination]
+                 for amount, ref in [("25000.00", "TR-001"), ("35000.00", "TR-002")]]
+        docs = [agreement, RECEIPT, WARRANTY, *banks]
+        regular, = rows({"findings": execute(material(docs), PROFILE)}, "H06")
+        self.assertEqual(regular["stage_payments"]["expected"], "60000.00")
+        split = material(docs, lambda i, k, label, v: "最终验收合格后支付6 0%" if i == 1 and label == "第二期" else v)
+        held, = rows({"findings": execute(split, PROFILE)}, "H06")
+        self.assertEqual(held["status"], "missing")
+        self.assertEqual(held["stage_payments"]["state"], "unresolved")
+        self.assertIsNone(held["stage_payments"]["expected"])
+        self.assertIsNone(held["stage_payments"]["difference"])
+        self.assertEqual(len(held["stage_payments"]["records"]), 2)
 
     def test_legacy_archives_keep_strict_layout_and_reject_unsafe_compatibility_at_signoff(self):
         for raw, old_state, refused in [

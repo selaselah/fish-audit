@@ -55,6 +55,7 @@
 | --- | --- | --- |
 | Noto Serif SC，首页标题的中文子集。Google Fonts 元数据记录的上游为 `notofonts/noto-cjk` 提交 `985fa52c81c1d6692ccdd82bc3656e8fb932fd89`。 | `239bfb03268dc2556d036e44c92dd933913f5ed3baca3233fc3cd3723ac5a36b` | [字体文件](../frontend/assets/noto-serif-sc.woff2) · [标题样式](../frontend/landing.css) · [notoserifsc-OFL.txt](licenses/notoserifsc-OFL.txt) · [Google Fonts 字样](https://fonts.google.com/noto/specimen/Noto+Serif+SC) · [上游元数据](https://raw.githubusercontent.com/google/fonts/main/ofl/notoserifsc/METADATA.pb) |
 | Geist Latin，界面拉丁文字和数字的子集。 | `9b6f5ff45b278c744b5f379a2c4ecbaf858a842b8eaf82ac8d21b699ca16c608` | [字体文件](../frontend/assets/geist-latin.woff2) · [界面字体样式](../frontend/brand.css) · [geist-OFL.txt](licenses/geist-OFL.txt) · [Geist 官方项目](https://github.com/vercel/geist-font) |
+
 ## 合同数字与物理原行
 
-PDFium 的文字流包含排版生成的空白和换行。Fish Audit 留存原行及坐标，按字段核对转录。数字内部的空白会保留给审计员。Unicode 列明摄氏符号 U+2103 与 U+00B0、U+0043 两种写法，系统只在完整的摄氏温度限值中使用这个对应关系。[PDFium 文字接口](https://pdfium.googlesource.com/pdfium/%2B/87e3d7a7ece467e46bc1aa350bcb2beb32ca2f35/public/fpdf_text.h) · [Unicode 字符表](https://www.unicode.org/Public/18.0.0/charts/nameslist/2100/)
+2026-11-26 查阅 PDFium 的公开接口说明。其文字流包含排版生成的空白和换行。Fish Audit 留存原行及坐标，按字段核对转录。数字内部的空白会保留给审计员。Unicode 列明摄氏符号 U+2103 与 U+00B0、U+0043 两种写法，系统只在完整的摄氏温度限值中使用这个对应关系。[PDFium 文字接口](https://pdfium.googlesource.com/pdfium/%2B/87e3d7a7ece467e46bc1aa350bcb2beb32ca2f35/public/fpdf_text.h) · [Unicode 字符表](https://www.unicode.org/Public/18.0.0/charts/nameslist/2100/)

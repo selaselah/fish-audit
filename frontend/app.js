@@ -796,7 +796,8 @@ function finding(item) {
   if (item.stage) {
     const change=item.payment_change;
     const revised=change?.applies==='amended' && PhaseEvidence.amendmentFact(state.bundle.report.graph,item,change.revised_ref);
-    const clause=box('clause-source',el('q',revised?revised.quote:item.stage.clause),citation(revised?revised.id:item.stage.clause_ref));
+    const originalNumber=ContractFolios.numeralLink(item,state.bundle.report.graph);
+    const clause=box('clause-source',el('q',revised?revised.quote:item.stage.clause),originalNumber || citation(revised?revised.id:item.stage.clause_ref));
     if (change && !revised) clause.prepend(el('small','原合同'));
     node.prepend(clause);
   }
