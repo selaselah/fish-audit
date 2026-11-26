@@ -13,6 +13,10 @@ EVIDENCE = {"title": "《中国注册会计师审计准则第1301号——审计
             "edition": "2022-12-22 修订", "scope": "注册会计师审计的方法参考，用于说明证据评估与追加程序思路。"}
 SOURCES = {
     WORKDAY_KEY:WORKDAY_NOTICE,
+    "electronic-signature":{"title":"《中华人民共和国电子签名法》","edition":"2019-04-23 修正",
+        "url":"https://wap.miit.gov.cn/zwgk/zcwj/flfg/art/2022/art_4ed0e4a46946479c90a9e0f2c76a11ef.html",
+        "locator":"第八、十三、十四条","scope":"用于复核数据电文来源、完整性和签署凭证的法律背景。",
+        "summary":"结合签署人的身份、签署数据的控制及改动可发现性审查所提交的电子签署证据。"},
     "branch-activities":{"title":"《中华人民共和国民法典》","edition":"2020-05-28 通过",
         "url":"https://www.cac.gov.cn/2020-06/01/c_1592561777268319.htm","locator":"第七十四条",
         "scope":"分支机构名义及民事责任的法律背景。具体归属与授权需要核实。",
@@ -94,7 +98,7 @@ SOURCES = {
     "follow-up": {**EVIDENCE, "locator": "第十五条",
                   "summary": "不同来源的材料相互矛盾或可靠性存疑时，应考虑调整检查或追加程序。"},
 }
-MAPPING = {"H01":["contract-effect","written-mandate","contract-signing","branch-activities","seal-authority","purchase-records"],"H02":["receipt","received-specifications","acceptance-roles","contract-change","batch-delivery","exchange-records","evidence-quality"],
+MAPPING = {"H01":["contract-effect","written-mandate","contract-signing","branch-activities","seal-authority","electronic-signature","purchase-records"],"H02":["receipt","received-specifications","acceptance-roles","contract-change","batch-delivery","exchange-records","evidence-quality"],
            "H03":["payment","purchase-records"],"H04":["payment","receipt","contract-change","batch-delivery","warranty-period","payment-time"],
            "H06":["payment","installment-tracking","evidence-quality"],
            "H05":["payment","evidence-quality","warranty-period","payment-time"],

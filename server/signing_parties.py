@@ -9,6 +9,8 @@ from delegation import PARTY_SIGNATURES
 
 NATIVE_FORMAT = "contract-effect-sources-v4"
 IMAGE_FORMAT = "contract-effect-sources-v5"
+WORD_FORMAT = "contract-effect-sources-v6"
+IMAGE_FORMATS = (IMAGE_FORMAT, WORD_FORMAT)
 IMPRINT_FIELDS={"buyer_seal_name":("甲方印章单位名称","采购方印章单位名称","买方印章单位名称"),
                 "seller_seal_name":("乙方印章单位名称","供应方印章单位名称","卖方印章单位名称")}
 SIDES={"buyer":"甲方","seller":"乙方"}
@@ -88,6 +90,56 @@ def checked(f,graph):
             correction.get("value")==f["value"] and correction.get("quote")==f["quote"])
 
 
+def word_signatures(ledger, graph, unit):
+    """Separate the reading of a printed Word signing line from proof of execution."""
+    pages = [p for p in ledger["pages"] if p["unit"] == unit]
+    word = {d["id"] for d in graph["documents"] if d.get("ext") in (".doc", ".docx")}
+    text_pages = {(p["doc"], p["page"]) for p in pages
+                  if p["doc"] in word and p["native"] and p["text_only"]}
+    if not text_pages:
+        return None
+    rows = [r for r in ledger.get("signing_rows", []) if r["unit"] == unit and r["role"] == "signature"
+            and r["line"] is not None and (r["doc"], r["page"]) in text_pages]
+    # A wholly typeset copy can have a blank, unlabelled or delegated signing block.
+    if not rows and len(text_pages) != len(pages):
+        return None
+    facts = {f["id"]: f for f in graph["facts"] if f.get("unit", f["doc"]) == unit}
+    readings = []
+    for row in rows:
+        ref = row["facts"][0] if len(row["facts"]) == 1 else None
+        fact = facts.get(ref)
+        receipt = None
+        if not fact:
+            state = "multiple" if row["facts"] else "unread"
+        elif fact["status"] == "disputed":
+            state = "disputed"
+        elif fact["field"] != row["field"]:
+            state = "field"
+        elif (fact["quote"] == row["quote"] and fact["value"].strip() in (split(row["quote"])[1], row["quote"])
+              and (fact.get("source_line") or {}).get("rects") and checked(fact, graph)):
+            state, receipt = "checked", fact["attestation"]["rev"]
+        else:
+            state = "pending"
+        readings.append({"row": row["id"], "state": state, "fact": ref, "receipt_rev": receipt})
+    selected = {(r["doc"], r["page"]) for r in rows} or text_pages
+    return {"unit": unit, "pages": [f"{doc}/p{page}" for doc, page in sorted(selected)], "rows": readings}
+
+
+def review_word(finding, ledger, contract, graph):
+    record = word_signatures(ledger, graph, contract.unit)
+    if record is None:
+        return
+    finding["effect_review"]["word_signatures"] = record
+    selected = {reading["row"] for reading in record["rows"]}
+    refs = [ref for row in ledger["signing_rows"] if row["id"] in selected for ref in (row["id"], *row["facts"])]
+    finding["evidence"] = list(dict.fromkeys([*finding["evidence"], *record["pages"], *refs]))
+    detail = "Word 原页仅见排印文字。请取得签署页或可对应本合同版本的电子签署记录，核实约定的签署条件。"
+    if finding["status"] == "ok":
+        finding.update(status="missing", detail=detail)
+    else:
+        finding["detail"] += " " + detail
+
+
 def field_source(row, pages, facts, contract, graph):
     """Describe what supports this one reading, independently of coverage of the whole contract."""
     page = pages.get((row["doc"], row["page"]), {})
@@ -128,7 +180,7 @@ def usable(row, origin, contract, graph):
 def assess(ledger,contract,graph):
     rows=[r for r in ledger.get("signing_rows",[]) if r["unit"]==contract.unit]
     clean=bool(rows) and all(p["native"] and p["text_only"] for p in ledger["pages"] if p["unit"]==contract.unit)
-    current = ledger.get("format") == IMAGE_FORMAT
+    current = ledger.get("format") in IMAGE_FORMATS
     sources = {}
     if current and rows:
         physical = {f"{p['doc']}/p{p['page']}":(p["doc"],p["page"]) for p in ledger["pages"] if p["unit"]==contract.unit}

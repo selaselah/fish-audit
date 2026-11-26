@@ -497,6 +497,10 @@ class EnterpriseFlow(unittest.TestCase):
                          "/app#w/"+a+"/case/"+emp_case+"?rev=1&view=contract-pages")
         self.assertEqual(admin.get(entity_link+"?view=contract-pages").status_code,400)
         self.assertEqual(admin.get(source_link+"&view=contract-pages").status_code,400)
+        self.assertEqual(admin.get(entity_link+"?rev=1&view=signatures").headers["Location"],
+                         "/app#w/"+a+"/case/"+emp_case+"?rev=1&view=signatures")
+        self.assertEqual(admin.get(entity_link+"?view=signatures").status_code,400)
+        self.assertEqual(admin.get(source_link+"&view=signatures").status_code,400)
         self.assertEqual(admin.get("/workpaper/"+emp_case).status_code,404)
         base="/api/w/"+a+"/cases/"+emp_case
         payload={"rev":1,"decision":"confirm","facts":["d01/p1/f1","d01/p1/f2"],"note":"核对演练原图","reviewer":"客户端姓名"}

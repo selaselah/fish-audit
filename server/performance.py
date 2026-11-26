@@ -856,7 +856,12 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
             accepted["evidence"] = list(dict.fromkeys(accepted["evidence"]+(refs or [doc["id"]])))
             accepted["scope"] = list(dict.fromkeys(accepted["scope"]+[doc["id"]]))
         for item in (signed,plan):
-            item.update(status="missing", detail="另有尚未归属的资料，请核对其是否变更本合同或付款约定。")
+            note = "另有尚未归属的资料，请核对其是否变更本合同或付款约定。"
+            if item.get("effect_review", {}).get("word_signatures"):
+                if note not in item["detail"]:
+                    item["detail"] += " " + note
+            else:
+                item.update(status="missing", detail=note)
             item["evidence"] = list(dict.fromkeys(item["evidence"] + (refs or [doc["id"]])))
             if doc["id"] not in item["scope"]:
                 item["scope"].append(doc["id"])

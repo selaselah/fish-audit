@@ -41,12 +41,12 @@ def contract_file(path, rows):
             output.writestr(entry, package.read(name), compress_type=ZIP_DEFLATED)
 
 
-def materials(seed):
+def materials(seed, *, split=True):
     code = hashlib.sha256(seed.encode()).hexdigest()[:8].upper()
-    folder = ROOT / "Word期款数字" / code
+    folder = ROOT / ("Word期款数字" if split else "Word签署凭证") / code
     folder.mkdir(parents=True, exist_ok=True)
     records = documents(code, "complete")
-    rows = [(k, "最终验收合格后支付6 0%" if k == "第二期" else v) for k, v in records.pop("采购合同")]
+    rows = [(k, "最终验收合格后支付6 0%" if split and k == "第二期" else v) for k, v in records.pop("采购合同")]
     contract = folder / "演练采购合同.docx"
     contract_file(contract, rows)
     font = embedded_font("WordPercentageCJK")

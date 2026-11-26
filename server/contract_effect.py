@@ -15,12 +15,14 @@ LEGACY = "contract-effect-sources-v1"
 SEAL_FORMAT = "contract-effect-sources-v2"
 APPROVAL_FORMAT = "contract-effect-sources-v3"
 SIGNING_FORMAT = signing_parties.NATIVE_FORMAT
-FORMAT = signing_parties.IMAGE_FORMAT
-SIGNING_FORMATS = (SIGNING_FORMAT, FORMAT)
+IMAGE_FORMAT = signing_parties.IMAGE_FORMAT
+FORMAT = signing_parties.WORD_FORMAT
+SIGNING_FORMATS = (SIGNING_FORMAT, IMAGE_FORMAT, FORMAT)
 BOARD_FORMATS = (APPROVAL_FORMAT, *SIGNING_FORMATS)
 APPROVAL_SINCE = "2026.11.25.17"
 PARTY_SINCE = "2026.11.26.02"
 IMAGE_SINCE = "2026.11.26.03"
+WORD_SINCE = "2026.11.26.12"
 APPROVAL_FIELDS = {"contract_approval","contract_id","buyer","seller","approval_authority",
                    "approval_result","approved_on","approval_signer"}
 SEAL_FIELDS = {"甲方盖章日期":"buyer_sealed_on","乙方盖章日期":"seller_sealed_on"}
@@ -213,6 +215,8 @@ def review(finding,ledger,contract,graph):
             finding["detail"]+=" "+detail
     if ledger.get("format") in SIGNING_FORMATS:
         signing_parties.review(finding,ledger,contract,graph)
+    if ledger.get("format") == FORMAT:
+        signing_parties.review_word(finding,ledger,contract,graph)
     if not conditions and not mixed and pages:
         return
     if finding["status"]=="ok":
@@ -238,13 +242,19 @@ def verify(report,read_text,*,signing=False):
         if (any(s.get("kind")=="approval_note" and s["unit"] in scope for s in current["conditions"])
                 or any(p.get("kind")=="board_approval" and p["unit"] in scope and not (p["native"] and p["text_only"]) for p in current["pages"])):
             raise ValueError("旧版董事会批准依据另有待核原文或影像，请按现行程序重审后签收。")
-    if signing and marker!=FORMAT and positive:
+    if signing and marker not in (IMAGE_FORMAT, FORMAT) and positive:
         from performance import Material
         scope={unit for finding in positive for unit in finding["scope"]}
         current=sources(graph,read_text)
         for unit in graph["documents_by_kind"].get("contract",[]):
             if unit in scope and any(r["status"]!="ok" for r in signing_parties.assess(current,Material(graph,unit),graph)):
                 raise ValueError("旧版合同的签章主体仍待核对，请按现行程序重审后签收。")
+    if signing and marker != FORMAT and positive:
+        scope = {unit for finding in positive for unit in finding["scope"]}
+        current = sources(graph, read_text)
+        if any(signing_parties.word_signatures(current, graph, unit)
+               for unit in graph["documents_by_kind"].get("contract", []) if unit in scope):
+            raise ValueError("旧版以 Word 文字栏支持了合同签署，请核对签署凭证并重新审计后签收。")
     if signing and marker==SIGNING_FORMAT:
         from performance import Material
         mixed=[f for f in report["findings"] if f["rule"]=="H01" and f.get("effect_review",{}).get("mixed_pages")]
@@ -274,7 +284,8 @@ def verify(report,read_text,*,signing=False):
             seals=[s for s in ledger["conditions"] if s["unit"]==unit and s.get("kind")=="seal_date"]
             if seals and seal_check(Material(graph,unit),seals,True)[1]!="ok":
                 raise ValueError("旧版未核清双方实际盖章日，请按现行规则重审后签收。")
-    if (marker not in (*BOARD_FORMATS,SEAL_FORMAT,LEGACY) or version>=IMAGE_SINCE and marker!=FORMAT or
+    if (marker not in (*BOARD_FORMATS,SEAL_FORMAT,LEGACY) or version>=WORD_SINCE and marker!=FORMAT or
+            version>=IMAGE_SINCE and marker not in (IMAGE_FORMAT,FORMAT) or
             version>=PARTY_SINCE and marker not in SIGNING_FORMATS or version>=APPROVAL_SINCE and marker not in BOARD_FORMATS or
             version>="2026.11.25.03" and marker==LEGACY or policy.get("performance_checks") not in EFFECT_FORMATS or
             graph.get("contract_effect_sources")!=sources(graph,read_text,marker)):

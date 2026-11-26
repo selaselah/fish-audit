@@ -159,7 +159,7 @@ def page_signals(graph, read_text, version=FORMAT):
 
 def observed_units(graph):
     from contract_effect import SEAL_FORMAT, BOARD_FORMATS
-    from signing_parties import IMAGE_FORMAT
+    from signing_parties import IMAGE_FORMATS
     effect_format=graph.get("contract_effect_sources",{}).get("format")
     has_main_contract_seals = effect_format in (SEAL_FORMAT,*BOARD_FORMATS)
     originals=set(graph["documents_by_kind"].get("contract",[])) if has_main_contract_seals else set()
@@ -171,7 +171,7 @@ def observed_units(graph):
             return True
         if field=="contract_addendum":
             # An unverified classification on a main contract can also be a signing-page heading.
-            return effect_format!=IMAGE_FORMAT or unit not in originals or f["status"]=="confirmed" or quote in TITLES
+            return effect_format not in IMAGE_FORMATS or unit not in originals or f["status"]=="confirmed" or quote in TITLES
         return (field in LABELS and (current or field not in QUANTITY_FIELDS) and not
                 (field in ("buyer_sealed_on","seller_sealed_on") and unit in originals))
     return {f.get("unit",f["doc"]) for f in graph["facts"] if observed(f)}
