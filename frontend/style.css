@@ -716,6 +716,22 @@ button.icon-button:hover,button.icon-button:focus-visible { color:var(--accent);
 
 /* Page-image tools use the same coordinate space as the archived highlights. */
 .source-tools { justify-content:space-between; flex-wrap:wrap; padding:0 0 8px; }
+.reader-citation-toggle { min-height:40px; padding:5px 10px; background:var(--surface); border:1px solid var(--field-line); color:var(--secondary); border-radius:5px; font-size:.82rem; }
+.reader-citation-toggle[aria-pressed=true] { color:var(--accent-hover); border-color:var(--accent); background:var(--accent-soft); }
+.reader-citation-detail { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 12px; margin:0 0 8px; padding:5px 9px; border-left:2px solid var(--accent); background:var(--surface); color:var(--secondary); font-size:.83rem; }
+.reader-citation-detail > details { flex:1 1 220px; margin:0; min-width:0; }
+.reader-citation-detail summary,.reader-citation-detail select { min-height:36px; align-content:center; }
+.reader-citation-detail select { min-width:0; max-width:100%; }
+.reader-citing-checks { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:2px 12px; padding-bottom:4px; }
+.reader-citing-checks a { display:grid; align-content:center; gap:1px; min-height:44px; padding:3px 0; border-top:1px solid var(--line); color:var(--accent-hover); text-decoration:none; }
+.reader-citing-checks a:is(:hover,:focus-visible) { text-decoration:underline; }
+.reader-citing-checks small { color:var(--secondary); font-size:.75rem; }
+.reader-citation-marks rect { fill:transparent; stroke:none; pointer-events:all; cursor:pointer; }
+.reader-citation-marks line { stroke:var(--accent); stroke-width:2; stroke-linecap:round; vector-effect:non-scaling-stroke; pointer-events:stroke; cursor:pointer; }
+.reader-citation-marks .current line { stroke:var(--attention); }
+.reader-citation-marks rect:hover { fill:rgb(38 73 182 / 12%); }
+@media (max-width:760px) { .reader-citation-toggle,.reader-citation-detail summary,.reader-citation-detail select { min-height:44px; } }
+@media (max-width:360px) { .reader-citing-checks { grid-template-columns:minmax(0,1fr); } }
 .zoom-group { gap:1px; padding:2px; background:white; border:1px solid var(--line); border-radius:6px; }
 .zoom-group .icon-button,.zoom-fit { min-height:36px; height:36px; }
 .zoom-fit { padding:2px 8px; color:var(--accent); border:0; border-left:1px solid var(--line); border-radius:0; font-size:.85rem; }

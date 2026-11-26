@@ -5,6 +5,103 @@ import {size,inspect} from './review-screen.mjs';
 const q = s=>'document.querySelector('+JSON.stringify(s)+')';
 const all = s=>'[...document.querySelectorAll('+JSON.stringify(s)+')]';
 
+export async function checkCitedOriginal(ctx,id) {
+  const {root,call,evaluate,wait}=ctx, api=root+'/api/cases/'+id;
+  const detail=await (await fetch(api)).json();
+  assert.ok(detail.title.startsWith('合成演练 · '));
+  const {report}=await (await fetch(api+'/reports/8')).json();
+  const ref='d04/p1/f11',accepted='d04/p1/f8', source=report.graph.facts.find(f=>f.id===ref);
+  assert.equal(source?.source_line.text,'实测结果：柜温8℃');
+  const ids=report.findings.filter(f=>f.evidence.includes(ref)).map(f=>f.id);
+  assert.deepEqual(ids,['H02-3','H04-6','H04-7','H05-8']);
+  const digest=createHash('sha256').update(Buffer.from(await (await fetch(api+'/documents/d04/pages/1?rev=8')).arrayBuffer())).digest('hex');
+  assert.equal(digest,source.page_sha256);
+  const open=root+'/workpaper/'+id+'?rev=8&fact='+accepted;
+  const toggle=q('.reader-citation-toggle'), picker=q('#reader-citation-picker');
+  const rect=q('.reader-citation-marks g[data-fact="'+ref+'"] rect');
+  const summary=q('#reader-citation-detail summary');
+  for (const width of [320,360,390,768,1024,1440]) {
+    await size(ctx,width);
+    await call('Page.navigate',{url:open});
+    await wait(toggle+'?.getClientRects().length && '+picker+'.value==='+JSON.stringify(accepted),'original and initial field');
+    assert.equal(await evaluate(q('.reader-citation-marks')),null);
+    await evaluate(toggle+'.click()');
+    await wait(rect+'?.getClientRects().length','citation overlays');
+    if ([390,1440].includes(width)) {
+      await evaluate(q('[aria-label="放大原页"]')+'.click()');
+      await evaluate(q('[aria-label="向右旋转 90°"]')+'.click()');
+    }
+    await evaluate(rect+'.scrollIntoView({block:"center",inline:"center",behavior:"instant"})');
+    const point=await evaluate('(()=>{const r='+rect+'.getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2}})()');
+    if (width===390) {
+      await call('Emulation.setTouchEmulationEnabled',{enabled:true,maxTouchPoints:1});
+      await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});
+      await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+    } else {
+      await call('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1});
+      await call('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount:1});
+    }
+    await wait(picker+'.value==='+JSON.stringify(ref)+' && '+summary+'.textContent.includes("4 项")','pointer chooses archived measurement at '+width);
+    if (width===390) await call('Emulation.setTouchEmulationEnabled',{enabled:false});
+    assert.equal(await evaluate(q('.viewer-facts .located')+'.dataset.fact'),ref);
+    await evaluate(summary+'.click()');
+    assert.deepEqual(await evaluate(all('#reader-citation-detail a')+'.map(a=>[new URL(a.href).searchParams.get("rev"),new URL(a.href).searchParams.get("finding")])'),ids.map(i=>['8',i]));
+    assert.ok(await evaluate(q('#reader-citation-detail a[href*="H04-6"]')+'.textContent.includes("第二期")'));
+    if ([390,1440].includes(width)) {
+      await evaluate(q('[aria-label="向左旋转 90°"]')+'.click()');
+      await inspect(ctx,width,'#reader-citation-detail','issued-page-citations');
+    }
+    if ([320,1440].includes(width)) {
+      const heading=q('.reader-citation-marks g[data-fact="d04/p1/f1"] rect');
+      await evaluate(heading+'.scrollIntoView({block:"center",inline:"center",behavior:"instant"})');
+      const spot=await evaluate('(()=>{const r='+heading+'.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2}})()');
+      for (const type of ['mousePressed','mouseReleased']) await call('Input.dispatchMouseEvent',{type,...spot,button:'left',clickCount:1});
+      const choice=q('#reader-citation-detail select');
+      await wait(choice+'?.options.length===3','coincident title facts require a choice');
+      assert.equal(await evaluate(picker+'.value'),ref);
+      assert.deepEqual(await evaluate('[...'+choice+'.options].slice(1).map(o=>o.value).sort()'),['d04/p1/f1','d04/p1/t2']);
+      assert.ok(await evaluate('[...'+choice+'.options].slice(1).every(o=>o.text.includes(o.value))'));
+      assert.ok(await evaluate(q('#page-dialog')+'.scrollWidth<='+q('#page-dialog')+'.clientWidth+1'),'overlap selector fits');
+      await evaluate(choice+'.value="d04/p1/t2";'+choice+'.dispatchEvent(new Event("change"))');
+      assert.equal(await evaluate(picker+'.value'),'d04/p1/t2');
+    }
+    await evaluate(toggle+'.click()');
+    assert.equal(await evaluate(q('.reader-citation-marks')),null);
+    await evaluate(toggle+'.click()');
+    await evaluate('(()=>{const p='+picker+',i=[...p.options].findIndex(o=>o.value==='+JSON.stringify(accepted)+');p.selectedIndex=i-1;p.focus()})()');
+    for (const type of ['keyDown','keyUp']) await call('Input.dispatchKeyEvent',{type,key:'ArrowDown',code:'ArrowDown',windowsVirtualKeyCode:40});
+    assert.equal(await evaluate('document.activeElement.id'),'reader-citation-picker');
+    assert.equal(await evaluate(picker+'.value'),accepted);
+    assert.ok(await evaluate(q('#reader-citation-detail strong')+'.textContent.includes("第 9 行")'));
+    await evaluate(summary+'.click();'+q('#reader-citation-detail a[href*="H04-6"]')+'.click()');
+    await wait('location.hash.includes("rev=8&finding=H04-6") && !'+q('#page-dialog')+'.open','same archived payment check');
+  }
+  await wait('state.bundle?.rev===8','pinned report after following finding');
+  const rejected=await evaluate(`(()=>{
+    function result(change) {
+      const p=structuredClone(state.bundle.report),f=p.graph.facts.find(f=>f.id==="d04/p1/f11");
+      change(p,f);
+      return OriginalReader.citedFields(p,'d04',1).find(row=>row.fact.id===f.id)?.checks.map(c=>c.id) || [];
+    }
+    return [
+      result((p,f)=>f.source_sha256='wrong'),result((p,f)=>f.page_sha256='other-page'),
+      result((p,f)=>f.source_line.rects=[[.5,.1,.2,.3]]),
+      result(p=>p.graph.nodes.find(n=>n.id==='d04/p1').layer='image'),
+      result((p,f)=>p.graph.edges=p.graph.edges.filter(e=>!(e.type==='records' && e.to===f.id))),
+      result((p,f)=>p.graph.edges=p.graph.edges.filter(e=>!(e.type==='supports_result' && e.from===f.id && e.to==='finding/H04-6')))
+    ];
+  })()`);
+  assert.deepEqual(rejected,[[],[],[],[],[],ids.filter(id=>id!=='H04-6')]);
+  await call('Network.enable'); await call('Network.setBlockedURLs',{urls:['*/documents/d04/pages/1?rev=8']});
+  await call('Page.navigate',{url:open});
+  await wait(q('.source-error')+'?.getClientRects().length','failed archived page');
+  assert.ok(await evaluate(toggle+'.hidden && !'+q('.reader-citation-marks')));
+  await call('Network.setBlockedURLs',{urls:[]});
+  await evaluate(q('.source-error button')+'.click()');
+  await wait(toggle+'?.getClientRects().length && '+q('.page-image')+'.naturalWidth>0','verified page available after retry');
+  console.log('PASS · 已出具 R8 页图反查四项检查，六种屏宽、触摸、缩放旋转、键盘选栏及六种证据缺口');
+}
+
 async function pendingPages(ctx,task,base) {
   const {root,call,evaluate,wait} = ctx;
   const doc = task.documents.find(d=>d.pages>=20);

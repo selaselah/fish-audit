@@ -11,7 +11,7 @@ import {once} from 'node:events';
 import {checkPaymentAcceptance,checkPreviewQueue} from './payment-acceptance.mjs';
 import {checkSignerTiming,checkSignerClock} from './signer-timing.mjs';
 import {checkPaymentProof} from './payment-proof.mjs';
-import {checkOriginalReader} from './original-reader.mjs';
+import {checkOriginalReader,checkCitedOriginal} from './original-reader.mjs';
 import {checkProduct, checkReviewDesign} from './product.mjs';
 import {checkPurchasePreview,checkIntakeEntry} from './purchase-preview.mjs';
 import {checkPerformanceIndex,checkPublicTopics} from './performance-index.mjs';
@@ -120,13 +120,14 @@ const signerClock=caseArgument('--signer-clock-case');
 const publicClock=process.argv.includes('--public-signer-clock');
 const bankAcceptance=caseArgument('--bank-acceptance-case');
 const originalCase=caseArgument('--original-reader-case');
+const citedOriginal=caseArgument('--cited-original-case');
 const publicBank=process.argv.includes('--public-bank-acceptance');
 const previewQueue=process.argv.includes('--preview-queue');
 const acceptanceRoster=process.argv.includes('--acceptance-roster'), publicRoster=process.argv.includes('--public-acceptance-roster');
 const receiptPdf=caseArgument('--acceptance-pdf-case');
 const publicTest=publicPurchase || publicRoster || publicProof || publicClock || publicTiming || publicBank || product || ruleCatalog || publicInspection || publicContractComments || publicWordComments || publicSuppliers || publicPdf || publicFolios;
 const scopeCase=caseArgument('--scope-case'), publicTopics=process.argv.includes('--public-audit-topics');
-const seeded = [receiptPdf,acceptanceRoster,publicTopics,scopeCase,publicTest,proofCase,signerClock,signerTiming,originalCase,bankAcceptance,previewQueue,contractCommentCase,commentCase,supplierCase,pdfCase,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+const seeded = [receiptPdf,acceptanceRoster,publicTopics,scopeCase,publicTest,proofCase,signerClock,signerTiming,originalCase,citedOriginal,bankAcceptance,previewQueue,contractCommentCase,commentCase,supplierCase,pdfCase,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
 const root = originalCase ? process.env.AUDIT_READER_ORIGIN || 'http://127.0.0.1:8000' : publicTest || publicTopics ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
@@ -211,6 +212,8 @@ try {
     await checkSignerClock({root,call,evaluate,wait},signerClock,Number(process.env.AUDIT_SIGNER_REV));
   } else if (signerTiming || publicTiming) {
     await checkSignerTiming({root,call,evaluate,wait},signerTiming,Number(process.env.AUDIT_SIGNER_REV));
+  } else if (citedOriginal) {
+    await checkCitedOriginal({root,call,evaluate,wait},citedOriginal);
   } else if (originalCase) {
     await checkOriginalReader({root,call,evaluate,wait},originalCase,Number(process.env.AUDIT_READER_REV));
   } else if (bankAcceptance || publicBank) {

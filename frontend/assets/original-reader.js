@@ -161,5 +161,92 @@ const OriginalReader = (() => {
     }
     update();
   }
-  return {open, sync, pageNumbers};
+  function citedFields(report,doc,page) {
+    if (!report) return [];
+    const index=graphIndex(report.graph), pageId=doc+'/p'+page;
+    if (index.nodes.get(pageId)?.layer!=='text') return [];
+    if (!index.citedPageFields) {
+      const pages=new Map();
+      for (const finding of report.findings) {
+        for (const {fact,line} of PerformanceIndex.originals(finding,report.graph)) {
+          if (!line || !finding.evidence?.includes(fact.id)) continue;
+          const id=fact.doc+'/p'+fact.page;
+          if (!pages.has(id)) pages.set(id,new Map());
+          const fields=pages.get(id);
+          if (!fields.has(fact.id)) fields.set(fact.id,{fact,line,checks:[]});
+          fields.get(fact.id).checks.push(finding);
+        }
+      }
+      index.citedPageFields=pages;
+    }
+    return [...(index.citedPageFields.get(pageId)?.values() || [])];
+  }
+
+  function markCitations(bundle,doc,page,plane,tools,onPick) {
+    const fields=citedFields(bundle?.report,doc,page);
+    if (!fields.length) return;
+    const caption=el('span','点选标线，或从「本页引文」选择字段。');
+    const details=box('reader-citation-detail',caption);
+    details.id='reader-citation-detail'; details.hidden=true;
+    const layer=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    layer.classList.add('reader-citation-marks'); layer.setAttribute('viewBox','0 0 1000 1000');
+    layer.setAttribute('preserveAspectRatio','none'); layer.setAttribute('aria-hidden','true');
+    let selection='';
+    const button=action('标出审计引文',()=>{
+      details.hidden=!details.hidden;
+      button.setAttribute('aria-pressed',String(!details.hidden));
+      if (details.hidden) { layer.remove(); return; }
+      if (!layer.childElementCount) for (const {fact} of fields) {
+        const group=document.createElementNS(layer.namespaceURI,'g');
+        markPageRects(group,fact.source_line.rects);
+        for (const [l,t,,b] of fact.source_line.rects) {
+          const tick=document.createElementNS(layer.namespaceURI,'line'), x=Math.max(0,l*1000-5);
+          for (const [attr,value] of Object.entries({x1:x,x2:x,y1:t*1000,y2:b*1000})) tick.setAttribute(attr,String(value));
+          group.append(tick);
+        }
+        group.dataset.fact=fact.id; layer.append(group);
+      }
+      plane.append(layer); sync(selection);
+    },'reader-citation-toggle');
+    button.setAttribute('aria-pressed','false'); button.setAttribute('aria-controls',details.id);
+    button.hidden=true; tools.insertBefore(button,tools.lastElementChild); tools.after(details);
+    function sync(ref) {
+      selection=ref;
+      if (details.hidden) return;
+      for (const group of layer.children) group.classList.toggle('current',group.dataset.fact===ref);
+      const source=fields.find(s=>s.fact.id===ref);
+      if (!source) { details.replaceChildren(caption); return; }
+      const links=fold('引用此处的检查 · '+source.checks.length+' 项');
+      const list=box('reader-citing-checks');
+      for (const item of source.checks) {
+        const label=[item.stage?.name,item.title].filter(Boolean).join(' · ');
+        const link=Team.paperLink(label,bundle.report.case_id,'source-jump',new URLSearchParams({rev:bundle.rev,finding:item.id}));
+        link.append(el('small',statusName(item.status)+' · '+item.id));
+        link.addEventListener('click',event=>{
+          if (!event.button && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) dialog.close();
+        });
+        list.append(link);
+      }
+      links.append(list);
+      details.replaceChildren(el('strong','第 '+source.line+' 行 · '+source.fact.label),links);
+    }
+    layer.addEventListener('click',event=>{
+      // Convert the displayed point through the SVG transform, including page zoom and quarter-turns.
+      const transform=layer.getScreenCTM();
+      if (!transform) return;
+      const point=new DOMPoint(event.clientX,event.clientY).matrixTransform(transform.inverse());
+      const x=point.x/1000,y=point.y/1000;
+      const hits=fields.filter(({fact})=>fact.source_line.rects.some(([l,t,r,b])=>x>=l-.006 && x<=r && y>=t && y<=b));
+      if (hits.length===1) { onPick(hits[0].fact.id,false); return; }
+      if (!hits.length) return;
+      const choice=el('select'); choice.setAttribute('aria-label','选择标线内的字段');
+      choice.add(new Option('请选择字段',''));
+      for (const {fact} of hits) choice.add(new Option([fact.label,fact.value,statusName(fact.status),fact.id].join(' · '),fact.id));
+      choice.addEventListener('change',()=>{ if (choice.value) { onPick(choice.value,false); button.focus({preventScroll:true}); } });
+      details.replaceChildren(el('span','此处有 '+hits.length+' 个字段'),choice);
+      choice.focus({preventScroll:true});
+    });
+    return {button,sync};
+  }
+  return {open, sync, pageNumbers, citedFields, markCitations};
 })();

@@ -243,7 +243,7 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
   const nameHolds = new Map([...(coverage?.agent_holds || []),...(coverage?.signer_holds || [])]
     .filter(h=>h.doc===docId && h.page===pageNumber && h.lines?.length).map(h=>[h.fact,h]));
   const editable = canReviewCurrentPaper();
-  let focusRow;
+  let focusRow, annotations;
   function setZoom(index) {
     zoom = Math.max(0,Math.min(index,levels.length-1));
     sheet.style.width=levels[zoom]+'%';
@@ -287,6 +287,7 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
   }
   function locate(fact, raw) {
     const ref = fact?.id || raw?.ref || '';
+    annotations?.sync(ref);
     comparison?.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.pairRef===ref)));
     markPageRects(overlay,fact?.source_line?.rects || raw?.rects || []);
     for (const row of right.querySelectorAll('.evidence-row')) {
@@ -316,6 +317,7 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
     showAllFacts = !fact && !raw;
     right.classList.toggle('quote-index',showAllFacts);
     if (showAllFacts) {
+      annotations?.sync('');
       comparison?.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed','false'));
       markPageRects(overlay,[]);
       for (const row of right.querySelectorAll('.evidence-row')) {
@@ -347,7 +349,14 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
     for (const fact of pageFacts) {
       if (!pageRefs.some(source => source.ref === fact.id)) fieldPicker.add(new Option(fact.label+' · '+fact.value,fact.id));
     }
-    fieldPicker.addEventListener('change',() => selectReference(fieldPicker.value, true));
+    fieldPicker.addEventListener('change',() => selectReference(fieldPicker.value,annotations?.button.getAttribute('aria-pressed')!=='true'));
+    fieldPicker.addEventListener('keydown',event=>{
+      if (annotations?.button.getAttribute('aria-pressed')!=='true' || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+      const last=fieldPicker.options.length-1, at=fieldPicker.selectedIndex;
+      const next={ArrowUp:Math.max(0,at-1),ArrowDown:Math.min(last,at+1),Home:0,End:last}[event.key];
+      if (next===undefined) return;
+      event.preventDefault(); fieldPicker.selectedIndex=next; selectReference(fieldPicker.value,false);
+    });
     const navigator = box('field-navigator',right.querySelector('h3'),fieldPicker);
     if (pageRefs.length > 1 && !comparison) {
       const announcement = el('output','','visually-hidden');
@@ -600,6 +609,7 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
   const loadStatus=el('span','原页加载失败。');
   const retry=action('重新加载页图',load,'ref');
   notice.append(loadStatus,retry); notice.setAttribute('role','alert');
+  annotations=OriginalReader.markCitations(state.bundle,docId,pageNumber,plane,tools,selectReference);
   async function load() {
     const returnFocus=document.activeElement===retry;
     retry.disabled=true;
@@ -609,6 +619,7 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
       if (signal.aborted) return;
       notice.remove();
       sheet.hidden=false; image.hidden=false; overlay.removeAttribute('hidden'); orient();
+      if (annotations) annotations.button.hidden=false;
       rotateLeft.disabled=rotateRight.disabled=fit.disabled=false;
       setZoom(zoom);
       for (const control of controls) control.disabled=false;
