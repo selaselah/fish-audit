@@ -1,14 +1,20 @@
 import copy
+import hashlib
+import io
 import sqlite3
+import tempfile
 import unittest
+from pathlib import Path
+
+from PIL import Image
 
 import payment_execution as execution
-from config import BANK
+from config import BANK, PERFORMANCE, CaseError
 from controls import VERSION, conclusion, execute
 from graph import build_graph
 from payment_history import payment_record
 from payment_index import install, sync_execution
-from storage import Store
+from storage import Store, encode
 from performance import compute, verify_findings
 from test_performance import BANK_DOC, CONTRACT, RECEIPT, WARRANTY, material
 from test_signer_clock import example as timed
@@ -32,6 +38,65 @@ def sample(bank=BANK_DOC, tail=(), extra=()):
 
 
 class ExecutionTests(unittest.TestCase):
+    def test_only_application_checks_original_and_page_again_at_approval(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            store=Store(Path(tmp))
+            image=io.BytesIO()
+            Image.new("RGB",(32,45),"white").save(image,"JPEG")
+            data=image.getvalue()
+            sha=hashlib.sha256(data).hexdigest()
+            doc={"id":"d01","name":"合成付款申请.jpg","ext":".jpg","size":len(data),"sha256":sha}
+            text=[label+"："+value if label else value for _,label,value in APP]
+            layer={"type":"text","clause_text_only":True,"lines":{str(i):[[.1,.1,.6,.2]] for i in range(1,len(text)+1)}}
+            facts=[{"field":field,"value":value,"quote":quote,"region":"top"} for (field,_,value),quote in zip(APP,text)]
+            page={"doc":"d01","number":1,"width":32,"height":45,"sha256":sha,"layer":layer,"text":"\n".join(text),
+                  "extraction":{"output":{"quality":"readable","facts":facts}}}
+            case="synthetic-only-request"
+            store.create(case,"合成演练 · 单独申请",[doc],case,case,PERFORMANCE)
+            store.put_pages(case,"d01",[page])
+            folder=store.files/case/"d01"
+            folder.mkdir(parents=True,exist_ok=True)
+            original,preview=folder/"original.jpg",folder/"1.jpg"
+            for path in (original,preview):
+                path.write_bytes(data)
+            graph=build_graph([doc],[page],{})
+            graph["profile"]=PERFORMANCE
+            findings=execute(graph,PERFORMANCE)
+            rows=graph[execution.KEY]["rows"]
+            geometry={str(r["line"]):layer["lines"][str(r["line"])] for r in rows if r["line"]}
+            calls={"pages":[{"doc":"d01","page":1,"page_sha256":sha,"payment_execution_rects":geometry}]}
+            report={"case_id":case,"graph":graph,"findings":findings,"result":conclusion(findings),
+                    "policy":{**VERSION,"profile":PERFORMANCE},"calls":calls}
+            store.save_report(case,report,hashlib.sha256(encode(report).encode()).hexdigest(),{})
+            pinned=store.approval_sources(case,1,None)
+            self.assertEqual(set(pinned[0][0].files),{original,preview})
+            with store.connect(True) as db:
+                store.recheck_approval(db,case,1,{},payment_sources=pinned)
+            preview.write_bytes(data+b"changed")
+            with self.assertRaises(CaseError),store.connect(True) as db:
+                store.recheck_approval(db,case,1,{},payment_sources=pinned)
+            with self.assertRaisesRegex(CaseError,"签收前核对"):
+                store.approval_sources(case,1,None)
+
+    def test_receipt_issued_before_conclusion_checks_cannot_be_newly_approved(self):
+        graph,read=sample(tail=[NOTE])
+        del graph[execution.KEY]
+        graph["nodes"]=[n for n in graph["nodes"] if n["type"]!="payment_execution_line"]
+        graph["edges"]=[e for e in graph["edges"] if e["type"]!="payment_execution_source"]
+        graph["profile"]=BANK
+        legacy={"case_id":"old","policy":{"version":"2026.11.23.1","profile":BANK},"graph":graph,
+                "findings":[{"rule":"B05","status":"ok"}]}
+        raw=encode(legacy)
+        with tempfile.TemporaryDirectory() as tmp,sqlite3.connect(":memory:") as db:
+            store=Store(Path(tmp))
+            db.row_factory=sqlite3.Row
+            db.executescript("CREATE TABLE cases(id,created); CREATE TABLE reports(case_id,rev,content,hash); CREATE TABLE pages(case_id,doc,number,text,layer);")
+            db.execute("INSERT INTO cases VALUES('old','2026-11-23')")
+            db.execute("INSERT INTO reports VALUES('old',1,?,?)",(raw,hashlib.sha256(raw.encode()).hexdigest()))
+            db.execute("INSERT INTO pages VALUES('old','d04',1,?,'{}')",(read("d04",1),))
+            with self.assertRaisesRegex(CaseError,"旧版付款材料"):
+                store.recheck_approval(db,"old",1,{})
+
     def test_original_qualification_stops_paid_conclusion_even_if_model_omits_footer(self):
         graph, _ = sample(tail=[NOTE])
         findings = execute(graph, graph["profile"])

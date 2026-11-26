@@ -64,6 +64,15 @@ BACKGROUND_WRITER = ContextVar("fish_audit_background_writer",default=None)
 TRANSIENT_WRITER_CODES = {getattr(sqlite3,k) for k in ("SQLITE_BUSY","SQLITE_BUSY_RECOVERY","SQLITE_BUSY_TIMEOUT") if hasattr(sqlite3,k)}
 
 
+FULL_PAGE_EVIDENCE = (
+    "quality_change", "acceptance_authority", "signer_timing", "date_checks", "batch_acceptance",
+    "effect_review", "warranty_check", "payment_window", "acceptance_reservations", "acceptance_comments",
+    "contract_comments", "stage_payments", "invoice_receipt", "payment_change", "payment_opinion",
+    "equipment_models", "inspection_coverage", "payment_acceptance", "execution_basis", "contract_folios",
+    "prior_installment",
+)
+
+
 def stamp():
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
@@ -765,7 +774,9 @@ class Store:
             except (KeyError, TypeError, ValueError) as error:
                 raise CaseError(f"签收前核对回单所据验收原件失败。{error}", 409) from error
             if row["profile"]!=BANK:
-                checks = [f for f in paper["findings"] if f.get("delegations") or f.get("quality_change") or f.get("acceptance_authority") or f.get("signer_timing") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("acceptance_comments") or f.get("contract_comments") or f.get("stage_payments") or f.get("invoice_receipt") or f.get("payment_change") or f.get("payment_opinion") or f.get("equipment_models") or f.get("inspection_coverage") or f.get("payment_acceptance") or f.get("contract_folios") or f.get("prior_installment")]
+                full_page_checks = [f for f in paper["findings"] if any(f.get(key) for key in FULL_PAGE_EVIDENCE)]
+                checks = list(full_page_checks)
+                checks.extend(f for f in paper["findings"] if f.get("delegations") and f not in full_page_checks)
                 packets = graph.get("receipt_packet_sources",{}).get("packets",[])
                 timing_pages = graph.get("reinspection_wait_sources", {}).get("pages", [])
                 folio_pages = graph.get("contract_folio_sources", {}).get("pages", [])
@@ -781,7 +792,7 @@ class Store:
                 originals.update(p["doc"] for p in packets)
                 originals.update(p["doc"] for p in timing_pages)
                 originals.update(p["doc"] for p in folio_pages)
-                full_pages = bool(packets) or any(f.get("quality_change") or f.get("acceptance_authority") or f.get("signer_timing") or f.get("date_checks") or f.get("batch_acceptance") or f.get("effect_review") or f.get("warranty_check") or f.get("payment_window") or f.get("acceptance_reservations") or f.get("acceptance_comments") or f.get("contract_comments") or f.get("stage_payments") or f.get("invoice_receipt") or f.get("payment_change") or f.get("payment_opinion") or f.get("equipment_models") or f.get("inspection_coverage") or f.get("payment_acceptance") or f.get("contract_folios") or f.get("prior_installment") for f in checks)
+                full_pages = bool(packets or full_page_checks)
                 fields = [f["id"] for f in graph["facts"] if f["id"] in named or (full_pages or timing_pages) and f["doc"] in originals]
                 pages = {(p["doc"],p["page"]) for p in paper["calls"]["pages"] if p["doc"] in originals}
                 registered = {(r["doc"],r["number"]) for r in db.execute("SELECT doc,number FROM pages WHERE case_id=?",(case_id,))
@@ -867,16 +878,22 @@ class Store:
         if not row or hashlib.sha256(row["content"].encode()).hexdigest()!=row["hash"]:
             raise CaseError("待签收底稿与留存的版本摘要不符。",409)
         paper = json.loads(row["content"])
-        if "conclusions.py" in paper["policy"].get("code_sha256",{}):
+        def page_text(doc,page):
+            row = db.execute("SELECT text FROM pages WHERE case_id=? AND doc=? AND number=?",(case_id,doc,page)).fetchone()
+            return row[0] if row else None
+        def page_layout(doc, page):
+            saved = db.execute("SELECT layer FROM pages WHERE case_id=? AND doc=? AND number=?",
+                               (case_id,doc,page)).fetchone()
+            return json.loads(saved[0] or "{}") if saved else {}
+        checks_conclusions = "conclusions.py" in paper["policy"].get("code_sha256", {})
+        if checks_conclusions or paper["policy"].get("payment_execution") or any(f["rule"] in ("B04","B05","H04","H05","H06") for f in paper["findings"]):
+            try:
+                payment_execution.verify(paper,page_text,signing=True,read_layout=page_layout)
+            except (KeyError,TypeError,ValueError) as error:
+                raise CaseError(f"签收前核对扣款凭证失败。{error}",409) from error
+        if checks_conclusions:
             try:
                 verify_result(paper)
-                def page_text(doc,page):
-                    row = db.execute("SELECT text FROM pages WHERE case_id=? AND doc=? AND number=?",(case_id,doc,page)).fetchone()
-                    return row[0] if row else None
-                def page_layout(doc, page):
-                    saved = db.execute("SELECT layer FROM pages WHERE case_id=? AND doc=? AND number=?",
-                                       (case_id,doc,page)).fetchone()
-                    return json.loads(saved[0] or "{}") if saved else {}
                 verify_quality_numbers(paper,page_text)
                 try:
                     verify_performance(paper,signing=True)
@@ -894,7 +911,6 @@ class Store:
                     verify_reservations(paper,page_text,signing=True)
                     verify_inspection(paper,page_text,signing=True)
                     verify_payment_acceptance(paper,page_text,signing=True)
-                    payment_execution.verify(paper,page_text,signing=True,read_layout=page_layout)
                     verify_prior_installment(paper,page_text,submitted=row["submitted"],signing=True)
                     verify_payment_releases(paper,page_text,submitted=row["submitted"])
                     verify_repair_completion(paper,page_text,signing=True)
@@ -943,18 +959,21 @@ class Store:
         chronology = any(f.get("date_checks") for f in paper["findings"])
         invoice_terms_checked = any(f.get("invoice_receipt") for f in paper["findings"])
         model_checked = any(f.get("equipment_models") for f in paper["findings"])
+        execution_checked = any(f.get("execution_basis") for f in paper["findings"])
         bank_acceptance_checked = any(f.get("payment_acceptance") for f in paper["findings"])
         inspection_checked = any(f.get("inspection_coverage") for f in paper["findings"])
         folios_checked = any(f.get("contract_folios") for f in paper["findings"])
         multi_transfers = any(f.get("stage_payments") for f in paper["findings"])
         packets_checked = bool(graph.get("receipt_packet_sources",{}).get("packets")) and any(f["rule"]=="H02" for f in paper["findings"])
-        if graph.get("profile")!=BANK and (contract_comments_checked or comments_checked or folios_checked or changed or named_acceptance or chronology or batches or packets_checked or multi_transfers or invoice_terms_checked or model_checked or inspection_checked or bank_acceptance_checked or effect_checked or warranty_checked or windows_checked or reservations_checked or any(f.get("delegations") for f in paper["findings"])):
+        if graph.get("profile")!=BANK and (contract_comments_checked or comments_checked or folios_checked or changed or named_acceptance or chronology or batches or packets_checked or multi_transfers or invoice_terms_checked or model_checked or inspection_checked or bank_acceptance_checked or execution_checked or effect_checked or warranty_checked or windows_checked or reservations_checked or any(f.get("delegations") for f in paper["findings"])):
             if not payment_sources or len(payment_sources)!=1:
                 raise CaseError("签收前需重新核对合同及所据履约附件原件。",409)
             source = payment_sources[0][0]
             if (source.case_id,source.revision,source.report_hash)!=(case_id,revision,row["hash"]):
                 raise CaseError("履约原件所据的签收版已变化。",409)
             source.guard(db)
+            if execution_checked:
+                event(db,case_id,"payment_execution_sources",f"签收前核对 R{revision} 的付款凭证原件、页图和说明所据原行。")
             if invoice_terms_checked:
                 event(db,case_id,"invoice_receipt_sources",f"签收前核对 R{revision} 的合同收票条款、发票原件、买方签收及付款回单。")
             if folios_checked:
@@ -985,7 +1004,7 @@ class Store:
                 event(db,case_id,"acceptance_signature_sources",f"签收前核对 R{revision} 的具名条款、验收签字及相关页图，共 {len(source.files)} 个文件。")
             if changed:
                 event(db,case_id,"addendum_sources",f"签收前核对 R{revision} 合同、补充协议、验收原件和相关页图，共 {len(source.files)} 个文件。")
-            elif not contract_comments_checked and not comments_checked and not folios_checked and not named_acceptance and not chronology and not batches and not packets_checked and not multi_transfers and not effect_checked and not warranty_checked and not windows_checked and not reservations_checked and not invoice_terms_checked:
+            elif not contract_comments_checked and not comments_checked and not folios_checked and not named_acceptance and not chronology and not batches and not packets_checked and not multi_transfers and not execution_checked and not effect_checked and not warranty_checked and not windows_checked and not reservations_checked and not invoice_terms_checked:
                 event(db,case_id,"mandate_sources",f"签收前核对 R{revision} 的合同签字、委托书及相关页图，共 {len(source.files)} 个文件。")
         if graph.get("profile") == PERFORMANCE:
             return None
