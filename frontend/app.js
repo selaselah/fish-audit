@@ -650,7 +650,7 @@ function citation(ref) {
   }
   const source = index?.nodes.get(ref);
   if (source?.type==='acceptance_pdf_inspection') {
-    return PerformanceIndex.receiptOriginal(state.bundle.report.graph,ref)?.button || el('span','验收 PDF 签署来源待核','small');
+    return PerformanceIndex.receiptCitation(state.bundle.report.graph,ref) || el('span','验收 PDF 签署来源待核','small');
   }
   if (['contract_word_review','contract_word_comment'].includes(source?.type)) return AcceptanceComments.citation(ref,'contract');
   if (['acceptance_word_review','acceptance_word_comment'].includes(source?.type)) return AcceptanceComments.citation(ref);

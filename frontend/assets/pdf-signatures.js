@@ -1,21 +1,29 @@
 const PdfSignatures = (() => {
+  function validSignatures(record) {
+    if (!record || !['unsigned','current','earlier','mismatch','review'].includes(record.state) ||
+        !Array.isArray(record.signatures) || record.state==='unsigned' && record.signatures.length) return false;
+    for (const item of record.signatures) {
+      if (!['current','earlier','mismatch','review','timestamp'].includes(item?.state)) return false;
+      if (item.state==='review' || item.state==='timestamp') continue;
+      const wholeFile=item.coverage==='ENTIRE_FILE' && item.ends_at===record.size;
+      const oldRevision=item.coverage==='ENTIRE_REVISION' && item.ends_at<record.size;
+      if (!Number.isSafeInteger(item.revision) || item.revision<1 || !Number.isSafeInteger(item.ends_at) ||
+          item.ends_at<1 || !Number.isSafeInteger(record.size) || !/^[a-f0-9]{64}$/.test(item.certificate_sha256) ||
+          !['sha256','sha384','sha512'].includes(item.digest) ||
+          !['/adbe.pkcs7.detached','/ETSI.CAdES.detached'].includes(item.subfilter) ||
+          !(wholeFile || oldRevision) || item.state==='current' && !wholeFile || item.state==='earlier' && !oldRevision) return false;
+    }
+    const states=record.signatures.map(s=>s.state);
+    if (['current','earlier','mismatch'].includes(record.state) && !states.includes(record.state)) return false;
+    if (['current','earlier'].includes(record.state) && states.some(s=>s==='mismatch' || s==='review')) return false;
+    return record.state!=='earlier' || !states.includes('current');
+  }
   function panel(finding, graph, findings, calls, policy) {
     const check=finding?.effect_review?.pdf_execution, ledger=graph?.pdf_execution_sources;
     if (!check || finding.status==='ok' || ledger?.format!=='pdf-execution-v1' || !finding.scope.includes(check.unit) ||
         !graph.documents_by_kind.contract?.includes(check.unit)) return null;
     const record=ledger.documents.find(r=>r.id===check.source && r.units.includes(check.unit));
-    if (!record || !['unsigned','current','earlier','mismatch','review'].includes(record.state) ||
-        !Array.isArray(record.signatures) || record.state==='unsigned' && record.signatures.length) return null;
-    for (const item of record.signatures) {
-      if (!['current','earlier','mismatch','review','timestamp'].includes(item.state)) return null;
-      if (['current','earlier','mismatch'].includes(item.state) &&
-          (!Number.isSafeInteger(item.revision) || item.revision<1 || !Number.isSafeInteger(item.ends_at) ||
-           item.ends_at<1 || !Number.isSafeInteger(record.size) || item.ends_at>record.size ||
-           !/^[a-f0-9]{64}$/.test(item.certificate_sha256) ||
-           item.state==='current' && (item.coverage!=='ENTIRE_FILE' || item.ends_at!==record.size) ||
-           item.state==='earlier' && (item.coverage!=='ENTIRE_REVISION' || item.ends_at>=record.size))) return null;
-    }
-    if (['current','earlier','mismatch'].includes(record.state) && !record.signatures.some(s=>s.state===record.state)) return null;
+    if (!validSignatures(record)) return null;
     const index=graphIndex(graph), doc=index.documents.get(record.doc), audit=index.nodes.get(record.id);
     const refs=new Set(traceReferences(graph,finding));
     if (doc?.ext!=='.pdf' || !doc.sha256 || doc.sha256!==record.original_sha256 || audit?.type!=='pdf_signature_inspection' ||
@@ -57,5 +65,5 @@ const PdfSignatures = (() => {
     }
     return root;
   }
-  return {panel};
+  return {panel,validSignatures};
 })();

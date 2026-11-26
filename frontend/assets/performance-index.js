@@ -58,7 +58,7 @@ const PerformanceIndex = (() => {
     }
     return sources;
   }
-  function sourceView(item, graph) {
+  function sourceView(item, graph, receipts=[]) {
     const rows=originals(item,graph);
     if (!rows.length) return el('p','本版没有可从此项直接打开的字段引文。','scope-empty');
     const pick=el('select'), fileGroups=new Map();
@@ -75,8 +75,9 @@ const PerformanceIndex = (() => {
       H03:['payment_stage','payment_term'], H05:['payment_designation','transfer_status','paid_on'],
     }[item.rule] || [];
     let initial=rows.findIndex(row=>row.fact.id===item.stage?.clause_ref && item.rule==='H04');
-    if (item.rule==='H02' && item.acceptance_execution?.length) {
-      const refs=new Set(item.acceptance_execution.flatMap(id=>receiptOriginal(graph,id)?.record.fields || []));
+    if (item.rule==='H02' && receipts.length &&
+        (item.status==='missing' || receipts.some(r=>r.record.state==='mismatch'))) {
+      const refs=new Set(receipts.flatMap(r=>r.record.fields));
       initial=rows.findIndex(({fact})=>refs.has(fact.id));
     }
     const authority=item.rule==='H02' && item.acceptance_authority;
@@ -110,7 +111,9 @@ const PerformanceIndex = (() => {
       const {fact,doc,line}=rows[Number(pick.value)];
       quote.textContent=line?fact.source_line.text:fact.quote;
       place.textContent=doc.name+' · 第 '+fact.page+' 页'+(line?' '+line+' 行':'');
-      quality.replaceChildren(el('span',line?'原行':'提取引文'),tag(fact.status));
+      const status=tag(fact.status);
+      if (fact.status==='confirmed' && receipts.some(r=>r.record.fields.includes(fact.id))) status.textContent='栏中文字已核';
+      quality.replaceChildren(el('span',line?'原行':'提取引文'),status);
       open.dataset.fact=fact.id;
       crop.replaceChildren(); showExcerpt();
       if (line) EvidenceCompare.lineExcerpt(fact,graphIndex(graph)).then(canvas=>{
@@ -143,29 +146,109 @@ const PerformanceIndex = (() => {
   }
   function receiptOriginal(graph,id) {
     const ledger=graph.acceptance_pdf_sources, index=graphIndex(graph);
-    if (ledger?.format!=='pdf-acceptance-execution-v1') return null;
-    const record=ledger.records.find(r=>r.id===id), node=index.nodes.get(id);
+    if (ledger?.format!=='pdf-acceptance-execution-v1' || !Array.isArray(ledger.records)) return null;
+    const inspected=index.receiptProofs ??= new Map();
+    if (inspected.has(id)) return inspected.get(id);
+    const record=ledger.records.find(r=>r?.id===id), node=index.nodes.get(id);
     const labels={typeset:'仅见排印文字',visual:'签认图像待核',current:'本版有电子签名，身份待核',
       earlier:'签名覆盖较早版',mismatch:'签名校验不符',review:'签署凭证待核'};
     if (!record || node?.type!=='acceptance_pdf_inspection' || node.doc!==record.doc || node.state!==record.state ||
-        !Object.hasOwn(labels,record.state) || !record.pages?.length) return null;
+        id!=='acceptance-pdf/'+record.unit || !Object.hasOwn(labels,record.state) ||
+        !Array.isArray(record.pages) || !record.pages.length || !Array.isArray(record.fields)) return null;
     const doc=index.documents.get(record.doc);
     if (doc?.ext!=='.pdf' || !/^[a-f0-9]{64}$/.test(doc.sha256) || doc.sha256!==record.original_sha256 ||
         doc.sha256!==node.sha256 || index.nodes.get(doc.id)?.sha256!==doc.sha256) return null;
+    const unit=(graph.audit_documents || graph.documents).find(u=>u.id===record.unit);
+    if (!unit || (unit.source || unit.id)!==doc.id || !['acceptance','reinspection'].some(k=>graph.documents_by_kind?.[k]?.includes(unit.id))) return null;
+    if (!Number.isSafeInteger(doc.pages) || doc.pages<1 || !Number.isSafeInteger(doc.size) || doc.size<1 ||
+        record.pages.length!==(unit.source?1:doc.pages)) return null;
+    if (record.pages.some((p,i)=>!p || p.ref!==doc.id+'/p'+(unit.source?unit.page:i+1) ||
+        !['text','image_overlay','unknown'].includes(p.layer) || typeof p.has_text!=='boolean' ||
+        typeof p.typeset!=='boolean' || p.typeset && p.layer!=='text')) return null;
+    const unsigned=['typeset','visual'].includes(record.state);
+    if (unsigned && record.pages.some(p=>p.layer==='unknown') ||
+        record.state==='typeset' && (!record.pages.every(p=>p.typeset) || !record.pages.some(p=>p.has_text)) ||
+        record.state==='visual' && record.pages.every(p=>p.typeset)) return null;
+    const signature={state:unsigned?'unsigned':record.state,size:doc.size,
+      original_sha256:doc.sha256,signatures:record.signatures};
+    if (!PdfSignatures.validSignatures(signature)) return null;
     const refs=[doc.id,...record.pages.map(p=>p.ref),...record.fields];
-    if (!graph.edges.some(e=>e.type==='acceptance_pdf_source' && e.from===record.unit && e.to===id &&
-        e.evidence.length===refs.length && e.evidence.every((ref,i)=>ref===refs[i]))) return null;
+    if (new Set(refs).size!==refs.length || !graph.edges.some(e=>e.type==='acceptance_pdf_source' && e.from===record.unit &&
+        e.to===id && e.evidence?.length===refs.length && e.evidence.every((ref,i)=>ref===refs[i]))) return null;
     if (record.pages.some(p=>index.nodes.get(p.ref)?.type!=='page' || !p.ref.startsWith(doc.id+'/p') ||
         !/^[a-f0-9]{64}$/.test(p.sha256) || index.nodes.get(p.ref).sha256!==p.sha256)) return null;
     const fields=record.fields.map(ref=>index.facts.get(ref));
     if (fields.some(f=>!f || f.doc!==doc.id || (f.unit || f.doc)!==record.unit || f.field!=='acceptance_signer' ||
         f.source_sha256!==doc.sha256 || !record.pages.some(p=>p.ref===f.doc+'/p'+f.page && p.sha256===f.page_sha256))) return null;
     const first=fields[0], page=first?.page || Number(record.pages[0].ref.split('/p').pop());
-    const button=action('',()=>openPage(doc.id,page,first?.id),'scope-pdf-receipt');
+    const proof={record,signature,doc,page,field:first?.id,label:labels[record.state]};
+    inspected.set(id,proof);
+    return proof;
+  }
+  function receiptButton({record,doc,page,field,label}) {
+    const button=action('',()=>openPage(doc.id,page,field),'scope-pdf-receipt');
     button.setAttribute('aria-haspopup','dialog'); button.setAttribute('aria-controls','page-dialog');
-    button.append(el('strong',labels[record.state]),el('small',doc.name+' · 第 '+page+' 页'),glyph('arrows-angle-expand'));
-    button.dataset.pdfAcceptance=id;
-    return {record,button};
+    button.append(glyph('file-earmark-text'),el('strong',label),el('small',doc.name+' · 第 '+page+' 页'),glyph('arrows-angle-expand'));
+    button.dataset.pdfAcceptance=record.id;
+    return button;
+  }
+  function receiptCitation(graph,id) {
+    const proof=receiptOriginal(graph,id);
+    return proof && receiptButton(proof);
+  }
+  function receiptEvidence(item,report) {
+    const {graph,policy}=report;
+    if (policy.acceptance_pdf!=='pdf-acceptance-execution-v1' || !['H02','H04','H05','H06'].includes(item.rule) || item.status==='ok') return [];
+    const index=graphIndex(graph), finding=index.nodes.get('finding/'+item.id);
+    if (finding?.type!=='finding' || finding.status!==item.status || finding.detail!==item.detail) return [];
+    const supports=index.receiptLinks ??= new Set(graph.edges.filter(e=>e.type==='supports_result' &&
+      e.evidence?.length===1 && e.evidence[0]===e.from).map(e=>e.from+' '+e.to));
+    const cited=new Set(item.evidence.filter(ref=>supports.has(ref+' '+finding.id)));
+    let ids=[...cited].filter(ref=>index.nodes.get(ref)?.type==='acceptance_pdf_inspection');
+    if (item.rule==='H02') {
+      if (Array.isArray(item.acceptance_execution)) ids=ids.filter(id=>item.acceptance_execution.includes(id));
+      else if (Object.hasOwn(item,'acceptance_execution') || policy.version!=='2026.11.26.27' ||
+        policy.code_sha256?.['controls.py']!=='eeff68cc20371bace1b158ebf70cc33885603b3913d8896f7b95236be19cd8a6') return [];
+    }
+    return ids.map(id=>receiptOriginal(graph,id)).filter(source=>{
+      if (!source) return false;
+      const {record}=source;
+      return [record.doc,...record.fields,...record.pages.map(p=>p.ref)].every(ref=>cited.has(ref)) &&
+        record.pages.every(p=>report.calls?.pages?.some(c=>c.doc===record.doc && record.doc+'/p'+c.page===p.ref && c.page_sha256===p.sha256));
+    });
+  }
+  function receiptPanel(receipt,item,related,graph,openPayment) {
+    const tools=box('scope-proof-tools'), panel=box('scope-proof-detail');
+    panel.id='receipt-detail-'+item.id+'-'+encodeURIComponent(receipt.record.id);
+    panel.hidden=true;
+    function control(label,build) {
+      const button=action(label,()=>{
+        const expand=button.getAttribute('aria-expanded')==='false';
+        for (const b of tools.children) b.setAttribute('aria-expanded',String(expand && b===button));
+        panel.replaceChildren(...(expand?[build()]:[])); panel.hidden=!expand;
+      });
+      button.setAttribute('aria-expanded','false'); button.setAttribute('aria-controls',panel.id);
+      tools.append(button);
+      return button;
+    }
+    control('签名覆盖范围',()=>PdfSignatureCard.digital(receipt.signature)).dataset.receiptRange=receipt.record.id;
+    if (related.length) {
+      control('付款检查 · '+related.length+' 项',()=>{
+        const list=box('scope-receipt-links');
+        for (const f of related) {
+          const original=originals(f,graph).find(r=>r.fact.id===f.stage.clause_ref && ['anchored','confirmed'].includes(r.fact.status));
+          const shares=original?.fact.value.normalize('NFKC').match(/\d+(?:\.\d+)?%/g) || [];
+          const share=shares.length===1 && Number(shares[0].slice(0,-1))===Number(f.stage.share)?' · '+shares[0]:'';
+          const label={H04:'付款条件',H05:'实付时点',H06:'回单合计'}[f.rule];
+          const button=action('',()=>openPayment(f,receipt.record.id),'scope-receipt-phase');
+          button.dataset.receiptPhase=f.id;
+          button.append(el('strong',f.stage.name+share),el('span',label),tag(f.status),glyph('chevron-down'));
+          list.append(button);
+        }
+        return list;
+      }).dataset.receiptPayments=receipt.record.id;
+    }
+    return box('scope-receipt-proof',receiptButton(receipt),tools,panel);
   }
   function pairedLines(item,report) {
     if (item.execution_basis) {
@@ -192,7 +275,7 @@ const PerformanceIndex = (() => {
     }));
     return {title:'合同标准与验收实测',rows};
   }
-  function pairView(item,report) {
+  function pairView(item,report,receipts) {
     const pair=pairedLines(item,report);
     if (!pair) return null;
     const section=box('scope-originals');
@@ -216,7 +299,7 @@ const PerformanceIndex = (() => {
       row.excerpt?.().then(canvas=>{if (canvas && crop.isConnected) {crop.replaceChildren(canvas);draw();}}).catch(()=>{});
     }
     draw();
-    section.append(lazyFold('其他字段引文',()=>[sourceView(item,report.graph)]));
+    section.append(lazyFold('其他字段引文',()=>[sourceView(item,report.graph,receipts)]));
     return section;
   }
   function overview(findings,graph,rev) {
@@ -224,6 +307,17 @@ const PerformanceIndex = (() => {
     const summary=box('performance-statuses scope-cards'), dialog=el('dialog','','scope-dialog');
     dialog.id='performance-index'; dialog.setAttribute('aria-labelledby','scope-title');
     const title=el('h2'); title.id='scope-title';
+    let previous;
+    const back=action('返回交付验收',()=>{
+      const source=previous;
+      previous=null; back.hidden=true;
+      showGroup(source.group,source.item);
+      const toggle=detail.querySelector('[data-receipt-payments="'+CSS.escape(source.proof)+'"]');
+      if (!toggle) return;
+      toggle.click();
+      toggle.closest('.scope-receipt-proof').querySelector('[data-receipt-phase="'+CSS.escape(source.phase)+'"]')?.focus();
+    },'text-button scope-back');
+    back.hidden=true;
     const close=action('',()=>dialog.close(),'icon-button');
     close.append(glyph('x-lg')); close.setAttribute('aria-label','关闭履约检查');
     const filters=box('scope-filters'), checks=box('scope-checks'), detail=el('section','','scope-detail'), mobile=el('select');
@@ -231,7 +325,7 @@ const PerformanceIndex = (() => {
     checks.setAttribute('role','group'); checks.setAttribute('aria-label','本组检查');
     mobile.className='scope-check-select'; mobile.setAttribute('aria-label','选择检查项');
     detail.setAttribute('aria-labelledby','scope-check-title');
-    dialog.append(box('scope-head',box('',el('small','合同履约审查 · R'+rev),title),close),filters,mobile,box('scope-body',checks,detail));
+    dialog.append(box('scope-head',box('',box('scope-context',back,el('small','合同履约审查 · R'+rev)),title),close),filters,mobile,box('scope-body',checks,detail));
     let shown=[],group,selected;
     function select(item) {
       selected=item.id; mobile.value=selected;
@@ -243,24 +337,38 @@ const PerformanceIndex = (() => {
       const jump=specialist(item);
       if (jump) jump.addEventListener('click',()=>dialog.close(),{capture:true});
       const actions=box('scope-actions',...(jump?[jump]:[]),complete);
-      const paired=pairView(item,state.bundle.report);
+      const receipts=receiptEvidence(item,state.bundle.report);
+      const paired=pairView(item,state.bundle.report,receipts);
       const roster=AcceptanceRoster.bind(item,state.bundle.report);
       detail.replaceChildren(box('scope-check-state',el('span',item.id,'mono'),tag(item.status)),heading);
-      const cited=traceReferences(graph,item);
-      for (const id of item.acceptance_execution || []) {
-        const receipt=cited.includes(id) && receiptOriginal(graph,id);
-        if (receipt) detail.append(receipt.button);
+      let detailText=item.detail || '';
+      if (paired) detail.append(paired);
+      else if (detailText && (receipts.length && ['issue','risk'].includes(item.status) || roster && item.status==='issue')) {
+        const end=detailText.indexOf('。')+1 || detailText.length;
+        detail.append(el('p',detailText.slice(0,end),'scope-reason')); detailText=detailText.slice(end).trimStart();
+      }
+      const payments=groupsHere.find(g=>g.id==='payment');
+      const byProof=new Map(receipts.map(r=>[r.record.id,[]]));
+      if (receipts.length && item.rule==='H02' && payments) {
+        for (const phase of payments.items.filter(f=>f.stage)) {
+          for (const r of receiptEvidence(phase,state.bundle.report)) byProof.get(r.record.id)?.push(phase);
+        }
+      }
+      for (const receipt of receipts) {
+        detail.append(receiptPanel(receipt,item,byProof.get(receipt.record.id),graph,(phase,proof)=>{
+          previous={group,item,proof,phase:phase.id}; back.hidden=false;
+          showGroup(payments,phase); back.focus();
+        }));
       }
       if (roster) {
-        if (item.status==='issue' && item.detail) detail.append(el('p',item.detail.split('。')[0]+'。','scope-reason'));
         detail.append(AcceptanceRosterCard.render(roster,'scope-signers','page-dialog'));
-        if (item.detail) detail.append(fold('本项检查结论',el('p',item.detail,'scope-reason')));
-      } else if (!paired && item.detail) {
-        const reason=el('p',item.detail,'scope-reason');
-        detail.append(item.detail.length<=100?reason:fold('阅读本项结论',reason));
+        if (detailText) detail.append(fold('本项检查结论',el('p',detailText,'scope-reason')));
+      } else if (!paired && detailText) {
+        const reason=el('p',detailText,'scope-reason');
+        detail.append(detailText.length<=100 && !receipts.length?reason:fold('阅读本项结论',reason));
       }
-      const fields=roster?lazyFold('其他字段引文',()=>[sourceView(item,graph)]):null;
-      detail.append(paired || fields || sourceView(item,graph),actions);
+      if (!paired) detail.append(roster?lazyFold('其他字段引文',()=>[sourceView(item,graph,receipts)]):sourceView(item,graph,receipts));
+      detail.append(actions);
     }
     function filter(pending) {
       shown=pending?priorityFindings(group.pending).concat(group.pending.filter(f=>!['risk','issue','missing'].includes(f.status))):group.items;
@@ -275,14 +383,18 @@ const PerformanceIndex = (() => {
       select(shown.find(f=>f.id===selected) || shown[0]);
     }
     mobile.addEventListener('change',()=>select(shown.find(f=>f.id===mobile.value)));
-    function open(scope) {
-      group=scope; selected=null; title.textContent=scope.label;
+    function showGroup(scope,item) {
+      group=scope; selected=item?.id; title.textContent=scope.label;
       dialog.dataset.single=String(group.items.length===1);
       filters.hidden=!group.pending.length || group.pending.length===group.items.length;
       const pending=action('待核 '+group.pending.length,()=>filter(true));
       pending.disabled=!group.pending.length;
       filters.replaceChildren(pending,action('全部 '+group.items.length,()=>filter(false)));
-      filter(Boolean(group.pending.length));
+      filter(Boolean(group.pending.length) && item?.status!=='ok');
+    }
+    function open(scope) {
+      previous=null; back.hidden=true;
+      showGroup(scope);
       dialog.showModal();
     }
     for (const scope of groupsHere) {
@@ -299,5 +411,5 @@ const PerformanceIndex = (() => {
     summary.append(dialog);
     return summary;
   }
-  return {groups,count,originals,receiptOriginal,overview};
+  return {groups,count,originals,receiptCitation,receiptEvidence,overview};
 })();

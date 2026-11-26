@@ -159,13 +159,39 @@ export async function checkAcceptancePdf(ctx,id,rev) {
   rev ||= task.rev;
   const {report}=await (await fetch(base+'/reports/'+rev)).json();
   const found=report.findings.find(f=>f.rule==='H02');
-  const proof=report.graph.acceptance_pdf_sources.records.find(r=>found.acceptance_execution.includes(r.id));
+  const declared=report.policy.version==='2026.11.26.27'?found.evidence:found.acceptance_execution;
+  const proof=report.graph.acceptance_pdf_sources.records.find(r=>declared.includes(r.id));
   assert.ok(proof && found.evidence.includes(proof.id));
   const holder=q('#performance-index [data-pdf-acceptance="'+proof.id+'"]');
   await call('Page.navigate',{url:root+'/workpaper/'+id+'?rev='+rev+'&view=acceptance-checks'});
   await wait(q('#performance-index')+'?.open && '+holder+'?.checkVisibility()','acceptance signature inspection');
-  const bad=await evaluate('(()=>{const g=structuredClone(state.bundle.report.graph); g.acceptance_pdf_sources.records[0].original_sha256="stale"; return !!PerformanceIndex.receiptOriginal(g,'+JSON.stringify(proof.id)+');})()');
-  assert.equal(bad,false);
+  function bindingErrors(proofId) {
+    const results={};
+    for (const change of ['as issued','original','unit','layer or signature','page','finding edge','edge evidence','linked field','version']) {
+      const r=structuredClone(state.bundle.report), g=r.graph, h=r.findings.find(f=>f.rule==='H02');
+      const record=g.acceptance_pdf_sources.records.find(row=>row.id===proofId);
+      if (change==='original') record.original_sha256='stale';
+      if (change==='unit') record.unit=g.documents_by_kind.contract[0];
+      if (change==='layer or signature') {
+        if (record.signatures.length) record.signatures[0].ends_at=0;
+        else record.pages[0].layer='unknown';
+      }
+      if (change==='page') r.calls.pages.find(p=>p.doc===record.doc).page_sha256='stale';
+      if (change==='finding edge') g.edges=g.edges.filter(e=>!(e.type==='supports_result' && e.from===proofId && e.to==='finding/'+h.id));
+      if (change==='edge evidence') g.edges.find(e=>e.type==='supports_result' && e.from===proofId && e.to==='finding/'+h.id).evidence=[];
+      if (change==='linked field') h.evidence=h.evidence.filter(ref=>!record.fields.includes(ref));
+      if (change==='version') {r.policy.version='2026.11.27.01'; delete h.acceptance_execution;}
+      results[change]=PerformanceIndex.receiptEvidence(h,r).some(p=>p.record.id===proofId);
+    }
+    return results;
+  }
+  const binding=await evaluate('('+bindingErrors.toString()+')('+JSON.stringify(proof.id)+')');
+  for (const [change,visible] of Object.entries(binding)) assert.equal(visible,change==='as issued',change);
+  const affected=await evaluate('state.bundle.report.findings.filter(f=>f.stage && PerformanceIndex.receiptEvidence(f,state.bundle.report).length).map(f=>f.id)');
+  assert.deepEqual(affected,report.findings.filter(f=>f.stage && f.evidence.includes(proof.id)).map(f=>f.id));
+  const range=q('#performance-index [data-receipt-range]'), related=q('#performance-index [data-receipt-payments]');
+  const panel=q('#performance-index .scope-proof-detail'), technical=q('#performance-index .scope-proof-detail .pdf-technical');
+  const back=q('#performance-index .scope-back');
   const states={typeset:'仅见排印文字',current:'本版有电子签名，身份待核',earlier:'签名覆盖较早版',mismatch:'签名校验不符',visual:'签认图像待核',review:'签署凭证待核'};
   for (const width of widths) {
     await size(ctx,width);
@@ -175,7 +201,35 @@ export async function checkAcceptancePdf(ctx,id,rev) {
     await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
     await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
     await wait('!'+q('#page-dialog')+'.open && document.activeElement==='+holder,'restore the original signature proof');
+    await evaluate(related+'.click()');
+    assert.deepEqual(await evaluate(all('#performance-index [data-receipt-phase]')+'.map(b=>b.dataset.receiptPhase)'),affected);
+    const target=q('#performance-index [data-receipt-phase="'+affected[0]+'"]');
+    assert.match(await evaluate(target+'.innerText'),/第二期 · 60%/u);
+    if (proof.state==='earlier') await inspect(ctx,width,'#performance-index','acceptance-pdf-payments');
+    await evaluate(target+'.focus()');
+    for (const type of ['keyDown','keyUp']) await call('Input.dispatchKeyEvent',{type,key:'Enter',code:'Enter',windowsVirtualKeyCode:13,
+      ...(type==='keyDown'?{text:'\r',unmodifiedText:'\r'}:{})});
+    await wait(q('#scope-title')+'.textContent==="分期与付款" && '+q('.scope-check-select')+'.value==='+JSON.stringify(affected[0]),'select linked payment');
+    assert.ok(await evaluate('document.activeElement==='+back));
+    await evaluate(back+'.click()');
+    await wait(q('#scope-title')+'.textContent==="交付验收" && document.activeElement==='+target,'restore selected receipt and payment');
+    if (['confirmed'].includes(report.graph.facts.find(f=>f.id===proof.fields[0])?.status))
+      assert.match(await evaluate(q('#performance-index .scope-source-quality')+'.innerText'),/栏中文字已核/u);
+    if (width===390 || width===1440) {
+      await evaluate(range+'.click()');
+      await wait(range+'.getAttribute("aria-expanded")==="true" && !!'+technical,'show signature coverage');
+      assert.equal(await evaluate(related+'.getAttribute("aria-expanded")'),'false');
+      assert.equal(await evaluate(panel+'.querySelector(".pdf-timeline").dataset.state'),proof.signatures[0]?.state || 'unsigned');
+      await evaluate(technical+'.querySelector("summary").click()');
+      const evidence=await evaluate(technical+'.innerText');
+      assert.ok(evidence.includes(proof.original_sha256));
+      if (proof.signatures[0]) assert.ok(evidence.includes(proof.signatures[0].certificate_sha256));
+      if (proof.state==='earlier') assert.match(await evaluate(panel+'.innerText'),/签后追加 [\d,]+ 字节/u);
+      await evaluate(technical+'.querySelector("summary").click()');
+    }
     await inspect(ctx,width,'#performance-index','acceptance-pdf-'+proof.state);
+    if (width===390 || width===1440) await evaluate(range+'.click()');
+    else await evaluate(related+'.click()');
   }
   console.log('PASS · acceptance PDF '+proof.state+' · R'+rev+' · six widths, original field and return focus');
 }

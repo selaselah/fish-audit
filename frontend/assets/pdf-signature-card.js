@@ -144,5 +144,5 @@ const PdfSignatureCard = (() => {
     root.append(head,title,switches,panel);show(state==='typeset'||state==='visual'?0:1);
     return root;
   }
-  return {render};
+  return {render,digital};
 })();

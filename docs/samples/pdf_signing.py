@@ -1,4 +1,4 @@
-"""Generate matched watermarked PDF contracts with zero, current or prior-revision signatures."""
+"""Generate watermarked contracts or acceptance reports with unsigned, current and earlier revisions."""
 
 import argparse
 from datetime import datetime, timedelta, timezone
@@ -91,6 +91,8 @@ def run(seed, upload, *, acceptance=False):
             found, = [f for f in report["findings"] if f["rule"]=="H02"]
             assert (row["state"],row["original_sha256"])==(mode,originals[target][0])
             assert found["status"]=="missing" and row["id"] in found["evidence"]
+            if report["policy"]["version"]!="2026.11.26.27":
+                assert found["acceptance_execution"]==[row["id"]]
         else:
             found = next(f for f in report["findings"] if f["rule"] == "H01")
             assert found["effect_review"]["pdf_execution"]["state"] == mode and found["status"] == "missing"
