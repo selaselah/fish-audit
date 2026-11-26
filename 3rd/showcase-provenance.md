@@ -2,6 +2,17 @@
 
 首页采用 Fish Audit 自制的冷藏柜采购演练。采购方「青禾演练采购中心」、供应方「云桥演练设备中心」、金额、温度、签认和回单均为虚构数据。每份原件第 1 行均印有「合成演练资料　仅供系统测试　无交易效力」。4℃ 是这份合同约定的柜温上限，8℃ 是这份验收报告填写的实测值。[水印和主体的生成定义](../docs/samples/generate.py) · [项目演练说明](../docs/samples/README.md#验收的是哪一种设备)
 
+## 合同指定抽检
+
+首页「采购验收 / 合同指定抽检」取自水印演练 `e562d30e190b4b388bd4e7cec42a565a` 的 R9。底稿 SHA-256 为 `eb96070257e8687e05f2ce5f7e78f7e5be6e3e4086336c8db403ad09026a70ad`。合同第 19 行约定至少抽检两台，第 20 行点名 QC-02 和 QC-03。验收第 15 行列四台设备，第 17、18 行分别是 QC-01 和 QC-03 的读数。[固定底稿](http://127.0.0.1:8000/workpaper/e562d30e190b4b388bd4e7cec42a565a?rev=9&view=inspection) · [首页数据与原行坐标](../frontend/assets/named-inspection.json)
+
+| 来源 | 原件 SHA-256 | 归档页图 SHA-256 |
+| --- | --- | --- |
+| [采购合同](../frontend/showcase/named-inspection-contract.pdf) | `986469c8292871cd6a9af8b3a05f2c8a28b29950a985b9bf64ad4983065e1106` | `0ec50cd1812ce56f15c2dcfca9d2a74225dcadbce107737a6b52e4ff96db65a4` |
+| [验收报告](../frontend/showcase/named-inspection-acceptance.pdf) | `0bdf473793336c8c73b0e017700ea7ec9ad163f4b1baa4a0f8eda9f45420dd0a` | `31dd26cdda5fb4479ba2434df14eb5f6b46dfc25e0d034c0d51c604a00cdbf52` |
+
+公开展示的四张行图取自上述 JPEG。按 R9 所据文字矩形的外框，左右各留页宽的 1.25%，上下各留页高的 0.55%，边界向外取整，裁为无损 WebP。四张裁片均与对应解码页图的像素逐一核对。读数和有无记录的判断来自同版原行及设备编号。[打开演练](http://127.0.0.1:8000/?scene=named-inspection#workflow)
+
 ## Word 验收批注与第二期回单
 
 首页“采购验收 / Word 审阅批注”使用独立演练 `84c4fa7a1a8e4dd594a03717614ed7ef` 的 R7。底稿 SHA-256 为 `80b74d8ad467c1093cb7f65ad663c59d87f322de04b775f096a07e6cd86a0111`。公开的验收 Word、采购合同 PDF、回单 PDF 及三张页图与归档文件逐字节一致。三个来源分别有三行可点击的文字层定位，实测柜温所在行保留原页的两个文字框。点击第二期与第三期条件打开相应合同条款，点击实付时点打开回单上的期次。工作台的人工意见、模型调用记录和企业资料属于各自底稿。[固定样本清单、文件摘要和坐标](../frontend/assets/acceptance-comment-sample.json) · [原始水印 Word](../frontend/showcase/acceptance-review.docx) · [业务演练验证](../docs/acceptance.md#word-验收正文与审阅批注)

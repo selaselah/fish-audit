@@ -1,0 +1,260 @@
+{
+  "case_id": "e562d30e190b4b388bd4e7cec42a565a",
+  "rev": 9,
+  "report_sha256": "eb96070257e8687e05f2ce5f7e78f7e5be6e3e4086336c8db403ad09026a70ad",
+  "check": {
+    "declared": 2,
+    "equipment": [
+      "QC-01",
+      "QC-02",
+      "QC-03",
+      "QC-04"
+    ],
+    "format": "inspection-coverage-v2",
+    "limit": {
+      "metric": "柜温",
+      "operator": "≤",
+      "unit": "℃",
+      "value": "4"
+    },
+    "measurements": [
+      {
+        "row": "inspection-line/d04/p1/l17",
+        "serial": "QC-01",
+        "value": "3",
+        "within": true
+      },
+      {
+        "row": "inspection-line/d04/p1/l18",
+        "serial": "QC-03",
+        "value": "2.5",
+        "within": true
+      }
+    ],
+    "mode": "sample",
+    "named": {
+      "equipment": [
+        "QC-02",
+        "QC-03"
+      ],
+      "missing": [
+        "QC-02"
+      ],
+      "row": "inspection-line/d02/p1/l20"
+    },
+    "required": 2,
+    "state": "named_records",
+    "status": "missing",
+    "tested": 2
+  },
+  "rows": [
+    {
+      "id": "inspection-line/d02/p1/l13",
+      "doc": "d02",
+      "unit": "d02",
+      "page": 1,
+      "line": 13,
+      "kind": "ordered",
+      "quote": "约定交付数量：4台"
+    },
+    {
+      "id": "inspection-line/d02/p1/l14",
+      "doc": "d02",
+      "unit": "d02",
+      "page": 1,
+      "line": 14,
+      "kind": "limit",
+      "quote": "约定验收标准：柜温不高于4℃"
+    },
+    {
+      "id": "inspection-line/d02/p1/l19",
+      "doc": "d02",
+      "unit": "d02",
+      "page": 1,
+      "line": 19,
+      "kind": "inspection_requirement",
+      "quote": "性能检测要求：至少抽检2台测温"
+    },
+    {
+      "id": "inspection-line/d02/p1/l20",
+      "doc": "d02",
+      "unit": "d02",
+      "page": 1,
+      "line": 20,
+      "kind": "inspection_required_serials",
+      "quote": "必检设备编号：QC-02、QC-03"
+    },
+    {
+      "id": "inspection-line/d04/p1/l10",
+      "doc": "d04",
+      "unit": "d04",
+      "page": 1,
+      "line": 10,
+      "kind": "received",
+      "quote": "实际验收数量：4台"
+    },
+    {
+      "id": "inspection-line/d04/p1/l11",
+      "doc": "d04",
+      "unit": "d04",
+      "page": 1,
+      "line": 11,
+      "kind": "basis",
+      "quote": "检验依据：柜温不高于4℃"
+    },
+    {
+      "id": "inspection-line/d04/p1/l15",
+      "doc": "d04",
+      "unit": "d04",
+      "page": 1,
+      "line": 15,
+      "kind": "population",
+      "quote": "验收设备编号：QC-01、QC-02、QC-03、QC-04"
+    },
+    {
+      "id": "inspection-line/d04/p1/l16",
+      "doc": "d04",
+      "unit": "d04",
+      "page": 1,
+      "line": 16,
+      "kind": "tested_quantity",
+      "quote": "性能实测数量：2台"
+    },
+    {
+      "id": "inspection-line/d04/p1/l17",
+      "doc": "d04",
+      "unit": "d04",
+      "page": 1,
+      "line": 17,
+      "kind": "unit_temperature",
+      "quote": "单机测温：QC-01，柜温3℃"
+    },
+    {
+      "id": "inspection-line/d04/p1/l18",
+      "doc": "d04",
+      "unit": "d04",
+      "page": 1,
+      "line": 18,
+      "kind": "unit_temperature",
+      "quote": "单机测温：QC-03，柜温2.5℃"
+    }
+  ],
+  "documents": {
+    "d02": {
+      "role": "contract",
+      "title": "采购合同",
+      "version": "合成采购 · R9",
+      "pdf": "/showcase/named-inspection-contract.pdf",
+      "image": "/assets/named-inspection-contract.jpg",
+      "source_sha256": "986469c8292871cd6a9af8b3a05f2c8a28b29950a985b9bf64ad4983065e1106",
+      "page_sha256": "0ec50cd1812ce56f15c2dcfca9d2a74225dcadbce107737a6b52e4ff96db65a4",
+      "lines": [
+        {
+          "ref": "inspection-line/d02/p1/l14",
+          "line": 14,
+          "rect": "0.08209,0.57991,0.42211,0.59635",
+          "rects": [
+            [
+              0.08209,
+              0.57991,
+              0.42211,
+              0.59635
+            ]
+          ],
+          "label": "约定验收标准",
+          "value": "柜温不高于4℃"
+        },
+        {
+          "ref": "inspection-line/d02/p1/l19",
+          "line": 19,
+          "rect": "0.08209,0.74612,0.44602,0.76256",
+          "rects": [
+            [
+              0.08209,
+              0.74612,
+              0.44602,
+              0.76256
+            ]
+          ],
+          "label": "性能检测要求",
+          "value": "至少抽检2台测温"
+        },
+        {
+          "ref": "inspection-line/d02/p1/l20",
+          "line": 20,
+          "rect": "0.08209,0.77945,0.42986,0.79589",
+          "rects": [
+            [
+              0.08209,
+              0.77945,
+              0.42986,
+              0.79589
+            ]
+          ],
+          "label": "必检设备编号",
+          "value": "QC-02、QC-03",
+          "crop": "/assets/named-inspection-contract-l20.webp"
+        }
+      ]
+    },
+    "d04": {
+      "role": "acceptance",
+      "title": "验收报告",
+      "version": "合成采购 · R9",
+      "pdf": "/showcase/named-inspection-acceptance.pdf",
+      "image": "/assets/named-inspection-acceptance.jpg",
+      "source_sha256": "0bdf473793336c8c73b0e017700ea7ec9ad163f4b1baa4a0f8eda9f45420dd0a",
+      "page_sha256": "31dd26cdda5fb4479ba2434df14eb5f6b46dfc25e0d034c0d51c604a00cdbf52",
+      "lines": [
+        {
+          "ref": "inspection-line/d04/p1/l15",
+          "line": 15,
+          "rect": "0.08145,0.61324,0.62831,0.62968",
+          "rects": [
+            [
+              0.08145,
+              0.61324,
+              0.62831,
+              0.62968
+            ]
+          ],
+          "label": "验收设备编号",
+          "value": "QC-01、QC-02、QC-03、QC-04",
+          "crop": "/assets/named-inspection-acceptance-l15.webp"
+        },
+        {
+          "ref": "inspection-line/d04/p1/l17",
+          "line": 17,
+          "rect": "0.08209,0.67991,0.3956,0.69726",
+          "rects": [
+            [
+              0.08209,
+              0.67991,
+              0.3956,
+              0.69726
+            ]
+          ],
+          "label": "单机测温",
+          "value": "QC-01，柜温3℃",
+          "crop": "/assets/named-inspection-acceptance-l17.webp"
+        },
+        {
+          "ref": "inspection-line/d04/p1/l18",
+          "line": 18,
+          "rect": "0.08209,0.71324,0.41629,0.73059",
+          "rects": [
+            [
+              0.08209,
+              0.71324,
+              0.41629,
+              0.73059
+            ]
+          ],
+          "label": "单机测温",
+          "value": "QC-03，柜温2.5℃",
+          "crop": "/assets/named-inspection-acceptance-l18.webp"
+        }
+      ]
+    }
+  }
+}

@@ -3,13 +3,15 @@ function contractPreview(report, task) {
   const findings=report.findings, graph=report.graph;
   const signing=findings.find(f=>f.rule==='H01'), acceptance=findings.find(f=>f.rule==='H02'), plan=findings.find(f=>f.rule==='H03');
   if (!signing || !acceptance || !plan) return null;
-  function jump(f,label,cls='preview-finding') {
-    const node=Team.paperLink(label,task.id,cls,new URLSearchParams({rev:String(task.rev),finding:f.id}));
+  function jump(f,label,cls='preview-finding',view) {
+    const query=new URLSearchParams({rev:String(task.rev),...(view?{view}:{finding:f.id})});
+    const node=Team.paperLink(label,task.id,cls,query);
     node.dataset.findingId=f.id; node.append(tag(f.status),glyph('arrows-angle-expand'));return node;
   }
   const panel=el('section','','preview-contract');
   panel.setAttribute('aria-label','合同履约速览');
-  panel.append(box('preview-checks',jump(signing,'合同生效','preview-check'),jump(acceptance,'交付验收','preview-check')));
+  const receiptCheck=acceptance.inspection_coverage?jump(acceptance,'验收设备','preview-check','inspection'):jump(acceptance,'交付验收','preview-check');
+  panel.append(box('preview-checks',jump(signing,'合同生效','preview-check'),receiptCheck));
   const header=box('preview-plan-head',el('h3','付款安排'),jump(plan,'全部条款','preview-plan-jump'));
   panel.append(header);
   const phases=findings.filter(f=>f.rule==='H04' && f.stage), index=graphIndex(graph);

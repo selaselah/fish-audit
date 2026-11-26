@@ -81,7 +81,7 @@ function performanceOverview(findings, graph) {
   const contractNotes=contractSource && AcceptanceComments.panel(state.bundle.report,'contract');
   const comments=commentSource && AcceptanceComments.panel(state.bundle.report);
   const supplier=acceptance && SupplierPages.panel(state.bundle.report);
-  const inspection=InspectionCoverage.panel(acceptance,graph);
+  const inspection=InspectionCoverage.panel(acceptance,graph,findings);
   const dates=ContractCalendar.panel(effect,graph,findings,state.bundle?.report.calls.pages);
   const dateQuestion=effect?.effect_review?.calendar?.some(day=>!['exact','spacing'].includes(day.state));
   const sections=[
@@ -219,8 +219,17 @@ function performanceOverview(findings, graph) {
       list.children[position].querySelector('.warranty-timeline:not([hidden])')?.dispatchEvent(new Event('show-warranty'));
       list.children[position].querySelector('.ticket-review:not([hidden])')?.dispatchEvent(new Event('show-tickets'));
     }
-    if (contractSource?.stages) contractNotes.addEventListener('select-contract-phase',event=>{
-      const i=phases.findIndex(f=>f.stage.clause_ref===event.detail);
+    function selectClause(ref) {
+      const i=phases.findIndex(f=>f.stage.clause_ref===ref);
+      if (i>=0) select(i);
+    }
+    if (contractSource?.stages) contractNotes.addEventListener('select-contract-phase',event=>selectClause(event.detail));
+    inspection?.addEventListener('select-contract-phase',event=>selectClause(event.detail));
+    inspection?.addEventListener('reveal-evidence',()=>{
+      const linked=[...inspection.querySelectorAll('.inspection-phase')];
+      if (!linked.length || linked.some(p=>p.dataset.phaseId===index.activePhase)) return;
+      const preferred=linked.find(p=>p.dataset.hasReceipt) || linked[0];
+      const i=phases.findIndex(f=>f.id===preferred.dataset.phaseId);
       if (i>=0) select(i);
     });
     buttons.forEach((button,i)=>{

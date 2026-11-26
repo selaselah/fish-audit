@@ -52,7 +52,7 @@ if (!restoreWorkspaceLink()) {
   const inspectionExample=document.getElementById('inspection-example');
   const paymentExample=document.getElementById('payment-example');
   const examples={company:{scene:'signing',revision:9},word:{scene:'word-signing',revision:6},calendar:{scene:'contract-dates',revision:6},pdf:{scene:'pdf-signing'}};
-  const inspectionRoutes={equipment:'inspection',supplier:'suppliers',comments:'word-comments'};
+  const inspectionRoutes={equipment:'inspection',named:'named-inspection',supplier:'suppliers',comments:'word-comments'};
   function sceneAddress(name) {
     const url=new URL(location.href);
     const scene=name==='inspection'?inspectionRoutes[inspectionExample.value]:name==='folios' && paymentExample.value==='comments'?'contract-comments':name;
@@ -100,23 +100,28 @@ if (!restoreWorkspaceLink()) {
   if (selection) {
     inspectionExample.value=selection; selectScene(document.getElementById('scene-tab-inspection'));
   }
-  let loadingInspection=false;
+  const loadedInspections=new Set();
+  const inspectionRevisions={equipment:11,supplier:5,comments:7};
   async function showInspection() {
     const choice=inspectionExample.value;
     for (const key of Object.keys(inspectionRoutes)) document.getElementById('inspection-'+key).hidden=key!==choice;
-    document.getElementById('inspection-version').textContent='合成案例 · R'+({equipment:11,supplier:5,comments:7})[choice];
+    const version=document.getElementById('inspection-version');
+    version.textContent=inspectionRevisions[choice]?'合成案例 · R'+inspectionRevisions[choice]:'合成案例';
     if (inspectionScene.hidden) return;
     if (choice==='supplier') {PublicSuppliers.open();return;}
     if (choice==='comments') {PublicAcceptanceComments.open();return;}
-    if (loadingInspection) return;
-    loadingInspection=true;
-    const target=document.getElementById('inspection-demo');
+    if (loadedInspections.has(choice)) return;
+    loadedInspections.add(choice);
+    const named=choice==='named';
+    const target=document.getElementById(named?'named-inspection-demo':'inspection-demo');
     try {
-      const response=await fetch('/assets/showcase-inspection.json');
+      const response=await fetch(named?'/assets/named-inspection.json':'/assets/showcase-inspection.json');
       if (!response.ok) throw new Error('sample unavailable');
       const sample=await response.json(), docs=sample.documents;
       const roles=new Map(Object.entries(docs).map(([id,doc])=>[id,doc.role]));
       if (!InspectionCoverage.quantities(sample.check,sample.rows,roles)) throw new Error('sample evidence incomplete');
+      inspectionRevisions[choice]=sample.rev;
+      if (inspectionExample.value===choice) version.textContent='合成案例 · R'+sample.rev;
       target.replaceChildren(InspectionCoverage.deviceView(sample.check,sample.rows,(row,label)=>{
         const doc=docs[row.doc], anchor=document.createElement('a');
         anchor.href=doc.pdf; anchor.target='_blank'; anchor.rel='noopener'; anchor.textContent=label;
@@ -129,9 +134,13 @@ if (!restoreWorkspaceLink()) {
           });
         }
         return anchor;
-      },{expanded:true,publicSample:true}));
+      },{expanded:true,publicSample:true,excerpt:async row=>{
+        const line=docs[row.doc].lines.find(l=>l.ref===row.id);
+        if (!line?.crop) return null;
+        const img=new Image(); img.alt=''; img.src=line.crop; await img.decode(); return img;
+      }}));
     } catch {
-      loadingInspection=false;
+      loadedInspections.delete(choice);
     }
   }
   const observer=new MutationObserver(showInspection);

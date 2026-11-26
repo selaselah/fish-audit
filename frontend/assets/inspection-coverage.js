@@ -1,13 +1,15 @@
 // Each selectable device and its readings belong to the originals cited by one H02 finding.
 const InspectionCoverage = (() => {
-  const format = 'inspection-coverage-v1';
+  const legacy = 'inspection-coverage-v1', current = 'inspection-coverage-v2';
+  const formats = new Set([legacy,current]);
+  const namedKind = 'inspection_required_serials';
   const labels = {
     covered:'检测范围相符', short:'检测台数不足', records:'单机记录待补', repeated:'同台重复',
     count_conflict:'台数记载冲突', out_of_limit:'单机超限', scope:'范围待核', identity:'归属待核',
     source:'原页待核', terms:'抽检约定待核', population:'设备清单待核', count:'实测台数待核',
-    criterion:'限值待核', reading:'读数待核', unknown:'检验依据待核'
+    criterion:'限值待核', reading:'读数待核', named_scope:'指定范围待核', named_records:'必检读数待补', unknown:'检验依据待核'
   };
-  const statuses = {covered:'ok',short:'risk',records:'missing',repeated:'risk',count_conflict:'risk',out_of_limit:'issue'};
+  const statuses = {covered:'ok',short:'risk',records:'missing',named_records:'missing',repeated:'risk',count_conflict:'risk',out_of_limit:'issue'};
   const compareText = s => s.replaceAll('℃','°C').replaceAll('，',',').replaceAll('：',':');
   const value = row => row?.quote.split(/[:：]/u).slice(1).join('：').trim() || '';
   const unique = (rows,kind) => {
@@ -16,7 +18,7 @@ const InspectionCoverage = (() => {
   };
   function sources(graph) {
     const ledger = graph?.inspection_coverage_sources;
-    if (ledger?.format!==format || !Array.isArray(ledger.rows) || !Array.isArray(ledger.pages)) return [];
+    if (!formats.has(ledger?.format) || !Array.isArray(ledger.rows) || !Array.isArray(ledger.pages)) return [];
     const index = graphIndex(graph);
     const links = new Map(graph.edges.filter(e => e.type==='inspection_coverage_source').map(e => [e.to,e]));
     const parents = new Map(graph.edges.filter(e => e.type==='contains' && e.evidence.includes(e.to)).map(e=>[e.to,e.from]));
@@ -55,7 +57,7 @@ const InspectionCoverage = (() => {
   }
 
   function quantities(check,rows,roles) {
-    if (!(check?.state in statuses) || check.status!==statuses[check.state] || !check.limit ||
+    if (!formats.has(check?.format) || !(check.state in statuses) || check.status!==statuses[check.state] || !check.limit ||
         !Array.isArray(check.measurements) || !Array.isArray(check.equipment) ||
         rows.some(r=>!r.line || r.disputed)) return false;
     const contract = rows.filter(r=>roles.get(r.unit)==='contract');
@@ -90,6 +92,22 @@ const InspectionCoverage = (() => {
       counts.set(m.serial,(counts.get(m.serial) || 0)+1);
     }
     if (counts.size!==check.tested) return false;
+    if (check.format===current) {
+      const splitIds = row => value(row).split(/[、，,]/u).map(s=>s.trim());
+      const ordered=contract.filter(r=>r.kind==='ordered_serials');
+      const sameList = (a,b) => Array.isArray(b) && a.length===b.length && a.every((s,i)=>s===b[i]);
+      if (ordered.length && (ordered.length!==1 || !sameList(splitIds(ordered[0]).sort(),[...equipment].sort()))) return false;
+      const named=contract.filter(r=>r.kind===namedKind);
+      const fromLabel=rows.filter(r=>/^(?:必检设备编号|指定抽检设备编号|必测设备编号)\s*[:：]/u.test(r.quote));
+      if (rows.some(r=>r.kind==='note') || named.length!==fromLabel.length || named.length>1 ||
+          rows.some(r=>r.kind===namedKind && !named.includes(r))) return false;
+      if (named.length) {
+        const row=named[0], expected=splitIds(row);
+        if (row!==fromLabel[0] || check.named?.row!==row.id || new Set(expected).size!==expected.length ||
+            expected.some(s=>!equipment.includes(s)) || !sameList(expected,check.named.equipment) ||
+            !sameList(expected.filter(s=>!counts.has(s)),check.named.missing)) return false;
+      } else if (check.named!==undefined) return false;
+    } else if (check.named!==undefined) return false;
     const {declared,required,tested}=check;
     let state='covered';
     if (check.measurements.some(m=>!m.within && counts.get(m.serial)===1)) state='out_of_limit';
@@ -97,6 +115,7 @@ const InspectionCoverage = (() => {
     else if (declared!=null && declared<tested) state='count_conflict';
     else if (declared!=null && declared<required) state='short';
     else if (tested<required || declared!=null && declared!==tested) state='records';
+    else if (check.named?.missing.length) state='named_records';
     return state===check.state;
   }
 
@@ -106,7 +125,7 @@ const InspectionCoverage = (() => {
     if (cls) node.className=cls;
     return node;
   }
-  function deviceView(check,rows,makeSource,{expanded=false,publicSample=false}={}) {
+  function deviceView(check,rows,makeSource,{expanded=false,publicSample=false,excerpt}={}) {
     const panel=element('details',null,'inspection-panel');
     panel.open=expanded;
     panel.dataset.inspectionState=check.state;
@@ -120,7 +139,8 @@ const InspectionCoverage = (() => {
     panel.append(body);
     const numeric=check.tested!=null && check.state in statuses;
     const terms=unique(rows,'inspection_requirement'), list=unique(rows,'population'), limit=unique(rows,'limit');
-    function source(parent,row,label) {
+    const namedRows=rows.filter(r=>r.kind===namedKind);
+    function source(parent,row,label,showLine=false) {
       if (!row) return;
       const button=makeSource(row,label);
       if (!button) return;
@@ -129,59 +149,104 @@ const InspectionCoverage = (() => {
       const icon=element('i',null,'ui-glyph ic-arrows-angle-expand');
       icon.setAttribute('aria-hidden','true');
       button.append(icon);
+      if (showLine) {
+        button.classList.add('inspection-original');
+        const location='第 '+row.page+' 页 · '+row.line+' 行';
+        button.setAttribute('aria-label',label+'，'+location+'，'+row.quote);
+        const strip=element('span',row.quote,'inspection-strip');
+        button.append(element('small',location),strip);
+        if (excerpt) Promise.resolve().then(()=>excerpt(row)).then(image=>{
+          if (image) {image.setAttribute('aria-hidden','true'); strip.replaceChildren(image);}
+        }).catch(()=>{});
+      }
       parent.append(button);
     }
     if (!numeric) {
       const links=element('div',null,'inspection-links');
+      for (const row of namedRows) source(links,row,namedRows.length===1?'必检原行':'必检原行 · 第 '+(row.line || '待核')+' 行');
       source(links,terms,'检测约定'); source(links,list,'设备清单');
       if (links.childElementCount) body.append(links);
       return panel;
     }
+    const requiredIds=new Set(check.named?.equipment || []);
     const metric=element('div',null,'inspection-metric');
-    metric.append(element('span','有读数'),element('strong',String(check.tested)),element('span','台'),
-      element('span','合同应检 '+(check.mode==='sample'?'至少 ':'')+check.required+' 台','inspection-required'));
+    if (check.named) {
+      metric.classList.add('inspection-comparison');
+      function total(label,actual,target,description,attention) {
+        const group=element('div',null,'inspection-total');
+        const numbers=element('div',null,'inspection-numbers');
+        numbers.append(element('strong',String(actual)),element('span',description,'inspection-required'));
+        const meter=element('meter');
+        meter.min=0; meter.max=target; meter.value=Math.min(target,actual);
+        meter.setAttribute('aria-label',label);
+        meter.setAttribute('aria-valuetext',actual+' 台有读数，'+description);
+        if (attention) group.dataset.attention='true';
+        group.append(element('span',label),numbers,meter); metric.append(group);
+      }
+      total('实测设备',check.tested,check.required,(check.mode==='sample'?'至少 ':'应检 ')+check.required+' 台',check.tested<check.required);
+      total('必检设备有读数',requiredIds.size-check.named.missing.length,requiredIds.size,'共 '+requiredIds.size+' 台',check.named.missing.length>0);
+    } else {
+      metric.append(element('span','有读数'),element('strong',String(check.tested)),element('span','台'),
+        element('span','合同应检 '+(check.mode==='sample'?'至少 ':'')+check.required+' 台','inspection-required'));
+    }
     if (check.declared!=null && (check.declared!==check.tested || check.state==='short')) {
       source(metric,unique(rows,'tested_quantity'),'验收单记载 '+check.declared+' 台');
     }
     body.append(metric);
     const byDevice=new Map(check.equipment.map(code=>[code,[]]));
     for (const m of check.measurements) byDevice.get(m.serial).push(m);
-    const devices=check.equipment;
+    const batch=check.equipment;
     const stateOf = records => records.length>1?'repeat':!records.length?'empty':records[0].within?'read':'over';
     const describe = records => records.length>1?records.length+' 条读数':!records.length?'未列读数':records[0].value+' ℃';
-    let selected=devices.find(id=>stateOf(byDevice.get(id))==='over') || devices.find(id=>stateOf(byDevice.get(id))==='repeat') ||
-      (check.mode==='all' && devices.find(id=>!byDevice.get(id).length)) || devices.find(id=>byDevice.get(id).length) || devices[0];
-    const prefix=(publicSample?'sample':'workpaper')+'-inspection';
+    let selected=batch.find(id=>stateOf(byDevice.get(id))==='over') || batch.find(id=>stateOf(byDevice.get(id))==='repeat') ||
+      check.named?.missing[0] || (check.mode==='all' && batch.find(id=>!byDevice.get(id).length)) ||
+      check.named?.equipment[0] || batch.find(id=>byDevice.get(id).length) || batch[0];
+    const prefix=(publicSample?'sample':'workpaper')+(check.named?'-named':'')+'-inspection';
     const controls=element('div',null,'inspection-devices'), detail=element('div',null,'inspection-selection');
-    const useSelect=devices.length>6;
-    let picker;
-    if (useSelect) {
-      picker=element('select');
-      picker.setAttribute('aria-label','选择验收设备');
-      for (const id of devices) picker.add(new Option(id+' · '+describe(byDevice.get(id)),id));
-      picker.addEventListener('change',()=>select(picker.value));
-      controls.append(picker);
-    } else {
-      controls.setAttribute('role','tablist'); controls.setAttribute('aria-label','验收设备编号');
-      detail.setAttribute('role','tabpanel'); detail.id=prefix+'-readings';
-      devices.forEach((id,i)=>{
-        const records=byDevice.get(id), button=element('button');
-        button.type='button'; button.id=prefix+'-device-'+i; button.dataset.device=id;
-        button.dataset.reading=stateOf(records); button.setAttribute('role','tab'); button.setAttribute('aria-controls',detail.id);
-        button.append(element('strong',id),element('span',describe(records)));
-        if (button.dataset.reading==='over') button.append(element('small','超限'));
-        button.addEventListener('click',()=>select(id));
-        button.addEventListener('keydown',event=>{
-          const next={ArrowRight:(i+1)%devices.length,ArrowLeft:(i+devices.length-1)%devices.length,Home:0,End:devices.length-1}[event.key];
-          if (next===undefined) return;
-          event.preventDefault(); select(devices[next]); controls.children[next].focus();
+    const options=element('div',null,'inspection-filter');
+    let picker=null;
+    function showDevices(onlyNamed) {
+      const devices=onlyNamed?check.named.equipment:batch;
+      controls.replaceChildren(); picker=null;
+      for (const b of options.children) {
+        const active=(b.dataset.scope==='named')===onlyNamed;
+        b.setAttribute('aria-pressed',String(active)); b.tabIndex=active?0:-1;
+      }
+      if (devices.length>6) {
+        controls.removeAttribute('role'); controls.removeAttribute('aria-label');
+        detail.removeAttribute('role'); detail.removeAttribute('aria-labelledby');
+        picker=element('select');
+        picker.setAttribute('aria-label','选择验收设备');
+        for (const id of devices) picker.add(new Option(id+(requiredIds.has(id)?' · 必检':'')+' · '+describe(byDevice.get(id)),id));
+        picker.addEventListener('change',()=>select(picker.value));
+        controls.append(picker);
+      } else {
+        controls.setAttribute('role','tablist'); controls.setAttribute('aria-label','验收设备编号');
+        detail.setAttribute('role','tabpanel'); detail.id=prefix+'-readings';
+        devices.forEach((id,i)=>{
+          const records=byDevice.get(id), button=element('button');
+          button.type='button'; button.id=prefix+'-device-'+i; button.dataset.device=id;
+          button.dataset.reading=stateOf(records); button.setAttribute('role','tab'); button.setAttribute('aria-controls',detail.id);
+          button.append(element('strong',id),element('span',describe(records)));
+          if (requiredIds.has(id)) {
+            button.dataset.required='true';
+            if (!onlyNamed) button.append(element('small','必检','inspection-named-mark'));
+          }
+          if (button.dataset.reading==='over') button.append(element('small','超限'));
+          button.addEventListener('click',()=>select(id));
+          button.addEventListener('keydown',event=>{
+            const next={ArrowRight:(i+1)%devices.length,ArrowLeft:(i+devices.length-1)%devices.length,Home:0,End:devices.length-1}[event.key];
+            if (next===undefined) return;
+            event.preventDefault(); select(devices[next]); controls.children[next].focus();
+          });
+          controls.append(button);
         });
-        controls.append(button);
-      });
+      }
+      select(devices.includes(selected)?selected:devices[0]);
     }
     function select(id) {
       selected=id; panel.dataset.selectedDevice=id;
-      if (useSelect) picker.value=id;
+      if (picker) picker.value=id;
       else for (const b of controls.children) {
         const active=b.dataset.device===id;
         b.setAttribute('aria-selected',String(active)); b.tabIndex=active?0:-1;
@@ -189,6 +254,17 @@ const InspectionCoverage = (() => {
       }
       detail.replaceChildren();
       const readings=byDevice.get(id), links=element('div',null,'inspection-links');
+      if (requiredIds.has(id)) {
+        const pair=element('div',null,'inspection-proof-pair');
+        source(pair,namedRows[0],'合同点名',true);
+        if (readings.length) {
+          for (const m of readings) source(pair,rows.find(r=>r.id===m.row),'验收读数',true);
+          source(links,limit,'合同 '+check.limit.operator+' '+check.limit.value+' ℃');
+        } else source(pair,list,'验收设备清单',true);
+        detail.append(pair);
+        if (links.childElementCount) detail.append(links);
+        return;
+      }
       const label=readings.length>1?'同台有 '+readings.length+' 条读数':readings.length?'单机记录':'验收清单内，未列单机读数';
       detail.append(element('span',id+' · '+label,'inspection-selection-label'),links);
       for (const m of readings) source(links,rows.find(r=>r.id===m.row),'实测 '+m.value+' ℃');
@@ -196,25 +272,78 @@ const InspectionCoverage = (() => {
       if (readings.length) source(links,limit,'合同 '+check.limit.operator+' '+check.limit.value+' ℃');
       source(links,terms,'检测约定');
     }
-    body.append(controls,detail); select(selected);
+    if (requiredIds.size && requiredIds.size<batch.length) {
+      options.setAttribute('role','group'); options.setAttribute('aria-label','筛选验收设备');
+      for (const [scope,label] of [['named','合同必检'],['all','全部设备']]) {
+        const b=element('button',label); b.type='button'; b.dataset.scope=scope;
+        b.append(element('span',String(scope==='named'?requiredIds.size:batch.length)));
+        b.addEventListener('click',()=>showDevices(scope==='named')); options.append(b);
+        b.addEventListener('keydown',event=>{
+          const next={Home:'named',End:'all',ArrowLeft:scope==='named'?'all':'named',ArrowRight:scope==='named'?'all':'named'}[event.key];
+          if (next===undefined) return;
+          event.preventDefault(); showDevices(next==='named'); options.querySelector('[aria-pressed=true]').focus();
+        });
+      }
+      body.append(options);
+    }
+    body.append(controls,detail); showDevices(requiredIds.has(selected));
     return panel;
   }
-  function panel(finding,graph) {
+  function relatedPayments(graph,findings,proof) {
+    const index=graphIndex(graph);
+    const linked=findings.filter(f=>{
+      if (!['H04','H05'].includes(f.rule) || !f.stage?.clause_ref) return false;
+      const refs=traceReferences(graph,f);
+      return index.facts.get(f.stage.clause_ref)?.field==='payment_stage' && refs.includes(f.stage.clause_ref) && refs.includes(proof.named.row);
+    });
+    const phases=linked.filter(f=>f.rule==='H04');
+    if (!phases.length) return null;
+    const fold=element('details',null,'inspection-payments');
+    const header=element('summary','引用本项验收的期款');
+    header.append(element('span',phases.length+' 期')); fold.append(header);
+    for (const phase of phases) {
+      const bank=linked.filter(f=>f.rule==='H05' && PhaseEvidence.sameStage(f.stage,phase.stage));
+      const payments=element('div',null,'inspection-phase');
+      payments.dataset.phaseId=phase.id;
+      if (bank.length) payments.dataset.hasReceipt='true';
+      payments.addEventListener('click',event=>{
+        if (event.target.closest('[data-jump-finding]')) payments.dispatchEvent(
+          new CustomEvent('select-contract-phase',{bubbles:true,detail:phase.stage.clause_ref}));
+      });
+      payments.append(performanceJump(phase,phase.stage.name+' · '+phase.stage.share+'%'));
+      for (const item of bank) {
+        const docs=graph.documents.filter(d=>item.scope.includes(d.id) && graph.documents_by_kind.bank_receipt?.includes(d.id));
+        payments.append(performanceJump(item,bank.length>1 && docs.length===1?docs[0].name:'付款回单'));
+      }
+      fold.append(payments);
+    }
+    return fold;
+  }
+  function panel(finding,graph,findings=[]) {
     const check=finding?.inspection_coverage;
-    if (finding?.rule!=='H02' || check?.format!==format) return null;
+    if (finding?.rule!=='H02' || !formats.has(check?.format)) return null;
     const index=graphIndex(graph), supports=index.supports.get('finding/'+finding.id);
     const ledger=graph.inspection_coverage_sources;
     const rows=sources(graph).filter(r=>[r.id,r.doc+'/p'+r.page,...r.facts].every(ref=>
       supports?.has(ref) && finding.evidence.includes(ref) && check.evidence?.includes(ref)) && finding.scope.includes(r.unit));
     const roles=new Map((Array.isArray(ledger?.pages)?ledger.pages:[]).map(p=>[p.unit,p.role]));
-    const bound=rows.length>0 && rows.length===ledger?.rows?.length &&
+    const bound=rows.length>0 && check.format===ledger?.format && rows.length===ledger.rows.length &&
       check.evidence.every(ref=>finding.evidence.includes(ref) && supports?.has(ref)) &&
       [...roles.keys()].every(unit=>finding.scope.includes(unit) && check.scope?.includes(unit));
     let display=check;
     if (!bound || check.state in statuses && (!quantities(check,rows,roles) || ledger.pages.some(p=>!p.native || !p.text_only))) {
       display={state:'unknown',mode:null,tested:null};
     }
-    const card=deviceView(display,rows,(r,label)=>action(label,()=>open(r,graph)),{expanded:display.state!=='covered'});
+    const card=deviceView(display,rows,(r,label)=>action(label,()=>open(r,graph)),{expanded:display.state!=='covered',
+      excerpt:r=>{
+        const fact=observation(r,graph);
+        return fact?.source_line?.rects?.length?EvidenceCompare.lineExcerpt(fact,index):null;
+      }});
+    card.id='inspection-coverage'; card.tabIndex=-1;
+    if (display.named) {
+      const payments=relatedPayments(graph,findings,display);
+      if (payments) card.querySelector('.inspection-body').append(payments);
+    }
     if (display.state==='unknown' && !card.querySelector('.inspection-source')) {
       const jump=action('查看交付验收检查',()=>revealPaperTarget(document.querySelector('[data-finding="'+CSS.escape(finding.id)+'"]')),'inspection-source');
       card.querySelector('.inspection-body').append(jump);

@@ -24,6 +24,9 @@
         const panel=$('#file-progress'); panel.open=true; jump(panel.querySelector('summary'));
       }, '', '解析 页数 进度');
       if (paper) {
+        if (paper.report.findings.some(f=>f.rule==='H02' && f.inspection_coverage)) add('底稿视图','核对验收设备','card-checklist',()=>{
+          state.tab='report'; renderCase(true); jump($('#inspection-coverage'));
+        },'R'+paper.rev,'合同 必检 抽检 设备编号 测温 原行');
         if (AcceptanceComments.current(paper.report)) add('底稿视图','对照验收批注','journal-text',()=>{
           state.tab='report'; renderCase(true); jump($('#acceptance-comments'));
         },'R'+paper.rev,'Word 审阅 原文 期款');

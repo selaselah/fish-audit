@@ -45,6 +45,46 @@
   color: var(--accent-hover); border: 0; border-radius: 3px; background: transparent; font: 550 .82rem/1.35 var(--font-ui); text-decoration: none; cursor: pointer;
 }
 .inspection-metric .inspection-source { margin-inline-start: auto; }
+.inspection-comparison {
+  display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0; align-items: stretch;
+  margin: 4px 0 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas);
+}
+.inspection-total { --meter-fill: var(--accent); display: grid; align-content: start; gap: 5px; min-width: 0; padding: 12px; }
+.inspection-total + .inspection-total { border-inline-start: 1px solid var(--line); }
+.inspection-total[data-attention=true] { --meter-fill: var(--attention-line); }
+.inspection-total > span { color: var(--secondary); font-size: .79rem; font-weight: 550; }
+.inspection-numbers { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 7px; }
+.inspection-numbers strong { color: var(--ink); font: 600 1.8rem/1.15 var(--font-number); font-variant-numeric: tabular-nums; }
+.inspection-numbers .inspection-required { border: 0; margin: 0; padding: 0; font-size: .75rem; }
+.inspection-total meter { appearance: none; height: 5px; width: 100%; margin: 3px 0 0; border: 0; border-radius: 5px; background: var(--line); }
+.inspection-total meter::-webkit-meter-bar { border: 0; height: 5px; border-radius: 5px; background: var(--line); }
+.inspection-total meter::-webkit-meter-optimum-value { border-radius: 5px; background: var(--meter-fill); }
+.inspection-total meter::-moz-meter-bar { border-radius: 5px; background: var(--meter-fill); }
+.inspection-comparison > .inspection-source { grid-column: 1 / -1; margin: 0 12px; justify-self: start; }
+.inspection-filter { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; border-radius: 8px; background: var(--soft); }
+.inspection-filter button { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 10px; border: 1px solid transparent; border-radius: 6px; color: var(--secondary); background: transparent; font: 550 .8rem var(--font-ui); cursor: pointer; }
+.inspection-filter [aria-pressed=true] { color: var(--accent-hover); border-color: var(--accent-line); background: var(--surface); }
+.inspection-filter button span { font-variant-numeric: tabular-nums; }
+.inspection-panel[data-inspection-mode=sample] .inspection-devices button[data-required=true][data-reading=empty] span { color: var(--attention); }
+.inspection-devices .inspection-named-mark { color: var(--accent-hover); font-weight: 550; }
+.inspection-filter + .inspection-devices { margin-top: 8px; }
+.inspection-proof-pair { width: 100%; display: grid; grid-template-columns: repeat(auto-fit,minmax(min(205px,100%),1fr)); gap: 6px; padding-top: 4px; }
+.inspection-panel .inspection-original { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 5px;
+  padding: 7px 8px; border: 1px solid var(--line); border-radius: 7px; color: var(--ink); text-align: start; font-size: .79rem; }
+.inspection-original i { grid-column: 3; grid-row: 1; color: var(--accent); }
+.inspection-original small { grid-column: 2; grid-row: 1; font-size: .69rem; font-weight: 400; color: var(--muted); }
+.inspection-strip { grid-column: 1 / -1; display: flex; align-items: center; min-height: 30px; padding: 1px 3px;
+  overflow-wrap: anywhere; overflow: hidden; background: var(--canvas); border-inline-start: 2px solid var(--accent-line); }
+.inspection-strip :is(img,canvas) { max-inline-size: 100%; max-block-size: 36px; inline-size: auto; block-size: auto; object-fit: contain; }
+.inspection-panel .inspection-original:is(:hover,:focus-visible) { border-color: var(--accent); background: var(--accent-soft); text-decoration: none; }
+.inspection-payments { margin-top: 6px; border-top: 1px solid var(--line); }
+.inspection-payments > summary { min-height: 44px; align-content: center; color: var(--secondary); font-size: .82rem; cursor: pointer; }
+.inspection-payments > summary span { margin-inline-start: 8px; font-variant-numeric: tabular-nums; color: var(--muted); }
+.inspection-phase { display: flex; flex-wrap: wrap; gap: 4px 8px; padding: 4px 0; }
+.inspection-phase .performance-jump { min-height: 44px; }
+@media (hover: hover) {
+  .inspection-filter button:hover, .inspection-devices button:hover { border-color: var(--accent-line); }
+}
 .inspection-source:hover { text-decoration: underline; text-underline-offset: 3px; }
 .inspection-source i { font-size: .75em; }
 .inspection-panel :focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }

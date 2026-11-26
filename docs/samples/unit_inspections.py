@@ -83,7 +83,8 @@ def review(cid, mode, folder, records):
     if report["policy"].get("inspection_coverage") == "inspection-coverage-v2":
         fields = {**fields,"必检设备编号":"inspection_required_serials"}
     reconcile_training_pages(cid,folder,records,case_titles=CASES.values(),row_spacing=28,
-                             field_labels={**FIELDS,"验收设备编号":"delivered_serials",**fields})
+                             field_labels={**FIELDS,"验收设备编号":"delivered_serials",**fields},
+                             exact_fields=("unit_temperature","inspection_required_serials"))
     report = check_training_watermark(cid,folder,records,confirm_printed_records(cid,folder,records))
     if report["policy"].get("inspection_coverage"):
         procedure = next(f for f in report["findings"] if f["rule"]=="H02")
@@ -95,7 +96,8 @@ def review(cid, mode, folder, records):
             return report
         assert procedure["inspection_coverage"]["state"] == STATES[mode], (mode,procedure["inspection_coverage"])
         stages = [f["status"] for f in report["findings"] if f["rule"]=="H04"]
-        assert stages[0]=="ok" and (stages[1]=="ok")==(mode in ("complete","sample")), (mode,stages)
+        effective = next(f["status"]=="ok" for f in report["findings"] if f["rule"]=="H01")
+        assert (stages[0]=="ok")==effective and (stages[1]=="ok")==(effective and mode in ("complete","sample")), (mode,stages)
     return report
 
 

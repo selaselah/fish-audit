@@ -823,6 +823,7 @@ function finding(item) {
     evidenceJump('按期核对合同付款批注','contract-comments'):el('span','合同批注来源待核','small'));
   if (item.acceptance_comments) node.append(AcceptanceComments.current(state.bundle.report)?
     evidenceJump('对照验收正文与 Word 批注','acceptance-comments'):el('span','验收批注来源待核','small'));
+  if (item.inspection_coverage) node.append(evidenceJump('按设备核对验收范围','inspection-coverage'));
   if (item.reinspection) node.append(evidenceJump('核对整改复验原件','equipment-reinspection-trail'));
   if (item.delegations) node.append(mandatePanel(item.delegations, state.bundle.report.graph));
   if (item.quality_change) node.append(qualityChangePanel(item.quality_change, state.bundle.report.graph));
@@ -1450,6 +1451,9 @@ async function refresh() {
       } else if (route.params.get('view')==='signatures' && state.openedCitation!==location.hash &&
                  bundle?.report.findings.some(f=>f.rule==='H01' && f.effect_review?.pdf_execution)) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#pdf-signatures';
+      } else if (route.params.get('view')==='inspection' && state.openedCitation!==location.hash &&
+                 bundle?.report.findings.some(f=>f.rule==='H02' && f.inspection_coverage)) {
+        state.openedCitation=location.hash; state.tab='report'; focusFinding='#inspection-coverage';
       } else if (route.params.get('view')==='contract-comments' && state.openedCitation!==location.hash && AcceptanceComments.current(bundle?.report,'contract')) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#contract-comments';
       } else if (route.params.get('view')==='acceptance-comments' && state.openedCitation!==location.hash && AcceptanceComments.current(bundle?.report)) {
@@ -1471,7 +1475,7 @@ async function refresh() {
           target.open=true;
           $('#trail-tab-final')?.click();
           revealPaperTarget($('#reinspection-wait'));
-        } else if (target?.dataset.finding || ['equipment-reinspection-trail','case-entity-browser','contract-pages','word-signatures','pdf-signatures','contract-calendar','supplier-pages','acceptance-comments','contract-comments'].includes(target?.id)) revealPaperTarget(target);
+        } else if (target?.dataset.finding || ['equipment-reinspection-trail','inspection-coverage','case-entity-browser','contract-pages','word-signatures','pdf-signatures','contract-calendar','supplier-pages','acceptance-comments','contract-comments'].includes(target?.id)) revealPaperTarget(target);
         else target?.focus();
       }
       const target = route.params.get('fact');

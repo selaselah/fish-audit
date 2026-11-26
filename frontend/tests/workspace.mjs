@@ -17,7 +17,7 @@ import {checkWarrantyTimeline} from './warranty-timeline.mjs';
 import {checkWarrantyTickets} from './warranty-tickets.mjs';
 import {checkWarrantyPhotos} from './warranty-photos.mjs';
 import {checkNavigation,checkPrior} from './prior-installment.mjs';
-import {checkInspectionCoverage} from './inspection-coverage.mjs';
+import {checkInspectionCoverage,checkPublicInspection} from './inspection-coverage.mjs';
 import {checkSigningParties} from './signing-parties.mjs';
 import {checkReinspectionTrail} from './reinspection-trail.mjs';
 import {checkReinspectionTiming} from './reinspection-timing.mjs';
@@ -42,6 +42,7 @@ const product = process.argv.includes('--product');
 const publicFolios=process.argv.includes('--public-folios');
 const ruleCatalog=process.argv.includes('--rule-catalog');
 const publicContractComments=process.argv.includes('--public-contract-comments');
+const publicInspection=process.argv.includes('--public-named-inspection');
 const contractCommentCase=caseArgument('--contract-comment-case');
 const publicWordComments=process.argv.includes('--public-word-comments');
 const publicSuppliers=process.argv.includes('--public-suppliers');
@@ -102,12 +103,13 @@ const qualityImageCase = caseArgument('--quality-image-case');
 const reinspectionGap = caseArgument('--reinspection-gap-case');
 const brokenPayment = caseArgument('--payment-source-case');
 const waitingCase = caseArgument('--waiting-case');
-const seeded = [publicContractComments,contractCommentCase,ruleCatalog,publicWordComments,commentCase,publicSuppliers,supplierCase,publicPdf,pdfCase,publicFolios,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,product,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+const publicTest=product || ruleCatalog || publicInspection || publicContractComments || publicWordComments || publicSuppliers || publicPdf || publicFolios;
+const seeded = [publicTest,contractCommentCase,commentCase,supplierCase,pdfCase,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
-const root = product || ruleCatalog || publicContractComments || publicWordComments || publicSuppliers || publicPdf || publicFolios ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
+const root = publicTest ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
   recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : 'http://127.0.0.1:' + (seeded ? 8000 : port);
-if (product || ruleCatalog || publicContractComments || publicWordComments || publicSuppliers || publicPdf || publicFolios || recoveringCase || waitingCase || legacyCase || brokenPayment) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
+if (publicTest || recoveringCase || waitingCase || legacyCase || brokenPayment) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
 if (legacyCase || brokenPayment) assert.ok(!['8000','8010'].includes(new URL(root).port));
 const children = [];
 const faults = [];
@@ -170,6 +172,9 @@ try {
   await call('Page.navigate',{url:product ? root : root+'/app'});
   if (ruleCatalog) {
     await checkRuleCatalog({root,call,evaluate,wait});
+  } else if (publicInspection) {
+    await checkPublicInspection({root,call,evaluate,wait},null,true);
+    console.log('PASS · 合同必检公开案例 · 设备切换、数量、原件及焦点');
   } else if (publicContractComments || contractCommentCase) {
     await checkContractComments({root,call,evaluate,wait},contractCommentCase);
   } else if (commentCase) {
