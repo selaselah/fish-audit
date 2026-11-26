@@ -22,6 +22,7 @@ import equipment_exchanges
 import stage_payments
 import contract_effect
 import pdf_execution
+import supplier_pages
 import contract_calendar
 import signing_parties
 import inspection_coverage
@@ -356,6 +357,10 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     graph["contract_effect_sources"]=contract_effect.sources(graph,lambda doc,number:texts[doc,number],calls=calls)
     graph["pdf_execution_sources"] = pdf_execution.sources(graph, read_original)
     nodes, edges = pdf_execution.source_graph(graph["pdf_execution_sources"])
+    graph["nodes"].extend(nodes)
+    graph["edges"].extend(edges)
+    graph["supplier_page_sources"] = supplier_pages.sources(graph, read_original)
+    nodes, edges = supplier_pages.source_graph(graph["supplier_page_sources"])
     graph["nodes"].extend(nodes)
     graph["edges"].extend(edges)
     signing_nodes,signing_edges=signing_parties.source_graph(graph["contract_effect_sources"])

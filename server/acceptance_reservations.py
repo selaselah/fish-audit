@@ -7,6 +7,7 @@ from collections import defaultdict
 
 import acceptance_payments
 import inspection_register
+import supplier_pages
 from calculations import normalized
 from performance_versions import FORMAT as CURRENT
 
@@ -147,15 +148,23 @@ def supplier_check(ledger, scope, graph):
             raw=source["quote"].replace("：",":").partition(":")[2].strip()
             if raw and not INCOMPLETE.search(raw) and supported[0]["value"].strip() in (raw,source["quote"]):
                 names[unit]=raw
+    inspected = [p for p in graph.get("supplier_page_sources", {}).get("pages", []) if p["unit"] in scope]
+    supported = {(p["doc"], p["page"]) for p in inspected if supplier_pages.supported(p, rows, facts)}
     if len(set(names.values()))>1:
         status,detail="risk","合同与验收或复验原件所列供应方名称不一致，请核实主体归属及有无委托交付约定。"
     elif any(row["kind"]=="delivery_note" for row in rows):
         status,detail="missing","另有实际供货或委托交付说明，须取得其与合同供应方的关系及对应交付依据。"
-    elif len(names)!=len({p["unit"] for p in pages}) or any(not p["native"] or not p["text_only"] for p in pages):
+    elif any(p["state"] == "annotations" for p in inspected):
+        status,detail="missing","供应方原页含 PDF 批注或表单，请核对其对供货主体及验收归属的影响。"
+    elif len(names)!=len({p["unit"] for p in pages}) or any(not p["native"] or not p["text_only"] and (p["doc"],p["page"]) not in supported for p in pages):
         status,detail="missing","须核对合同及各次验收原页的完整供应方名称、影像附注或补充可关联的交付凭证。"
     else:
         status,detail="ok","合同与所据验收原件的供应方名称相符。"
-    return {"status":status,"detail":detail,"pages":pages,"lines":rows,"names":names}
+    result = {"status":status,"detail":detail,"pages":pages,"lines":rows,"names":names}
+    if inspected:
+        result["page_inspections"] = [p["id"] for p in inspected]
+        result["matching_print"] = [p["id"] for p in inspected if (p["doc"], p["page"]) in supported]
+    return result
 
 
 def apply(finding, ledger, graph=None):
@@ -173,6 +182,7 @@ def apply(finding, ledger, graph=None):
         finding["acceptance_reservations"]["supplier"]=supplier
         refs.extend(f"{p['doc']}/p{p['page']}" for p in supplier["pages"])
         refs.extend(ref for s in supplier["lines"] for ref in s["facts"])
+        refs.extend(supplier.get("page_inspections", []))
         supplier_hold=supplier["status"]!="ok"
         if supplier_hold:
             if finding["status"]=="ok":

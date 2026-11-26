@@ -31,6 +31,7 @@ from receipt_packets import verify_sources as verify_receipt_packets
 from delivery_batches import verify_sources as verify_delivery_batches
 from contract_effect import verify as verify_contract_effect
 from pdf_execution import verify as verify_pdf_execution
+from supplier_pages import verify as verify_supplier_pages
 from warranty_terms import verify as verify_warranty
 from payment_windows import verify as verify_payment_windows
 from acceptance_reservations import verify as verify_reservations
@@ -261,6 +262,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
         return bundle.read(path)
     try:
         verify_pdf_execution(report, read_original)
+        verify_supplier_pages(report, read_original)
     except ModuleNotFoundError as error:
         raise ValueError("重验 PDF 签署凭证需要安装 server/requirements.txt 中的依赖，请使用服务端虚拟环境运行校验。") from error
     verify_warranty(report,page_text,submitted=submitted,signed=signed)

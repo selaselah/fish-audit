@@ -36,6 +36,7 @@ from receipt_packets import verify_sources as verify_receipt_packets
 from delivery_batches import verify_sources as verify_delivery_batches
 from contract_effect import verify as verify_contract_effect
 from pdf_execution import verify as verify_pdf_execution
+from supplier_pages import verify as verify_supplier_pages
 from warranty_terms import verify as verify_warranty
 from payment_windows import verify as verify_payment_windows
 from acceptance_reservations import verify as verify_reservations
@@ -739,6 +740,7 @@ class Store:
                 return (self.files / case_id / doc["id"] / ("original" + doc["ext"])).read_bytes()
             try:
                 verify_pdf_execution(paper, read_original, signing=True)
+                verify_supplier_pages(paper, read_original)
             except (ValueError, OSError, KeyError, TypeError) as error:
                 raise CaseError(f"签收前核对 PDF 签署凭证失败。{error}", 409) from error
             if row["profile"]!=BANK:
