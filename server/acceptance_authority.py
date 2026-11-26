@@ -10,6 +10,7 @@ from contract_changes import SOURCE_LABELS, labelled_sources
 from delegation import agent_kind, complete_id, covered_rows
 from performance_versions import SIGNATORY_FORMATS
 from reinspection import LINK_KEYS, linked
+import acceptance_execution
 import signer_timing
 import signer_clock
 
@@ -286,7 +287,8 @@ def check(graph, contract, receipts, retests, *, contract_supported, other_terms
         records.append({"unit":doc.unit,"role":role,"date":accepted.isoformat() if accepted else None,
                         "status":status,"detail":detail,"signed":rows,"missing_names":missing,
                         "other_names":extra,"evidence":list(dict.fromkeys(evidence))})
-        cited.extend(evidence)
+        acceptance_execution.apply(records[-1],acceptance_execution.relevant(graph,{doc.unit}))
+        cited.extend(records[-1]["evidence"])
     status = "risk" if any(r["status"]=="risk" for r in records) else "ok" if records and all(r["status"]=="ok" for r in records) else "missing"
     detail = reason or (" ".join(dict.fromkeys(r["detail"] for r in records)) if records else "缺少本合同对应的终验签认原件。")
     if name_records and len(records)>1 and not reason:

@@ -61,6 +61,10 @@
 .scope-check:hover { border-color:var(--line); }
 .scope-check-select { display:none; }
 .scope-detail { min-width:0; padding:20px 22px 16px; }
+.scope-pdf-receipt { display:inline-flex; flex-wrap:wrap; align-items:center; gap:6px; min-height:38px; max-width:100%; margin:0 4px 8px 0; padding:5px 9px; border:1px solid var(--line); border-radius:6px; background:white; color:var(--ink); font:500 .81rem/1.5 var(--font-ui); overflow-wrap:anywhere; text-align:left; }
+.scope-pdf-receipt strong { color:var(--attention); }
+.scope-pdf-receipt small { color:var(--secondary); }
+.scope-pdf-receipt .ui-glyph { color:var(--accent); }
 .scope-check-state,.scope-source-quality,.scope-actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
 .scope-check-state > .mono { font-size:.8rem; color:var(--secondary); }
 .scope-dialog .scope-detail h3 { margin:7px 0 16px; font-size:1.08rem; line-height:1.5; }

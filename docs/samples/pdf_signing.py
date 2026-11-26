@@ -44,7 +44,7 @@ def later_copy(signed):
     return out.getvalue()
 
 
-def run(seed, upload):
+def run(seed, upload, *, acceptance=False):
     from contract_milestones import PROFILE, documents
     from generate import ROOT, WATERMARK, embedded_font, pdf
     from printed_dates import read_back
@@ -60,32 +60,40 @@ def run(seed, upload):
     print(base, flush=True)
     for title, rows in records.items():
         pdf(base / (title + ".pdf"), title, rows, font=font)
-    raw = (base / "采购合同.pdf").read_bytes()
+    target = "验收报告.pdf" if acceptance else "采购合同.pdf"
+    raw = (base / target).read_bytes()
     signed = signed_copy(raw)
     variants = {"typeset": raw, "current": signed, "earlier": later_copy(signed)}
     submitted = []
     for mode, content in variants.items():
         dest = base / mode
         dest.mkdir()
-        contract = dest / "采购合同.pdf"
-        contract.write_bytes(content)
-        paths = [contract, base / "验收报告.pdf", base / "银行付款回单.pdf"]
+        specimen = dest / target
+        specimen.write_bytes(content)
+        paths = [specimen if name==target else base/name for name in ("采购合同.pdf","验收报告.pdf","银行付款回单.pdf")]
         originals = {}
         for path in paths:
             page, = prepare(path, 1, save_images=False)
             lines = page["text"].splitlines()
             assert lines[0] == WATERMARK and all(k + "：" + v in lines for k, v in records[path.stem])
             originals[path.name] = (sha256(path.read_bytes()).hexdigest(), page)
-        print(mode, originals[contract.name][0], flush=True)
+        print(mode, originals[target][0], flush=True)
         if upload:
-            title = "合成演练 · PDF " + LABELS[mode]
-            cid = submit(title, paths, seed + mode + originals[contract.name][0][:16], PROFILE)
+            title = ("合成演练 · 验收 PDF " if acceptance else "合成演练 · PDF ") + LABELS[mode]
+            key = seed + ("-receipt-" if acceptance else "") + mode + originals[target][0][:16]
+            cid = submit(title, paths, key, PROFILE)
             submitted.append((mode, cid, title, originals))
             print(mode, cid, flush=True)
     for mode, cid, title, originals in submitted:
         report = read_back(cid, title, originals, wait(cid))
-        found = next(f for f in report["findings"] if f["rule"] == "H01")
-        assert found["effect_review"]["pdf_execution"]["state"] == mode and found["status"] == "missing"
+        if acceptance:
+            row, = report["graph"]["acceptance_pdf_sources"]["records"]
+            found, = [f for f in report["findings"] if f["rule"]=="H02"]
+            assert (row["state"],row["original_sha256"])==(mode,originals[target][0])
+            assert found["status"]=="missing" and row["id"] in found["evidence"]
+        else:
+            found = next(f for f in report["findings"] if f["rule"] == "H01")
+            assert found["effect_review"]["pdf_execution"]["state"] == mode and found["status"] == "missing"
         assert all(f["status"] != "ok" for f in report["findings"] if f["rule"] in ("H04", "H05"))
         statuses = [(f["rule"], f["status"]) for f in report["findings"] if f["rule"].startswith("H")]
         print(mode, cid, "R" + str(get("/api/cases/" + cid)["rev"]), statuses, flush=True)
@@ -95,5 +103,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seed", required=True)
     parser.add_argument("--run", action="store_true")
+    parser.add_argument("--acceptance",action="store_true",help="在验收报告上生成三种签署情形")
     args = parser.parse_args()
-    run(args.seed, args.run)
+    run(args.seed, args.run, acceptance=args.acceptance)

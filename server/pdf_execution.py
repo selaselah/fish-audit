@@ -3,7 +3,9 @@
 from hashlib import sha256
 from io import BytesIO
 from itertools import islice
+from threading import Lock
 
+PDFIUM_LOCK = Lock()
 FORMAT = "pdf-execution-v1"
 SINCE = "2026.11.26.14"
 MAX_SIGNATURES = 24

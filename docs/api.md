@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## 验收 PDF 签署检查
+
+`policy.acceptance_pdf` 使用 `pdf-acceptance-execution-v1`。每个验收或复验单元在 `graph.acceptance_pdf_sources.records` 保存原件摘要、物理页、签字字段、签名校验结果及覆盖范围。H02 的 `acceptance_execution` 列出所据记录。由 `acceptance_pdf_source` 可回到该单的来源，由 `supports_result` 可查引用它的判断。工作台的「交付验收」可从签署状态进入对应 PDF 的署名栏。
+
+`typeset` 表示原件仅见排印内容，`visual` 表示有图像或其他需核实的版面元素。电子签名区分 `current`、`earlier`、`mismatch` 和待查的 `review`。旧版肯定结论若依赖待核验收 PDF，批准前返回 HTTP 409 并提示重审。[审计方法](audit-method.md#验收-pdf-的实际签署依据)
+
 ## 共同签认与实际扣款时刻
 
 规则 `2026.11.26.24` 的 `acceptance_authority` 标记为 `named-acceptance-signatures-v5`。约定两人共同终验、回单能对应到本合同的验收款时，H05 的 `signer_timing` 保存按日比较，`clock` 保存同日可用的时刻证据。其 `days`、`signers`、`debit` 指向逐人日期、逐人时刻与实际扣款栏，`rows` 包含当笔回单上可辨的打印、受理等其他时间。各行属于物理页，持有原文、行号和模型观察引用。页图上的位置存于对应 `calls.pages[].signer_timing_rects`，可从归档原件重新分页校验。

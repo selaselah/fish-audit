@@ -37,6 +37,7 @@ from receipt_packets import verify_sources as verify_receipt_packets
 from delivery_batches import verify_sources as verify_delivery_batches
 from contract_effect import verify as verify_contract_effect
 from pdf_execution import verify as verify_pdf_execution
+from acceptance_execution import verify as verify_acceptance_pdf
 from supplier_pages import verify as verify_supplier_pages
 from acceptance_comments import verify as verify_word_reviews
 from contract_comments import verify as verify_contract_reviews
@@ -65,7 +66,7 @@ TRANSIENT_WRITER_CODES = {getattr(sqlite3,k) for k in ("SQLITE_BUSY","SQLITE_BUS
 
 
 FULL_PAGE_EVIDENCE = (
-    "quality_change", "acceptance_authority", "signer_timing", "date_checks", "batch_acceptance",
+    "quality_change", "acceptance_authority", "acceptance_execution", "signer_timing", "date_checks", "batch_acceptance",
     "effect_review", "warranty_check", "payment_window", "acceptance_reservations", "acceptance_comments",
     "contract_comments", "stage_payments", "invoice_receipt", "payment_change", "payment_opinion",
     "equipment_models", "inspection_coverage", "payment_acceptance", "execution_basis", "contract_folios",
@@ -757,6 +758,7 @@ class Store:
                 return (self.files / case_id / doc["id"] / ("original" + doc["ext"])).read_bytes()
             try:
                 verify_pdf_execution(paper, read_original, signing=True)
+                verify_acceptance_pdf(paper, read_original, signing=True)
                 verify_supplier_pages(paper, read_original, signing=True)
             except (ValueError, OSError, KeyError, TypeError) as error:
                 raise CaseError(f"签收前核对 PDF 签署凭证失败。{error}", 409) from error

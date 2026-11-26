@@ -151,3 +151,31 @@ export async function checkAcceptanceRoster(ctx,publicOnly) {
   }
   console.log('PASS · five cases, distinct original and reinspection records, uncertain sources, phase dependencies, keyboard, focus · '+widths.join('/'));
 }
+
+export async function checkAcceptancePdf(ctx,id,rev) {
+  const {root,call,evaluate,wait}=ctx, base=root+'/api/cases/'+id;
+  const task=await (await fetch(base)).json();
+  assert.match(task.title,/^合成演练/u);
+  rev ||= task.rev;
+  const {report}=await (await fetch(base+'/reports/'+rev)).json();
+  const found=report.findings.find(f=>f.rule==='H02');
+  const proof=report.graph.acceptance_pdf_sources.records.find(r=>found.acceptance_execution.includes(r.id));
+  assert.ok(proof && found.evidence.includes(proof.id));
+  const holder=q('#performance-index [data-pdf-acceptance="'+proof.id+'"]');
+  await call('Page.navigate',{url:root+'/workpaper/'+id+'?rev='+rev+'&view=acceptance-checks'});
+  await wait(q('#performance-index')+'?.open && '+holder+'?.checkVisibility()','acceptance signature inspection');
+  const bad=await evaluate('(()=>{const g=structuredClone(state.bundle.report.graph); g.acceptance_pdf_sources.records[0].original_sha256="stale"; return !!PerformanceIndex.receiptOriginal(g,'+JSON.stringify(proof.id)+');})()');
+  assert.equal(bad,false);
+  const states={typeset:'仅见排印文字',current:'本版有电子签名，身份待核',earlier:'签名覆盖较早版',mismatch:'签名校验不符',visual:'签认图像待核',review:'签署凭证待核'};
+  for (const width of widths) {
+    await size(ctx,width);
+    assert.equal(await evaluate(holder+'.querySelector("strong").textContent'),states[proof.state]);
+    await evaluate(holder+'.focus();'+holder+'.click()');
+    await wait(q('#page-dialog')+'?.open && '+q('#page-dialog .located')+'?.dataset.fact==='+JSON.stringify(proof.fields[0]),'signed row in its own PDF');
+    await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+    await call('Input.dispatchKeyEvent',{type:'keyUp',key:'Escape',code:'Escape',windowsVirtualKeyCode:27});
+    await wait('!'+q('#page-dialog')+'.open && document.activeElement==='+holder,'restore the original signature proof');
+    await inspect(ctx,width,'#performance-index','acceptance-pdf-'+proof.state);
+  }
+  console.log('PASS · acceptance PDF '+proof.state+' · R'+rev+' · six widths, original field and return focus');
+}

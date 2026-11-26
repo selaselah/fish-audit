@@ -24,6 +24,7 @@ import payment_acceptance
 import payment_execution
 import contract_effect
 import pdf_execution
+import acceptance_execution
 import supplier_pages
 import contract_calendar
 import signing_parties
@@ -369,6 +370,10 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     graph["payment_window_sources"]=payment_windows.sources(graph,lambda doc,number:texts[doc,number])
     calls = {(p["doc"], p["number"]): p["extraction"] for p in pages}
     graph["contract_effect_sources"]=contract_effect.sources(graph,lambda doc,number:texts[doc,number],calls=calls)
+    graph["acceptance_pdf_sources"] = acceptance_execution.sources(graph, read_original)
+    nodes, edges = acceptance_execution.source_graph(graph["acceptance_pdf_sources"])
+    graph["nodes"].extend(nodes)
+    graph["edges"].extend(edges)
     graph["pdf_execution_sources"] = pdf_execution.sources(graph, read_original)
     nodes, edges = pdf_execution.source_graph(graph["pdf_execution_sources"])
     graph["nodes"].extend(nodes)

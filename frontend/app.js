@@ -649,6 +649,9 @@ function citation(ref) {
     return Team.paperLink(label,prior.case_id,'button ref',new URLSearchParams({rev:String(prior.rev),fact:prior.fact}));
   }
   const source = index?.nodes.get(ref);
+  if (source?.type==='acceptance_pdf_inspection') {
+    return PerformanceIndex.receiptOriginal(state.bundle.report.graph,ref)?.button || el('span','验收 PDF 签署来源待核','small');
+  }
   if (['contract_word_review','contract_word_comment'].includes(source?.type)) return AcceptanceComments.citation(ref,'contract');
   if (['acceptance_word_review','acceptance_word_comment'].includes(source?.type)) return AcceptanceComments.citation(ref);
   if (source?.type==='supplier_page_inspection') {

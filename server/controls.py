@@ -34,6 +34,7 @@ from payment_acceptance import FORMAT as PAYMENT_ACCEPTANCE
 from receipt_packets import FORMAT as RECEIPT_PACKETS
 from delivery_batches import FORMAT as DELIVERY_BATCHES
 from contract_effect import FORMAT as CONTRACT_EFFECT
+from acceptance_execution import FORMAT as ACCEPTANCE_PDF
 from pdf_execution import FORMAT as PDF_EXECUTION
 from supplier_pages import FORMAT as SUPPLIER_PAGE_INSPECTION
 from warranty_terms import FORMAT as WARRANTY_CHECKS
@@ -74,7 +75,7 @@ VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING
            "invoice_receipt_conditions":INVOICE_RECEIPT, "acceptance_reservations":RESERVATIONS, "acceptance_word_reviews":WORD_REVIEWS, "contract_word_reviews":CONTRACT_WORD_REVIEWS, "payment_releases":PAYMENT_RELEASES, "equipment_models":EQUIPMENT_MODELS, "repair_completion":REPAIR_COMPLETION, "reinspection_wait": REINSPECTION_WAIT, "contract_folios": CONTRACT_FOLIOS, "inspection_coverage":INSPECTION_COVERAGE, "prior_installment":PRIOR_INSTALLMENT,
            "quality_number_classification":QUALITY_NUMBER_FORMAT, "quality_references":QUALITY_REFERENCE_FORMAT,
            "delegation_checks":DELEGATION_FORMAT, "quality_addenda":ADDENDUM_FORMAT, "acceptance_authority":ACCEPTANCE_AUTHORITY,"delivery_batches":DELIVERY_BATCHES,"receipt_packets":RECEIPT_PACKETS,"stage_payments":STAGE_PAYMENTS, "payment_acceptance":PAYMENT_ACCEPTANCE, "payment_execution":PAYMENT_EXECUTION,
-           "supplier_page_inspection": SUPPLIER_PAGE_INSPECTION, "pdf_execution": PDF_EXECUTION, "contract_effect":CONTRACT_EFFECT,"warranty_checks":WARRANTY_CHECKS,"payment_windows":PAYMENT_WINDOWS,"sources": SOURCES, "rule_sources": MAPPING, "invoice_sources": INVOICE_SOURCE_FORMAT,
+           "supplier_page_inspection": SUPPLIER_PAGE_INSPECTION, "pdf_execution": PDF_EXECUTION, "acceptance_pdf": ACCEPTANCE_PDF, "contract_effect":CONTRACT_EFFECT,"warranty_checks":WARRANTY_CHECKS,"payment_windows":PAYMENT_WINDOWS,"sources": SOURCES, "rule_sources": MAPPING, "invoice_sources": INVOICE_SOURCE_FORMAT,
            "invoice_approval": INVOICE_APPROVAL_FORMAT,"invoice_identity":INVOICE_IDENTITY_FORMAT,"invoice_lookup":INVOICE_LOOKUP,
            "invoice_number_masks":MASK_FORMAT,"payment_references":PAYMENT_REFERENCE_FORMAT,"payment_checks":PAYMENT_CHECKS}
 FULL_TERMS = {"验收后一次性全额结算", "验收后一次性付清", "一次性全额结算", "一次性付清",

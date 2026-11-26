@@ -62,9 +62,10 @@ def revisions(raw, reader, signatures):
     """Cross-check PDFium trailer ends with the independently verified signed ranges."""
     import ctypes
     import pypdfium2 as pdfium
+    from pdf_execution import PDFIUM_LOCK
     from pyhanko.sign.diff_analysis import DEFAULT_DIFF_POLICY, ModificationLevel
 
-    with pdfium.PdfDocument(raw) as pdf:
+    with PDFIUM_LOCK, pdfium.PdfDocument(raw) as pdf:
         count = pdfium.raw.FPDF_GetTrailerEnds(pdf, None, 0)
         if count < 2 or count > 128 or count != reader.xrefs.total_revisions:
             return None
@@ -87,9 +88,11 @@ def revisions(raw, reader, signatures):
 def render_pages(source, target):
     from config import MAX_PAGES
     from documents import render
+    from pdf_execution import PDFIUM_LOCK
 
     target.mkdir()
-    render(source, target, MAX_PAGES)
+    with PDFIUM_LOCK:
+        render(source, target, MAX_PAGES)
     return json.loads((target / "manifest.json").read_bytes())
 
 

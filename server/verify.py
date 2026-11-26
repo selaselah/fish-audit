@@ -32,6 +32,7 @@ from receipt_packets import verify_sources as verify_receipt_packets
 from delivery_batches import verify_sources as verify_delivery_batches
 from contract_effect import verify as verify_contract_effect
 from pdf_execution import verify as verify_pdf_execution
+from acceptance_execution import verify as verify_acceptance_pdf
 from supplier_pages import verify as verify_supplier_pages
 from acceptance_comments import verify as verify_word_reviews
 from contract_comments import verify as verify_contract_reviews
@@ -269,6 +270,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
         return bundle.read(path)
     try:
         verify_pdf_execution(report, read_original)
+        verify_acceptance_pdf(report, read_original)
         verify_supplier_pages(report, read_original)
     except ModuleNotFoundError as error:
         raise ValueError("重验 PDF 签署凭证需要安装 server/requirements.txt 中的依赖，请使用服务端虚拟环境运行校验。") from error
@@ -448,6 +450,7 @@ def render_addendum_sources(bundle, report, nodes):
     selected.update(p["doc"] for p in graph.get("contract_folio_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("reinspection_wait_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("payment_acceptance_sources",{}).get("pages",[]))
+    selected.update(r["doc"] for r in graph.get("acceptance_pdf_sources",{}).get("records",[]))
     selected.update(p["doc"] for p in graph.get("inspection_coverage_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("equipment_model_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("receipt_packet_sources",{}).get("packets",[]))
