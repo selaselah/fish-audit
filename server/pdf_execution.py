@@ -1,5 +1,6 @@
-"""Bind an offline PDF signature integrity check to the exact contract original."""
+"""Inspect embedded PDF signatures and bind execution evidence to submitted originals and filing units."""
 
+from collections import defaultdict
 from hashlib import sha256
 from io import BytesIO
 from itertools import islice
@@ -95,6 +96,105 @@ def contracts(graph):
             physical.setdefault(unit.get("source", unit["id"]), []).append(unit["id"])
     return [(doc, physical[doc["id"]]) for doc in graph["documents"]
             if doc["id"] in physical and doc.get("ext") == ".pdf"]
+
+
+def page_content(raw, expected):
+    import pypdfium2 as pdfium
+    from documents import clause_text_only, layer_type
+
+    # PDFium is not thread-safe. The web server can receive multiple signing requests at once.
+    with PDFIUM_LOCK:
+        try:
+            with pdfium.PdfDocument(raw) as pdf:
+                if len(pdf) != expected:
+                    return {}
+                contents = {}
+                for i in range(len(pdf)):
+                    page = pdf[i]
+                    try:
+                        layer = layer_type(page)
+                        text = page.get_textpage()
+                        try:
+                            has_text = text.count_chars()>0
+                        finally:
+                            text.close()
+                        contents[i+1] = {"layer":layer,"has_text":has_text,"typeset":layer=="text" and clause_text_only(page)}
+                    finally:
+                        page.close()
+                return contents
+        except (ValueError, OSError, RuntimeError, pdfium.PdfiumError):
+            return {}
+
+
+def unit_records(graph, read_original, assigned, *, field, prefix, label):
+    from config import MAX_PAGES
+
+    units = defaultdict(list)
+    for unit in graph.get("audit_documents", graph["documents"]):
+        if unit["id"] in assigned:
+            units[unit.get("source", unit["id"])].append(unit)
+    nodes = {n["id"]:n for n in graph["nodes"] if n["type"]=="page"}
+    rows = []
+    for doc in graph["documents"]:
+        if doc.get("ext")!=".pdf" or doc["id"] not in units:
+            continue
+        count = doc.get("pages")
+        if count is None:
+            count = sum(ref.startswith(doc["id"]+"/p") for ref in nodes)
+        if type(count) is not int or not 1<=count<=MAX_PAGES:
+            raise ValueError(label+"页数与可核对的原页范围不符")
+        raw = read_original(doc) if read_original else None
+        if raw is not None and sha256(raw).hexdigest()!=doc["sha256"]:
+            raise ValueError(label+"原件与入库摘要不符")
+        integrity, signatures = inspect_original(raw) if raw is not None else ("review", [])
+        contents = page_content(raw, count) if raw is not None else {}
+        for unit in units[doc["id"]]:
+            numbers = [unit["page"]] if "source" in unit else range(1,count+1)
+            pages = {}
+            for number in numbers:
+                key = f"{doc['id']}/p{number}"
+                page = nodes.get(key)
+                if not page:
+                    raise ValueError(label+"所据物理页缺失")
+                pages[number] = {"ref":key,"sha256":page["sha256"],**contents.get(number, {"layer":"unknown","has_text":False,"typeset":False})}
+            fields = [f for f in graph["facts"] if (f.get("unit") or f["doc"])==unit["id"]
+                      and f["doc"]==doc["id"] and f["page"] in pages and f["field"]==field]
+            state = integrity if contents else "review"
+            if state=="unsigned":
+                if all(p["typeset"] for p in pages.values()):
+                    state = "typeset" if any(p["has_text"] for p in pages.values()) else "review"
+                else:
+                    state = "visual"
+            rows.append({"id":prefix+"/"+unit["id"],"unit":unit["id"],"doc":doc["id"],
+                         "original_sha256":doc["sha256"],"state":state,"signatures":signatures,
+                         "pages":list(pages.values()),"fields":[f["id"] for f in fields]})
+    return rows
+
+
+def unit_graph(ledger, kind, label):
+    nodes, edges = [], []
+    for row in ledger["records"]:
+        nodes.append({"id":row["id"],"type":kind+"_inspection","label":label,
+                      "doc":row["doc"],"sha256":row["original_sha256"],"state":row["state"]})
+        refs = [row["doc"], *(p["ref"] for p in row["pages"]), *row["fields"]]
+        edges.append({"from":row["unit"],"to":row["id"],"type":kind+"_source","evidence":refs})
+    return nodes, edges
+
+
+def apply_unit_records(item, records, key, descriptions):
+    if not records:
+        return False
+    refs = [ref for r in records for ref in (r["id"],r["doc"],*(p["ref"] for p in r["pages"]),*r["fields"])]
+    item[key] = [r["id"] for r in records]
+    item["evidence"] = list(dict.fromkeys([*item["evidence"],*refs]))
+    details = list(dict.fromkeys(descriptions[r["state"]] for r in records))
+    if item["status"]=="ok":
+        item.update(status="missing",detail=" ".join(details))
+    else:
+        item["detail"] += "".join(" "+d for d in details if d not in item["detail"])
+    if item["status"]!="issue" and any(r["state"]=="mismatch" for r in records):
+        item["status"] = "risk"
+    return True
 
 
 def sources(graph, read_original):

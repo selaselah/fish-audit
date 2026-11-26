@@ -1,9 +1,6 @@
 """Distinguish a printed acceptance name from evidence of execution in the submitted PDF."""
 
-from collections import defaultdict
-from hashlib import sha256
-
-from pdf_execution import PDFIUM_LOCK, inspect_original
+from pdf_execution import apply_unit_records, unit_graph, unit_records
 
 FORMAT = "pdf-acceptance-execution-v1"
 SINCE = (2026, 11, 26, 27)
@@ -17,89 +14,15 @@ DETAIL = {
 }
 
 
-def page_content(raw, expected):
-    import pypdfium2 as pdfium
-    from documents import clause_text_only, layer_type
-
-    # PDFium is not thread-safe. The web server can receive multiple signing requests at once.
-    with PDFIUM_LOCK:
-        try:
-            with pdfium.PdfDocument(raw) as pdf:
-                if len(pdf) != expected:
-                    return {}
-                contents = {}
-                for i in range(len(pdf)):
-                    page = pdf[i]
-                    try:
-                        layer = layer_type(page)
-                        text = page.get_textpage()
-                        try:
-                            has_text = text.count_chars()>0
-                        finally:
-                            text.close()
-                        contents[i+1] = {"layer":layer,"has_text":has_text,"typeset":layer=="text" and clause_text_only(page)}
-                    finally:
-                        page.close()
-                return contents
-        except (ValueError, OSError, RuntimeError, pdfium.PdfiumError):
-            return {}
-
-
 def sources(graph, read_original):
-    from config import MAX_PAGES
-
     kinds = graph.get("documents_by_kind", {})
     receipts = set(kinds.get("acceptance", ())) | set(kinds.get("reinspection", ()))
-    units = defaultdict(list)
-    for unit in graph.get("audit_documents", graph["documents"]):
-        if unit["id"] in receipts:
-            units[unit.get("source", unit["id"])].append(unit)
-    nodes = {n["id"]:n for n in graph["nodes"] if n["type"]=="page"}
-    rows = []
-    for doc in graph["documents"]:
-        if doc.get("ext")!=".pdf" or doc["id"] not in units:
-            continue
-        count = doc.get("pages")
-        if count is None:
-            count = sum(ref.startswith(doc["id"]+"/p") for ref in nodes)
-        if type(count) is not int or not 1<=count<=MAX_PAGES:
-            raise ValueError("验收 PDF 页数与可核对的原页范围不符")
-        raw = read_original(doc) if read_original else None
-        if raw is not None and sha256(raw).hexdigest()!=doc["sha256"]:
-            raise ValueError("验收 PDF 原件与入库摘要不符")
-        integrity, signatures = inspect_original(raw) if raw is not None else ("review", [])
-        contents = page_content(raw, count) if raw is not None else {}
-        for unit in units[doc["id"]]:
-            numbers = [unit["page"]] if "source" in unit else range(1,count+1)
-            pages = {}
-            for number in numbers:
-                key = f"{doc['id']}/p{number}"
-                page = nodes.get(key)
-                if not page:
-                    raise ValueError("验收签认所据物理页缺失")
-                pages[number] = {"ref":key,"sha256":page["sha256"],**contents.get(number, {"layer":"unknown","has_text":False,"typeset":False})}
-            fields = [f for f in graph["facts"] if (f.get("unit") or f["doc"])==unit["id"]
-                      and f["doc"]==doc["id"] and f["page"] in pages and f["field"]=="acceptance_signer"]
-            state = integrity if contents else "review"
-            if state=="unsigned":
-                if all(p["typeset"] for p in pages.values()):
-                    state = "typeset" if any(p["has_text"] for p in pages.values()) else "review"
-                else:
-                    state = "visual"
-            rows.append({"id":"acceptance-pdf/"+unit["id"],"unit":unit["id"],"doc":doc["id"],
-                         "original_sha256":doc["sha256"],"state":state,"signatures":signatures,
-                         "pages":list(pages.values()),"fields":[f["id"] for f in fields]})
-    return {"format":FORMAT,"records":rows}
+    return {"format": FORMAT, "records": unit_records(graph, read_original, receipts, field="acceptance_signer",
+            prefix="acceptance-pdf", label="验收 PDF ")}
 
 
 def source_graph(ledger):
-    nodes, edges = [], []
-    for row in ledger["records"]:
-        nodes.append({"id":row["id"],"type":"acceptance_pdf_inspection","label":"验收 PDF 签署凭证",
-                      "doc":row["doc"],"sha256":row["original_sha256"],"state":row["state"]})
-        refs = [row["doc"], *(p["ref"] for p in row["pages"]), *row["fields"]]
-        edges.append({"from":row["unit"],"to":row["id"],"type":"acceptance_pdf_source","evidence":refs})
-    return nodes, edges
+    return unit_graph(ledger, "acceptance_pdf", "验收 PDF 签署凭证")
 
 
 def relevant(graph, units):
@@ -107,19 +30,7 @@ def relevant(graph, units):
 
 
 def apply(item, records):
-    if not records:
-        return False
-    refs = [ref for r in records for ref in (r["id"],r["doc"],*(p["ref"] for p in r["pages"]),*r["fields"])]
-    item["acceptance_execution"] = [r["id"] for r in records]
-    item["evidence"] = list(dict.fromkeys([*item["evidence"],*refs]))
-    details = list(dict.fromkeys(DETAIL[r["state"]] for r in records))
-    if item["status"]=="ok":
-        item.update(status="missing",detail=" ".join(details))
-    else:
-        item["detail"] += "".join(" "+d for d in details if d not in item["detail"])
-    if item["status"]!="issue" and any(r["state"]=="mismatch" for r in records):
-        item["status"] = "risk"
-    return True
+    return apply_unit_records(item, records, "acceptance_execution", DETAIL)
 
 
 def verify(report, read_original, *, signing=False):
