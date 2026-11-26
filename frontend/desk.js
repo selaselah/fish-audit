@@ -6,6 +6,7 @@ function contractPreview(report, task) {
   function jump(f,label,cls='preview-finding',view) {
     const query=new URLSearchParams({rev:String(task.rev),...(view?{view}:{finding:f.id})});
     if (['payment-acceptance','signer-timing','payment-proof'].includes(view)) query.set('receipt',f.id);
+    if (view==='payment-checks') query.set('stage',f.id);
     const node=Team.paperLink(label,task.id,cls,query);
     node.dataset.findingId=f.id;
     if (view!=='payment-acceptance') node.append(tag(f.status));
@@ -44,10 +45,11 @@ function contractPreview(report, task) {
       content.setAttribute('aria-labelledby',pick.children[i].id);
     }
     const payments=related.filter(r=>r.rule==='H05');
-    content.replaceChildren(jump(f,'付款条件'));
+    content.replaceChildren(f.advance_guarantee?jump(f,'预付款保函','preview-finding','payment-checks'):jump(f,'付款条件'));
     for (const r of related) {
       const bank=payments.length>1 && r.rule==='H05' && traceReferences(graph,r).map(ref=>index.facts.get(ref)).find(v=>v?.field==='bank_receipt');
       if (r.execution_basis) content.append(jump(r,'核对扣款凭证','preview-finding','payment-proof'));
+      else if (r.advance_guarantee) content.append(jump(r,payments.length>1?AdvanceGuarantee.receiptName(r,report)+' · 签收与付款日':'签收与付款日','preview-finding','payment-checks'));
       else if (r.signer_timing) content.append(jump(r,bank?.name || '签认与付款日','preview-finding','signer-timing'));
       else content.append(jump(r,r.rule==='H06'?'本期回单合计':bank?.name || '实付时点'));
     }

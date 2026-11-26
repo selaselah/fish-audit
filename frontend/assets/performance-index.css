@@ -163,6 +163,19 @@
 }
 @media (prefers-reduced-motion:reduce) { .scope-cards .scope-card { transition:none; } }
 
+@media (max-width:650px) and (min-height:500px) {
+  .scope-dialog { scroll-padding-block:76px 10px; }
+  .scope-dialog .scope-head { position:sticky; top:0; z-index:2; background:var(--surface); }
+}
+@media (min-width:651px) {
+  .scope-dialog[open] { display:flex; flex-direction:column; overflow:hidden; }
+  .scope-dialog .scope-head,.scope-dialog .scope-filters { flex:none; }
+  .scope-dialog .scope-filters { align-self:flex-start; }
+  .scope-dialog .scope-body { flex:0 1 auto; min-height:0; overflow:hidden; }
+  .scope-dialog[data-single=true] .scope-body { display:grid; grid-template-columns:minmax(0,1fr); }
+  .scope-dialog .scope-checks,.scope-dialog .scope-detail { min-height:0; max-height:none; overflow-y:auto; overscroll-behavior-y:contain; }
+}
+
 .phase-choices .phase-choice { position:relative; }
 .batch-phase-proof {
   container-type:inline-size;
@@ -254,7 +267,7 @@
 @media (max-width:650px) {
   .batch-phase-modes button,.batch-phase-empty .text-button,.batch-phase-proof > details summary { min-height:44px; }
   .phase-evidence .proof-switch { flex-wrap:wrap; max-width:100%; }
-  .scope-dialog[data-single=false] .scope-detail[data-batch=true] > h3 {
+  .scope-dialog[data-single=false] .scope-detail:is([data-batch=true],[data-guarantee=true]) > h3 {
     position:absolute; width:1px; height:1px; margin:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap;
   }
 }

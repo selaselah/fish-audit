@@ -53,8 +53,10 @@ function priorityQueue(items) {
   function show(i) {
     selected=i;
     const finding=items[i], title=finding.stage ? finding.stage.name+' · '+finding.title : finding.title;
-    if (finding.execution_basis) {
-      const jump=PaymentProof.jump(finding,(finding.stage?finding.stage.name+' · ':'')+'核对扣款凭证');
+    if (finding.execution_basis || finding.advance_guarantee) {
+      const prefix=finding.stage?finding.stage.name+' · ':'';
+      const jump=finding.execution_basis?PaymentProof.jump(finding,prefix+'核对扣款凭证'):
+        AdvanceGuarantee.jump(finding,prefix+(finding.rule==='H05'?'签收与付款日':'核对预付款保函'));
       jump.classList.add('performance-jump');jump.append(tag(finding.status));destination.replaceChildren(jump);
     } else destination.replaceChildren(performanceJump(finding,title));
     position.value=(i+1)+' / '+items.length;

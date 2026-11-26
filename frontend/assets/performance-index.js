@@ -17,7 +17,9 @@ const PerformanceIndex = (() => {
     return group.pending.length+' / '+group.items.length+' 项待核';
   }
   function checkName(item) {
-    const label=item.execution_basis?'扣款凭证':item.title;
+    let label=item.title;
+    if (item.execution_basis) label='扣款凭证';
+    else if (item.advance_guarantee) label=item.rule==='H05'?'签收与付款日':'预付款收函条件';
     if (item.stage) return item.stage.name+' · '+label;
     if (item.rule==='H05' || item.stage_payments) return '期次待核 · '+label;
     return label;
@@ -466,6 +468,9 @@ const PerformanceIndex = (() => {
   }
   function overview(findings,graph,rev) {
     const groupsHere=groups(findings);
+    const guaranteePayments=findings.filter(f=>f.rule==='H05' && f.advance_guarantee);
+    const checkLabel=item=>guaranteePayments.length>1 && guaranteePayments.includes(item)?
+      checkName(item)+' · '+AdvanceGuarantee.receiptName(item,state.bundle.report):checkName(item);
     const summary=box('performance-statuses scope-cards'), dialog=el('dialog','','scope-dialog');
     dialog.id='performance-index'; dialog.setAttribute('aria-labelledby','scope-title');
     const title=el('h2'); title.id='scope-title';
@@ -492,7 +497,7 @@ const PerformanceIndex = (() => {
     function select(item) {
       selected=item.id; mobile.value=selected;
       for (const row of checks.children) row.setAttribute('aria-pressed',String(row.dataset.check===selected));
-      const heading=el('h3',checkName(item)); heading.id='scope-check-title';
+      const heading=el('h3',checkLabel(item)); heading.id='scope-check-title';
       const complete=action('完整检查',()=>{
         dialog.close(); revealPaperTarget(document.querySelector('[data-finding="'+CSS.escape(item.id)+'"]'));
       },'text-button');
@@ -504,13 +509,16 @@ const PerformanceIndex = (() => {
       const paired=pairView(item,state.bundle.report,receipts);
       const roster=AcceptanceRoster.bind(item,state.bundle.report);
       const batch=BatchPhase.resolve(item,findings.find(f=>f.rule==='H02'),graph,state.bundle.report.calls?.pages);
+      const guarantee=AdvanceGuarantee.panel(item,state.bundle.report);
       detail.dataset.batch=String(Boolean(batch));
+      detail.dataset.guarantee=String(Boolean(guarantee));
       detail.replaceChildren(box('scope-check-state',el('span',item.id,'mono'),tag(item.status)),heading);
       for (const mandate of mandates) detail.append(mandatePanel(mandate));
       let detailText=item.detail || '';
+      if (guarantee) detail.append(guarantee);
       if (batch) detail.append(BatchPhase.panel(batch,item.stage));
       if (paired) detail.append(paired);
-      else if (detailText && (receipts.length && ['issue','risk'].includes(item.status) || roster && item.status==='issue')) {
+      else if (!guarantee && detailText && (receipts.length && ['issue','risk'].includes(item.status) || roster && item.status==='issue')) {
         const end=detailText.indexOf('。')+1 || detailText.length;
         detail.append(el('p',detailText.slice(0,end),'scope-reason')); detailText=detailText.slice(end).trimStart();
       }
@@ -532,13 +540,14 @@ const PerformanceIndex = (() => {
         if (detailText) detail.append(fold('本项检查结论',el('p',detailText,'scope-reason')));
       } else if (!paired && detailText) {
         const reason=el('p',detailText,'scope-reason');
-        detail.append(detailText.length<=100 && !receipts.length && !batch?reason:fold('阅读本项结论',reason));
+        detail.append(detailText.length<=100 && !receipts.length && !batch && !guarantee?reason:fold('阅读本项结论',reason));
       }
       if (!paired) {
         const sources=()=>sourceView(item,graph,[...receipts,...mandates.flatMap(m=>m.proofs)]);
-        detail.append(roster || batch || mandates.length?lazyFold('其他字段引文',()=>[sources()]):sources());
+        detail.append(roster || batch || guarantee || mandates.length?lazyFold('其他字段引文',()=>[sources()]):sources());
       }
       detail.append(actions);
+      detail.scrollTop=0;
     }
     function filter(pending,unavailable=false) {
       shown=pending?priorityFindings(group.pending).concat(group.pending.filter(f=>!['risk','issue','missing'].includes(f.status))):group.items;
@@ -546,12 +555,13 @@ const PerformanceIndex = (() => {
       checks.replaceChildren(); mobile.replaceChildren();
       for (const item of shown) {
         const row=action('',()=>select(item),'scope-check'); row.dataset.check=item.id;
-        row.append(el('small',item.id,'mono'),el('span',checkName(item)),tag(item.status));
-        const option=el('option',item.id+' · '+checkName(item)+' · '+statusName(item.status)); option.value=item.id;
+        const label=checkLabel(item);
+        row.append(el('small',item.id,'mono'),el('span',label),tag(item.status));
+        const option=el('option',item.id+' · '+label+' · '+statusName(item.status)); option.value=item.id;
         checks.append(row); mobile.append(option);
       }
       if (unavailable) {
-        selected=null; detail.dataset.batch='false';
+        selected=null; detail.dataset.batch='false'; detail.dataset.guarantee='false';
         for (const row of checks.children) row.setAttribute('aria-pressed','false');
         const placeholder=new Option('选择本版检查项','',true,true); placeholder.disabled=true;
         mobile.prepend(placeholder); mobile.value='';
@@ -573,9 +583,10 @@ const PerformanceIndex = (() => {
     }
     function open(scope, stage) {
       previous=null; back.hidden=true;
-      const item=stage && scope.items.find(f=>f.rule==='H04' && f.id===stage);
+      const item=stage && scope.items.find(f=>['H04','H05'].includes(f.rule) && f.id===stage);
       showGroup(scope,item,Boolean(stage && !item));
       dialog.showModal();
+      dialog.scrollTop=0;
     }
     for (const scope of groupsHere) {
       const button=action('',()=>open(scope),'scope-card');

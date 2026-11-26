@@ -24,6 +24,14 @@
         const panel=$('#file-progress'); panel.open=true; jump(panel.querySelector('summary'));
       }, '', '解析 页数 进度');
       if (paper) {
+        const guarantees=paper.report.findings.filter(f=>f.advance_guarantee);
+        const payments=guarantees.filter(f=>f.rule==='H05');
+        for (const f of payments.length?payments:guarantees) {
+          const label=payments.length>1?'核对预付款保函 · '+AdvanceGuarantee.receiptName(f,paper.report):'核对预付款保函';
+          add('底稿视图',label,'file-earmark-text',()=>{
+            state.tab='report'; renderCase(true); AdvanceGuarantee.open(f);
+          },'R'+paper.rev+(payments.length>1?' · '+f.id:''),'首期付款 收函 签收 开立 受益人 担保');
+        }
         if (paper.report.findings.some(f=>f.execution_basis)) add('底稿视图','核对扣款凭证','receipt',()=>{
           state.tab='report'; renderCase(true); jump($('#payment-proof'));
         },'R'+paper.rev,'付款申请 受理 回单 页脚 扣款');
