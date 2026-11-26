@@ -21,3 +21,9 @@ Microsoft 的 Open XML 文档说明正文中的评论引用如何通过同一标
 Docusign 的合同审查把疑点链接到具体条款，由审阅者判断修订建议。FloQast 的对账工作区将支持材料、复核意见和签收记录与对应事项放在一起。本项目据此把“第二期付款条件”和“第二期实付时点”做成独立原件入口，让审计人员直接从期次进入该版本的底稿。[Docusign 合同审查](https://www.docusign.com/company/news-center/docusign-introduces-ai-contract-review-assistant-to-streamline-agreements-workflows) · [FloQast 对账与复核](https://www.floqast.com/close-management/products/account-reconciliations)
 
 公开演示使用本项目生成的冷藏柜采购合同和银行回单。两份原件、页图和支付比例都来自同一份演练底稿。示例中的合成单位、署名和水印均保留在下载件中。[水印资料生成器](../docs/samples/contract_comments.py) · [演示数据与原件摘要](../frontend/assets/contract-comment-sample.json) · [验收记录](../docs/acceptance.md#合同分期付款批注)
+
+## 质保确认与维修记录的取证参考
+
+中国注册会计师审计准则第 1301 号第十五条要求，在不同来源的证据存在差异时判断需要追加哪些审计程序。应用指南第 57 段还涉及重大事项中差异处理的记录。本项目据此将确认单原行、关联工单及需补查的关闭签认留在同一项发现中。合同约定、实际维修进度和付款依据各自需要相应原件。[中注协发布的审计准则第 1301 号，第十五条](https://www.cicpa.org.cn/ztzl1/Professional_standards/xxzztx/zyzz/sjzz/202105/P020240412542695263912.pdf#page=4) · [第 1301 号应用指南，第 57 段](https://cicpa.org.cn/xxfb/tzgg/202304/W020230410260829897530.pdf#page=17)
+
+IBM Maximo 的工单应用把单张工单的状态、附件和处理历史放在可选择的记录中。SAP Fiori 的 Filter Bar 支持使用状态条件筛选列表。这里允许审计员按差异筛选工单，选中后就地打开原始记录。[IBM Maximo Work Orders](https://www.ibm.com/docs/en/masv-and-l/maximo-manage/cd?topic=module-work-orders-application) · [SAP Fiori Filter Bar](https://www.sap.com/design-system/fiori-design-web/v1-139/ui-elements/filter-bar)

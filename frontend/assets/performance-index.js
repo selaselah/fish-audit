@@ -2,8 +2,9 @@ const PerformanceIndex = (() => {
   const scopes = [
     {id:'contract', label:'签署与生效', icon:'journal-text', rules:['H01']},
     {id:'acceptance', label:'交付验收', icon:'clipboard-check', rules:['H02']},
-    {id:'payment', label:'分期与付款', icon:'receipt', rules:['H03','H04','H05','H06']},
+    {id:'payment', label:'分期与付款', icon:'receipt', rules:['H03','H04','H05','H06','H07']},
   ];
+  const includes = finding => scopes.some(scope=>scope.rules.includes(finding.rule));
   function groups(findings) {
     return scopes.map(scope=>{
       const items=findings.filter(f=>scope.rules.includes(f.rule));
@@ -138,6 +139,7 @@ const PerformanceIndex = (() => {
   }
   function specialist(item) {
     const target=id=>document.getElementById(id);
+    if (item.warranty_difference) return WarrantyRegisterEvidence.jump(item);
     if (item.execution_basis && target('payment-proof')) return PaymentProof.jump(item);
     if (item.signer_timing && target('signer-timing')) return SignerEvidence.jump(item);
     if (item.payment_acceptance && target('payment-acceptance')) return PaymentAcceptance.jump(item);
@@ -417,6 +419,18 @@ const PerformanceIndex = (() => {
     return detail.normalize('NFKC').includes(statement.normalize('NFKC'));
   }
   function pairedLines(item,report) {
+    const graph=report.graph;
+    function fromFacts(title, entries) {
+      const rows=entries.map(([label,fact])=>({
+        label,place:'第 '+fact.page+' 页 · 第 '+fact.source_line.number+' 行',line:fact.source_line.number,quote:fact.source_line.text,
+        excerpt:()=>EvidenceCompare.lineExcerpt(fact,graphIndex(graph)),open:()=>openPage(fact.doc,fact.page,fact.id),
+      }));
+      return {title,rows};
+    }
+    if (item.rule==='H07') {
+      const pair=WarrantyRegisterEvidence.pair(item,report);
+      return pair && fromFacts(pair.label,[['期满确认单',pair.left],['维修工单',pair.right]]);
+    }
     if (item.execution_basis) {
       const [entry]=PaymentProof.entries(report,[item]);
       if (!entry || !['conflict','limited','application'].includes(entry.state)) return null;
@@ -425,7 +439,7 @@ const PerformanceIndex = (() => {
       return rows.length?{title:rows[0].file,rows}:null;
     }
     if (item.rule!=='H02' || item.status!=='issue') return null;
-    const graph=report.graph, refs=originals(item,graph), kinds=graph.documents_by_kind || {};
+    const refs=originals(item,graph), kinds=graph.documents_by_kind || {};
     function only(field,kind) {
       const candidates=refs.filter(r=>r.line && r.fact.field===field && kinds[kind]?.includes(r.fact.unit || r.fact.doc));
       return candidates.length===1?candidates[0]:null;
@@ -434,11 +448,7 @@ const PerformanceIndex = (() => {
     if (!contract || !acceptance) return null;
     // This is the issued quantitative finding. Other procedures may cite the same fields as context.
     if (!issuedLimitBreach(item.detail,contract.fact,acceptance.fact)) return null;
-    const rows=[contract,acceptance].map(({doc,fact,line})=>({
-      label:doc.name,place:'第 '+fact.page+' 页 · 第 '+line+' 行',line,quote:fact.source_line.text,
-      excerpt:()=>EvidenceCompare.lineExcerpt(fact,graphIndex(graph)),open:()=>openPage(doc.id,fact.page,fact.id),
-    }));
-    return {title:'合同标准与验收实测',rows};
+    return fromFacts('合同标准与验收实测',[contract,acceptance].map(({doc,fact})=>[doc.name,fact]));
   }
   function pairView(item,report,receipts) {
     const pair=pairedLines(item,report);
@@ -615,5 +625,5 @@ const PerformanceIndex = (() => {
     summary.append(dialog);
     return summary;
   }
-  return {groups,count,originals,fieldLinks,issuedLimitBreach,receiptCitation,receiptEvidence,mandateCitation,mandateEvidence,overview};
+  return {includes,groups,count,originals,fieldLinks,issuedLimitBreach,receiptCitation,receiptEvidence,mandateCitation,mandateEvidence,overview};
 })();

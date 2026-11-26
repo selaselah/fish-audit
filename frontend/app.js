@@ -1091,7 +1091,7 @@ function findingsLedger(report) {
 }
 function reportPanel() {
   const report = state.bundle.report;
-  const performance = report.findings.filter(item => /^H0[1-6]$/.test(item.rule));
+  const performance = report.findings.filter(PerformanceIndex.includes);
   const verdict = report.result.verdict;
   const mark = box('verdict-symbol',glyph(({pass:'shield-check',reject:'exclamation-diamond',review:'clipboard-check'})[verdict] || 'question-circle'));
   const verdictLine=box('verdict-line',mark,box('verdict-name',el('h2','审计建议'),el('strong',statusName(verdict))));
@@ -1256,6 +1256,19 @@ function graphRelations(report) {
     }));
     links.classList.add('warranty-relations');
     panel.append(links);
+  }
+  const workOrders=report.findings.filter(f=>f.rule==='H07').map(finding=>({
+    finding,pair:WarrantyRegisterEvidence.pair(finding,report),
+  })).filter(record=>record.pair);
+  if (workOrders.length) {
+    const links=lazyFold('期满确认与工单状态（'+workOrders.length+'）',()=>workOrders.map(({finding,pair})=>{
+      const compare=action('双页对照',()=>showFindingPath(finding,true,pair.key),'text-button');
+      const row=box('line',box('flow',el('strong',finding.warranty_difference.number),compare));
+      for (const fact of [pair.left,pair.right]) row.append(box('batch-source',el('q',fact.source_line.text),citation(fact.id)));
+      row.dataset.warrantyDifference=finding.id;
+      return row;
+    }));
+    links.classList.add('warranty-difference-relations'); panel.append(links);
   }
   const receiptEdges=graph.edges.filter(e=>e.type==='acceptance_page_identity');
   if (receiptEdges.length) {
@@ -1535,6 +1548,8 @@ async function refresh() {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='[data-audit-scope="'+requestedScope.id+'"]';
       } else if (requestedView==='execution' && state.openedCitation!==location.hash && state.bundle) {
         state.openedCitation=location.hash; state.tab='activity'; focusFinding='#execution-trace-page';
+      } else if (requestedView==='warranty-register' && state.openedCitation!==location.hash && state.bundle) {
+        state.openedCitation=location.hash; state.tab='report'; focusFinding='#case-panel';
       } else if (route.params.get('view')==='replay' && state.openedCitation!==location.hash && state.bundle) {
         state.openedCitation=location.hash; state.tab='activity'; focusFinding='.rule-replay button';
       } else if (['reinspection','trial'].includes(route.params.get('view')) && state.openedCitation!==location.hash &&
@@ -1577,7 +1592,9 @@ async function refresh() {
       renderCase(Boolean(focusFinding));
       if (focusFinding) {
         const target = $(focusFinding);
-        if (target?.dataset.auditScope) {
+        if (requestedView==='warranty-register' && target) {
+          WarrantyRegisterEvidence.locate(target,route.params);
+        } else if (target?.dataset.auditScope) {
           target.focus();
           if (target.dataset.auditScope==='payment' && route.params.has('stage'))
             target.dispatchEvent(new CustomEvent('open-payment-stage',{detail:route.params.get('stage')}));

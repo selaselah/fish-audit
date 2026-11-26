@@ -5,7 +5,7 @@ import {join} from 'node:path';
 const q=s=>'document.querySelector('+JSON.stringify(s)+')';
 export function browserInput({call,evaluate}) {
   async function key(name) {
-    const codes={Escape:27,Enter:13,Tab:9,Space:32,Home:36,End:35,ArrowLeft:37,ArrowRight:39};
+    const codes={Escape:27,Enter:13,Tab:9,Space:32,Home:36,End:35,ArrowLeft:37,ArrowUp:38,ArrowRight:39,ArrowDown:40};
     for (const type of ['keyDown','keyUp']) await call('Input.dispatchKeyEvent',{type,key:name==='Space'?' ':name,
       code:name,windowsVirtualKeyCode:codes[name],...(type==='keyDown' && name==='Enter'?{text:'\r'}:{})});
   }

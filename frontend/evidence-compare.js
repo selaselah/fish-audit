@@ -11,6 +11,11 @@ const EvidenceCompare = (() => {
       if (left && right && left.id !== right.id) result.push({key, label, left, right});
     }
     const kinds = graph.documents_by_kind || {};
+    if (finding.rule==='H07' && report?.graph===graph) {
+      const compared=WarrantyRegisterEvidence.pair(finding,report);
+      if (compared && [compared.left,compared.right].every(endpoint=>facts.some(f=>f.id===endpoint.id)))
+        add(compared.key,compared.label,compared.left,compared.right);
+    }
     const contract = kinds.contract;
     if (finding.rule === 'H01') {
       for (const pair of SigningParties.pagePairs(finding,graph))

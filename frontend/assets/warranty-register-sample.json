@@ -1,0 +1,632 @@
+{
+  "case_id": "920ea04963ef4f68905ff87533133fd4",
+  "rev": 11,
+  "report_sha256": "c36e9da397ef9f131fbc9feb5c7fdf191dbfd48ba8ff4f478b7b5e5402bdefb0",
+  "rule_version": "2026.11.27.07",
+  "phase": {
+    "id": "H04-7",
+    "stage": "第三期",
+    "status": "missing",
+    "accepted_on": null,
+    "calendar_end": null,
+    "tickets": {
+      "open": {
+        "state": "period",
+        "status": "missing"
+      },
+      "closed": {
+        "state": "period",
+        "status": "missing"
+      }
+    }
+  },
+  "payment": {
+    "id": "H05-8",
+    "stage": "第三期",
+    "status": "missing",
+    "paid_on": "2026-11-24"
+  },
+  "comparison": {
+    "id": "H07-9",
+    "status": "risk",
+    "state": "record_difference",
+    "ticket_unit": "d01",
+    "release_unit": "d02",
+    "refs": {
+      "condition": "d04/p1/f19",
+      "confirmation": "d02/p1/f5",
+      "defects": "d02/p1/f7",
+      "fault": "d01/p1/f7",
+      "reported_on": "d01/p1/f6",
+      "ticket_id": "d01/p1/f5",
+      "ticket_state": "d01/p1/f8"
+    },
+    "tickets": {
+      "open": {
+        "unit": "d01",
+        "refs": {
+          "contract_id": "d01/p1/f1",
+          "warranty_ticket_id": "d01/p1/f5",
+          "warranty_reported_on": "d01/p1/f6",
+          "warranty_fault": "d01/p1/f7",
+          "warranty_ticket_state": "d01/p1/f8"
+        }
+      },
+      "closed": {
+        "unit": "d03",
+        "refs": {
+          "contract_id": "d03/p1/f1",
+          "warranty_ticket_id": "d03/p1/f5",
+          "warranty_reported_on": "d03/p1/f6",
+          "warranty_fault": "d03/p1/f7",
+          "warranty_ticket_state": "d03/p1/f8",
+          "warranty_closed_on": "d03/p1/f9",
+          "warranty_closed_by": "d03/p1/f10"
+        }
+      }
+    }
+  },
+  "documents": {
+    "contract": {
+      "title": "采购合同",
+      "version": "合成采购 · R11",
+      "page": 1,
+      "pdf": "/showcase/warranty-register-contract.pdf",
+      "image": "/assets/warranty-register-contract.jpg",
+      "source_sha256": "581f0f1d8f6b9de9f45a36390eaa720f07ae61ae1952bf5b108685cac57da5cf",
+      "page_sha256": "fa45fbef93c4558e023260f6c706e33d543fa77f8e07228fa048cac3bed299bf",
+      "lines": [
+        {
+          "ref": "d04/p1/f2",
+          "field": "contract_id",
+          "label": "合同编号",
+          "value": "YL-LY-D2F16EDD",
+          "quote": "合同编号：YL-LY-D2F16EDD",
+          "line": 3,
+          "rect": [
+            0.08145,
+            0.2137,
+            0.41241,
+            0.23059
+          ],
+          "rects": [
+            [
+              0.08145,
+              0.2137,
+              0.41241,
+              0.23059
+            ]
+          ]
+        },
+        {
+          "ref": "d04/p1/f17",
+          "field": "payment_stage",
+          "label": "第三期",
+          "value": "质保期满后支付10%",
+          "quote": "第三期：质保期满后支付10%",
+          "line": 18,
+          "rect": [
+            0.08209,
+            0.71279,
+            0.40659,
+            0.72922
+          ],
+          "rects": [
+            [
+              0.08209,
+              0.71279,
+              0.40659,
+              0.72922
+            ]
+          ]
+        },
+        {
+          "ref": "d04/p1/f18",
+          "field": "warranty_period",
+          "label": "质保期限",
+          "value": "自终验合格之日起60个自然日，届满日不顺延",
+          "quote": "质保期限：自终验合格之日起60个自然日，届满日不顺延",
+          "line": 19,
+          "rect": [
+            0.08145,
+            0.74612,
+            0.71235,
+            0.76393
+          ],
+          "rects": [
+            [
+              0.08145,
+              0.74612,
+              0.71235,
+              0.76393
+            ]
+          ]
+        },
+        {
+          "ref": "d04/p1/f19",
+          "field": "warranty_condition",
+          "label": "质保金返还条件",
+          "value": "质保期满且无未关闭缺陷",
+          "quote": "质保金返还条件：质保期满且无未关闭缺陷",
+          "line": 20,
+          "rect": [
+            0.08145,
+            0.77945,
+            0.55721,
+            0.79589
+          ],
+          "rects": [
+            [
+              0.08145,
+              0.77945,
+              0.55721,
+              0.79589
+            ]
+          ]
+        }
+      ]
+    },
+    "certificate": {
+      "title": "质保期满确认单",
+      "version": "合成采购 · R11",
+      "page": 1,
+      "pdf": "/showcase/warranty-register-certificate.pdf",
+      "image": "/assets/warranty-register-certificate.jpg",
+      "source_sha256": "1861a910c2175f9503ee52185c155d43f26d976cc48df2efe9d403d7dbb6e27f",
+      "page_sha256": "8a18332ab095bdefcb0d918fb0e3197a23c83ba5ecc8837068bf11c119f57259",
+      "lines": [
+        {
+          "ref": "d02/p1/f1",
+          "field": "contract_id",
+          "label": "合同编号",
+          "value": "YL-LY-D2F16EDD",
+          "quote": "合同编号：YL-LY-D2F16EDD",
+          "line": 3,
+          "rect": [
+            0.08145,
+            0.2137,
+            0.41241,
+            0.23059
+          ],
+          "rects": [
+            [
+              0.08145,
+              0.2137,
+              0.41241,
+              0.23059
+            ]
+          ]
+        },
+        {
+          "ref": "d02/p1/f5",
+          "field": "warranty_release",
+          "label": "质保期满确认",
+          "value": "2026年11月22日双方确认质保期已满",
+          "quote": "质保期满确认：2026年11月22日双方确认质保期已满",
+          "line": 7,
+          "rect": [
+            0.08145,
+            0.34703,
+            0.66968,
+            0.36347
+          ],
+          "rects": [
+            [
+              0.08145,
+              0.34703,
+              0.66968,
+              0.36347
+            ]
+          ]
+        },
+        {
+          "ref": "d02/p1/f7",
+          "field": "warranty_defects",
+          "label": "质保遗留事项",
+          "value": "无未关闭缺陷",
+          "quote": "质保遗留事项：无未关闭缺陷",
+          "line": 9,
+          "rect": [
+            0.08145,
+            0.4137,
+            0.40595,
+            0.43014
+          ],
+          "rects": [
+            [
+              0.08145,
+              0.4137,
+              0.40595,
+              0.43014
+            ]
+          ]
+        }
+      ]
+    },
+    "open": {
+      "title": "质保报修工单",
+      "version": "合成采购 · R11",
+      "page": 1,
+      "pdf": "/showcase/warranty-register-open.pdf",
+      "image": "/assets/warranty-register-open.jpg",
+      "source_sha256": "d616a52b9c9dd4c2c201f866da77d94d5995fdf70bc5351697df9dfa3e4c53b4",
+      "page_sha256": "31b3a9c0c56565067e2258f556e9760280e5bf49474dd68ea871c4555e4069ad",
+      "lines": [
+        {
+          "ref": "d01/p1/f1",
+          "field": "contract_id",
+          "label": "合同编号",
+          "value": "YL-LY-D2F16EDD",
+          "quote": "合同编号：YL-LY-D2F16EDD",
+          "line": 3,
+          "rect": [
+            0.08145,
+            0.2137,
+            0.41241,
+            0.23059
+          ],
+          "rects": [
+            [
+              0.08145,
+              0.2137,
+              0.41241,
+              0.23059
+            ]
+          ]
+        },
+        {
+          "ref": "d01/p1/f5",
+          "field": "warranty_ticket_id",
+          "label": "质保工单编号",
+          "value": "WX-D2F16EDD-2",
+          "quote": "质保工单编号：WX-D2F16EDD-2",
+          "line": 7,
+          "rect": [
+            0.08145,
+            0.34703,
+            0.45637,
+            0.36347
+          ],
+          "rects": [
+            [
+              0.08145,
+              0.34703,
+              0.45637,
+              0.36347
+            ]
+          ]
+        },
+        {
+          "ref": "d01/p1/f6",
+          "field": "warranty_reported_on",
+          "label": "报修日期",
+          "value": "2026年11月5日",
+          "quote": "报修日期：2026年11月5日",
+          "line": 8,
+          "rect": [
+            0.08209,
+            0.38037,
+            0.37492,
+            0.3968
+          ],
+          "rects": [
+            [
+              0.08209,
+              0.38037,
+              0.37492,
+              0.3968
+            ]
+          ]
+        },
+        {
+          "ref": "d01/p1/f7",
+          "field": "warranty_fault",
+          "label": "报修事项",
+          "value": "柜体风扇故障",
+          "quote": "报修事项：柜体风扇故障",
+          "line": 9,
+          "rect": [
+            0.08209,
+            0.4137,
+            0.35617,
+            0.43014
+          ],
+          "rects": [
+            [
+              0.08209,
+              0.4137,
+              0.35617,
+              0.43014
+            ]
+          ]
+        },
+        {
+          "ref": "d01/p1/f8",
+          "field": "warranty_ticket_state",
+          "label": "工单状态",
+          "value": "待维修",
+          "quote": "工单状态：待维修",
+          "line": 10,
+          "rect": [
+            0.08339,
+            0.44703,
+            0.28184,
+            0.46347
+          ],
+          "rects": [
+            [
+              0.08339,
+              0.44703,
+              0.28184,
+              0.46347
+            ]
+          ]
+        }
+      ]
+    },
+    "closed": {
+      "title": "质保维修工单",
+      "version": "合成采购 · R11",
+      "page": 1,
+      "pdf": "/showcase/warranty-register-closed.pdf",
+      "image": "/assets/warranty-register-closed.jpg",
+      "source_sha256": "a6d25af0ba511a7ef1f82a8acc0dc0961334990f0d657645b13dda344a5a9109",
+      "page_sha256": "571ce3a5cdb5d2e4bb3937dfe27fb245ac45c1170a8097e5aef3b943fb3ea56d",
+      "lines": [
+        {
+          "ref": "d03/p1/f1",
+          "field": "contract_id",
+          "label": "合同编号",
+          "value": "YL-LY-D2F16EDD",
+          "quote": "合同编号：YL-LY-D2F16EDD",
+          "line": 3,
+          "rect": [
+            0.08145,
+            0.2137,
+            0.41241,
+            0.23059
+          ],
+          "rects": [
+            [
+              0.08145,
+              0.2137,
+              0.41241,
+              0.23059
+            ]
+          ]
+        },
+        {
+          "ref": "d03/p1/f5",
+          "field": "warranty_ticket_id",
+          "label": "质保工单编号",
+          "value": "WX-D2F16EDD-1",
+          "quote": "质保工单编号：WX-D2F16EDD-1",
+          "line": 7,
+          "rect": [
+            0.08145,
+            0.34703,
+            0.45249,
+            0.36347
+          ],
+          "rects": [
+            [
+              0.08145,
+              0.34703,
+              0.45249,
+              0.36347
+            ]
+          ]
+        },
+        {
+          "ref": "d03/p1/f6",
+          "field": "warranty_reported_on",
+          "label": "报修日期",
+          "value": "2026年11月5日",
+          "quote": "报修日期：2026年11月5日",
+          "line": 8,
+          "rect": [
+            0.08209,
+            0.38037,
+            0.37492,
+            0.3968
+          ],
+          "rects": [
+            [
+              0.08209,
+              0.38037,
+              0.37492,
+              0.3968
+            ]
+          ]
+        },
+        {
+          "ref": "d03/p1/f7",
+          "field": "warranty_fault",
+          "label": "报修事项",
+          "value": "温控探头故障",
+          "quote": "报修事项：温控探头故障",
+          "line": 9,
+          "rect": [
+            0.08209,
+            0.4137,
+            0.35617,
+            0.43014
+          ],
+          "rects": [
+            [
+              0.08209,
+              0.4137,
+              0.35617,
+              0.43014
+            ]
+          ]
+        },
+        {
+          "ref": "d03/p1/f8",
+          "field": "warranty_ticket_state",
+          "label": "工单状态",
+          "value": "已关闭",
+          "quote": "工单状态：已关闭",
+          "line": 10,
+          "rect": [
+            0.08339,
+            0.44703,
+            0.2786,
+            0.46301
+          ],
+          "rects": [
+            [
+              0.08339,
+              0.44703,
+              0.2786,
+              0.46301
+            ]
+          ]
+        },
+        {
+          "ref": "d03/p1/f9",
+          "field": "warranty_closed_on",
+          "label": "关闭日期",
+          "value": "2026年11月20日",
+          "quote": "关闭日期：2026年11月20日",
+          "line": 11,
+          "rect": [
+            0.08145,
+            0.48037,
+            0.38914,
+            0.4968
+          ],
+          "rects": [
+            [
+              0.08145,
+              0.48037,
+              0.38914,
+              0.4968
+            ]
+          ]
+        },
+        {
+          "ref": "d03/p1/f10",
+          "field": "warranty_closed_by",
+          "label": "采购方关闭签认",
+          "value": "演练许澄（已签字）",
+          "quote": "采购方关闭签认：演练许澄（已签字）",
+          "line": 12,
+          "rect": [
+            0.08209,
+            0.5137,
+            0.49968,
+            0.53242
+          ],
+          "rects": [
+            [
+              0.08209,
+              0.5137,
+              0.49968,
+              0.53242
+            ]
+          ]
+        }
+      ]
+    },
+    "bank": {
+      "title": "银行付款回单",
+      "version": "合成采购 · R11",
+      "page": 1,
+      "pdf": "/showcase/warranty-register-bank.pdf",
+      "image": "/assets/warranty-register-bank.jpg",
+      "source_sha256": "de08a06d9c72e6cf146ce94a36dc747f810527ef19052415a7a057626e7d226d",
+      "page_sha256": "f98458452454755c1dde1052bdfca027ea73037c8d1f5d2b628b2520d603cc85",
+      "lines": [
+        {
+          "ref": "d05/p1/f5",
+          "field": "transfer_amount",
+          "label": "付款金额",
+          "value": "10,000.00",
+          "quote": "付款金额：10,000.00",
+          "line": 6,
+          "rect": [
+            0.08209,
+            0.3137,
+            0.31739,
+            0.33151
+          ],
+          "rects": [
+            [
+              0.08209,
+              0.3137,
+              0.31739,
+              0.33151
+            ]
+          ]
+        },
+        {
+          "ref": "d05/p1/f6",
+          "field": "payment_designation",
+          "label": "款项用途",
+          "value": "第三期",
+          "quote": "款项用途：第三期",
+          "line": 7,
+          "rect": [
+            0.08209,
+            0.34703,
+            0.2799,
+            0.36347
+          ],
+          "rects": [
+            [
+              0.08209,
+              0.34703,
+              0.2799,
+              0.36347
+            ]
+          ]
+        },
+        {
+          "ref": "d05/p1/f7",
+          "field": "transfer_status",
+          "label": "交易状态",
+          "value": "交易成功",
+          "quote": "交易状态：交易成功",
+          "line": 8,
+          "rect": [
+            0.08274,
+            0.38082,
+            0.30511,
+            0.3968
+          ],
+          "rects": [
+            [
+              0.08274,
+              0.38082,
+              0.30511,
+              0.3968
+            ]
+          ]
+        },
+        {
+          "ref": "d05/p1/f8",
+          "field": "paid_on",
+          "label": "付款日期",
+          "value": "2026年11月24日",
+          "quote": "付款日期：2026年11月24日",
+          "line": 9,
+          "rect": [
+            0.08209,
+            0.4137,
+            0.38914,
+            0.43014
+          ],
+          "rects": [
+            [
+              0.08209,
+              0.4137,
+              0.38914,
+              0.43014
+            ]
+          ]
+        }
+      ]
+    }
+  }
+}

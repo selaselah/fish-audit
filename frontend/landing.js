@@ -32,7 +32,9 @@ if (!restoreWorkspaceLink()) {
   function markSection() {
     navigationFrame=0;
     const edge=document.querySelector('.site-header').getBoundingClientRect().bottom+Math.min(140,innerHeight*.2);
-    const current=sections.filter(section=>section.getBoundingClientRect().top<=edge).at(-1)?.id || '';
+    const page=document.scrollingElement;
+    const atEnd=page.scrollTop>0 && page.scrollHeight-page.scrollTop-page.clientHeight<2;
+    const current=(atEnd?sections.at(-1):sections.filter(section=>section.getBoundingClientRect().top<=edge).at(-1))?.id || '';
     if (current===currentSection) return;
     currentSection=current;
     for (const link of sectionLinks) {
@@ -94,7 +96,7 @@ if (!restoreWorkspaceLink()) {
   }
   const examples={company:{scene:'signing',revision:9},word:{scene:'word-signing',revision:6},calendar:{scene:'contract-dates',revision:6},pdf:{scene:'pdf-signing'}};
   const inspectionRoutes={readings:'acceptance',standards:'batch-standards',signers:'acceptance-signers',equipment:'inspection',named:'named-inspection',supplier:'suppliers',comments:'word-comments'};
-  const paymentRoutes={comments:'contract-comments',guarantee:'guarantee-period',reference:'payment-acceptance',timing:'signer-timing',clock:'signer-clock',proof:'payment-proof',folios:'folios'};
+  const paymentRoutes={comments:'contract-comments',guarantee:'guarantee-period',warranty:'warranty-register',reference:'payment-acceptance',timing:'signer-timing',clock:'signer-clock',proof:'payment-proof',folios:'folios'};
   function sceneAddress(name) {
     const url=new URL(location.href);
     const scene=name==='inspection'?inspectionRoutes[inspectionExample.value]:name==='folios'?paymentRoutes[paymentExample.value]:name;
@@ -122,6 +124,8 @@ if (!restoreWorkspaceLink()) {
     const clock=document.getElementById('payment-signer-clock');
     const proof=document.getElementById('payment-execution');
     const period=document.getElementById('payment-guarantee-period');
+    const warranty=document.getElementById('payment-warranty-register');
+    warranty.hidden=paymentExample.value!=='warranty';
     period.hidden=paymentExample.value!=='guarantee';
     proof.hidden=paymentExample.value!=='proof';
     clock.hidden=paymentExample.value!=='clock';
@@ -131,6 +135,10 @@ if (!restoreWorkspaceLink()) {
     slot.hidden=!comments;
     const edition=document.getElementById('payment-version');
     edition.textContent=comments?(slot.dataset.revision?'合成案例 · R'+slot.dataset.revision:'合成合同'):'合成案例 · R10';
+    if (!warranty.hidden) {
+      edition.textContent=warranty.dataset.revision?'合成案例 · R'+warranty.dataset.revision:'合成案例';
+      if (!paymentsScene.hidden) PublicWarrantyRegister.open();
+    }
     if (!period.hidden) {
       edition.textContent=period.dataset.revision?'合成案例 · R'+period.dataset.revision:'合成案例';
       if (!paymentsScene.hidden) PublicGuaranteePeriod.open();

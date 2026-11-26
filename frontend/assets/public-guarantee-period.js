@@ -1,31 +1,14 @@
 // This landing example is an immutable export of one watermarked workpaper.
 const PublicGuaranteePeriod = (() => {
   const expected={contract:['receipt_clause','clause'],guarantee:['start','end'],receipt:['received'],bank:['paid']};
-  const pages=new Map();
-  function page(doc) {
-    const key=doc.image+' '+doc.page_sha256;
-    if (!pages.has(key)) {
-      const hex=doc.page_sha256.match(/../g);
-      const integrity='sha256-'+btoa(String.fromCharCode(...hex.map(x=>parseInt(x,16))));
-      const request=fetch(doc.image,{integrity}).then(async response=>{
-        if (!response.ok) throw new Error('Page unavailable');
-        const url=URL.createObjectURL(await response.blob()), img=new Image();
-        try { img.src=url; await img.decode(); return img; } finally { URL.revokeObjectURL(url); }
-      });
-      pages.set(key,request); request.catch(()=>pages.delete(key));
-    }
-    return pages.get(key);
-  }
   function printedLine(row,link) {
     const sheet=document.createElement('canvas'), strip=document.createElement('canvas'), text=document.createElement('span');
     sheet.className='period-sheet'; strip.className='period-print'; text.className='period-transcript'; text.textContent=row.quote;
     for (const canvas of [sheet,strip]) { canvas.hidden=true; canvas.setAttribute('aria-hidden','true'); }
     link.classList.add('period-has-preview'); link.append(sheet,strip,text);
-    page(row.doc).then(img=>{
-      const w=img.naturalWidth,h=img.naturalHeight, [l,t,r,b]=row.rect;
-      const x=Math.max(0,Math.floor(l*w)-4), y=Math.max(0,Math.floor(t*h)-4);
-      strip.width=Math.min(w-x,Math.ceil(r*w)+4-x); strip.height=Math.min(h-y,Math.ceil(b*h)+4-y);
-      strip.getContext('2d').drawImage(img,x,y,strip.width,strip.height,0,0,strip.width,strip.height);
+    VerifiedSamplePage.load(row.doc).then(img=>{
+      const w=img.naturalWidth,h=img.naturalHeight;
+      VerifiedSamplePage.crop(img,row.rect,strip);
       sheet.width=152; sheet.height=Math.round(152*h/w);
       const ctx=sheet.getContext('2d'); ctx.drawImage(img,0,0,sheet.width,sheet.height);
       ctx.fillStyle='rgba(226,170,59,.45)'; ctx.strokeStyle='#8c5812'; ctx.lineWidth=1.3;
@@ -38,21 +21,14 @@ const PublicGuaranteePeriod = (() => {
     }).catch(()=>{ /* The fixed quotation and PDF link remain available. */ });
   }
   function source(row,title) {
-    const link=document.createElement('a'), meta=document.createElement('span'), name=document.createElement('strong');
-    link.className='period-original-link'; link.href=row.doc.pdf; link.target='_blank'; link.rel='noopener';
+    const link=VerifiedSamplePage.link(row), meta=document.createElement('span'), name=document.createElement('strong');
+    link.className='period-original-link';
     link.dataset.source=row.ref; link.dataset.key=row.key;
-    link.setAttribute('aria-haspopup','dialog'); link.setAttribute('aria-controls','sample-review');
     link.setAttribute('aria-description',row.quote);
     meta.textContent=title+' · 第 '+row.doc.page+' 页 / '+row.line+' 行'; name.textContent=row.doc.title+'.pdf';
     const arrow=document.createElement('i'); arrow.className='ui-glyph ic-arrows-angle-expand'; arrow.setAttribute('aria-hidden','true');
     link.append(meta,name,arrow);
     if (['start','end','paid'].includes(row.key)) printedLine(row,link);
-    link.addEventListener('click',event=>{
-      if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-      const inspect=new CustomEvent('inspect-sample-line',{cancelable:true,detail:{
-        doc:row.doc,ref:row.ref,opener:link,loadPage:()=>page(row.doc)}});
-      if (!document.dispatchEvent(inspect)) event.preventDefault();
-    });
     return link;
   }
   function published(sample) {

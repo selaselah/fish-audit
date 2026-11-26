@@ -27,7 +27,7 @@ const WarrantyTickets = (() => {
   }
   function pairs(finding,graph) {
     const w=finding.warranty_check, ledger=graph.warranty_sources;
-    if (!w?.tickets || !['contract-warranty-release-v3','contract-warranty-release-v4'].includes(ledger?.format)) return [];
+    if (!w?.tickets || !['contract-warranty-release-v3','contract-warranty-release-v4','contract-warranty-release-v5'].includes(ledger?.format)) return [];
     const index=graphIndex(graph), result=[];
     function fact(ref,field,units) {
       const f=printedFact(index,finding,ref,field);
@@ -60,7 +60,7 @@ const WarrantyTickets = (() => {
   }
   function panel(phase,payments,graph) {
     const entry=phase.warranty_check, stored=entry?.tickets, ledger=graph.warranty_sources;
-    if (!stored?.length || !['contract-warranty-release-v3','contract-warranty-release-v4'].includes(ledger?.format)) return null;
+    if (!stored?.length || !['contract-warranty-release-v3','contract-warranty-release-v4','contract-warranty-release-v5'].includes(ledger?.format)) return null;
     const index=graphIndex(graph), within=ref=>supports(index,phase,ref);
     function paper(ref,field,kind) {
       const f=printedFact(index,phase,ref,field);

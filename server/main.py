@@ -280,7 +280,7 @@ def create_app(store, worker):
             args["finding"] = ref
         if "view" in request.args:
             view = request.args["view"]
-            if view not in ("replay", "execution", "reinspection", "inspection", "entities", "trial", "contract-pages", "signatures", "calendar", "suppliers", "acceptance-comments", "contract-comments", "payment-acceptance", "signer-timing", "payment-proof", "contract-checks", "acceptance-checks", "payment-checks") or set(args)!={"rev"}:
+            if view not in ("replay", "execution", "warranty-register", "reinspection", "inspection", "entities", "trial", "contract-pages", "signatures", "calendar", "suppliers", "acceptance-comments", "contract-comments", "payment-acceptance", "signer-timing", "payment-proof", "contract-checks", "acceptance-checks", "payment-checks") or set(args)!={"rev"}:
                 raise CaseError("请选择有效的底稿视图及版本。",400)
             args["view"] = view
         if "call" in request.args:
@@ -289,6 +289,12 @@ def create_app(store, worker):
                     or not re.fullmatch(r"expert|d[0-9]{2,8}/p[1-9][0-9]{0,7}/(?:initial|check)", calls[0])):
                 raise CaseError("请选择固定底稿中的模型调用。", 400)
             args["call"] = calls[0]
+        if "ticket" in request.args:
+            tickets = request.args.getlist("ticket")
+            if (args.get("view") != "warranty-register" or any(len(request.args.getlist(k)) != 1 for k in ("rev", "view", "ticket"))
+                    or not re.fullmatch(r"d[0-9]{2,8}", tickets[0])):
+                raise CaseError("请选择固定底稿中的质保工单。", 400)
+            args["ticket"] = tickets[0]
         if "stage" in request.args:
             stages = request.args.getlist("stage")
             if args.get("view") != "payment-checks" or len(stages) != 1 or not re.fullmatch(r"H0[45]-[1-9][0-9]{0,7}", stages[0]):
@@ -321,6 +327,8 @@ def create_app(store, worker):
                             "batch-bank-1.pdf","batch-bank-2.pdf","batch-acceptance-1.pdf","batch-acceptance-2.pdf","batch-payment-contract.pdf",
                             "batch-version-contract.pdf","batch-version-addendum.pdf","batch-version-first.pdf","batch-version-second.pdf",
                             "guarantee-period-contract.pdf","guarantee-period-guarantee.pdf","guarantee-period-receipt.pdf","guarantee-period-bank.pdf",
+                            "warranty-register-contract.pdf","warranty-register-certificate.pdf","warranty-register-open.pdf",
+                            "warranty-register-closed.pdf","warranty-register-bank.pdf",
                             "joint-signing-contract.pdf","joint-signing-acceptance.pdf","joint-signing-transfer.pdf",
                             "acceptance-roster-contract.pdf","acceptance-roster-receipt.pdf",
                             "signer-clock-contract.pdf","signer-clock-acceptance.pdf","signer-clock-transfer.pdf","payment-execution-notice.pdf"}:

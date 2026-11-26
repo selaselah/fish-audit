@@ -45,7 +45,11 @@
   <link rel="stylesheet" href="/assets/payment-proof.css">
   <script src="/assets/payment-proof-card.js" defer></script>
   <script src="/assets/public-payment-proof.js" defer></script>
+  <script src="/assets/verified-sample-page.js" defer></script>
   <script src="/assets/public-guarantee-period.js" defer></script>
+  <link rel="stylesheet" href="/assets/warranty-register.css">
+  <script src="/assets/warranty-register.js" defer></script>
+  <script src="/assets/public-warranty-register.js" defer></script>
   <script src="/assets/intake-profiles.js" defer></script>
   <script src="/assets/purchase-preview.js" defer></script>
   <script src="/assets/case-finder.js" defer></script>
@@ -269,13 +273,18 @@
           <div id="scene-folios" class="signing-sample public-folios" role="tabpanel" aria-labelledby="scene-tab-folios" hidden>
             <div class="signing-sample-header"><span><i class="ui-glyph ic-journal-text" aria-hidden="true"></i> 付款核对</span>
               <label id="payment-example-choice" hidden><span class="sr-only">选择付款条款案例</span><select id="payment-example">
-                <option value="guarantee">保函期间与付款日</option><option value="comments">分期付款批注</option><option value="proof">付款是否已执行</option><option value="clock">同日签认与扣款</option><option value="timing">跨日签认与付款</option><option value="reference">回单验收单号</option><option value="folios">合同续页</option></select></label><small id="payment-version">合成案例 · R10</small></div>
+                <option value="guarantee">保函期间与付款日</option><option value="warranty">质保金与维修工单</option><option value="comments">分期付款批注</option><option value="proof">付款是否已执行</option><option value="clock">同日签认与扣款</option><option value="timing">跨日签认与付款</option><option value="reference">回单验收单号</option><option value="folios">合同续页</option></select></label><small id="payment-version">合成案例 · R10</small></div>
             <div id="payment-guarantee-period" data-integrity="sha256-eu1APu+E4wYs036zdvQwmKNGqc0ySAUsX0CNINGLv7w=" hidden>
               <div class="period-fallback"><h3>首期预付款保函</h3>
                 <a href="/showcase/guarantee-period-guarantee.pdf" target="_blank" rel="noopener">查看水印保函 ↗</a>
                 <a href="/showcase/guarantee-period-bank.pdf" target="_blank" rel="noopener">查看水印付款回单 ↗</a></div>
             </div>
             <div id="payment-execution" hidden><a href="/showcase/payment-execution-notice.pdf" target="_blank" rel="noopener">查看演练付款回单</a></div>
+            <div id="payment-warranty-register" data-integrity="sha256-85o7tN7Z/zQU4d5Zhdx9JDw/rsbCA8eJ6HYQ5l93wXU=" hidden>
+              <div class="period-fallback"><h3>质保工单</h3>
+                <a href="/showcase/warranty-register-certificate.pdf" target="_blank" rel="noopener">查看水印期满确认单 ↗</a>
+                <a href="/showcase/warranty-register-open.pdf" target="_blank" rel="noopener">查看水印报修工单 ↗</a></div>
+            </div>
             <div id="payment-signer-clock" hidden><a href="/showcase/signer-clock-transfer.pdf" rel="noopener" target="_blank">查看演练扣款回单</a></div>
             <div id="payment-signer-timing" hidden><a href="/showcase/joint-signing-transfer.pdf" rel="noopener" target="_blank">查看演练付款回单</a></div>
             <div id="payment-reference" hidden><a href="/showcase/batch-bank-1.pdf" rel="noopener" target="_blank">查看演练付款回单</a></div>

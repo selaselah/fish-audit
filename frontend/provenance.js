@@ -1,5 +1,26 @@
 const graphIndexes = new WeakMap();
 
+function issuedPageDocument(graph, page) {
+  const isSha256 = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+  if (typeof page.doc !== 'string' || !Number.isSafeInteger(page.page) || page.page < 1 || !isSha256(page.page_sha256)) return;
+  if (!Array.isArray(graph?.documents) || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return;
+  const manifests = graph.documents.filter(doc => doc?.id === page.doc);
+  const documents = graph.nodes.filter(node => node?.id === page.doc);
+  if (manifests.length !== 1 || documents.length !== 1) return;
+  const [manifest] = manifests, [documentNode] = documents;
+  if (documentNode.type !== 'document' || !isSha256(manifest.sha256) || documentNode.sha256 !== manifest.sha256 ||
+      (Number.isInteger(manifest.pages) && page.page > manifest.pages)) return;
+
+  const ref = page.doc + '/p' + page.page;
+  const pages = graph.nodes.filter(node => node?.id === ref);
+  if (pages.length !== 1 || pages[0].type !== 'page' || pages[0].sha256 !== page.page_sha256) return;
+  const parents = graph.edges.filter(edge => edge?.type === 'contains' && edge.to === ref);
+  if (parents.length !== 1) return;
+  const [parent] = parents;
+  if (parent.from === page.doc && Array.isArray(parent.evidence) && parent.evidence.length === 1 && parent.evidence[0] === ref)
+    return manifest;
+}
+
 function graphIndex(graph) {
   let index = graphIndexes.get(graph);
   if (!index) {

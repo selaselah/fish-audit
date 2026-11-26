@@ -1,5 +1,20 @@
 # 本机演练验收记录
 
+## 质保期满确认与两张维修工单
+
+合同 `YL-LY-D2F16EDD` 的期满确认单在 2026 年 11 月 22 日记载「无未关闭缺陷」。规则 `2026.11.27.07` 的 R11 单列了一项书面记载差异 `H07-9 / risk`，将确认单第 9 行连到柜体风扇工单第 10 行「待维修」，提示查验这张工单的后续处理和关闭签认。[期满确认单第 7、9 行](../frontend/showcase/warranty-register-certificate.pdf#page=1) · [R11 固定底稿](http://127.0.0.1:8000/workpaper/920ea04963ef4f68905ff87533133fd4?rev=11)
+
+| 工单编号 | 报修日期及事项 | 工单记载的状态与关闭依据 | 水印原件 |
+| --- | --- | --- | --- |
+| `WX-D2F16EDD-2` | 11 月 5 日，柜体风扇故障 | 待维修 | [报修工单第 7–10 行](../frontend/showcase/warranty-register-open.pdf#page=1) |
+| `WX-D2F16EDD-1` | 11 月 5 日，温控探头故障 | 已关闭。关闭日期为 11 月 20 日，采购方关闭签认栏为「演练许澄（已签字）」 | [维修工单第 7–12 行](../frontend/showcase/warranty-register-closed.pdf#page=1) |
+
+合同约定第三期支付 10%，质保期自终验合格之日起算 60 个自然日，返还条件为期满且无未关闭缺陷。银行回单记载 11 月 24 日第三期交易成功，金额为 10,000.00。R11 仍缺可核实的同合同、双方及标的的合格终验或复验日期，质保起算与届满日期均为空。第三期条件 `H04-7` 和实付审查 `H05-8` 均为 `missing`，两张工单的合同期间判断均为 `period / missing`。[合同第 18–20 行](../frontend/showcase/warranty-register-contract.pdf#page=1) · [银行回单第 6–9 行](../frontend/showcase/warranty-register-bank.pdf#page=1)
+
+R9 将风扇工单列为风险、探头工单列为已关闭。R10 在终验起算依据上保留待核。R9、R10、R11 已分别按对应 Git 源码复算，逐版从六份原件重绘页图并核对行框。两次重审各复用六页初读及六页复检，各取得一次新的专家响应。R10 到 R11 仅发起一次重审，沿用历史核图 10 条、补录 7 条，人工决定 0 条，案件待验收。[R9 底稿](http://127.0.0.1:8000/workpaper/920ea04963ef4f68905ff87533133fd4?rev=9) · [R10 底稿](http://127.0.0.1:8000/workpaper/920ea04963ef4f68905ff87533133fd4?rev=10) · [公开证据索引](../frontend/assets/warranty-register-sample.json)
+
+从仓库根目录执行 `server/.venv/bin/python docs/samples/warranty_register_run.py --output /tmp/fish-audit-warranty-replay` 可以复算三个版本。目录中缺少的证据包从本机案件读取，已有证据包可离线复算。结果按版保存原件摘要、模型调用对照和图谱引文。[复算脚本](samples/warranty_register_run.py) · [同类水印场景生成器](samples/warranty_tickets.py)
+
 ## 首期付款日与预付款保函期间
 
 四个独立的合成案例各上传合同、保函、签收单和银行回单。9 月 3 日已签收，9 月 5 日支付首期预付款。旧版 R1 的首期收函与付款均为待核，三期付款安排也待核。规则 `2026.11.27.06` 出具的 R2 在四案均核对出三期比例合计 100%，保留收函和实际付款的两条独立记录。

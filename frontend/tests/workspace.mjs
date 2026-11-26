@@ -31,6 +31,7 @@ import {checkMandateOriginal} from './mandate-original.mjs';
 import {checkReviewDecisions} from './review-decisions.mjs';
 import {checkWarrantyTimeline} from './warranty-timeline.mjs';
 import {checkWarrantyTickets} from './warranty-tickets.mjs';
+import {checkPrivateWarrantyRegister, checkPublicWarrantyRegister} from './warranty-register.mjs';
 import {checkWarrantyPhotos} from './warranty-photos.mjs';
 import {checkNavigation,checkPrior} from './prior-installment.mjs';
 import {checkInspectionCoverage,checkPublicInspection} from './inspection-coverage.mjs';
@@ -57,6 +58,8 @@ const sampleDesk = process.argv.includes('--sample-desk');
 const product = process.argv.includes('--product');
 const publicPurchase=process.argv.includes('--public-purchase-preview');
 const publicPeriod=process.argv.includes('--public-guarantee-period');
+const publicWarrantyRegister=process.argv.includes('--public-warranty-register');
+const privateWarrantyRegister=process.argv.includes('--workpaper-warranty-register');
 const publicStandards=process.argv.includes('--public-batch-standards');
 const isolatedEntry=process.argv.includes('--isolated-intake-entry');
 const publicFolios=process.argv.includes('--public-folios');
@@ -144,9 +147,9 @@ const publicBank=process.argv.includes('--public-bank-acceptance');
 const previewQueue=process.argv.includes('--preview-queue');
 const acceptanceRoster=process.argv.includes('--acceptance-roster'), publicRoster=process.argv.includes('--public-acceptance-roster');
 const receiptPdf=caseArgument('--acceptance-pdf-case');
-const publicTest=publicPeriod || publicStandards || publicPurchase || publicRoster || publicProof || publicClock || publicTiming || publicBank || product || ruleCatalog || publicInspection || publicContractComments || publicWordComments || publicSuppliers || publicPdf || publicFolios;
+const publicTest=publicWarrantyRegister || publicPeriod || publicStandards || publicPurchase || publicRoster || publicProof || publicClock || publicTiming || publicBank || product || ruleCatalog || publicInspection || publicContractComments || publicWordComments || publicSuppliers || publicPdf || publicFolios;
 const scopeCase=caseArgument('--scope-case'), publicTopics=process.argv.includes('--public-audit-topics');
-const seeded = [traceCase,periodCase,advanceGuaranteeCase,batchStandardCase,mandateOriginalCase,mandatePdfCase,batchCase,receiptPdf,acceptanceRoster,publicTopics,scopeCase,publicTest,proofCase,signerClock,signerTiming,originalCase,citedOriginal,bankAcceptance,previewQueue,contractCommentCase,commentCase,supplierCase,pdfCase,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+const seeded = [privateWarrantyRegister,traceCase,periodCase,advanceGuaranteeCase,batchStandardCase,mandateOriginalCase,mandatePdfCase,batchCase,receiptPdf,acceptanceRoster,publicTopics,scopeCase,publicTest,proofCase,signerClock,signerTiming,originalCase,citedOriginal,bankAcceptance,previewQueue,contractCommentCase,commentCase,supplierCase,pdfCase,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 reviewDecisionCase,invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
 const root = originalCase ? process.env.AUDIT_READER_ORIGIN || 'http://127.0.0.1:8000' : publicTest || publicTopics ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
@@ -211,10 +214,14 @@ try {
   };
   const click = (label, container='document') => evaluate('[...'+container+'.querySelectorAll("button,a")].find(b=>b.textContent==='+JSON.stringify(label)+' && b.getClientRects().length).click()');
   await call('Runtime.enable');
-  await call('Page.navigate',{url:product || publicPeriod || publicStandards || publicPurchase || isolatedEntry ? root : root+'/app'});
+  await call('Page.navigate',{url:product || publicWarrantyRegister || publicPeriod || publicStandards || publicPurchase || isolatedEntry ? root : root+'/app'});
   if (isolatedEntry) {
     assert.ok(!seeded && !['8000','8010'].includes(new URL(root).port));
     await checkIntakeEntry({root,call,evaluate,wait,entry,click});
+  } else if (publicWarrantyRegister) {
+    await checkPublicWarrantyRegister({root,call,evaluate,wait});
+  } else if (privateWarrantyRegister) {
+    await checkPrivateWarrantyRegister({root,call,evaluate,wait});
   } else if (publicPeriod) {
     await checkPublicGuaranteePeriod({root,call,evaluate,wait});
   } else if (publicStandards) {

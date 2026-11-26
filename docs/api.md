@@ -574,6 +574,8 @@ H05 的 `warranty_payment` 保留本笔回单列示的 `paid_on`、日期字段�
 
 H04/H05 继续返回原有的 `warranty_check` 和逐单期间状态。v3、v4 归档按出具时的方法复算。旧版签收重读原页，若现已能定位同一笔记载差异而旧版未揭示，则要求重审。已有同一工单、同一确认事实和具名比较边的未关闭风险可通过这项专项检查。
 
+底稿固定入口 `/workpaper/{case_id}?rev={rev}&view=warranty-register&ticket={doc_id}` 选择该版的维修工单。省略 `ticket` 时打开清单的首选项。企业路径使用 `/w/{workspace_id}` 前缀。同一参数重复、工单编号格式有误或与其他视图混用时返回 HTTP 400。历史版本缺少这项对照或没有所选工单时，页面显示该版可查范围。[风扇工单 R11](http://127.0.0.1:8000/workpaper/920ea04963ef4f68905ff87533133fd4?rev=11&view=warranty-register&ticket=d01) · [探头工单 R11](http://127.0.0.1:8000/workpaper/920ea04963ef4f68905ff87533133fd4?rev=11&view=warranty-register&ticket=d03)
+
 ### 共同签认与实付日期
 
 自规则 `2026.11.26.21` 起，`policy.acceptance_authority` 为 `named-acceptance-signatures-v2`。一份合同指定两人共同终验，且成功回单明确列示终验款期次时，H05 可包含 `signer_timing`。对象保存本笔回单、终验单、约定人名、已核图签字引用、各签认日期原行、付款日期原行、合同签认条款和期款条款的引用。`days` 为回单日减去最晚具名签认栏日期的自然日数。材料范围或日期归属待核时，`days` 和 `latest_on` 均为 `null`。

@@ -89,7 +89,7 @@ const PhaseEvidence = (() => {
     const inPhase=new Set(phase.evidence);
     const checkpoints=[],events=[];
     const warranty=WarrantyTimeline.panel(phase,payments,graph);
-    const tickets=WarrantyTickets.panel(phase,payments,graph);
+    const tickets=WarrantyRegisterEvidence.panel(phase,payments,state.bundle?.report) || WarrantyTickets.panel(phase,payments,graph);
     function unique(item,field) {
       const matches=(item?.evidence || []).map(id=>facts.get(id)).filter(f=>f?.field===field && inPhase.has(f.id));
       return matches.length===1 ? matches[0] : null;

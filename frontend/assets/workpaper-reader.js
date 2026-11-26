@@ -53,10 +53,12 @@ function priorityQueue(items) {
   function show(i) {
     selected=i;
     const finding=items[i], title=finding.stage ? finding.stage.name+' · '+finding.title : finding.title;
-    if (finding.execution_basis || finding.advance_guarantee) {
-      const prefix=finding.stage?finding.stage.name+' · ':'';
-      const jump=finding.execution_basis?PaymentProof.jump(finding,prefix+'核对扣款凭证'):
-        AdvanceGuarantee.jump(finding,prefix+(finding.advance_guarantee.period?'核对保函期间':finding.rule==='H05'?'签收与付款日':'核对预付款保函'));
+    const prefix=finding.stage?finding.stage.name+' · ':'';
+    let jump;
+    if (finding.execution_basis) jump=PaymentProof.jump(finding,prefix+'核对扣款凭证');
+    else if (finding.advance_guarantee) jump=AdvanceGuarantee.jump(finding,prefix+(finding.advance_guarantee.period?'核对保函期间':finding.rule==='H05'?'签收与付款日':'核对预付款保函'));
+    else if (finding.warranty_difference) jump=WarrantyRegisterEvidence.jump(finding,'核对期满声明与维修工单');
+    if (jump) {
       jump.classList.add('performance-jump');jump.append(tag(finding.status));destination.replaceChildren(jump);
     } else destination.replaceChildren(performanceJump(finding,title));
     position.value=(i+1)+' / '+items.length;

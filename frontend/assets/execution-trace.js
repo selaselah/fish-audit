@@ -1,7 +1,6 @@
 const ExecutionTrace = (() => {
   const stages = {initial:'多模态提取', check:'独立复检', expert:'专家追加程序'};
   const isRecord = value => value !== null && typeof value === 'object' && !Array.isArray(value);
-  const isSha256 = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
   const clock = new Intl.DateTimeFormat('zh-CN', {timeZone:'Asia/Shanghai', year:'numeric', month:'2-digit',
     day:'2-digit', hour:'2-digit', minute:'2-digit', second:'2-digit', hourCycle:'h23'});
   const logs = new WeakMap();
@@ -15,26 +14,6 @@ const ExecutionTrace = (() => {
     node.dateTime = value;
     node.title = value;
     return node;
-  }
-
-  function sourcePage(graph, page) {
-    if (typeof page.doc !== 'string' || !Number.isSafeInteger(page.page) || page.page < 1 || !isSha256(page.page_sha256)) return;
-    if (!Array.isArray(graph?.documents) || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) return;
-    const manifests = graph.documents.filter(doc => doc?.id === page.doc);
-    const documents = graph.nodes.filter(node => node?.id === page.doc);
-    if (manifests.length !== 1 || documents.length !== 1) return;
-    const [manifest] = manifests, [documentNode] = documents;
-    if (documentNode.type !== 'document' || !isSha256(manifest.sha256) || documentNode.sha256 !== manifest.sha256 ||
-        (Number.isInteger(manifest.pages) && page.page > manifest.pages)) return;
-
-    const ref = page.doc + '/p' + page.page;
-    const pages = graph.nodes.filter(node => node?.id === ref);
-    if (pages.length !== 1 || pages[0].type !== 'page' || pages[0].sha256 !== page.page_sha256) return;
-    const parents = graph.edges.filter(edge => edge?.type === 'contains' && edge.to === ref);
-    if (parents.length !== 1) return;
-    const [parent] = parents;
-    if (parent.from === page.doc && Array.isArray(parent.evidence) && parent.evidence.length === 1 && parent.evidence[0] === ref)
-      return manifest;
   }
 
   function technicalText(value, label) {
@@ -88,7 +67,7 @@ const ExecutionTrace = (() => {
     }
     for (const page of Array.isArray(calls?.pages) ? calls.pages : []) {
       if (!isRecord(page)) continue;
-      const source = sourcePage(graph,page);
+      const source = issuedPageDocument(graph,page);
       const name = source?.name || page.doc || '未记录资料';
       const title = name + (Number.isInteger(page.page) ? ' · 第 '+page.page+' 页' : ' · 页码未记录');
       const entries = [['initial',page]];

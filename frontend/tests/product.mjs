@@ -215,6 +215,9 @@ export async function checkProduct({root,call,evaluate,wait}) {
     await call('Emulation.setDeviceMetricsOverride',{width,height:width<600?844:900,deviceScaleFactor:1,mobile:width<600});
     await evaluate('scrollTo({top:0,behavior:"instant"})');
     assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),'product width '+width);
+    assert.ok(await evaluate(`[...document.querySelectorAll(".section-nav a,.nav-actions > a")].filter(a=>a.getClientRects().length).every(a=>{
+      const text=document.createRange(); text.selectNodeContents(a); return text.getClientRects().length===1;
+    })`),'product navigation links fit on one line at '+width);
     await evaluate(select(readingSwitch+' [aria-controls=source-strips]')+'.click()');
     const stripsFit=await evaluate('Array.from(document.querySelectorAll("#source-strips a"),n=>n.getBoundingClientRect()).every(r=>r.height>=44 && r.left>=0 && r.right<=innerWidth)');
     assert.ok(stripsFit,'published line links at '+width);

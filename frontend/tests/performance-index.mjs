@@ -30,7 +30,7 @@ export async function checkPerformanceIndex(ctx,id,requested) {
   assert.ok(task.title.startsWith('合成演练'));
   const rev=requested || task.rev;
   const {report}=await (await fetch(base+'/reports/'+rev)).json();
-  const groups={contract:['H01'],acceptance:['H02'],payment:['H03','H04','H05','H06']};
+  const groups={contract:['H01'],acceptance:['H02'],payment:['H03','H04','H05','H06','H07']};
   const dialog='#performance-index', page='#page-dialog';
   const card=scope=>'[data-audit-scope="'+scope+'"]';
   const checkPick=q('.scope-check-select');
@@ -195,7 +195,7 @@ export async function checkPublicTopics(ctx) {
   const routes=[
     ['signing',['signing','word-signing','contract-dates','pdf-signing'],'signing-example',['company','word','calendar','pdf']],
     ['inspection',['acceptance','batch-standards','acceptance-signers','inspection','named-inspection','suppliers','word-comments'],'inspection-example',['readings','standards','signers','equipment','named','supplier','comments']],
-    ['folios',['guarantee-period','contract-comments','payment-proof','signer-clock','signer-timing','payment-acceptance','folios'],'payment-example',['guarantee','comments','proof','clock','timing','reference','folios']],
+    ['folios',['guarantee-period','warranty-register','contract-comments','payment-proof','signer-clock','signer-timing','payment-acceptance','folios'],'payment-example',['guarantee','warranty','comments','proof','clock','timing','reference','folios']],
   ];
   await call('Page.navigate',{url:root+'/#workflow'});
   await wait(q('.scene-tabs')+'?.hidden===false','product workflow ready');
