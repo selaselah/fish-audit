@@ -572,15 +572,25 @@ class LocalFlowTests(unittest.TestCase):
             self.assertEqual(cache.status_code,304)
         with self.client.get(base+"pages/1?rev=1") as pinned:
             self.assertEqual(pinned.headers["ETag"],etag)
+        thumbnail = base+"pages/1/thumbnail?rev=1"
+        with self.client.get(thumbnail) as response:
+            self.assertEqual((response.status_code,response.mimetype),(200,"image/jpeg"))
+            self.assertIn("no-store",response.cache_control)
+            with Image.open(io.BytesIO(response.data)) as small:
+                self.assertLessEqual(small.width,180)
+                self.assertLessEqual(small.height,224)
+        self.assertEqual(self.client.get(base+"pages/1/thumbnail?rev=9").status_code,404)
         self.assertEqual(self.client.get(base+"original?rev=9").status_code,404)
         self.assertEqual(self.client.get(base+"original?rev=bad").status_code,400)
         with self.store.connect(True) as db:
             db.execute("UPDATE pages SET sha256=? WHERE case_id=?",("different registered page",cid))
         self.assertEqual(self.client.get(base+"pages/1?rev=1").status_code,409)
+        self.assertEqual(self.client.get(thumbnail).status_code,409)
         with self.store.connect(True) as db:
             db.execute("UPDATE pages SET sha256=? WHERE case_id=?",(etag.strip('"'),cid))
         folder = self.store.files/cid/"d01"
         (folder/"1.jpg").write_bytes(b"changed")
+        self.assertEqual(self.client.get(thumbnail).status_code,409)
         self.assertEqual(self.client.get(base+"pages/1",headers={"If-None-Match":etag}).status_code,409)
         self.store.rerun(cid,1)
         with self.assertRaises(CaseError) as failure:

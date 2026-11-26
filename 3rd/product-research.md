@@ -1,5 +1,11 @@
 # 审计与会计软件的公开界面
 
+## 从审计引文翻到相邻原页
+
+DataSnipper Alwin 把证据片段在当前组里的位置放在阅读器中，点击位置可展开清单，再回到对应片段。Adobe Acrobat 提供逐页翻阅、按页码直达和返回先前视图。Fish Audit 采用可展开的页码控件，同一份原件连续翻页，一键回到进入时的审计引文。[DataSnipper 任务结果复核](https://knowledge.datasnipper.com/en/articles/882479-how-to-review-a-task-s-output-in-alwin) · [Adobe Acrobat 页间导航](https://helpx.adobe.com/acrobat/desktop/get-started/learn-the-basics/navigation.html)
+
+Ramp 的账单查看器把旋转、缩放和下载原件放在单据旁。Fish Audit 的原件入口采用白底文件列表，蓝色标识当前物理页，字段另用文字标明「已匹配文字层」「待核原图」等证据状态。[Ramp 账单与原始凭证](https://support.ramp.com/managing-bills-and-payments-on-bill-pay/) · [颜色参考](interface-color.md)
+
 ## 在合同正文和付款续页之间定位
 
 Adobe Acrobat 的页面缩略图用于在长文档中识别和切换物理页。Fish Audit 保留真实页形，缩略图旁列出各页载明的期次。发现编号不符时，正文与续页的号码同时显示，审计员可切换原图与字符差异，打开所据页和行。全部展示素材均为本项目的水印演练件。[Adobe Acrobat 页面缩略图与书签](https://helpx.adobe.com/acrobat/using/page-thumbnails-bookmarks-pdfs.html) · [本例原件登记](showcase-provenance.md#付款续页案例-r10)

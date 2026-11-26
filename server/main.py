@@ -7,6 +7,7 @@ import sys
 import tempfile
 import uuid
 from contextlib import ExitStack, closing
+from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlencode, urlsplit
 
@@ -18,6 +19,7 @@ if __name__ == "__main__":
         os.execv(str(local_python), [str(local_python), *sys.argv])
 
 from flask import Blueprint, Flask, g, jsonify, redirect, request, send_file, send_from_directory
+from PIL import Image
 from waitress import serve
 from werkzeug.exceptions import HTTPException
 
@@ -46,7 +48,7 @@ def text_field(value, name, limit):
     return value.strip()
 
 
-def verified_download(path, expected, name, mimetype, *, attachment):
+def verified_stream(path, expected):
     stream = tempfile.SpooledTemporaryFile(max_size=2*1024**2)
     try:
         hasher = hashlib.sha256()
@@ -59,7 +61,17 @@ def verified_download(path, expected, name, mimetype, *, attachment):
             raise CaseError("存证文件缺失，请核对本机资料或备份。", 409) from exc
         if hasher.hexdigest() != expected:
             raise CaseError("存证文件与记录的摘要不符，无法提供此原件或页图。", 409)
-        size = stream.tell()
+        stream.seek(0)
+        return stream
+    except BaseException:
+        stream.close()
+        raise
+
+
+def verified_download(path, expected, name, mimetype, *, attachment):
+    stream = verified_stream(path, expected)
+    try:
+        size = stream.seek(0, os.SEEK_END)
         stream.seek(0)
         response = send_file(stream, download_name=name, mimetype=mimetype, as_attachment=attachment,
                              conditional=False, etag=expected)
@@ -420,15 +432,27 @@ def create_app(store, worker):
         return verified_download(store.files / case_id / doc / ("original" + match["ext"]), match["sha256"],
                                  match["name"], "application/octet-stream", attachment=True)
 
+    @business.get("/cases/<case_id>/documents/<doc>/pages/<int:number>/thumbnail", defaults={"thumbnail": True})
     @business.get("/cases/<case_id>/documents/<doc>/pages/<int:number>")
-    def page_image(case_id, doc, number):
+    def page_image(case_id, doc, number, thumbnail=False):
         with store.connect() as db:
             row = db.execute("SELECT sha256 FROM pages WHERE case_id=? AND doc=? AND number=?", (case_id, doc, number)).fetchone()
         if not row:
             raise CaseError("页图不存在。", 404)
         verify_revision_source(case_id, f"{doc}/p{number}", row["sha256"])
-        return verified_download(store.files / case_id / doc / f"{number}.jpg", row["sha256"],
-                                 f"{number}.jpg", "image/jpeg", attachment=False)
+        path = store.files / case_id / doc / f"{number}.jpg"
+        if thumbnail:
+            with verified_stream(path, row["sha256"]) as stream:
+                try:
+                    with Image.open(stream, formats=["JPEG"]) as page:
+                        page.draft("RGB", (180, 224))
+                        page.thumbnail((180, 224), Image.Resampling.LANCZOS)
+                        with BytesIO() as small:
+                            page.convert("RGB").save(small, "JPEG", quality=78)
+                            return app.response_class(small.getvalue(), mimetype="image/jpeg")
+                except OSError as exc:
+                    raise CaseError("存证页图无法解码，请核对原件。", 409) from exc
+        return verified_download(path, row["sha256"], f"{number}.jpg", "image/jpeg", attachment=False)
 
     @business.post("/cases/<case_id>/retry")
     def retry(case_id):

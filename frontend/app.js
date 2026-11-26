@@ -138,9 +138,12 @@ function renderList() {
     button.setAttribute('aria-pressed', String(button.dataset.filter === state.filter));
   }
 }
-async function loadReviewImage(image, source) {
-  const response = await fetch(source, {cache:'no-store'});
-  if (!response.ok) throw new Error('原页加载失败');
+async function loadReviewImage(image, source, signal) {
+  const response = await fetch(source, {cache:'no-store',signal});
+  if (!response.ok) {
+    const detail = [401,403,404,409].includes(response.status) && await response.json().catch(()=>null);
+    throw new Error(detail?.error || '原页加载失败。');
+  }
   const objectUrl = URL.createObjectURL(await response.blob());
   try {
     image.src = objectUrl;
@@ -163,13 +166,18 @@ function markPageRects(overlay, rects) {
 }
 
 function openPage(docId, pageNumber, highlight, lineHint, registerPair, rawRef) {
-  const item = state.detail.documents.find(doc => doc.id === docId);
-  if (!item) return;
-  const pageUrl = workpaperSource(docId,'pages/'+pageNumber);
+  const documents = state.bundle?.report.graph.documents || state.detail.documents;
+  const item = documents.find(doc => doc.id===docId);
+  if (item) OriginalReader.open(item,pageNumber,{highlight,lineHint,registerPair,rawRef});
+}
+
+function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,rawRef}, selected, pageUrl, signal) {
+  const docId = item.id;
   const image = el('img', '', 'page-image');
   image.alt = item.name + ' 第 ' + pageNumber + ' 页';
-  const enlarged = link('单独打开页图', pageUrl); enlarged.target = '_blank'; enlarged.rel = 'noopener';
-  enlarged.prepend(glyph('arrows-angle-expand'));
+  const enlarged = link('', pageUrl); enlarged.target = '_blank'; enlarged.rel = 'noopener';
+  enlarged.title = '单独打开页图'; enlarged.setAttribute('aria-label',enlarged.title);
+  enlarged.append(glyph('arrows-angle-expand'),el('span',enlarged.title));
   const overlay = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   overlay.setAttribute('viewBox', '0 0 1000 1000');
   overlay.setAttribute('preserveAspectRatio', 'none');
@@ -209,10 +217,9 @@ function openPage(docId, pageNumber, highlight, lineHint, registerPair, rawRef) 
   const timingRefs=timingRows.filter(s=>!otherRefs.some(r=>r.rawLine===s.rawLine));
   const contractRefs=[...ContractFolios.pageReferences(docId,pageNumber),...ContractCalendar.pageReferences(docId,pageNumber)];
   const preferred=contractRefs.find(r=>r.ref===rawRef);
-  const existingRefs=[...timingRefs,...otherRefs];
-  const pageRefs=[...(preferred?[preferred]:[]),...existingRefs.filter(r=>!preferred || r.rawLine!==preferred.rawLine)];
-  for (const row of contractRefs) {
-    if (!pageRefs.some(r=>r.rawLine===row.rawLine)) pageRefs.push(row);
+  const pageRefs=[];
+  for (const row of [...(preferred?[preferred]:[]),...timingRefs,...otherRefs,...contractRefs]) {
+    if (!pageRefs.some(r=>r.ref===row.ref || (row.rawLine && r.rawLine===row.rawLine))) pageRefs.push(row);
   }
   const comparedFact=registerPair && pageFacts.find(f=>f.id===registerPair.fact && f.field==='acceptance_result' && f.source_line?.rects?.length);
   const comparedNote=registerPair && registerRefs.find(s=>s.rawLine===registerPair.line && s.rawLine!==comparedFact?.source_line.number);
@@ -235,8 +242,7 @@ function openPage(docId, pageNumber, highlight, lineHint, registerPair, rawRef) 
   const coverage = state.bundle?.report.graph.delegation_coverage;
   const nameHolds = new Map([...(coverage?.agent_holds || []),...(coverage?.signer_holds || [])]
     .filter(h=>h.doc===docId && h.page===pageNumber && h.lines?.length).map(h=>[h.fact,h]));
-  const editable = state.bundle?.rev === state.detail.rev && state.detail.status === 'ready';
-  const selected = new Set();
+  const editable = canReviewCurrentPaper();
   let focusRow;
   function setZoom(index) {
     zoom = Math.max(0,Math.min(index,levels.length-1));
@@ -308,9 +314,13 @@ function openPage(docId, pageNumber, highlight, lineHint, registerPair, rawRef) 
     const fact = pageFacts.find(f => f.id === ref);
     const raw = rawLines.find(source => source.ref === ref);
     showAllFacts = !fact && !raw;
+    right.classList.toggle('quote-index',showAllFacts);
     if (showAllFacts) {
       comparison?.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed','false'));
-      for (const row of right.querySelectorAll('[data-fact],[data-source-ref]')) row.hidden = false;
+      markPageRects(overlay,[]);
+      for (const row of right.querySelectorAll('.evidence-row')) {
+        row.hidden = false; row.classList.remove('located');
+      }
       return;
     }
     focusObservation(fact, raw, moveFocus);
@@ -318,13 +328,21 @@ function openPage(docId, pageNumber, highlight, lineHint, registerPair, rawRef) 
   let fieldPicker, compareButton;
   if (pageFacts.length || rawLines.length) {
     fieldPicker=el('select'); fieldPicker.setAttribute('aria-label','定位本页引文');
+    fieldPicker.id='reader-citation-picker';
+    const pickerLabel = el('label','本页引文');
+    pickerLabel.htmlFor=fieldPicker.id;
+    right.querySelector('h3').replaceChildren(pickerLabel);
     fieldPicker.add(new Option('全部引文 · '+(pageFacts.length + rawLines.length)+' 项',''));
-    for (const [label,refs] of [['复验间隔原行',timingRefs],['审批决定与待核原文',boardRefs],['整改状态与原行',repairRefs],['复验附注',registerRefs]]) {
-      if (!refs.length) continue;
+    const listed = new Set();
+    for (const [label,refs] of [['复验间隔原行',timingRefs],['审批决定与待核原文',boardRefs],['整改状态与原行',repairRefs],['复验附注',registerRefs],['原件依据',pageRefs]]) {
       const group = el('optgroup');
       group.label = label;
-      for (const source of refs) group.append(new Option(source.option, source.ref));
-      fieldPicker.append(group);
+      for (const source of refs) {
+        if (!listed.has(source.ref) && pageRefs.some(r=>r.ref===source.ref)) {
+          group.append(new Option(source.option,source.ref)); listed.add(source.ref);
+        }
+      }
+      if (group.childElementCount) fieldPicker.append(group);
     }
     for (const fact of pageFacts) {
       if (!pageRefs.some(source => source.ref === fact.id)) fieldPicker.add(new Option(fact.label+' · '+fact.value,fact.id));
@@ -345,21 +363,32 @@ function openPage(docId, pageNumber, highlight, lineHint, registerPair, rawRef) 
     right.prepend(navigator);
   }
   const selectionCount = el('span','','small');
+  function selectionText() {
+    selectionCount.textContent = selected.size ? '本页已选 '+selected.size+' 项引文' : '';
+  }
+  function indexButton(ref, label, value) {
+    const button = action('',()=>selectReference(ref,true),'reader-quote');
+    button.append(box('reader-quote-text',el('small',label),el('strong',value)),glyph('chevron-down'));
+    return button;
+  }
+  right.classList.toggle('quote-index',showAllFacts);
   for (const fact of pageFacts) {
     const row = box('evidence-row');
     row.dataset.fact = fact.id;
     const label = el('label', '', 'check-label');
     if (editable) {
       const check = el('input'); check.type = 'checkbox'; check.value = fact.id;
+      check.checked = selected.has(fact.id);
+      check.setAttribute('aria-label','选择'+fact.label+'，'+fact.value);
       check.addEventListener('change', () => {
         if (check.checked) selected.add(fact.id); else selected.delete(fact.id);
         submit.disabled = selected.size === 0;
-        selectionCount.textContent = selected.size ? '已选 '+selected.size+' 项引文' : '';
+        selectionText();
       });
       label.append(check);
     }
     label.append(el('strong', fact.label + ' · ' + fact.value));
-    row.append(label, tag(fact.status), el('blockquote', fact.quote),
+    row.append(label, indexButton(fact.id,fact.label,fact.value), tag(fact.status), el('blockquote', fact.quote),
       el('small', fact.id + ' · ' + (fact.source_line ? '文字层第 ' + fact.source_line.number + ' 行' :
         '模型定位：页' + statusName(fact.region)), 'small'));
     if (fact.source_line) row.append(fold('对照本机文字层', el('blockquote', fact.source_line.text)));
@@ -529,6 +558,7 @@ function openPage(docId, pageNumber, highlight, lineHint, registerPair, rawRef) 
     section.dataset.gapLine = String(gap.line);
     if (raw) {
       section.dataset.sourceRef = raw.ref;
+      section.prepend(indexButton(raw.ref,heading+' · 第 '+gap.line+' 行',gap.quote));
       if (boardRefs.includes(raw)) section.dataset.boardRef = raw.ref;
     }
     if (gap.line===lineHint) {
@@ -556,13 +586,14 @@ function openPage(docId, pageNumber, highlight, lineHint, registerPair, rawRef) 
     $('#page-dialog').close(); openReview([...selected]);
   }, 'primary');
   submit.disabled = true;
+  selectionText();
   if (editable) {
     const reviewActions=box('review-selection');
     if (pageFacts.length) reviewActions.append(submit);
     reviewActions.append(action('补录本页字段', () => openAmend(docId, pageNumber, null)),selectionCount);
     right.append(reviewActions);
   }
-  const controls = editable ? [...right.querySelectorAll('button:enabled,input:enabled')].filter(control => control !== compareButton) : [];
+  const controls = editable ? [...right.querySelectorAll('button:enabled,input:enabled')].filter(control => control!==compareButton && !control.classList.contains('reader-quote')) : [];
   for (const control of controls) control.disabled = true;
   const notice=box('source-error');
   const loadStatus=el('span','原页加载失败。');
@@ -573,23 +604,27 @@ function openPage(docId, pageNumber, highlight, lineHint, registerPair, rawRef) 
     retry.disabled=true;
     if (notice.isConnected) { loadStatus.textContent='正在重新载入原页…'; notice.setAttribute('aria-busy','true'); }
     try {
-      await loadReviewImage(image,pageUrl);
+      await loadReviewImage(image,pageUrl,signal);
+      if (signal.aborted) return;
       notice.remove();
       sheet.hidden=false; image.hidden=false; overlay.removeAttribute('hidden'); orient();
       rotateLeft.disabled=rotateRight.disabled=fit.disabled=false;
       setZoom(zoom);
       for (const control of controls) control.disabled=false;
+      submit.disabled = !selected.size;
       if (returnFocus && canvas.isConnected && $('#page-dialog').open) canvas.focus({preventScroll:true});
-    } catch {
+    } catch (error) {
+      if (signal.aborted) return;
       sheet.hidden=true; image.hidden=true; overlay.setAttribute('hidden','');
       decrease.disabled=increase.disabled=fit.disabled=rotateLeft.disabled=rotateRight.disabled=true;
-      loadStatus.textContent='原页加载失败。'; notice.removeAttribute('aria-busy'); retry.disabled=false;
+      loadStatus.textContent=error.message && error.name==='Error' ? error.message : '原页加载失败。'; notice.removeAttribute('aria-busy'); retry.disabled=false;
       if (!notice.isConnected) left.prepend(notice);
       if (returnFocus && retry.isConnected && $('#page-dialog').open) retry.focus({preventScroll:true});
     }
   }
   load();
-  $('#page-title').textContent = item.name + ' · 第 ' + pageNumber + ' 页';
+  $('#page-title').replaceChildren(item.name,el('span',' · 第 '+pageNumber+' 页',item.pages>1?'visually-hidden':''));
+  $('#page-title').title = item.name;
   const jumpTo = (pane, target) => {
     pane.focus({preventScroll:true});
     (target || pane).scrollIntoView({block:'center'});
@@ -598,7 +633,7 @@ function openPage(docId, pageNumber, highlight, lineHint, registerPair, rawRef) 
   const quotesButton = action('看引文', () => jumpTo(right,right.querySelector('.located')));
   originalButton.setAttribute('aria-controls',left.id); quotesButton.setAttribute('aria-controls',right.id);
   $('#page-content').replaceChildren(box('viewer-nav', originalButton, quotesButton), box('page-view', left, right));
-  $('#page-dialog').showModal();
+  if (!$('#page-dialog').open) $('#page-dialog').showModal();
   if (focusRow) {
     const fact=pageFacts.find(f=>f.id===highlight);
     if (fact || initialRaw) locate(fact, initialRaw);
@@ -674,16 +709,29 @@ $('.skip').addEventListener('click', event => {
   $('#content').focus();
 });
 function sourceList() {
-  const panel = box('panel', el('h2', '提交资料'));
-  for (const item of state.detail.documents) {
-    const download = link('下载原件', workpaperSource(item.id,'original'));
-    const pages = box('chips');
-    for (let number = 1; number <= item.pages; number++) {
-      pages.append(action('查看第 ' + number + ' 页', () => openPage(item.id, number), 'ref'));
-    }
-    const hash = fold('原件摘要 SHA-256', el('code', item.sha256));
-    panel.append(box('source-doc', box('panel-head', el('h3', item.name), download),
-      el('small', Math.ceil(item.size / 1024) + ' KiB · ' + item.pages + ' 页', 'small'), pages, hash));
+  const graph = state.bundle?.report.graph;
+  const documents = graph?.documents || state.detail.documents;
+  const panel = box('panel source-library',box('archive-heading',el('h2','提交资料'),el('small',documents.length+' 份原件')));
+  for (const item of documents) {
+    const pages = OriginalReader.pageNumbers(item,graph);
+    const open = action('',()=>openPage(item.id,pages[0]),'archive-open');
+    open.disabled = !pages.length;
+    const format = item.ext.slice(1).toUpperCase();
+    const icon = box('archive-icon',glyph('file-earmark-text'),el('small',format));
+    icon.setAttribute('aria-hidden','true');
+    const count = pages.length ? pages.length+' 页' : graph?'此版未留存页图':'等待分页';
+    open.append(el('span','阅览','visually-hidden'),icon,box('archive-name',el('strong',item.name),el('small',count+' · '+fileSize(item.size))),glyph('chevron-down'));
+    const download = link('下载',workpaperSource(item.id,'original'),'archive-download');
+    download.setAttribute('aria-label','下载原件 '+item.name);
+    const receipt = box('archive-hash',el('small','原件 SHA-256'),el('code',item.sha256));
+    receipt.id = 'archive-hash-'+item.id; receipt.hidden = true;
+    const info = action('',()=>{
+      receipt.hidden = !receipt.hidden;
+      info.setAttribute('aria-expanded',String(!receipt.hidden));
+    },'archive-info');
+    info.setAttribute('aria-label','存证摘要 '+item.name); info.title = '存证摘要';
+    info.setAttribute('aria-expanded','false'); info.setAttribute('aria-controls',receipt.id); info.append(glyph('receipt'));
+    panel.append(box('source-doc archive-file',open,download,info,receipt));
   }
   return panel;
 }
@@ -1319,6 +1367,7 @@ function paperViewContext(data, rev) {
 }
 function renderCase(forcePanel = false) {
   const data = state.detail;
+  OriginalReader.sync();
   $('#case-title').textContent = data.title;
   $('#case-meta').textContent = profileName(data.profile) + ' · ' + time(data.created) + ' 提交';
   $('#case-status').replaceChildren(tag(data.status));
@@ -1351,11 +1400,20 @@ function renderCase(forcePanel = false) {
   renderSupplementFamily(data,bundle?.rev);
   $('#report-tools').hidden = !bundle;
   if (!bundle) {
-    displayedPaper = null;
+    const source = JSON.stringify([data.id,data.documents,data.decisions]);
+    const events = JSON.stringify(data.events);
+    if (displayedPaper?.bundle===null && displayedPaper.source===source) {
+      if (displayedPaper.events!==events) {
+        $('#case-panel').lastElementChild.replaceWith(activityPanel());
+        displayedPaper.events = events;
+      }
+      return;
+    }
     const content = [sourceList(), activityPanel()];
     const decision = data.decisions?.at(-1);
     if (decision) content.unshift(box('panel',el('h2','验收决定'),tag(decision.decision),el('p',decision.note)));
-    $('#case-panel').replaceChildren(...content); return;
+    $('#case-panel').replaceChildren(...content);
+    displayedPaper = {bundle:null,source,events}; return;
   }
   const nav = $('#tabs');
   if (!nav.childElementCount) {
@@ -1380,6 +1438,7 @@ function renderCase(forcePanel = false) {
 }
 function clearCaseView() {
   state.detail = null; state.bundle = null;
+  OriginalReader.sync();
   displayedPaper = null;
   PageProgress.reset();
   $('#supplement-family').hidden = true; $('#supplement-family').replaceChildren();

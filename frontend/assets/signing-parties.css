@@ -92,6 +92,8 @@ button.seal-payments {
   background: var(--soft); border: 1px solid var(--line); border-radius: 8px;
 }
 .seal-page-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.seal-page-choice { display:flex; align-items:center; gap:5px; margin:0; min-width:0; max-width:65%; white-space:nowrap; color:var(--muted); font-size:.8rem; }
+.seal-page-choice .seal-page-picker { min-width:0; max-width:100%; }
 .seal-filename { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .8rem; }
 .seal-page-number, .seal-page-picker { font-size: .76rem; color: var(--secondary); white-space: nowrap; }
 .seal-page-picker { max-width: 65%; min-height: 44px; width: auto; border-color: var(--field-line); background: var(--surface); padding: 4px 6px; }

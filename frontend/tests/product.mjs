@@ -366,7 +366,8 @@ export async function checkReviewDesign({root,call,evaluate,wait}, caseId) {
     latest.result.human_required===true?'需人工校验':latest.result.human_required===false?'无专项待核项':'人工校验要求待核';
   assert.equal(await evaluate('document.querySelector(".preview-verdict .small")?.textContent ?? null'),human);
   const priority = ['issue','risk','missing'].flatMap(s=>latest.findings.filter(f=>f.status===s)).slice(0,3);
-  assert.deepEqual(await evaluate('[...document.querySelectorAll(".preview-finding")].map(a=>Array.from(new URL(a.href).searchParams.values()))'),
+  const priorityLinks = '.preview-other > .preview-finding, .preview-section > .preview-finding';
+  assert.deepEqual(await evaluate('[...document.querySelectorAll('+JSON.stringify(priorityLinks)+')].map(a=>Array.from(new URL(a.href).searchParams.values()))'),
     priority.map(f=>[String(task.rev),f.id]));
   if (process.env.AUDIT_UI_SHOTS) {
     await call('Emulation.setDeviceMetricsOverride',{width:1440,height:900,deviceScaleFactor:1,mobile:false});
@@ -379,8 +380,9 @@ export async function checkReviewDesign({root,call,evaluate,wait}, caseId) {
   await wait('!document.querySelector("#case-preview").open && !document.querySelector("#preview-body").childElementCount','dismiss and clear preview');
   assert.equal(await evaluate('document.activeElement.dataset.previewCase'),caseId);
   await evaluate(peek+'.click()');
-  await wait('!!document.querySelector(".preview-finding")','reopen preview');
-  await evaluate('document.querySelector(".preview-finding").click()');
+  const firstPriority = 'document.querySelector('+JSON.stringify(priorityLinks)+')';
+  await wait(firstPriority,'reopen priority list');
+  await evaluate(firstPriority+'.closest("details")?.querySelector("summary").click();'+firstPriority+'.click()');
   await wait('!document.querySelector("#case-preview").open && !document.querySelector("#case").hidden && !!document.querySelector("#trace-select")','preview to evidence trail');
   assert.equal(await evaluate('document.querySelector("#trace-select").value'),priority[0].id);
   await call('Page.navigate',{url:root+'/workpaper/'+caseId+'?rev=7'});

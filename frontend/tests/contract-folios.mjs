@@ -26,6 +26,7 @@ export async function checkFolios({root,call,evaluate,wait},cid,revision) {
     await wait(q('#page-dialog .located blockquote')+'?.textContent==='+JSON.stringify(row.quote)+' && '+q('#page-dialog .page-image')+'?.naturalWidth>0','exact physical row '+id);
     const selected=await evaluate(q('#page-dialog .located')+'.dataset.gapLine');
     assert.equal(selected,String(row.line));
+    assert.equal(await evaluate(q('#page-dialog .field-navigator select')+'.value'),row.id);
     const rects=report.calls.pages.find(c=>c.doc===row.doc && c.page===row.page).contract_folio_rects[row.line];
     assert.equal(await evaluate('document.querySelectorAll("#page-dialog .source-plane svg rect").length'),rects.length);
     const url=await evaluate(q('#page-dialog .source-tools a')+'.href');

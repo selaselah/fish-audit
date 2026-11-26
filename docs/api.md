@@ -291,6 +291,7 @@ v3 另在 `graph.delegation_coverage.signer_holds` 登记待核的合同签字�
 | `GET /api/cases/{id}/reports/{rev}/methods/{name}` | 阅读该版本配套的程序源码，文件名取自底稿中的 `policy.code_sha256`。保存了源码快照的版本可用 |
 | `GET /api/cases/{id}/documents/{doc}/original` | 下载原始文件 |
 | `GET /api/cases/{id}/documents/{doc}/pages/{page}` | 查看模型读取的页图，页码从 1 开始 |
+| `GET /api/cases/{id}/documents/{doc}/pages/{page}/thumbnail` | 从校验过的页图按比例生成 JPEG 缩略图，宽不超过 180 像素，高不超过 224 像素 |
 | `POST /api/cases/{id}/retry` | 中断任务从已保存的检查点继续 |
 | `POST /api/cases/{id}/rerun` | 提交当前 `rev`，沿用已保存的视觉提取重新执行审计，生成新版 |
 | `POST /api/cases/{id}/attest` | 对指定底稿中的若干观察确认或提出异议，生成新版 |
@@ -322,6 +323,8 @@ curl -F 'title=本月采购验收' -F 'files=@合同.docx' -F 'files=@发票.pdf
 专家模型已经返回且响应已保存、底稿尚待生成时，`page_progress.expert` 提供目标底稿版本 `target_rev` 与保存时间 `saved_at`。写入响应的同时，工作台进度更新为 96%。恢复后若同案同版的完整请求与原记录相符，系统标记 97% 并沿用原响应。底稿成功提交时清理临时响应，完整专家执行记录进入该版底稿。
 
 原件下载和页图预览在响应前核对 SHA-256。请求支持 ETag、HEAD 和字节范围。审计人员或管理员可加 `?rev=版本号`，同时校验所选底稿及其图谱中的来源摘要，底稿引用默认使用这个入口。员工可从本人任务读取已登记的当前原件和页图。已登记的文件缺失或内容与相应摘要不符时返回 409。
+
+缩略图沿用页图的企业权限、版本和来源摘要检查，响应标明 `Cache-Control: no-store`。缩图只用于选页，签收和字段核验使用完整页图。企业端在 `/api/w/{workspace}/cases/...` 下使用同一接口。
 
 ## 复算历史底稿
 

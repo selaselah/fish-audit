@@ -226,7 +226,9 @@ const SigningParties = (() => {
     const multipleDocs=new Set(pages.map(p=>p.doc)).size>1;
     for (const [i,p] of pages.entries())
       picker.add(new Option((multipleDocs?p.name+' · ':'')+'第 '+p.page+' 页',String(i)));
-    const head=box('seal-page-head',filename,pages.length>1?picker:caption);
+    const choice=el('label','原页','seal-page-choice');
+    choice.append(picker);
+    const head=box('seal-page-head',filename,pages.length>1?choice:caption);
     const content=box('seal-preview-content');
     rail.append(head,content);
     let show;

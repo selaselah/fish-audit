@@ -61,6 +61,8 @@
   <script src="/supplements.js" defer></script>
   <script src="/checkpoints.js" defer></script>
   <script src="/peer-review.js" defer></script>
+  <link rel="stylesheet" href="/assets/original-reader.css">
+  <script src="/assets/original-reader.js" defer></script>
   <script src="/app.js" defer></script>
   <script src="/assets/audit-navigation.js" defer></script>
 </head>
@@ -191,7 +193,9 @@
     </form>
   </dialog>
   <dialog id="page-dialog" class="wide-dialog" aria-labelledby="page-title">
-    <div class="dialog-head"><h2 id="page-title">资料原页</h2><button class="plain" type="button" data-close>关闭</button></div>
+    <div class="dialog-head"><div class="reader-file-heading"><i class="ui-glyph ic-file-earmark-text" aria-hidden="true"></i><h2 id="page-title">资料原页</h2><span id="reader-revision" hidden></span></div>
+      <button class="icon-button" type="button" aria-label="关闭原件" data-close><i class="ui-glyph ic-x-lg" aria-hidden="true"></i></button></div>
+    <div id="reader-navigation" hidden></div>
     <div id="page-content"></div>
   </dialog>
   <dialog id="review-dialog">

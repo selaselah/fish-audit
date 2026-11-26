@@ -478,7 +478,11 @@ class EnterpriseFlow(unittest.TestCase):
         checkpoint = employee.get("/api/w/"+a+"/cases/"+emp_case).json["page_progress"]
         self.assertEqual(checkpoint["documents"],{"d01":[{"page":1,"state":"checked"}]})
         self.assertEqual(employee.get("/api/w/"+a+"/cases/"+emp_case+"/documents/d01/pages/1?rev=1").status_code,403)
-        for tail in ("","/reports/1","/reports/1/bundle","/documents/d01/original","/documents/d01/pages/1"):
+        thumb=f"/api/w/{a}/cases/{emp_case}/documents/d01/pages/1/thumbnail"
+        self.assertEqual(employee.get(thumb).status_code,200)
+        self.assertEqual(employee.get(thumb+"?rev=1").status_code,403)
+        self.assertEqual(employee.get(thumb.replace(emp_case,administrator_case)).status_code,404)
+        for tail in ("","/reports/1","/reports/1/bundle","/documents/d01/original","/documents/d01/pages/1","/documents/d01/pages/1/thumbnail?rev=1"):
             self.assertEqual(other.get("/api/w/"+b+"/cases/"+emp_case+tail).status_code,404)
         self.assertEqual(employee.get("/api/w/"+a+"/cases/"+administrator_case).status_code,404)
         self.assertEqual(employee.get("/api/w/"+a+"/cases/"+emp_case+"/reports/1").status_code,403)

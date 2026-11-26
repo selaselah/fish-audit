@@ -10,9 +10,8 @@
 .catalog-columns { display:grid; grid-template-columns:minmax(16.5rem,.84fr) minmax(0,1.8fr); }
 .catalog-master { display:flex; flex-direction:column; gap:8px; padding:16px 12px; min-width:0; border-right:1px solid var(--catalog-line); background:#f8f9fb; }
 .catalog-search { min-height:42px; gap:8px; padding:0 9px; border:1px solid var(--field-line); border-radius:7px; color:var(--muted); background:white; }
-.catalog-search:focus-within { outline:2px solid var(--focus); outline-offset:1px; }
 .catalog-search input { width:100%; min-width:0; min-height:38px; border:0; outline:0; box-shadow:none; padding:0; background:transparent; font:inherit; }
-.catalog-search input:focus-visible { outline:0; }
+.catalog-search input:focus-visible { outline:2px solid var(--focus); outline-offset:1px; }
 .catalog-count:empty { display:none; }
 .catalog-list { position:relative; display:grid; align-content:start; max-height:clamp(20rem,51vh,35rem); gap:2px; overflow-y:auto; scrollbar-width:thin; }
 .catalog-list .catalog-row { display:flex; align-items:baseline; gap:8px; min-height:42px; width:100%; padding:7px 8px; border:1px solid transparent; border-radius:5px; text-align:left; background:transparent; color:var(--ink); }
