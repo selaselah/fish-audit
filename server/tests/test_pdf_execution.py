@@ -14,8 +14,8 @@ from pdf_execution import FORMAT, inspect_original, source_graph, sources, verif
 from performance import compute
 from test_performance import BANK_DOC, CONTRACT, RECEIPT, material
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "docs" / "samples"))
-from pdf_signing import later_copy, signed_copy
+with patch.object(sys, "path", [str(Path(__file__).resolve().parents[2] / "docs" / "samples"), *sys.path]):
+    from pdf_signing import later_copy, signed_copy
 
 
 class PdfExecutionTests(unittest.TestCase):
@@ -23,7 +23,7 @@ class PdfExecutionTests(unittest.TestCase):
     def setUpClass(cls):
         out = BytesIO()
         writer = PdfFileWriter()
-        content = writer.add_object(generic.StreamObject(stream_data=b""))
+        content = writer.add_object(generic.StreamObject(stream_data=b"% synthetic fixture A"))
         writer.insert_page(PageObject(content, (0, 0, 300, 400)))
         writer.write(out)
         cls.plain = out.getvalue()
@@ -64,6 +64,13 @@ class PdfExecutionTests(unittest.TestCase):
             self.assertEqual(self.paper(raw)["findings"][0]["status"], "missing")
         state, rows = inspect_original(signed_copy(self.signed, "SecondSyntheticSignature"))
         self.assertEqual((state, [r["state"] for r in rows]), ("current", ["earlier", "current"]))
+
+    def test_damaged_signed_document_is_flagged_from_the_actual_bytes(self):
+        self.assertEqual(self.signed.count(b"synthetic fixture A"), 1)
+        damaged = self.signed.replace(b"synthetic fixture A", b"synthetic fixture B")
+        state, (entry,) = inspect_original(damaged)
+        self.assertEqual((state, entry["state"]), ("mismatch", "mismatch"))
+        self.assertEqual(self.paper(damaged)["findings"][0]["status"], "risk")
 
     def test_inconclusive_inputs_and_integrity_failure(self):
         self.assertEqual(inspect_original(b"unreadable synthetic fixture"), ("review", []))

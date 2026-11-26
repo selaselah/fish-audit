@@ -71,7 +71,8 @@ function performanceOverview(findings, graph) {
   overview.setAttribute('aria-label','履约结论与期次');
   overview.append(summary);
   const effect=findings.find(f=>f.rule==='H01');
-  const word=WordSigning.panel(effect,graph,findings,state.bundle?.report.calls.pages);
+  const signatures=WordSigning.panel(effect,graph,findings,state.bundle?.report.calls.pages) ||
+    PdfSignatures.panel(effect,graph,findings,state.bundle?.report.calls.pages,state.bundle?.report.policy);
   const folios=ContractFolios.panel(plan,graph,state.bundle?.report.calls.pages,state.bundle?.report.findings.find(f=>f.rule==='E01'));
   const parties=SigningParties.panel(effect,graph,phases);
   const acceptance=findings.find(f=>f.rule==='H02');
@@ -79,7 +80,7 @@ function performanceOverview(findings, graph) {
   const dates=ContractCalendar.panel(effect,graph,findings,state.bundle?.report.calls.pages);
   const dateQuestion=effect?.effect_review?.calendar?.some(day=>!['exact','spacing'].includes(day.state));
   const sections=[
-    {key:'signatures',label:'签署凭证',icon:'journal-text',content:word,priority:!dateQuestion && Boolean(word)},
+    {key:'signatures',label:'签署凭证',icon:'journal-text',content:signatures,priority:!dateQuestion && Boolean(signatures)},
     {key:'contract-dates',label:'合同日期',icon:'clock-history',content:dates,priority:dateQuestion},
     {key:'contract-pages',label:'分期条款',icon:'layers',content:folios,priority:plan?.status!=='ok'},
     {key:'parties',label:'签章主体',icon:'shield-check',content:parties,priority:effect?.status==='risk'},

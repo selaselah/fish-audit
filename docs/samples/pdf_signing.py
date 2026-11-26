@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from hashlib import sha256
 from io import BytesIO
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from tempfile import mkdtemp
 
 from asn1crypto import keys, x509 as asn1_x509
 from cryptography import x509
@@ -56,39 +56,39 @@ def run(seed, upload):
     folder.mkdir(parents=True, exist_ok=True)
     font = embedded_font("PdfSignatureFixture")
     records = documents(code, "complete")
-    with TemporaryDirectory(dir=folder) as tmp:
-        base = Path(tmp)
-        for title, rows in records.items():
-            pdf(base / (title + ".pdf"), title, rows, font=font)
-        raw = (base / "采购合同.pdf").read_bytes()
-        signed = signed_copy(raw)
-        variants = {"typeset": raw, "current": signed, "earlier": later_copy(signed)}
-        submitted = []
-        for mode, content in variants.items():
-            dest = base / mode
-            dest.mkdir()
-            contract = dest / "采购合同.pdf"
-            contract.write_bytes(content)
-            paths = [contract, base / "验收报告.pdf", base / "银行付款回单.pdf"]
-            originals = {}
-            for path in paths:
-                page, = prepare(path, 1, save_images=False)
-                lines = page["text"].splitlines()
-                assert lines[0] == WATERMARK and all(k + "：" + v in lines for k, v in records[path.stem])
-                originals[path.name] = (sha256(path.read_bytes()).hexdigest(), page)
-            print(mode, originals[contract.name][0], flush=True)
-            if upload:
-                title = "合成演练 · PDF " + LABELS[mode]
-                cid = submit(title, paths, seed + mode + originals[contract.name][0][:16], PROFILE)
-                submitted.append((mode, cid, title, originals))
-                print(mode, cid, flush=True)
-        for mode, cid, title, originals in submitted:
-            report = read_back(cid, title, originals, wait(cid))
-            found = next(f for f in report["findings"] if f["rule"] == "H01")
-            assert found["effect_review"]["pdf_execution"]["state"] == mode and found["status"] == "missing"
-            assert all(f["status"] != "ok" for f in report["findings"] if f["rule"] in ("H04", "H05"))
-            statuses = [(f["rule"], f["status"]) for f in report["findings"] if f["rule"].startswith("H")]
-            print(mode, cid, "R" + str(get("/api/cases/" + cid)["rev"]), statuses, flush=True)
+    base = Path(mkdtemp(prefix=code + "-", dir=folder))
+    print(base, flush=True)
+    for title, rows in records.items():
+        pdf(base / (title + ".pdf"), title, rows, font=font)
+    raw = (base / "采购合同.pdf").read_bytes()
+    signed = signed_copy(raw)
+    variants = {"typeset": raw, "current": signed, "earlier": later_copy(signed)}
+    submitted = []
+    for mode, content in variants.items():
+        dest = base / mode
+        dest.mkdir()
+        contract = dest / "采购合同.pdf"
+        contract.write_bytes(content)
+        paths = [contract, base / "验收报告.pdf", base / "银行付款回单.pdf"]
+        originals = {}
+        for path in paths:
+            page, = prepare(path, 1, save_images=False)
+            lines = page["text"].splitlines()
+            assert lines[0] == WATERMARK and all(k + "：" + v in lines for k, v in records[path.stem])
+            originals[path.name] = (sha256(path.read_bytes()).hexdigest(), page)
+        print(mode, originals[contract.name][0], flush=True)
+        if upload:
+            title = "合成演练 · PDF " + LABELS[mode]
+            cid = submit(title, paths, seed + mode + originals[contract.name][0][:16], PROFILE)
+            submitted.append((mode, cid, title, originals))
+            print(mode, cid, flush=True)
+    for mode, cid, title, originals in submitted:
+        report = read_back(cid, title, originals, wait(cid))
+        found = next(f for f in report["findings"] if f["rule"] == "H01")
+        assert found["effect_review"]["pdf_execution"]["state"] == mode and found["status"] == "missing"
+        assert all(f["status"] != "ok" for f in report["findings"] if f["rule"] in ("H04", "H05"))
+        statuses = [(f["rule"], f["status"]) for f in report["findings"] if f["rule"].startswith("H")]
+        print(mode, cid, "R" + str(get("/api/cases/" + cid)["rev"]), statuses, flush=True)
 
 
 if __name__ == "__main__":

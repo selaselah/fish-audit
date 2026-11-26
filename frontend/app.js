@@ -632,6 +632,11 @@ function citation(ref) {
     return Team.paperLink(label,prior.case_id,'button ref',new URLSearchParams({rev:String(prior.rev),fact:prior.fact}));
   }
   const source = index?.nodes.get(ref);
+  if (source?.type==='pdf_signature_inspection') {
+    const original=index.documents.get(source.doc);
+    if (original?.ext!=='.pdf' || original.sha256!==source.sha256) return el('span','PDF 签署来源待核','small');
+    return evidenceJump(original.name+' · 签署凭证','pdf-signatures');
+  }
   if (source?.type==='contract_date_line') return ContractCalendar.citation(ref);
   if (source?.type==='contract_folio_line') return ContractFolios.citation(ref);
   if (source?.type==='reinspection_time_line') {
@@ -1432,6 +1437,9 @@ async function refresh() {
       } else if (route.params.get('view')==='signatures' && state.openedCitation!==location.hash &&
                  bundle?.report.findings.some(f=>f.rule==='H01' && f.effect_review?.word_signatures)) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#word-signatures';
+      } else if (route.params.get('view')==='signatures' && state.openedCitation!==location.hash &&
+                 bundle?.report.findings.some(f=>f.rule==='H01' && f.effect_review?.pdf_execution)) {
+        state.openedCitation=location.hash; state.tab='report'; focusFinding='#pdf-signatures';
       } else if (route.params.get('view')==='calendar' && state.openedCitation!==location.hash &&
                  bundle?.report.findings.some(f=>f.rule==='H01' && f.effect_review?.calendar?.length)) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#contract-calendar';
@@ -1447,7 +1455,7 @@ async function refresh() {
           target.open=true;
           $('#trail-tab-final')?.click();
           revealPaperTarget($('#reinspection-wait'));
-        } else if (target?.dataset.finding || ['equipment-reinspection-trail','case-entity-browser','contract-pages','word-signatures','contract-calendar'].includes(target?.id)) revealPaperTarget(target);
+        } else if (target?.dataset.finding || ['equipment-reinspection-trail','case-entity-browser','contract-pages','word-signatures','pdf-signatures','contract-calendar'].includes(target?.id)) revealPaperTarget(target);
         else target?.focus();
       }
       const target = route.params.get('fact');

@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## PDF 合同签署凭证
+
+从规则 `2026.11.26.14` 起，`policy.pdf_execution` 为 `pdf-execution-v1`。图谱按已识别的合同资料匹配物理 PDF 原件。每份原件在 `graph.pdf_execution_sources.documents` 中记录原件摘要、字节数、所属审查单元和已填写的签名记录。支持范围内的记录带有 PDF 修订序号、已签范围终点、摘要算法、签名覆盖范围和证书指纹。归档校验会重新读取原件并复算这些字段。
+
+H01 的 `effect_review.pdf_execution` 引用原件检查节点、审查单元、合同页及签署栏。纯排印和需要核图的两种无嵌入签名情形分别标记为 `typeset`、`visual`。其余状态为 `current`、`earlier`、`mismatch`、`review`。当前文件与较早修订的签名完整性均可校验。`mismatch` 对应已支持的签名与其覆盖内容校验不符。格式不支持、记录不完整或仅含文档时间戳时保留待核。网页固定版本链接接受 `view=signatures`。[原件检查实现](../server/pdf_execution.py) · [公开示例数据](../frontend/assets/pdf-signing-samples.json)
+
 ## 合同原行与转录
 
 规则 `2026.11.26.11` 使用 `policy.contract_folios=contract-payment-folios-v2`。可复核的排版差异在对应的 `graph.contract_folio_sources.lines[]` 增列 `transcription`。其中 `ref` 指向同行的唯一观察，`quote` 和 `value` 保留转录，物理原行仍取该行的 `quote`。`form` 表示日期、数量、摄氏温度限值或分期比例。依据 `basis` 为 `visual_check` 时可查两次模型调用的输入与结果，为 `field_receipt` 时可查当时的人工核图回执。程序逐项核对行框、原件及页图摘要。

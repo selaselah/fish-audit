@@ -1,5 +1,9 @@
 # 合成财会审计演练
 
+## 排印稿、电子签署版与签后修订版
+
+运行 `server/.venv/bin/python docs/samples/pdf_signing.py --seed pdf-demo`，生成目录会打印到终端。加 `--run` 将这三套水印资料提交到本机审计服务，并在核对原件与页图摘要后模拟审计人员核验。每次生成都会创建新的虚构自签证书，签名文件的摘要随之变化。[固定底稿及实测结果](../acceptance.md#pdf-签名覆盖与付款条件)
+
 ## 同一合同上的生效日期
 
 运行 `server/.venv/bin/python docs/samples/printed_dates.py conflict --seed calendar-demo-01` 可生成两处生效日不同的水印合同、验收单、回单和质保确认单，并上传本机审计。把 `conflict` 换成 `mixed` 可核对原件混用分隔符的情况。追加 `--check-fields` 会对这一组水印文件模拟字段核图，先核实本案全部文件摘要和当前版本，再依据原页更正错列或漏读。重复使用相同种子和模式会打开原案。[演练结果](../acceptance.md#合同日期与三期付款)

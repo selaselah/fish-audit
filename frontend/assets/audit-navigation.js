@@ -24,6 +24,10 @@
         const panel=$('#file-progress'); panel.open=true; jump(panel.querySelector('summary'));
       }, '', '解析 页数 进度');
       if (paper) {
+        const signature=paper.report.findings.find(f=>f.rule==='H01')?.effect_review;
+        if (signature?.pdf_execution || signature?.word_signatures) add('底稿视图','核对签署凭证','shield-check',()=>{
+          state.tab='report'; renderCase(true); jump($(signature.pdf_execution?'#pdf-signatures':'#word-signatures'));
+        },'R'+paper.rev,'电子签名 证书 签章 盖章 PDF Word 签署页');
         if (ContractCalendar.available()) add('底稿视图','核对合同日期','clock-history',()=>{
           state.tab='report'; renderCase(true); jump($('#contract-calendar'));
         },'R'+paper.rev,'签订日 生效日 截止日 原件 冲突');

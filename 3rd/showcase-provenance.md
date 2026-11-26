@@ -2,6 +2,10 @@
 
 首页采用 Fish Audit 自制的冷藏柜采购演练。采购方「青禾演练采购中心」、供应方「云桥演练设备中心」、金额、温度、签认和回单均为虚构数据。每份原件第 1 行均印有「合成演练资料　仅供系统测试　无交易效力」。4℃ 是这份合同约定的柜温上限，8℃ 是这份验收报告填写的实测值。[水印和主体的生成定义](../docs/samples/generate.py) · [项目演练说明](../docs/samples/README.md#验收的是哪一种设备)
 
+## 电子签名演练
+
+三套文件共用同一合同正文、验收单和回单。页图和排印行完全一致。「排印稿」来自 R5，「电子签署版」和「签后修订版」来自各自的 R4。后一份保留了前一份的签名，在文件末尾追加 349 字节的测试元数据。签署页缩略图和两个签章栏裁片取自三案字节一致的归档页图，裁片定位到第 11、12 行。公开文件逐字节取自对应底稿的归档原件，当前版与前版使用同一测试证书。[公开演练](http://127.0.0.1:8000/?scene=pdf-signing#workflow) · [三份文件的 SHA-256 与校验明细](../frontend/assets/pdf-signing-samples.json) · [技术与交互资料](pdf-signature-review.md)
+
 ## 合同日期冲突案例 R6
 
 首页「合同生效」的日期冲突取自虚构的水印合同 `YL-LY-985A11F2`。首页的两个日期入口和签约日期入口均可打开原页。日期冲突的判断取自本案 H01，三期付款条件和第二期实付均需复核。[公开原件](../frontend/showcase/calendar-contract.pdf) · [归档页图](../frontend/assets/showcase-calendar-page.jpg) · [固定 R6](http://127.0.0.1:8000/workpaper/ad3f0a459eaa44c393ef346d0c64bdfc?rev=6&view=calendar)
@@ -55,15 +59,16 @@ PDF 的 SHA-256 为 `c9751b24f4902a8f18e963b86b3f2c6b1eeaf5562483814be397165e9a0
 | 案件、合同 | `ed7751a871aa4fb1a8574eddada0254b`，合同号 `YL-LY-32EED203`，案名「合成演练 · 所验型号相符但实测温度超限」 |
 | 样本批次 | `synthetic-equipment-models-20261125-13`，分支 `quality`，任务键为两者用连字符拼接 |
 | 样本生成器版本 | `equipment_models.py` 对应 Git 提交 `168ca95be2825e3ac5a2907367af85ed5d469ae9` |
-| 底稿 | R7，2026-11-25 09:35（北京时间），业务范围 `cn-contract-performance/v1` |
-| 当版规则 | `policy.version = 2026.11.25.13`，`policy.equipment_models = printed-equipment-models-v1` |
+| 原始展示底稿 | R7，2026-11-25 09:35（北京时间），业务范围 `cn-contract-performance/v1` |
+| R7 规则 | `policy.version = 2026.11.25.13`，`policy.equipment_models = printed-equipment-models-v1` |
+| 首页当前底稿 | R8，规则 `2026.11.26.14`，底稿 SHA-256 为 `b0100d48118210a67d504c09dfad461ce4daaa5b5e3fc8aad1c78a1321ed15f5` |
 | R7 底稿 SHA-256 | `cfed6075a9836ab6c851d4133b5ad0b29c4f69c848db6c46eb52d1937b763e11` |
 
 样本沿用 `contract_milestones.documents(code, "complete")` 的总价、付款条款、回单与质保期满确认。设备型号生成器在合同和验收单各写入 YL-C4，`quality` 分支将实测结果改为 8℃，保留结论「合格」和遗留事项「无」。仓库验收记录在「合同约定型号、分批验收与整改后换货」一节设有「实测温度 R7」入口。[基础合同与回单](../docs/samples/contract_milestones.py) · [定选案例生成器](../docs/samples/equipment_models.py) · [版本验收记录](../docs/acceptance.md#2026-11-25--合同约定型号分批验收与整改后换货) · [当版字段说明](../docs/api.md#约定设备型号与实收型号)
 
 ## 展示原件
 
-首页核图窗口只在打开时载入水印验收报告的固定 R7 页图。该页归档为 JPEG，沿用最初的公开资源名 `showcase-acceptance-page.png`，服务以 `image/jpeg` 返回原始字节。页图宽 1547、高 2190 像素，SHA-256 为 `fb4799101ab7c9ee46baa4705ed0712abeede3e50e22d8f0b8aebfb5a9ef27bd`。三处高亮分别取自第 9、11、12 行的 `source_line.rects`，切换整页和原行使用相同坐标。[归档页图副本](../frontend/assets/showcase-acceptance-page.png) · [验收报告 PDF](../frontend/showcase/acceptance.pdf)
+首页核图窗口打开时载入 R8 水印验收页图，原件、页图字节和引文位置已与 R7 逐项核对。该页归档为 JPEG，沿用最初的公开资源名 `showcase-acceptance-page.png`，服务以 `image/jpeg` 返回原始字节。页图宽 1547、高 2190 像素，SHA-256 为 `fb4799101ab7c9ee46baa4705ed0712abeede3e50e22d8f0b8aebfb5a9ef27bd`。三处高亮分别取自第 9、11、12 行的 `source_line.rects`，切换整页和原行使用相同坐标。[归档页图副本](../frontend/assets/showcase-acceptance-page.png) · [验收报告 PDF](../frontend/showcase/acceptance.pdf)
 
 首页「看原行」显示 R7 两张已归档页图的像素裁片。以下裁切坐标按左、上、右、下排列，单位为原始像素。可从对应 PDF 阅读完整上下文。
 
@@ -97,6 +102,8 @@ PDF 的 SHA-256 为 `c9751b24f4902a8f18e963b86b3f2c6b1eeaf5562483814be397165e9a0
 | 回单记载第二期 60,000.00 元，9 月 21 日交易成功 | 银行付款回单第 6 至 9 行 | `d03/p1/f5` · `transfer_amount`，`f6` · `payment_designation`，`f7` · `transfer_status`，`f8` · `paid_on`（均为 `d03/p1`） |
 
 按合同总额乘各期比例，三期约定金额分别为 **30,000、60,000、10,000 元**。收到的回单只记载第二期实付。R7 的 H02-3 判为 `issue`，实测 8℃ 高于合同上限 4℃。H04-5 第一期生效条件相符，H04-6 第二期和 H04-7 第三期均因终验依据不足标为 `risk`。H05-8 标为 `missing`，表示付款日是否已具备全部前提仍缺证。整案建议不通过（`result.verdict = reject`），查阅时待人工签收。[合同履约程序](../docs/audit-method.md#合同履约与分期) · [签收字段与流程](../docs/api.md#核图与最终决定)
+
+首页当前显示 R8。H01 和三期 H04 均为证据不足，H02 仍为实测温度超限问题，H03 的付款比例可核，H05 要求核对付款日条件。签署栏只有排印文字。首次重审保留了 R7 的原始文件和页图，旧版结论仍可单独打开。[当前签署原件](http://127.0.0.1:8000/workpaper/ed7751a871aa4fb1a8574eddada0254b?rev=8&view=signatures)
 
 在仓库根目录运行以下命令即可复核三个展示文件的摘要。
 

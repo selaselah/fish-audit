@@ -21,6 +21,9 @@
   <script src="/assets/sample-compare.js" defer></script>
   <script src="/assets/folio-number.js" defer></script>
   <script src="/assets/public-folios.js" defer></script>
+  <link rel="stylesheet" href="/assets/pdf-signatures.css">
+  <script src="/assets/pdf-signature-card.js" defer></script>
+  <script src="/assets/public-pdf-signing.js" defer></script>
   <script src="/landing.js" defer></script>
   <script src="/assets/sample-review.js" defer></script>
 </head>
@@ -45,7 +48,7 @@
           <p class="formats"><i aria-hidden="true" class="ui-glyph ic-paperclip"></i>支持电子与扫描 PDF、照片、Word</p>
         </div>
         <div class="specimen document-mat app-frame" data-visual id="sample" role="region" aria-label="交互演示，切换文件核对证据">
-          <div class="specimen-head"><span class="folder-caption">采购审计底稿</span><span class="sample-label">合成案例 · R7</span></div>
+          <div class="specimen-head"><span class="folder-caption">采购审计底稿</span><span class="sample-label">合成案例 · R8</span></div>
           <div class="file-tabs" role="tablist" aria-label="选择演练原件">
             <button type="button" id="tab-contract" role="tab" aria-selected="false" aria-controls="sheet-contract" tabindex="-1"><i class="ui-glyph ic-journal-text" aria-hidden="true"></i>采购合同</button>
             <button type="button" id="tab-acceptance" role="tab" aria-selected="true" aria-controls="sheet-acceptance"><i class="ui-glyph ic-clipboard-check" aria-hidden="true"></i>验收报告</button>
@@ -72,7 +75,7 @@
             <p class="paper-title">四门冷藏柜采购合同</p>
             <p class="paper-id">YL-LY-32EED203</p>
             <dl class="paper-lines"><div><dt>采购标的</dt><dd>四门冷藏柜</dd></div><div><dt>签约日期</dt><dd>2026 年 9 月 1 日</dd></div><div><dt>含税总额</dt><dd>100,000.00</dd></div><div class="marked"><dt>生效条款</dt><dd>本合同自双方盖章之日起生效</dd></div></dl></div>
-            <div class="evidence-note"><div><span class="finding-dot ok"></span>合同生效有据</div><p>双方签章有据，第一期预付款条件相符。</p><a href="/showcase/contract.pdf" target="_blank" rel="noopener">查看合同原件<span class="sr-only">，在新标签页打开 PDF</span></a></div>
+            <div class="evidence-note"><div><span class="finding-dot risk"></span>签署凭证待核</div><p>双方签章栏为排印文字，首期付款条件待核。</p><a href="/showcase/contract.pdf" target="_blank" rel="noopener">查看合同原件<span class="sr-only">，在新标签页打开 PDF</span></a><a class="pdf-hero-jump" href="/?scene=pdf-signing#workflow">试核电子签名 <i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i></a></div>
           </div>
           <div class="evidence-paper" role="tabpanel" id="sheet-transfer" aria-labelledby="tab-transfer" tabindex="0" hidden>
             <div class="paper-sheet"><div class="paper-meta"><span>回单原文摘录</span><span>第 1 页</span></div>
@@ -102,12 +105,12 @@
             <div class="total"><span>合同含税总额</span><strong><small>¥</small>100,000<small>.00</small></strong></div>
             <button type="button" class="phase-dial" hidden><span class="dial-share"></span><span class="dial-label">约定占比</span></button>
           </div>
-          <details name="payment" class="phase"><summary><span class="phase-share">30<small>%</small></span><span class="phase-name">生效预付款</span><span class="state ok">条件相符</span><i aria-hidden="true"></i></summary><div class="phase-detail"><q>合同生效后支付30%</q><p>双方签章及生效日期已核对。</p><a href="/showcase/contract.pdf" target="_blank" rel="noopener">采购合同 · 第 1 页</a></div></details>
-          <details name="payment" class="phase" open><summary><span class="phase-share">60<small>%</small></span><span class="phase-name">终验款</span><span class="state risk">验收风险</span><i aria-hidden="true"></i></summary><div class="phase-detail"><q>最终验收合格后支付60%</q><p>验收单列为合格，柜温 8℃ 超出合同上限 4℃。需查整改和复验记录。</p><a href="/showcase/acceptance.pdf" target="_blank" rel="noopener">验收报告 · 第 1 页</a></div></details>
-          <details name="payment" class="phase"><summary><span class="phase-share">10<small>%</small></span><span class="phase-name">质保金</span><span class="state risk">起算待核</span><i aria-hidden="true"></i></summary><div class="phase-detail"><q>质保期满后支付10%</q><p>终验存在温度超限，质保起算日期待核。</p><a href="/showcase/contract.pdf" target="_blank" rel="noopener">采购合同 · 第 1 页</a></div></details>
+          <details name="payment" class="phase"><summary><span class="phase-share">30<small>%</small></span><span class="phase-name">生效预付款</span><span class="state risk">签署待核</span><i aria-hidden="true"></i></summary><div class="phase-detail"><q>合同生效后支付30%</q><p>签章栏仅见排印文字，需补充双方签署凭证。</p><a href="/showcase/contract.pdf" target="_blank" rel="noopener">采购合同 · 第 1 页</a></div></details>
+          <details name="payment" class="phase" open><summary><span class="phase-share">60<small>%</small></span><span class="phase-name">终验款</span><span class="state risk">付款待核</span><i aria-hidden="true"></i></summary><div class="phase-detail"><q>最终验收合格后支付60%</q><p>签署凭证待核，验收实测 8℃ 超出合同上限 4℃。需查整改和复验记录。</p><a href="/showcase/acceptance.pdf" target="_blank" rel="noopener">验收报告 · 第 1 页</a></div></details>
+          <details name="payment" class="phase"><summary><span class="phase-share">10<small>%</small></span><span class="phase-name">质保金</span><span class="state risk">起算待核</span><i aria-hidden="true"></i></summary><div class="phase-detail"><q>质保期满后支付10%</q><p>合同签署待核，终验温度超限，质保期起算仍需核实。</p><a href="/showcase/contract.pdf" target="_blank" rel="noopener">采购合同 · 第 1 页</a></div></details>
           </div>
           <ol class="sample-dates" id="sample-dates" aria-label="三份原件记载的日期" hidden>
-            <li><a href="/showcase/contract.pdf" title="采购合同 · 第 1 页" target="_blank" rel="noopener"><time datetime="2026-09-01"><small>2026.09</small>01</time><span><strong>合同生效</strong><small>双方盖章</small></span><i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i><span class="sr-only">查看合同原件，在新标签页打开</span></a></li>
+            <li><a href="/showcase/contract.pdf" title="采购合同 · 第 1 页" target="_blank" rel="noopener"><time datetime="2026-09-01"><small>2026.09</small>01</time><span><strong>记载生效日</strong><small>双方签署待核</small></span><i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i><span class="sr-only">查看合同原件，在新标签页打开</span></a></li>
             <li class="flagged"><a href="/showcase/acceptance.pdf" title="验收报告 · 第 1 页" target="_blank" rel="noopener"><time datetime="2026-09-20"><small>2026.09</small>20</time><span><strong>现场验收</strong><small>实测 8℃ · 合同上限 4℃</small></span><i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i><span class="sr-only">查看验收原件，在新标签页打开</span></a></li>
             <li><a href="/showcase/transfer.pdf" title="银行付款回单 · 第 1 页" target="_blank" rel="noopener"><time datetime="2026-09-21"><small>2026.09</small>21</time><span><strong>支付第二期</strong><small>回单金额 60,000.00 元</small></span><i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i><span class="sr-only">查看回单原件，在新标签页打开</span></a></li>
           </ol>
@@ -129,7 +132,7 @@
           </div>
           <div id="scene-signing" class="signing-sample" role="tabpanel" aria-labelledby="scene-tab-signing" hidden>
             <div class="signing-sample-header"><span><i class="ui-glyph ic-journal-text" aria-hidden="true"></i> 采购合同</span>
-              <label id="signing-example-choice" hidden><span class="sr-only">合同生效案例</span><select id="signing-example"><option value="company">用印单位</option><option value="word">文字签章</option><option value="calendar">生效日冲突</option></select></label>
+              <label id="signing-example-choice" hidden><span class="sr-only">合同生效案例</span><select id="signing-example"><option value="company">用印单位</option><option value="word">文字签章</option><option value="calendar">生效日冲突</option><option value="pdf">PDF 电子签名</option></select></label>
               <small id="signing-example-version">合成案例 · R9</small></div>
             <div id="signing-company">
             <h3>印章单位多出「杭州分公司」</h3>
@@ -170,6 +173,14 @@
               <div class="public-signing-lines"><a class="open-sample-review" data-sample="calendar" data-ref="d01/p1/f6" data-line="8" data-rect="0.08209,0.41598,0.36134,0.43242" href="/showcase/calendar-contract.pdf"><span>签约日期</span><strong>2026年9月1日</strong><i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i></a></div>
               <p><span class="finding-dot risk"></span>生效日冲突 · 三期付款条件待核</p>
             </div>
+            <div id="signing-pdf" hidden>
+              <div class="pdf-demo-choices" role="group" aria-label="选择合成合同原件" hidden>
+                <button type="button" data-pdf-mode="typeset" aria-pressed="false">排印稿</button>
+                <button type="button" data-pdf-mode="current" aria-pressed="false">电子签署版</button>
+                <button type="button" data-pdf-mode="earlier" aria-pressed="true">签后修订版</button>
+              </div>
+              <div class="pdf-demo-view"><a href="/showcase/signature-earlier.pdf">打开签后修订的水印合同</a></div>
+            </div>
           </div>
           <div id="scene-inspection" class="inspection-sample" role="tabpanel" aria-labelledby="scene-tab-inspection" hidden>
             <div class="signing-sample-header"><span><i class="ui-glyph ic-clipboard-check" aria-hidden="true"></i> 采购验收</span><small>合成案例 · R11</small></div>
@@ -196,7 +207,7 @@
     </section>
   </main>
   <dialog id="sample-compare" aria-labelledby="sample-compare-title">
-    <header class="sample-review-head"><div><span>合成采购 · R7</span><h2 id="sample-compare-title">合同标准与验收实测</h2></div>
+    <header class="sample-review-head"><div><span>合成采购 · R8</span><h2 id="sample-compare-title">合同标准与验收实测</h2></div>
       <form method="dialog"><button aria-label="关闭原件对照" autofocus><i class="ui-glyph ic-x-lg" aria-hidden="true"></i></button></form></header>
     <div class="public-compare-panes">
       <figure data-image="/assets/showcase-contract-page.jpg" data-fact="d02/p1/f13" data-rect="0.08209,0.56712,0.42211,0.58311"><figcaption><strong>采购合同</strong><a href="/showcase/contract.pdf" target="_blank" rel="noopener">第 1 页 · 第 14 行<i class="ui-glyph ic-arrows-angle-expand" aria-hidden="true"></i></a></figcaption>
@@ -207,7 +218,7 @@
     <footer class="public-compare-scale"><label for="compare-zoom">同步缩放</label><button type="button" data-step="-1" aria-label="缩小两份原件"><i class="ui-glyph ic-zoom-out" aria-hidden="true"></i></button><input id="compare-zoom" type="range" min="0" max="3" step="1" value="2"><button type="button" data-step="1" aria-label="放大两份原件"><i class="ui-glyph ic-zoom-in" aria-hidden="true"></i></button><output for="compare-zoom">放大</output></footer>
   </dialog>
   <dialog id="sample-review" aria-labelledby="sample-review-title">
-    <header class="sample-review-head"><div><span>合成采购 · R7</span><h2 id="sample-review-title">验收报告</h2></div><form method="dialog"><button type="submit" autofocus aria-label="关闭验收报告"><i class="ui-glyph ic-x-lg" aria-hidden="true"></i></button></form></header>
+    <header class="sample-review-head"><div><span>合成采购 · R8</span><h2 id="sample-review-title">验收报告</h2></div><form method="dialog"><button type="submit" autofocus aria-label="关闭验收报告"><i class="ui-glyph ic-x-lg" aria-hidden="true"></i></button></form></header>
     <div class="sample-review-body">
       <div class="sample-document">
         <div class="sample-review-toolbar"><output id="sample-location" aria-live="polite"></output><div class="reading-switch" role="group" aria-label="页图视图"><button type="button" data-scale="line" aria-pressed="true">看原行</button><button type="button" data-scale="page" aria-pressed="false">整页</button></div></div>

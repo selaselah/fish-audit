@@ -286,7 +286,8 @@ def create_app(store, worker):
             return send_file(FRONTEND / "showcase" / filename, as_attachment=True,
                              mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
         if filename not in {"contract.pdf", "acceptance.pdf", "transfer.pdf", "signing-contract.pdf",
-                            "inspection-contract.pdf", "inspection-acceptance.pdf", "payment-folios.pdf", "calendar-contract.pdf"}:
+                            "inspection-contract.pdf", "inspection-acceptance.pdf", "payment-folios.pdf", "calendar-contract.pdf",
+                            "signature-typeset.pdf", "signature-current.pdf", "signature-earlier.pdf"}:
             raise CaseError("没有这份演练原件。", 404)
         return send_file(FRONTEND / "showcase" / filename, mimetype="application/pdf")
 

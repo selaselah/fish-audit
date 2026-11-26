@@ -259,7 +259,10 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
     def read_original(doc):
         path = originals[doc["id"]] if originals is not None else "originals/" + doc["id"] + doc["ext"]
         return bundle.read(path)
-    verify_pdf_execution(report, read_original)
+    try:
+        verify_pdf_execution(report, read_original)
+    except ModuleNotFoundError as error:
+        raise ValueError("重验 PDF 签署凭证需要安装 server/requirements.txt 中的依赖，请使用服务端虚拟环境运行校验。") from error
     verify_warranty(report,page_text,submitted=submitted,signed=signed)
     verify_payment_windows(report,page_text)
     verify_reservations(report,page_text)

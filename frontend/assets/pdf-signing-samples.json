@@ -1,0 +1,115 @@
+{
+  "typeset": {
+    "state": "typeset",
+    "revision": 5,
+    "filename": "采购合同.pdf",
+    "original": "/showcase/signature-typeset.pdf",
+    "record": {
+      "size": 60726,
+      "state": "unsigned",
+      "original_sha256": "a811b96b387acacd95779900227190e5687f3f5621955d1bab1b2e5b06dc5477",
+      "signatures": []
+    },
+    "rows": [
+      {
+        "side": "甲方",
+        "page": 1,
+        "line": 11,
+        "quote": "甲方签章：青禾演练采购中心（已盖章）",
+        "image": "/assets/showcase-pdf-signing-buyer.webp"
+      },
+      {
+        "side": "乙方",
+        "page": 1,
+        "line": 12,
+        "quote": "乙方签章：云桥演练设备中心（已盖章）",
+        "image": "/assets/showcase-pdf-signing-seller.webp"
+      }
+    ],
+    "thumbnail": "/assets/showcase-pdf-signing-thumb.webp"
+  },
+  "current": {
+    "state": "current",
+    "revision": 4,
+    "filename": "采购合同.pdf",
+    "original": "/showcase/signature-current.pdf",
+    "record": {
+      "size": 66444,
+      "state": "current",
+      "original_sha256": "05c3881eb5ea6f0ea8c840e9d91ec6b22c26e661e95a7ac42750f472e30dfa2b",
+      "signatures": [
+        {
+          "certificate_sha256": "c91ab3b670bfae65daca1f2beac1ad8cf2d12095b5d00245c0734dab5f8e2291",
+          "coverage": "ENTIRE_FILE",
+          "digest": "sha256",
+          "ends_at": 66444,
+          "field": "SyntheticApproval",
+          "revision": 2,
+          "state": "current",
+          "subfilter": "/adbe.pkcs7.detached"
+        }
+      ]
+    },
+    "rows": [
+      {
+        "side": "甲方",
+        "page": 1,
+        "line": 11,
+        "quote": "甲方签章：青禾演练采购中心（已盖章）",
+        "image": "/assets/showcase-pdf-signing-buyer.webp"
+      },
+      {
+        "side": "乙方",
+        "page": 1,
+        "line": 12,
+        "quote": "乙方签章：云桥演练设备中心（已盖章）",
+        "image": "/assets/showcase-pdf-signing-seller.webp"
+      }
+    ],
+    "thumbnail": "/assets/showcase-pdf-signing-thumb.webp"
+  },
+  "earlier": {
+    "state": "earlier",
+    "revision": 4,
+    "filename": "采购合同.pdf",
+    "original": "/showcase/signature-earlier.pdf",
+    "record": {
+      "size": 66793,
+      "state": "earlier",
+      "original_sha256": "bcc2491042279888961ce47069c942ce61cd1a364e909e58ab1e8d47cbdc517a",
+      "signatures": [
+        {
+          "certificate_sha256": "c91ab3b670bfae65daca1f2beac1ad8cf2d12095b5d00245c0734dab5f8e2291",
+          "coverage": "ENTIRE_REVISION",
+          "digest": "sha256",
+          "ends_at": 66444,
+          "field": "SyntheticApproval",
+          "revision": 2,
+          "state": "earlier",
+          "subfilter": "/adbe.pkcs7.detached"
+        }
+      ]
+    },
+    "rows": [
+      {
+        "side": "甲方",
+        "page": 1,
+        "line": 11,
+        "quote": "甲方签章：青禾演练采购中心（已盖章）",
+        "image": "/assets/showcase-pdf-signing-buyer.webp"
+      },
+      {
+        "side": "乙方",
+        "page": 1,
+        "line": 12,
+        "quote": "乙方签章：云桥演练设备中心（已盖章）",
+        "image": "/assets/showcase-pdf-signing-seller.webp"
+      }
+    ],
+    "thumbnail": "/assets/showcase-pdf-signing-thumb.webp"
+  },
+  "basis": {
+    "label": "《中华人民共和国电子签名法》 第八、十三、十四条",
+    "url": "https://wap.miit.gov.cn/zwgk/zcwj/flfg/art/2022/art_4ed0e4a46946479c90a9e0f2c76a11ef.html"
+  }
+}

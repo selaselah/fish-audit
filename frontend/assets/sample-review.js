@@ -5,7 +5,7 @@
   const rows=[...dialog.querySelectorAll('[data-ref]')];
   const describe = r => ({...r.dataset, label:r.querySelector('span').textContent, value:r.querySelector('strong').textContent});
   const samples = {
-    acceptance:{title:'验收报告',version:'合成采购 · R7',image:'/assets/showcase-acceptance-page.png',pdf:'/showcase/acceptance.pdf',lines:rows.map(describe)},
+    acceptance:{title:'验收报告',version:'合成采购 · R8',image:'/assets/showcase-acceptance-page.png',pdf:'/showcase/acceptance.pdf',lines:rows.map(describe)},
     signing:{title:'采购合同',version:'合成采购 · R9',image:'/assets/showcase-signing-page.jpg',pdf:'/showcase/signing-contract.pdf',
       lines:[...document.querySelectorAll('#signing-company [data-ref]')].map(describe)},
     word:{title:'演练采购合同',version:'合成采购 · R6',image:'/assets/showcase-word-signing-page.jpg',original:'/showcase/signing-text.docx',
