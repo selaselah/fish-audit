@@ -195,7 +195,27 @@ def edges(findings):
             for f in findings if (r:=f.get("retest_reference")) and r["state"] in ("original","final")]
 
 
-def verify(report,read_text,*,read_original=None):
+def verify_positions(graph, checks, read_layout):
+    cited = {ref for check in checks for ref in check["evidence"]}
+    if not cited:
+        return
+    locations = {}
+    for fact in graph["facts"]:
+        line = fact.get("source_line")
+        if fact["id"] in cited and line and line["rects"]:
+            locations.setdefault((fact["doc"], fact["page"]), []).append(line)
+    pages = {n["id"]: n for n in graph["nodes"] if n["type"] == "page"}
+    for (doc, page), lines in locations.items():
+        issued = pages[f"{doc}/p{page}"]
+        current = read_layout(doc, page)
+        if (not isinstance(current, dict) or current.get("type") != issued["layer"]
+                or (current.get("clause_text_only") is True) != (issued.get("clause_text_only") is True)
+                or not isinstance(current.get("lines"), dict)
+                or any(current["lines"].get(str(line["number"])) != line["rects"] for line in lines)):
+            raise ValueError(f"回单所据初验与复验的引文位置与底稿不符（{doc} 第 {page} 页）")
+
+
+def verify(report,read_text,*,read_original=None,read_layout=None):
     graph,p,findings=report["graph"],report["policy"],report["findings"]
     actual=[e for e in graph["edges"] if e["type"]==EDGE]
     current=tuple(map(int,p.get("version","0").split(".")))>=SINCE
@@ -212,6 +232,8 @@ def verify(report,read_text,*,read_original=None):
         if (f.get("retest_reference")!=c or c and (f.get("payment_acceptance") or LEVEL[f["status"]]<LEVEL[c["status"]]
                 or not set(c["evidence"]).issubset(f["evidence"]))):
             raise ValueError("回单所据初验、复验或日期与本期发现不符")
+    if read_layout:
+        verify_positions(graph, expected.values(), read_layout)
     if read_original and expected:
         from payment_quality import verify_units
         units={u for c in expected.values() for u in (c["bank"],*c.get("units",{}).values())}

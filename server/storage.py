@@ -97,6 +97,12 @@ def encode(value):
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True, allow_nan=False)
 
 
+def stored_page_layout(db, case_id, doc, page):
+    saved = db.execute("SELECT layer FROM pages WHERE case_id=? AND doc=? AND number=?",
+                       (case_id, doc, page)).fetchone()
+    return json.loads(saved[0] or "{}") if saved else {}
+
+
 def source_hashes(content, signoff):
     return hashlib.sha256(content).hexdigest(), hashlib.sha256(canonical(signoff)).hexdigest()
 
@@ -825,7 +831,8 @@ class Store:
             except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
                 raise CaseError(f"签收前核对验收款质量凭证失败。{error}",409) from error
             try:
-                retest_reference.verify(paper,read_text,read_original=read_original)
+                retest_reference.verify(paper,read_text,read_original=read_original,
+                                        read_layout=lambda doc, page: stored_page_layout(db, case_id, doc, page))
             except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
                 raise CaseError(f"签收前核对回单所据初验与复验失败。{error}",409) from error
             try:
@@ -961,9 +968,7 @@ class Store:
             row = db.execute("SELECT text FROM pages WHERE case_id=? AND doc=? AND number=?",(case_id,doc,page)).fetchone()
             return row[0] if row else None
         def page_layout(doc, page):
-            saved = db.execute("SELECT layer FROM pages WHERE case_id=? AND doc=? AND number=?",
-                               (case_id,doc,page)).fetchone()
-            return json.loads(saved[0] or "{}") if saved else {}
+            return stored_page_layout(db,case_id,doc,page)
         checks_conclusions = "conclusions.py" in paper["policy"].get("code_sha256", {})
         if checks_conclusions or paper["policy"].get("payment_execution") or any(f["rule"] in ("B04","B05","H04","H05","H06") for f in paper["findings"]):
             try:
@@ -978,6 +983,11 @@ class Store:
                 installment_counts.verify(paper,page_text,signing=True,read_layout=page_layout)
             except (KeyError,TypeError,ValueError) as error:
                 raise CaseError(f"签收前核对合同分期总述失败。{error}",409) from error
+            try:
+                references = (f["retest_reference"] for f in paper["findings"] if f.get("retest_reference"))
+                retest_reference.verify_positions(paper["graph"], references, page_layout)
+            except (KeyError,TypeError,ValueError) as error:
+                raise CaseError(f"签收前核对回单所据初验与复验失败。{error}",409) from error
             try:
                 inspection_use.verify(paper,page_text,signing=True,read_layout=page_layout)
             except (KeyError,TypeError,ValueError) as error:
@@ -1063,7 +1073,7 @@ class Store:
         guarantee_checked = any(f.get("advance_guarantee") for f in paper["findings"])
         model_checked = any(f.get("equipment_models") for f in paper["findings"])
         execution_checked = any(f.get("execution_basis") for f in paper["findings"])
-        bank_acceptance_checked = any(f.get("payment_acceptance") for f in paper["findings"])
+        bank_acceptance_checked = any(f.get("payment_acceptance") or f.get("retest_reference") for f in paper["findings"])
         inspection_checked = any(f.get("inspection_coverage") for f in paper["findings"])
         folios_checked = any(f.get("contract_folios") or f.get("installment_count") for f in paper["findings"])
         multi_transfers = any(f.get("stage_payments") for f in paper["findings"])

@@ -346,8 +346,10 @@ def create_app(store, worker):
             args["ticket"] = tickets[0]
         if "stage" in request.args:
             stages = request.args.getlist("stage")
-            if args.get("view") not in ("payment-checks","payment-release","warranty-certificate") or len(stages) != 1 or not re.fullmatch(r"H0[45]-[1-9][0-9]{0,7}", stages[0]):
-                raise CaseError("请选择本版的付款条件或实付时点检查。", 400)
+            view = args.get("view")
+            pattern = r"H0[3456]-[1-9][0-9]{0,7}" if view == "payment-checks" else r"H0[45]-[1-9][0-9]{0,7}"
+            if view not in ("payment-checks","payment-release","warranty-certificate") or len(stages) != 1 or not re.fullmatch(pattern, stages[0]):
+                raise CaseError("请选择本版对应的分期付款检查项。", 400)
             args["stage"] = stages[0]
         if args.get("view")=="payment-release" and any(len(request.args.getlist(k))!=1 for k in ("rev","view","stage")):
             raise CaseError("请选择固定底稿中的放行单和期次。",400)

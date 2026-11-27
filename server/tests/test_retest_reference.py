@@ -58,6 +58,33 @@ class RetestReceiptTests(unittest.TestCase):
         p,_=sample(changes={(1,"seller_signature"):None});f,=payments(p)
         self.assertEqual((f["status"],f["retest_reference"]["status"]),("missing","ok"))
 
+    def test_signing_rechecks_the_physical_lines_cited_by_each_receipt(self):
+        report, read_text = sample()
+        facts = {f["id"]: f for f in report["graph"]["facts"]}
+        check = payments(report)[0]["retest_reference"]
+        layouts = {}
+        for fact in facts.values():
+            line = fact.get("source_line")
+            if line and line["rects"]:
+                page = layouts.setdefault((fact["doc"], fact["page"]), {"type":"text","clause_text_only":True,"lines":{}})
+                page["lines"][str(line["number"])] = line["rects"]
+        refs.verify(report, read_text, read_layout=lambda doc, page: layouts[doc,page])
+        for key in ("citation","paid_on","original_acceptance_number","repair_repaired_on","final_accepted_on","final_defect_closure"):
+            fact = facts[check["fields"][key]]
+            for change in ("moved","missing","layer","annotation"):
+                with self.subTest(key=key, change=change), self.assertRaisesRegex(ValueError,"引文位置"):
+                    current = deepcopy(layouts)
+                    page = current[fact["doc"],fact["page"]]
+                    line = str(fact["source_line"]["number"])
+                    if change == "moved": page["lines"][line] = [[0.15,0.3,0.7,0.35]]
+                    if change == "missing": del page["lines"][line]
+                    if change == "layer": page["type"] = "image"
+                    if change == "annotation": page["clause_text_only"] = False
+                    refs.verify(report, read_text, read_layout=lambda doc, n: current[doc,n])
+        unused = next(f for f in facts.values() if f["doc"] not in {facts[v]["doc"] for v in check["evidence"] if v in facts})
+        layouts[unused["doc"],unused["page"]] = {}
+        refs.verify(report, read_text, read_layout=lambda doc, n: layouts[doc,n])
+
     def test_prefix_case_and_separators_are_part_of_the_complete_number(self):
         for code in ("FY-03","FY02","fy-02","YS-02"):
             p,_=sample((code,));f,=payments(p)
