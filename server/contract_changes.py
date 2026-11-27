@@ -13,6 +13,7 @@ from quality_references import incomplete_number
 
 import payment_amendments
 import addendum_execution
+import addendum_originals
 
 
 LEGACY = "acceptance-addendum-v1"
@@ -376,7 +377,10 @@ def resolve(graph, contract, changes, receipts, *, multiple_events, contract_sup
         facts = [ref for line in quantity["lines"] for ref in line["facts"]]
         entry["evidence"] = list(dict.fromkeys([*refs,*pages,*facts]))
     proof = addendum_execution.bind(entry, graph, entry["units"])
+    native_proof = addendum_originals.bind(entry, graph, entry["units"])
     def decision(detail, state="pending", criterion=None):
+        if native_proof and detail != native_proof:
+            detail += " " + native_proof
         return {**entry, **dates, "state":state, "detail":detail, "applied_criterion":criterion}
 
     if ledger.get("payments"):
@@ -433,8 +437,8 @@ def resolve(graph, contract, changes, receipts, *, multiple_events, contract_sup
     entry["scope_clear"] = True
     if state in {"草案","草稿","待签署","未签署"}:
         return decision("补充协议记载的状态为“"+state+"”，请核对双方最终签署的生效文本。")
-    if proof:
-        return decision(proof)
+    if proof or native_proof:
+        return decision(proof or native_proof)
     if not (contract_supported and change.signed("buyer_signature",contract.body("buyer"),"seal")
             and change.signed("seller_signature",contract.body("seller"),"seal") and buyer_day and seller_day):
         return decision("需分别核对原合同生效依据、补充协议双方签章原页和各自的盖章日期。")

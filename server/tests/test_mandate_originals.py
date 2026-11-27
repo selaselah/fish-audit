@@ -26,7 +26,7 @@ NOTE = "签署前请另经采购总监书面批准"
 WATERMARK = "合成演练资料　仅供系统测试　无交易效力"
 
 
-def word_source(*, comment=False, second=None, tracked=False):
+def word_source(*, comment=False, second=None, tracked=False, rows=GRANT, anchor_field="grant_scope", note=NOTE):
     # Retain the real OPC relationships and content types of a marked sample.
     output = BytesIO()
     with ZipFile(BytesIO(SOURCE)) as src, ZipFile(output, "w") as dst:
@@ -37,13 +37,13 @@ def word_source(*, comment=False, second=None, tracked=False):
                 body = root.find(W + "body")
                 sect = body.find(W + "sectPr")
                 body.clear()
-                groups = [GRANT] if second is None else [GRANT, second]
+                groups = [rows] if second is None else [rows, second]
                 for group in groups:
                     for field, label, value in [("", "", WATERMARK), *group]:
                         p = ET.SubElement(body, W + "p")
                         if label:
                             ET.SubElement(ET.SubElement(p, W + "r"), W + "t").text = label + "："
-                        selected = comment and field == "grant_scope" and body.find(".//" + W + "commentRangeStart") is None
+                        selected = comment and field == anchor_field and body.find(".//" + W + "commentRangeStart") is None
                         if selected:
                             ET.SubElement(p, W + "commentRangeStart", {W + "id": "0"})
                         run = ET.SubElement(p, W + "r")
@@ -60,7 +60,7 @@ def word_source(*, comment=False, second=None, tracked=False):
                 root = ET.Element(W + "comments")
                 if comment:
                     item = ET.SubElement(root, W + "comment", {W + "id": "0", W + "author": "演练审阅人"})
-                    ET.SubElement(ET.SubElement(ET.SubElement(item, W + "p"), W + "r"), W + "t").text = NOTE
+                    ET.SubElement(ET.SubElement(ET.SubElement(item, W + "p"), W + "r"), W + "t").text = note
                 raw = ET.tostring(root, encoding="utf-8")
             dst.writestr(info, raw)
     return output.getvalue()

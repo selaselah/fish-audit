@@ -81,6 +81,7 @@ def edges(ledger):
 
 def resolve(graph, contract, changes, *, base_decision, unassigned):
     import addendum_execution
+    import addendum_originals
     from contract_changes import SEALS, SOURCE_LABELS
     from performance import day, printed_day
     ledger = graph.get("quality_addenda",{}).get("payments")
@@ -93,7 +94,10 @@ def resolve(graph, contract, changes, *, base_decision, unassigned):
              "original_ref":None,"previous_ref":None,"revised_ref":None,"scope_ref":None,"timing_ref":None,
              "buyer_date_ref":None,"seller_date_ref":None,"effect_ref":None,"unit":None,"evidence":list(dict.fromkeys(ids)),"units":units}
     proof = addendum_execution.bind(entry, graph, [c.unit for c in changes])
+    native_proof = addendum_originals.bind(entry, graph, [c.unit for c in changes])
     def decision(detail):
+        if native_proof and detail != native_proof:
+            detail += " " + native_proof
         return {**entry,"detail":detail}
     def reading(doc,field):
         rows = [s for s in lines if s["unit"]==doc.unit and s["field"]==field]
@@ -154,8 +158,8 @@ def resolve(graph, contract, changes, *, base_decision, unassigned):
     disposition = reading(agreement,"change_state")[0]
     if (any(s["field"]=="change_state" for s in local) and disposition not in ("已签署","已生效")):
         return decision("协议状态尚待确认，请取得双方最终签订的文本。")
-    if proof:
-        return decision(proof)
+    if proof or native_proof:
+        return decision(proof or native_proof)
     for side in ("buyer","seller"):
         seal,ref = reading(agreement,side+"_signature")
         facts = agreement.fields[side+"_signature"]

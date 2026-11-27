@@ -38,6 +38,7 @@ from delivery_batches import verify_sources as verify_delivery_batches
 from contract_effect import verify as verify_contract_effect
 from pdf_execution import verify as verify_pdf_execution
 from acceptance_execution import verify as verify_acceptance_pdf
+from addendum_originals import verify as verify_addendum_originals
 from addendum_execution import verify as verify_addendum_pdf
 from mandate_execution import verify as verify_mandate_pdf
 from mandate_originals import verify as verify_mandate_originals
@@ -773,6 +774,10 @@ class Store:
                                       (case_id, doc, page)).fetchone()
                 return page_row[0] if page_row else None
             try:
+                verify_addendum_originals(paper, read_original, read_text, signing=True)
+            except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
+                raise CaseError(f"签收前核对补充协议原件失败。{error}", 409) from error
+            try:
                 verify_mandate_originals(paper, read_original, read_text, signing=True)
             except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
                 raise CaseError(f"签收前核对委托书原件失败。{error}", 409) from error
@@ -786,7 +791,7 @@ class Store:
             except (KeyError, TypeError, ValueError) as error:
                 raise CaseError(f"签收前核对回单所据验收原件失败。{error}", 409) from error
             if row["profile"]!=BANK:
-                signing_proofs = {r["id"] for key in ("acceptance_pdf_sources", "addendum_pdf_sources", "mandate_pdf_sources", "mandate_original_sources")
+                signing_proofs = {r["id"] for key in ("acceptance_pdf_sources", "addendum_pdf_sources", "addendum_original_sources", "mandate_pdf_sources", "mandate_original_sources")
                               for r in graph.get(key, {}).get("records", [])}
                 full_page_checks = [f for f in paper["findings"] if any(f.get(key) for key in FULL_PAGE_EVIDENCE)
                                     or signing_proofs.intersection(f["evidence"])]
