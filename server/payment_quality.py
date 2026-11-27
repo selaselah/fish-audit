@@ -242,7 +242,7 @@ def verify(report, read_text, *, read_original=None):
         verify_units(g,units,read_original,"验收款质量凭证")
 
 
-def verify_units(graph, units, read_original, label):
+def verify_units(graph, units, read_original, label, *, extra_lines=()):
     from original_records import verify_rendered
     nodes = {n["id"]:n for n in graph["nodes"] if n["type"]=="page"}
     files = []
@@ -252,4 +252,4 @@ def verify_units(graph, units, read_original, label):
             node = nodes[ref]
             files.append({"doc":page["doc"],"pages":[{"ref":ref,"sha256":node["sha256"],"layer":node["layer"],
                                                      "text_only":node.get("clause_text_only") is True}]})
-    verify_rendered(graph,files,read_original,label)
+    verify_rendered(graph,files,read_original,label,extra_lines=extra_lines)

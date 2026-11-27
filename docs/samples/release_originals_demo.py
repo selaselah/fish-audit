@@ -115,7 +115,8 @@ def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MAS
                 last = page["text"].splitlines()[-1]
                 require(last == label+"："+value and not any(r.startswith(label+"：") for r in archived_lines), "新增水印原行")
                 archived_lines.append(last)
-                printed_fields.append({"field":field,"quote":last,"value":value,"region":region,"status":"anchored"})
+                if field:
+                    printed_fields.append({"field":field,"quote":last,"value":value,"region":region,"status":"anchored"})
             require(archived_lines[0] == WATERMARK and next(n for n in report["graph"]["nodes"]
                     if n["id"] == doc["id"]+"/p1")["sha256"] == page["sha256"], "物理页及水印")
             if path.suffix == ".jpg":

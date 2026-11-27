@@ -233,6 +233,7 @@ class AdvanceGuaranteeTests(unittest.TestCase):
     def test_actual_legacy_approval_gate_with_and_without_rider(self):
         g,texts=specimen(rider="首款条件：买方须先收到保函",letter=None,receipt=None)
         del g[guarantee.KEY]
+        del g["inspection_use_sources"]
         g["nodes"]=[n for n in g["nodes"] if n["type"]!="advance_guarantee_line"]
         g["edges"]=[e for e in g["edges"] if e["type"]!="advance_guarantee_source"]
         paper={"graph":g,"findings":[{"rule":"H04","status":"ok","stage":{"name":"第一期"}}],

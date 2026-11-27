@@ -152,7 +152,7 @@ def verify_filed(graph, pdf, native, cited, read_original, label):
         verify_rendered(graph, records, read_original, label)
 
 
-def verify_rendered(graph, records, read_original, label):
+def verify_rendered(graph, records, read_original, label, *, extra_lines=()):
     # Called outside the signoff write transaction. Reproduce each relevant physical original once.
     from documents import prepare
 
@@ -160,6 +160,11 @@ def verify_rendered(graph, records, read_original, label):
     docs = {r["doc"] for r in records}
     nodes = {n["id"]: n for n in graph["nodes"] if n["type"] == "page"}
     lines = defaultdict(list)
+    for row in extra_lines:
+        ref = f"{row['doc']}/p{row['page']}"
+        if ref not in pages:
+            raise ValueError(f"{label}引文指向未纳入核对的原页")
+        lines[ref].append({"number":row["line"],"text":row["quote"],"rects":row["rects"]})
     for fact in graph["facts"]:
         ref = f"{fact['doc']}/p{fact['page']}"
         if ref in pages and fact.get("source_line"):

@@ -43,6 +43,7 @@ import warranty_service
 import payment_windows
 import payment_quality
 import retest_reference
+import inspection_use
 import invoice_conditions
 import payment_amendments
 import acceptance_comments
@@ -472,6 +473,11 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     citations = payment_acceptance.sources(graph, lambda doc, number: texts[doc, number])
     graph[payment_acceptance.GRAPH_KEY] = citations
     graph[retest_reference.KEY] = retest_reference.sources(graph,lambda d,n:texts[d,n])
+    uses = inspection_use.sources(graph,lambda d,n:texts[d,n],lambda d,n:layouts[d,n])
+    graph[inspection_use.KEY] = uses
+    lines, links = inspection_use.source_graph(uses)
+    graph["nodes"].extend(lines)
+    graph["edges"].extend(links)
     lines, links = payment_acceptance.source_graph(citations)
     graph["nodes"].extend(lines)
     graph["edges"].extend(links)
@@ -556,6 +562,7 @@ def link_procedures(graph, findings, calls):
     edges.extend(warranty_dates.edges(findings))
     edges.extend(payment_quality.edges(findings))
     edges.extend(retest_reference.edges(findings))
+    edges.extend(inspection_use.edges(findings))
     edges.extend(signing_parties.comparisons(findings))
     edges.extend(payment_windows.edges(findings))
     expert_id = "model/expert"

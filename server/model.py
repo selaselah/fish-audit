@@ -351,6 +351,11 @@ def audit_graph(graph, controls):
                     procedure["payment_opinion"]["release"]["instruments"] = release["instruments"]
         if board := finding.get("effect_review", {}).get("board_decision"):
             procedure["board_decision"] = board
+        if use := finding.get("inspection_use"):
+            procedure["inspection_use"] = use
+            cited = {n["row"] for n in use["notes"]}
+            procedure["inspection_use_lines"] = [{k:r[k] for k in ("id","quote","unit","line")}
+                for r in graph["inspection_use_sources"]["rows"] if r["id"] in cited]
         if reference := finding.get("retest_reference"):
             procedure["retest_reference"] = reference
         if quality := finding.get("payment_quality"):

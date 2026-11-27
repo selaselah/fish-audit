@@ -36,6 +36,7 @@ import warranty_execution
 import warranty_dates
 import payment_quality
 import retest_reference
+import inspection_use
 import warranty_service
 import warranty_register
 import payment_windows
@@ -719,6 +720,7 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True, recheck_
         payment_execution.apply(graph, results)
         retest_reference.apply(graph, results)
         payment_acceptance.apply(graph, results)
+        inspection_use.apply(graph, results)
         advance_guarantee.apply(graph, results)
         grouped = stage_payments.findings(graph, results)
         if graph.get("prior_installment_sources", {}).get("lines"):
@@ -1319,6 +1321,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("warranty_payment") != entry.get("warranty_payment")
                 or saved.get("payment_quality") != entry.get("payment_quality")
                 or saved.get("retest_reference") != entry.get("retest_reference")
+                or saved.get("inspection_use") != entry.get("inspection_use")
                 or saved.get("warranty_difference") != entry.get("warranty_difference")
                 or saved.get("contract_folios") != entry.get("contract_folios")
                 or saved.get("prior_installment") != entry.get("prior_installment")

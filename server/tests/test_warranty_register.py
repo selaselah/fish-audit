@@ -165,6 +165,7 @@ class WarrantyRegisterTests(unittest.TestCase):
         old=copy.deepcopy(g)
         old["warranty_sources"]=terms.sources(old,read,terms.IMAGE_FORMAT)
         legacy=issue(old);legacy["policy"].update(version="2026.11.27.06",warranty_checks=terms.IMAGE_FORMAT)
+        del old["inspection_use_sources"], legacy["policy"]["inspection_use"]
         terms.verify(legacy,read)
         current=issue(g)
         with tempfile.TemporaryDirectory() as temp,sqlite3.connect(":memory:") as db:
