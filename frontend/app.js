@@ -1550,7 +1550,7 @@ async function refresh() {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='[data-audit-scope="'+requestedScope.id+'"]';
       } else if (requestedView==='execution' && state.openedCitation!==location.hash && state.bundle) {
         state.openedCitation=location.hash; state.tab='activity'; focusFinding='#execution-trace-page';
-      } else if (['warranty-register','addendum-signing'].includes(requestedView) && state.openedCitation!==location.hash && state.bundle) {
+      } else if (['warranty-register','addendum-signing','payment-release'].includes(requestedView) && state.openedCitation!==location.hash && state.bundle) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#case-panel';
       } else if (route.params.get('view')==='replay' && state.openedCitation!==location.hash && state.bundle) {
         state.openedCitation=location.hash; state.tab='activity'; focusFinding='.rule-replay button';
@@ -1598,6 +1598,8 @@ async function refresh() {
           AddendumSigning.locate(target,route.params);
         } else if (requestedView==='warranty-register' && target) {
           WarrantyRegisterEvidence.locate(target,route.params);
+        } else if (requestedView==='payment-release' && target) {
+          ReleaseEvidence.locate(target,route.params);
         } else if (target?.dataset.auditScope) {
           target.focus();
           if (target.dataset.auditScope==='payment' && route.params.has('stage'))

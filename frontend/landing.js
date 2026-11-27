@@ -96,7 +96,7 @@ if (!restoreWorkspaceLink()) {
   }
   const examples={company:{scene:'signing',revision:9},word:{scene:'word-signing',revision:6},calendar:{scene:'contract-dates',revision:6},pdf:{scene:'pdf-signing'},addendum:{scene:'addendum-signing'}};
   const inspectionRoutes={readings:'acceptance',standards:'batch-standards',signers:'acceptance-signers',equipment:'inspection',named:'named-inspection',supplier:'suppliers',comments:'word-comments'};
-  const paymentRoutes={comments:'contract-comments',guarantee:'guarantee-period',warranty:'warranty-register',invoice:'addendum-invoice',reference:'payment-acceptance',timing:'signer-timing',clock:'signer-clock',proof:'payment-proof',folios:'folios'};
+  const paymentRoutes={comments:'contract-comments',guarantee:'guarantee-period',warranty:'warranty-register',invoice:'addendum-invoice',release:'payment-release',reference:'payment-acceptance',timing:'signer-timing',clock:'signer-clock',proof:'payment-proof',folios:'folios'};
   const scripts=new Map(), loadedScripts=new Set(), opening=new WeakSet();
   function loadScript(name) {
     if (!scripts.has(name)) {
@@ -137,6 +137,9 @@ if (!restoreWorkspaceLink()) {
     else url.searchParams.delete('copy');
     PublicAgreementCarriers.address(url);
     PublicAcceptanceOriginals.address(url);
+    const slip=document.getElementById('release-example');
+    if (scene!=='payment-release') url.searchParams.delete('slip');
+    else if (slip) url.searchParams.set('slip',slip.value);
     if (scene==='batch-standards') PublicBatchStandards.address(url);
     else { url.searchParams.delete('edition'); url.searchParams.delete('batch'); }
     url.hash='workflow';
@@ -157,6 +160,7 @@ if (!restoreWorkspaceLink()) {
     const timing=document.getElementById('payment-signer-timing');
     const clock=document.getElementById('payment-signer-clock');
     const proof=document.getElementById('payment-execution');
+    const release=document.getElementById('payment-release');
     const period=document.getElementById('payment-guarantee-period');
     const warranty=document.getElementById('payment-warranty-register');
     const invoice=document.getElementById('payment-addendum-invoice');
@@ -164,6 +168,7 @@ if (!restoreWorkspaceLink()) {
     warranty.hidden=paymentExample.value!=='warranty';
     period.hidden=paymentExample.value!=='guarantee';
     proof.hidden=paymentExample.value!=='proof';
+    release.hidden=paymentExample.value!=='release';
     clock.hidden=paymentExample.value!=='clock';
     timing.hidden=paymentExample.value!=='timing';
     document.getElementById('payment-folios').hidden=paymentExample.value!=='folios';
@@ -172,6 +177,14 @@ if (!restoreWorkspaceLink()) {
     const edition=document.getElementById('payment-version');
     edition.textContent=comments?(slot.dataset.revision?'合成案例 · R'+slot.dataset.revision:'合成合同'):'合成案例 · R10';
     if (!invoice.hidden && !paymentsScene.hidden) PublicAddendumSigning.openInvoice();
+    if (!release.hidden) {
+      edition.textContent=release.dataset.revision?'合成演练 · R'+release.dataset.revision:'合成演练';
+      const files=[...release.querySelectorAll(':scope > a[data-slip]')];
+      const choice=release.dataset.requestedSlip || new URL(location.href).searchParams.get('slip');
+      const selected=files.find(a=>a.dataset.slip===choice) || files[0];
+      for (const file of files) file.hidden=file!==selected;
+      if (!paymentsScene.hidden) openCase(release,'release-card','public-release-examples',()=>PublicReleaseExamples.open());
+    }
     if (!warranty.hidden) {
       edition.textContent=warranty.dataset.revision?'合成案例 · R'+warranty.dataset.revision:'合成案例';
       if (!paymentsScene.hidden) openCase(warranty,'warranty-register','public-warranty-register',()=>PublicWarrantyRegister.open());
@@ -278,6 +291,11 @@ if (!restoreWorkspaceLink()) {
   showInspection();
   scenes.hidden = false;
   PublicCaseFinder.mount(sceneTabs,[contractExample,inspectionExample,paymentExample],(tab,picker,value,query)=>{
+    if (picker===paymentExample && value==='release') {
+      const slip=/扫描|照片/u.test(query)?'scan':/草稿|会签|批注/u.test(query)?'comment':
+        /前版|签后|追加/u.test(query)?'earlier':/本版/u.test(query)?'current':'late';
+      document.getElementById('payment-release').dataset.requestedSlip=slip;
+    }
     if (picker===paymentExample && value==='invoice') PublicAgreementCarriers.forQuery(query);
     if (picker===inspectionExample && value==='comments') PublicAcceptanceOriginals.forQuery(query);
     picker.value=value; selectScene(tab); picker.dispatchEvent(new Event('change'));

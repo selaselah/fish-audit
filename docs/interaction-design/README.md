@@ -1,5 +1,13 @@
 # Fish Audit 产品界面与交互设计
 
+## 审计员怎样核对一张付款放行单
+
+「签署版本」直接显示提交版本。点击 PDF 修订明细，可看签名范围及签后增加的字节。Word 草稿则显示审阅者的批注，点击所选正文可回到打印页。签认栏是照片时，入口打开对应整页。[签后追加 349 字节](http://127.0.0.1:8000/?scene=payment-release&slip=earlier#workflow) · [Word 会签批注](http://127.0.0.1:8000/?scene=payment-release&slip=comment#workflow)
+
+「放行权限」可切换「显示原行」，对照合同指定人和放行单签认栏。窄屏按阅读顺序排列两份资料，每项都带页码。打开原件后可用 Escape 回到刚才的控件。「付款时点」把已关联的两份单据按日期排列，提前付款的天数由底稿日期计算。[桌面原行对照](release-authority.webp) · [手机日期对照](release-dates-mobile.webp)
+
+工作底稿的固定链接保留版次和检查项。公开案例共用该交互控件，只取已发布的水印文件。浏览器对实际下载的字节计算 SHA-256，供审计员核对文件。[提前付款底稿](http://127.0.0.1:8000/workpaper/2bf163a2b272462d9e535e6f1d3e25fe?rev=9&view=payment-release&stage=H05-8) · [公开案例的发布程序](../samples/publish_release_execution.py)
+
 ## 从验收风险直接核对原件
 
 打开整页扫描件后，可将原图放大至适页视图的 4 倍，点缩略图直接移到签认处。触屏可以滑动原页，桌面可以拖动或用方向键平移。旋转 90 度会保留当前查看的区域，点「适页」可重新看见整页。阅读器使用已核对摘要的页图。[体验扫描件](http://127.0.0.1:8000/?scene=word-comments&record=scan#workflow) · [手机局部核对](scan-viewport-mobile.webp)

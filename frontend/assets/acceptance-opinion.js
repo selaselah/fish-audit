@@ -72,6 +72,11 @@ const AcceptanceOpinion = (() => {
     const opinion=phase.payment_opinion;
     const root=box('proof-opinion');
     root.dataset.paymentOpinionState=opinion.state;
+    const releaseCard=ReleaseEvidence.panel(phase,notes,state.bundle?.report);
+    if (releaseCard) {
+      root.classList.add('release-proof');root.dataset.releaseState=opinion.release.state;root.append(releaseCard);
+      return root;
+    }
     const index=graphIndex(graph);
     function paper(row,fact) {
       const excerpt=source(row,graph), quote=excerpt.querySelector('q'), button=excerpt.querySelector('button');

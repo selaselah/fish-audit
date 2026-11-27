@@ -44,6 +44,7 @@
   <link rel="stylesheet" href="/assets/signer-timeline.css">
   <link rel="stylesheet" href="/assets/guarantee-period.css">
   <link rel="stylesheet" href="/assets/payment-proof.css">
+  <link rel="stylesheet" href="/assets/release-card.css">
   <script src="/assets/verified-sample-page.js" defer></script>
   <link rel="stylesheet" href="/assets/warranty-register.css">
   <script src="/assets/intake-profiles.js" defer></script>
@@ -72,7 +73,7 @@
           <div class="hero-actions"><a class="button" href="/app">进入工作台</a><a class="text-link open-sample-review" href="/showcase/acceptance.pdf" target="_blank" rel="noopener" data-ref="d04/p1/f11">试核验收原件 <i aria-hidden="true" class="ui-glyph ic-arrows-angle-expand"></i></a></div>
           <p class="formats" aria-label="支持上传的资料格式">PDF（含扫描件） · 照片 · Word</p>
         </div>
-        <div class="specimen document-mat app-frame" data-visual id="sample" data-evidence-integrity="sha256-sSybT5S1wXZk033l0JrnkLgplwaNptT2h2DgG99lYn4=" role="region" aria-label="交互演示，切换文件核对证据">
+        <div class="specimen document-mat app-frame" data-ui="purchase-workpaper" data-visual id="sample" data-evidence-integrity="sha256-sSybT5S1wXZk033l0JrnkLgplwaNptT2h2DgG99lYn4=" role="region" aria-label="交互演示，切换文件核对证据">
           <div class="specimen-head"><span class="folder-caption">采购审计底稿</span><span class="sample-label">合成案例 · R8</span></div>
           <div class="file-tabs" role="tablist" aria-label="选择演练原件">
             <button type="button" id="tab-contract" role="tab" aria-selected="false" aria-controls="sheet-contract" tabindex="-1"><i class="ui-glyph ic-journal-text" aria-hidden="true"></i>采购合同</button>
@@ -177,7 +178,7 @@
           </div>
           <div class="workflow-actions"><a class="button compact" href="/app?new=contract"><i class="ui-glyph ic-plus-lg" aria-hidden="true"></i>新建合同审计</a></div>
         </div>
-        <div class="workflow-demo">
+        <div class="workflow-demo" data-ui="audit-case-browser">
           <div id="scene-signing" class="signing-sample" role="tabpanel" aria-labelledby="scene-tab-signing" hidden>
             <div class="signing-sample-header"><span><i class="ui-glyph ic-journal-text" aria-hidden="true"></i> 采购合同</span>
               <label id="signing-example-choice" hidden><span class="sr-only">合同生效案例</span><select id="signing-example"><option value="company">用印单位</option><option value="word">文字签章</option><option value="calendar">生效日冲突</option><option value="pdf">PDF 电子签名</option><option value="addendum">补充协议签署</option></select></label>
@@ -274,11 +275,18 @@
           <div id="scene-folios" class="signing-sample public-folios" role="tabpanel" aria-labelledby="scene-tab-folios" hidden>
             <div class="signing-sample-header"><span><i class="ui-glyph ic-journal-text" aria-hidden="true"></i> 付款核对</span>
               <label id="payment-example-choice" hidden><span class="sr-only">选择付款条款案例</span><select id="payment-example">
-                <option value="guarantee">保函期间与付款日</option><option value="warranty">质保金与维修工单</option><option value="invoice">验收款收票前提</option><option value="comments">分期付款批注</option><option value="proof">付款是否已执行</option><option value="clock">同日签认与扣款</option><option value="timing">跨日签认与付款</option><option value="reference">回单验收单号</option><option value="folios">合同续页</option></select></label><small id="payment-version">合成案例 · R10</small></div>
+                <option value="guarantee">保函期间与付款日</option><option value="warranty">质保金与维修工单</option><option value="invoice">验收款收票前提</option><option value="comments">分期付款批注</option><option value="release">验收款放行权限</option><option value="proof">付款是否已执行</option><option value="clock">同日签认与扣款</option><option value="timing">跨日签认与付款</option><option value="reference">回单验收单号</option><option value="folios">合同续页</option></select></label><small id="payment-version">合成案例 · R10</small></div>
             <div id="payment-guarantee-period" data-integrity="sha256-eu1APu+E4wYs036zdvQwmKNGqc0ySAUsX0CNINGLv7w=" hidden>
               <div class="period-fallback"><h3>首期预付款保函</h3>
                 <a href="/showcase/guarantee-period-guarantee.pdf" target="_blank" rel="noopener">查看水印保函 ↗</a>
                 <a href="/showcase/guarantee-period-bank.pdf" target="_blank" rel="noopener">查看水印付款回单 ↗</a></div>
+            </div>
+            <div id="payment-release" data-integrity="sha256-glPeyIz+za24ofM7yVKG/ahiM3V5huOTNSmbKTFblww=" hidden>
+              <a data-slip="late" href="/showcase/release-935ecb36e4a27a.pdf" target="_blank" rel="noopener">查看演练原件 · 回单早一天</a>
+              <a data-slip="current" href="/showcase/release-618da6596669e7.pdf" target="_blank" rel="noopener" hidden>查看演练原件 · 签名覆盖本版</a>
+              <a data-slip="earlier" href="/showcase/release-aded8a7d221749.pdf" target="_blank" rel="noopener" hidden>查看演练原件 · 签后另存新版</a>
+              <a data-slip="comment" href="/showcase/release-e82298c73eba5f.docx" target="_blank" rel="noopener" hidden>查看演练原件 · Word 草稿会签</a>
+              <a data-slip="scan" href="/showcase/release-b426133b372620.jpg" target="_blank" rel="noopener" hidden>查看演练原件 · 扫描签认栏</a>
             </div>
             <div id="payment-execution" hidden><a href="/showcase/payment-execution-notice.pdf" target="_blank" rel="noopener">查看演练付款回单</a></div>
             <div id="payment-addendum-invoice" data-carrier-integrity="sha256-dkvfB58F4m88Njxi1u0GsjKK9RRXp3/1yCbmhTLPHpM=" data-integrity="sha256-mqSg2921XNORClx1k3ylAWkkyv4qj0zRll+YE0nPwTs=" hidden>

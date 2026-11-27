@@ -1,5 +1,27 @@
 # 本机演练验收记录
 
+## 验收款放行与已付款时点
+
+十份带水印的虚构采购资料各保留两版本，先以规则 `2026.11.27.10` 签发，再以相同的原件和已核字段用 `2026.11.27.11` 重审。全部 20 份证据包都从原件重现了物理页，并从 Git 中对应的签发源码独立复算。公开案例使用五份固定底稿的原件和引文，可在本地与企业模式的首页体验。[公共案例](http://127.0.0.1:8000/?scene=payment-release&slip=late#workflow) · [固定摘要和复建程序](samples/publish_release_execution.py)
+
+| 演练材料 | 审计员在新版看到的结果 | 固定底稿 |
+| --- | --- | --- |
+| 第二期放行单仅有排印姓名，回单晚一天 | 栏内姓名与合同一致，实际签署待核 | [R8](http://127.0.0.1:8000/workpaper/5ded713a74244105a171a77fb0a51557?rev=8&view=payment-release&stage=H04-6) |
+| 银行回单 9 月 24 日，放行单列 9 月 25 日 | 实付早于单上日期一天，保留提前付款风险 | [R9](http://127.0.0.1:8000/workpaper/2bf163a2b272462d9e535e6f1d3e25fe?rev=9&view=payment-release&stage=H05-8) |
+| 两份单据同日 | 当日签批、付款时分待核 | [R7](http://127.0.0.1:8000/workpaper/933e295559324406b647cd9db71ae081?rev=7&view=payment-release&stage=H05-8) |
+| 签认栏列名不同，或另引验收单 | 分别标出姓名冲突或原单号冲突 | [姓名 R9](http://127.0.0.1:8000/workpaper/0e2bdd2017bd44a9b9546f00f0c9ef55?rev=9&view=payment-release&stage=H04-6) · [单号 R8](http://127.0.0.1:8000/workpaper/5f33974ca11a43aeb9d31cf001ea52e4?rev=8&view=payment-release&stage=H04-6) |
+| 只有审批日期 | 签字日期待补，实付先后待核 | [R8](http://127.0.0.1:8000/workpaper/e814159d6e0a4c70b5177a35d241d3ee?rev=8&view=payment-release&stage=H04-6) |
+| 测试电子签名覆盖所交版本，或签后追加 349 字节 | 分别显示本版或前版签名，实际签发人与权限待核 | [本版 R6](http://127.0.0.1:8000/workpaper/048b4638bed4493b8d8bbbf5435db836?rev=6&view=payment-release&stage=H04-6) · [前版 R5](http://127.0.0.1:8000/workpaper/dfad83fbd0a84c5180b1c5b70564425a?rev=5&view=payment-release&stage=H04-6) |
+| Word 会签草稿、整页扫描签认栏 | 批注可回到选中正文，扫描件可开整页核图，关联与签认保留人工校验 | [Word R6](http://127.0.0.1:8000/workpaper/5e244752f2ec40378100499f4214263a?rev=6&view=payment-release&stage=H04-6) · [扫描 R6](http://127.0.0.1:8000/workpaper/4c35692e8b554723b5abf085d8ef8e94?rev=6&view=payment-release&stage=H04-6) |
+
+五份公开演练分别复制到独立临时数据库做签收试验。在签收预检前替换放行原件、在预检结束后和提交事务前替换放行原件，十次请求均收到 409。两份包含测试签名的 PDF 有相同的打印页，互换文件仍会被检出。旧版以姓名核字判定已放行的签收也收到 409。恢复原件后，五份隔离副本均可正常退回补证。共享演练案件保持待核状态。
+
+在仓库根目录运行以下命令可逐件核对首页公开资料。命令从本机取得指定底稿，在临时目录中核对原件和出具版本。可通过 `--archives` 指定已下载证据包的目录。
+
+```sh
+PYTHONPATH=server:docs/samples server/.venv/bin/python -m publish_release_execution --check
+```
+
 ## 验收签认、数量签收与整改复验
 
 五份水印底稿分两版核对。每案沿用同一批原件、模型读页和复检记录，分别用规则 `2026.11.27.09` 与 `2026.11.27.10` 执行。两份外观相同的 Word 验收单，第 1 页第 9 行都写「合格」，第 14 行都有排印的签认人姓名。只有其中一份原始 DOCX 对「合格」附加了数量签收限制。[公开案例](http://127.0.0.1:8000/?scene=word-comments&record=limited#workflow)

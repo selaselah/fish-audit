@@ -1,5 +1,15 @@
 # 本机审计接口
 
+## 付款放行单的签署凭证
+
+规则 `2026.11.27.11` 的 `policy.release_execution` 为 `payment-release-execution-v1`。PDF 凭证在 `graph.release_pdf_sources.records`，Word 和图像凭证在 `graph.release_original_sources.records`，Word 审阅记录在同一对象的 `documents`。每个凭证绑定提交文件摘要、单元、物理页和签认字段。发现经 `supports_result` 引用凭证，Word 批注另有指向原页的关系。[生成与核验](../server/release_execution.py)
+
+H04 期款和能归属该期的 H05 回单在 `payment_opinion.release.signature_records` 列出凭证编号。`signature_pending` 表示所引单号及列名已对上，实际签署待核。`scope_pending` 表示暂缓意见与授权条款都点名该期，所附放行单的归属仍待核。签认姓名和原单号冲突沿用 `signer_mismatch`、`reference_mismatch`。`signature_mismatch` 单独记录 PDF 签名与已签内容的校验冲突。[期款和回单规则](../server/payment_releases.py)
+
+回单的 `written_timing` 用 `before`、`same_day`、`after`、`unknown` 表示付款日相对于单上所列签字日的位置。`timing` 在签署未核实期间为 `unknown`。旧版底稿可按签发程序复算。签收前如发现旧版以 `matched` 认定已签放行，接口返回 409 并提示重新审计。[离线核验](../server/verify.py) · [签收事务](../server/storage.py)
+
+从固定入口 `/workpaper/{case}?rev={revision}&view=payment-release&stage={finding}` 可直达 H04 的签署版本或 H05 的付款时点。企业入口沿用 `/w/{workspace}/workpaper/{case}`，案件访问权限随工作区校验。[固定底稿示例](http://127.0.0.1:8000/workpaper/2bf163a2b272462d9e535e6f1d3e25fe?rev=9&view=payment-release&stage=H05-8)
+
 ## Word 与影像验收单的签认凭证
 
 自规则 `2026.11.27.10` 起，`policy.acceptance_originals` 记录 `acceptance-original-execution-v1`。`graph.acceptance_original_sources.records` 为每个验收或复验单元保存文件摘要、物理页及其摘要、签认字段、审阅来源、批注编号和未定位批注数。Word 审阅记录位于 `graph.acceptance_word_reviews.documents`，两项程序引用同一份原始批注及正文选区。[签认凭证](../server/acceptance_originals.py) · [Word 原生批注](../server/acceptance_comments.py)

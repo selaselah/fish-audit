@@ -9,6 +9,9 @@ const MandateOriginals = (() => {
     review:'委托书原件的签发依据待核'
   };
   const families={
+    release:{kinds:['payment_release'],labels:{
+      word_text:'Word 排印件',word_visual:'Word 含图形',word_review:'Word 审阅版',photo:'扫描或拍照原件',review:'签署凭证待核'
+    }},
     mandate:{kinds:['power_of_attorney'],labels},
     addendum:{kinds:['contract_addendum'],labels:{
       word_text:'Word 排印原件',word_visual:'Word 签章页待核图',word_review:'Word 定稿待核',
@@ -30,7 +33,8 @@ const MandateOriginals = (() => {
     const relation=role==='acceptance'?'word_review':role+'_word_review';
     const documents=ledger.documents.filter(d=>d?.doc===doc.id || d?.id===record.review), [word]=documents;
     const units=(graph.audit_documents || graph.documents).filter(u=>(u.source || u.id)===doc.id);
-    const assigned=units.filter(u=>families[role].kinds.some(k=>graph.documents_by_kind[k]?.includes(u.id)));
+    const assigned=units.filter(u=>families[role].kinds.some(k=>graph.documents_by_kind[k]?.includes(u.id)) ||
+      role==='release' && ReleaseEvidence.filedUnit(graph,u.id));
     if (documents.length!==1 || word.id!==record.review || word.id!==role+'-word/'+doc.id || word.doc!==doc.id ||
         word.original_sha256!==doc.sha256 || !same(word.units,assigned.map(u=>u.id)) ||
         index.nodes.get(word.id)?.type!==role+'_word_review' || index.nodes.get(word.id).doc!==doc.id ||

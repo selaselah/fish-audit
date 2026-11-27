@@ -71,6 +71,7 @@ const EvidenceCompare = (() => {
         if (authority) add('release-authority','合同指定人与放行签认',printed(authority),ref(release.signature_ref));
         add('release-receipt','验收单号与放行所引原单',ref(release.original_ref),ref(release.receipt_ref));
         if (finding.rule==='H05' && release.state==='matched') add('release-transfer','放行签字日与实付日',ref(release.date_ref),ref(release.paid_ref));
+        if (finding.rule==='H05' && release.state==='signature_pending') add('release-transfer','单上所列签字日与实付日',ref(release.date_ref),ref(release.paid_ref));
       } else if (finding.rule==='H05' && notes.length===1 && ['hold','assent'].includes(finding.payment_opinion.state)) {
         const paid=unique('paid_on',kinds.bank_receipt);
         if (paid?.source_line?.rects?.length) add('opinion-transfer','付款意见与实付日期',printed(notes[0]),paid);

@@ -280,7 +280,7 @@ def create_app(store, worker):
             args["finding"] = ref
         if "view" in request.args:
             view = request.args["view"]
-            if view not in ("replay", "execution", "warranty-register", "addendum-signing", "reinspection", "inspection", "entities", "trial", "contract-pages", "signatures", "calendar", "suppliers", "acceptance-comments", "contract-comments", "payment-acceptance", "signer-timing", "payment-proof", "contract-checks", "acceptance-checks", "payment-checks") or set(args)!={"rev"}:
+            if view not in ("replay", "execution", "warranty-register", "addendum-signing", "reinspection", "inspection", "entities", "trial", "contract-pages", "signatures", "calendar", "suppliers", "acceptance-comments", "contract-comments", "payment-acceptance", "signer-timing", "payment-proof", "payment-release", "contract-checks", "acceptance-checks", "payment-checks") or set(args)!={"rev"}:
                 raise CaseError("请选择有效的底稿视图及版本。",400)
             args["view"] = view
         if args.get("view") == "addendum-signing" and any(len(request.args.getlist(k)) != 1 for k in ("rev","view")):
@@ -311,9 +311,11 @@ def create_app(store, worker):
             args["ticket"] = tickets[0]
         if "stage" in request.args:
             stages = request.args.getlist("stage")
-            if args.get("view") != "payment-checks" or len(stages) != 1 or not re.fullmatch(r"H0[45]-[1-9][0-9]{0,7}", stages[0]):
+            if args.get("view") not in ("payment-checks","payment-release") or len(stages) != 1 or not re.fullmatch(r"H0[45]-[1-9][0-9]{0,7}", stages[0]):
                 raise CaseError("请选择本版的付款条件或实付时点检查。", 400)
             args["stage"] = stages[0]
+        if args.get("view")=="payment-release" and any(len(request.args.getlist(k))!=1 for k in ("rev","view","stage")):
+            raise CaseError("请选择固定底稿中的放行单和期次。",400)
         if "receipt" in request.args:
             receipt = request.args["receipt"]
             if args.get("view") not in ("payment-acceptance","signer-timing","payment-proof") or not re.fullmatch(r"H05-[1-9][0-9]{0,7}", receipt):
@@ -330,6 +332,8 @@ def create_app(store, worker):
 
     @app.get("/showcase/<filename>")
     def showcase_document(filename):
+        if re.fullmatch(r"release-[0-9a-f]{14}\.(?:pdf|docx|jpg)",filename):
+            return send_from_directory(FRONTEND / "showcase", filename, as_attachment=filename.endswith(".docx"))
         if filename in {"signing-text.docx", "acceptance-review.docx", "contract-payment-review.docx",
                         "addendum-original-printed.docx", "addendum-original-commented.docx",
                         "acceptance-original-clean.docx", "acceptance-original-hot.docx", "acceptance-original-retest.docx"}:

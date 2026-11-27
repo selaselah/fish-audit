@@ -1,0 +1,951 @@
+{
+  "rule": "2026.11.27.11",
+  "editions": [
+    {
+      "key": "late",
+      "rev": 9,
+      "report_sha256": "47ab853299d9b82fdb17b74154f51cadacfa1ef57cbe63706817b5f4447305b7",
+      "stage": "H04-6",
+      "status": "signature_pending",
+      "record": {
+        "doc": "d01",
+        "fields": [
+          "d01/p1/f8"
+        ],
+        "id": "release-pdf/d01",
+        "original_sha256": "935ecb36e4a27ab45e7e0dc390c4e9b68f4d7301be8225131b96fdea3421dd90",
+        "pages": [
+          {
+            "has_text": true,
+            "layer": "text",
+            "ref": "d01/p1",
+            "sha256": "84b639be42cc4147ecfcb4fc381547a8e42da25adf1666c2948047f9223e6b08",
+            "typeset": true
+          }
+        ],
+        "signatures": [],
+        "state": "typeset",
+        "unit": "d01"
+      },
+      "docs": {
+        "d01": {
+          "id": "d01",
+          "name": "付款放行单.pdf",
+          "title": "付款放行单",
+          "page": 1,
+          "version": "合成演练 · R9",
+          "media": "pdf",
+          "image": "/assets/release-84b639be42cc41.jpg",
+          "page_sha256": "84b639be42cc4147ecfcb4fc381547a8e42da25adf1666c2948047f9223e6b08",
+          "source_sha256": "935ecb36e4a27ab45e7e0dc390c4e9b68f4d7301be8225131b96fdea3421dd90",
+          "size": 56112,
+          "lines": [
+            {
+              "ref": "d01/p1/l9",
+              "label": "所列签字日",
+              "value": "放行签字日期：2026年9月25日",
+              "line": 9,
+              "rects": [
+                [
+                  0.08209,
+                  0.43516,
+                  0.42534,
+                  0.4516
+                ]
+              ]
+            },
+            {
+              "ref": "d01/p1/l10",
+              "label": "签认栏",
+              "value": "审批签认：演练林岚（已签字）",
+              "line": 10,
+              "rects": [
+                [
+                  0.08274,
+                  0.47215,
+                  0.42405,
+                  0.49087
+                ]
+              ]
+            }
+          ],
+          "pdf": "/showcase/release-935ecb36e4a27a.pdf"
+        },
+        "d03": {
+          "id": "d03",
+          "name": "采购合同.pdf",
+          "title": "采购合同",
+          "page": 1,
+          "version": "合成演练 · R9",
+          "media": "pdf",
+          "image": "/assets/release-de9a20122c4ed3.jpg",
+          "page_sha256": "de9a20122c4ed3d0e1cef0d0351a8a401c5418635391b19aea438265067ef004",
+          "source_sha256": "53913c1ecf9102e9914feb369adf8ba3a9c9572ec63a1e45f2cd86b5a1e3fd82",
+          "size": 64562,
+          "lines": [
+            {
+              "ref": "d03/p1/l19",
+              "label": "合同授权",
+              "value": "放行约定：第二期暂缓自验收日起执行，须经甲方演练林岚签字放行",
+              "line": 19,
+              "rects": [
+                [
+                  0.08209,
+                  0.8032,
+                  0.83516,
+                  0.821
+                ]
+              ]
+            }
+          ],
+          "pdf": "/showcase/release-53913c1ecf9102.pdf"
+        },
+        "d05": {
+          "id": "d05",
+          "name": "验收报告.pdf",
+          "title": "验收报告",
+          "page": 1,
+          "version": "合成演练 · R9",
+          "media": "pdf",
+          "image": "/assets/release-7d2a4b01b1110a.jpg",
+          "page_sha256": "7d2a4b01b1110a869423e0dd8867509b12ac4a4ded970ec504b368f018d0cce0",
+          "source_sha256": "2b23440f83527d6b4ac5fcddaf749fb3ac243d2f9aede3227586c4b5bae6e288",
+          "size": 61868,
+          "lines": [
+            {
+              "ref": "d05/p1/l16",
+              "label": "验收单意见",
+              "value": "付款意见：第二期验收款暂缓支付",
+              "line": 16,
+              "rects": [
+                [
+                  0.08209,
+                  0.69269,
+                  0.45766,
+                  0.70913
+                ]
+              ]
+            }
+          ],
+          "pdf": "/showcase/release-2b23440f83527d.pdf"
+        },
+        "d04": {
+          "id": "d04",
+          "name": "银行付款回单.pdf",
+          "title": "银行付款回单",
+          "page": 1,
+          "version": "合成演练 · R9",
+          "media": "pdf",
+          "image": "/assets/release-bf948ce63b5500.jpg",
+          "page_sha256": "bf948ce63b55006ddf0af68ee64594a794fe050c44a7f7b979101def93df7965",
+          "source_sha256": "030ccfe2e637f02e0e0583f81e249a8a1e3a0f49d7c6acf71901aeb97ae4da5c",
+          "size": 49188,
+          "lines": [
+            {
+              "ref": "d04/p1/l9",
+              "label": "回单付款日",
+              "value": "付款日期：2026年9月24日",
+              "line": 9,
+              "rects": [
+                [
+                  0.08209,
+                  0.43516,
+                  0.37492,
+                  0.4516
+                ]
+              ]
+            }
+          ],
+          "pdf": "/showcase/release-030ccfe2e637f0.pdf"
+        }
+      },
+      "rows": {
+        "authority": {
+          "doc": "d03",
+          "ref": "d03/p1/l19",
+          "value": "演练林岚",
+          "line": 19
+        },
+        "date": {
+          "doc": "d01",
+          "ref": "d01/p1/l9",
+          "value": "2026年9月25日",
+          "line": 9
+        },
+        "signer": {
+          "doc": "d01",
+          "ref": "d01/p1/l10",
+          "value": "演练林岚（已签字）",
+          "line": 10
+        },
+        "hold": {
+          "doc": "d05",
+          "ref": "d05/p1/l16",
+          "value": "付款意见：第二期验收款暂缓支付",
+          "line": 16
+        },
+        "paid": {
+          "doc": "d04",
+          "ref": "d04/p1/l9",
+          "value": "2026年9月24日",
+          "line": 9
+        }
+      },
+      "notes": [],
+      "timing": "before",
+      "dates": {
+        "paid": "2026-09-24",
+        "signed": "2026-09-25"
+      },
+      "bank_status": "risk"
+    },
+    {
+      "key": "current",
+      "rev": 6,
+      "report_sha256": "64ad93abe06585cdf9b3c3b45ef6d97b10a1227fb9f6a4e801c2c6e9388d8507",
+      "stage": "H04-6",
+      "status": "scope_pending",
+      "record": {
+        "doc": "d01",
+        "fields": [
+          "d01/p1/f9"
+        ],
+        "id": "release-pdf/d01",
+        "original_sha256": "618da6596669e7a65505a64e6953aeae136c8a5e04cf8b592c86e2d310131667",
+        "pages": [
+          {
+            "has_text": true,
+            "layer": "text",
+            "ref": "d01/p1",
+            "sha256": "b426133b3726204697549c381b1d0ef3352048a5fc78cef449593699cb4b26c9",
+            "typeset": false
+          }
+        ],
+        "signatures": [
+          {
+            "certificate_sha256": "fba9b9fd5d53a5b0a3dbeb86be89f1688fbb21467fdaf30c0ce9c2b5a9cf6d38",
+            "coverage": "ENTIRE_FILE",
+            "digest": "sha256",
+            "ends_at": 61825,
+            "field": "SyntheticRelease",
+            "revision": 2,
+            "state": "current",
+            "subfilter": "/adbe.pkcs7.detached"
+          }
+        ],
+        "state": "current",
+        "unit": "d01"
+      },
+      "docs": {
+        "d01": {
+          "id": "d01",
+          "name": "付款放行单.pdf",
+          "title": "付款放行单",
+          "page": 1,
+          "version": "合成演练 · R6",
+          "media": "pdf",
+          "image": "/assets/release-b426133b372620.jpg",
+          "page_sha256": "b426133b3726204697549c381b1d0ef3352048a5fc78cef449593699cb4b26c9",
+          "source_sha256": "618da6596669e7a65505a64e6953aeae136c8a5e04cf8b592c86e2d310131667",
+          "size": 61825,
+          "lines": [
+            {
+              "ref": "d01/p1/l9",
+              "label": "所列签字日",
+              "value": "放行签字日期：2026年9月23日",
+              "line": 9,
+              "rects": [
+                [
+                  0.08209,
+                  0.43516,
+                  0.42534,
+                  0.4516
+                ]
+              ]
+            },
+            {
+              "ref": "d01/p1/l10",
+              "label": "签认栏",
+              "value": "审批签认：演练林岚（已签字）",
+              "line": 10,
+              "rects": [
+                [
+                  0.08274,
+                  0.47215,
+                  0.42405,
+                  0.49087
+                ]
+              ]
+            }
+          ],
+          "pdf": "/showcase/release-618da6596669e7.pdf"
+        },
+        "d03": {
+          "id": "d03",
+          "name": "采购合同.pdf",
+          "title": "采购合同",
+          "page": 1,
+          "version": "合成演练 · R6",
+          "media": "pdf",
+          "image": "/assets/release-fd0972536ec9c5.jpg",
+          "page_sha256": "fd0972536ec9c5b4fcb5f1ee57d9a1d24247f8c3b4e7c1be6ef137ea367ea5f7",
+          "source_sha256": "bb74c623ac716cc52fa17877d7e314b852492339e31c4ed70d6a123310e2cf35",
+          "size": 64562,
+          "lines": [
+            {
+              "ref": "d03/p1/l19",
+              "label": "合同授权",
+              "value": "放行约定：第二期暂缓自验收日起执行，须经甲方演练林岚签字放行",
+              "line": 19,
+              "rects": [
+                [
+                  0.08209,
+                  0.8032,
+                  0.83516,
+                  0.821
+                ]
+              ]
+            }
+          ],
+          "pdf": "/showcase/release-bb74c623ac716c.pdf"
+        },
+        "d05": {
+          "id": "d05",
+          "name": "验收报告.pdf",
+          "title": "验收报告",
+          "page": 1,
+          "version": "合成演练 · R6",
+          "media": "pdf",
+          "image": "/assets/release-dfc04e56ac5880.jpg",
+          "page_sha256": "dfc04e56ac5880737bc976489894155dd2b1c6595e03bda8305c61adbd2ae478",
+          "source_sha256": "a5ef948891f6676b8b549e1eafddea198c9b7d94569de0be63769c7a4b122b67",
+          "size": 61870,
+          "lines": [
+            {
+              "ref": "d05/p1/l16",
+              "label": "验收单意见",
+              "value": "付款意见：第二期验收款暂缓支付",
+              "line": 16,
+              "rects": [
+                [
+                  0.08209,
+                  0.69269,
+                  0.45766,
+                  0.70913
+                ]
+              ]
+            }
+          ],
+          "pdf": "/showcase/release-a5ef948891f667.pdf"
+        }
+      },
+      "rows": {
+        "authority": {
+          "doc": "d03",
+          "ref": "d03/p1/l19",
+          "value": "演练林岚",
+          "line": 19
+        },
+        "date": {
+          "doc": "d01",
+          "ref": "d01/p1/l9",
+          "value": "2026年9月23日",
+          "line": 9
+        },
+        "signer": {
+          "doc": "d01",
+          "ref": "d01/p1/l10",
+          "value": "演练林岚（已签字）",
+          "line": 10
+        },
+        "hold": {
+          "doc": "d05",
+          "ref": "d05/p1/l16",
+          "value": "付款意见：第二期验收款暂缓支付",
+          "line": 16
+        }
+      },
+      "notes": [],
+      "timing": null,
+      "dates": {
+        "paid": null,
+        "signed": null
+      },
+      "bank_status": null
+    },
+    {
+      "key": "earlier",
+      "rev": 5,
+      "report_sha256": "cb15e378f8996ece13b83cb57660d3e77227d3f2486e7e71f65d633d113664a8",
+      "stage": "H04-6",
+      "status": "scope_pending",
+      "record": {
+        "doc": "d01",
+        "fields": [
+          "d01/p1/f9"
+        ],
+        "id": "release-pdf/d01",
+        "original_sha256": "aded8a7d221749caeff499ff9f5b67c27f38696b0075327be81ff27aec25cfea",
+        "pages": [
+          {
+            "has_text": true,
+            "layer": "text",
+            "ref": "d01/p1",
+            "sha256": "b426133b3726204697549c381b1d0ef3352048a5fc78cef449593699cb4b26c9",
+            "typeset": false
+          }
+        ],
+        "signatures": [
+          {
+            "certificate_sha256": "fba9b9fd5d53a5b0a3dbeb86be89f1688fbb21467fdaf30c0ce9c2b5a9cf6d38",
+            "coverage": "ENTIRE_REVISION",
+            "digest": "sha256",
+            "ends_at": 61825,
+            "field": "SyntheticRelease",
+            "revision": 2,
+            "state": "earlier",
+            "subfilter": "/adbe.pkcs7.detached"
+          }
+        ],
+        "state": "earlier",
+        "unit": "d01"
+      },
+      "docs": {
+        "d01": {
+          "id": "d01",
+          "name": "付款放行单.pdf",
+          "title": "付款放行单",
+          "page": 1,
+          "version": "合成演练 · R5",
+          "media": "pdf",
+          "image": "/assets/release-b426133b372620.jpg",
+          "page_sha256": "b426133b3726204697549c381b1d0ef3352048a5fc78cef449593699cb4b26c9",
+          "source_sha256": "aded8a7d221749caeff499ff9f5b67c27f38696b0075327be81ff27aec25cfea",
+          "size": 62174,
+          "lines": [
+            {
+              "ref": "d01/p1/l9",
+              "label": "所列签字日",
+              "value": "放行签字日期：2026年9月23日",
+              "line": 9,
+              "rects": [
+                [
+                  0.08209,
+                  0.43516,
+                  0.42534,
+                  0.4516
+                ]
+              ]
+            },
+            {
+              "ref": "d01/p1/l10",
+              "label": "签认栏",
+              "value": "审批签认：演练林岚（已签字）",
+              "line": 10,
+              "rects": [
+                [
+                  0.08274,
+                  0.47215,
+                  0.42405,
+                  0.49087
+                ]
+              ]
+            }
+          ],
+          "pdf": "/showcase/release-aded8a7d221749.pdf"
+        },
+        "d03": {
+          "id": "d03",
+          "name": "采购合同.pdf",
+          "title": "采购合同",
+          "page": 1,
+          "version": "合成演练 · R5",
+          "media": "pdf",
+          "image": "/assets/release-fd0972536ec9c5.jpg",
+          "page_sha256": "fd0972536ec9c5b4fcb5f1ee57d9a1d24247f8c3b4e7c1be6ef137ea367ea5f7",
+          "source_sha256": "bb74c623ac716cc52fa17877d7e314b852492339e31c4ed70d6a123310e2cf35",
+          "size": 64562,
+          "lines": [
+            {
+              "ref": "d03/p1/l19",
+              "label": "合同授权",
+              "value": "放行约定：第二期暂缓自验收日起执行，须经甲方演练林岚签字放行",
+              "line": 19,
+              "rects": [
+                [
+                  0.08209,
+                  0.8032,
+                  0.83516,
+                  0.821
+                ]
+              ]
+            }
+          ],
+          "pdf": "/showcase/release-bb74c623ac716c.pdf"
+        },
+        "d05": {
+          "id": "d05",
+          "name": "验收报告.pdf",
+          "title": "验收报告",
+          "page": 1,
+          "version": "合成演练 · R5",
+          "media": "pdf",
+          "image": "/assets/release-dfc04e56ac5880.jpg",
+          "page_sha256": "dfc04e56ac5880737bc976489894155dd2b1c6595e03bda8305c61adbd2ae478",
+          "source_sha256": "a5ef948891f6676b8b549e1eafddea198c9b7d94569de0be63769c7a4b122b67",
+          "size": 61870,
+          "lines": [
+            {
+              "ref": "d05/p1/l16",
+              "label": "验收单意见",
+              "value": "付款意见：第二期验收款暂缓支付",
+              "line": 16,
+              "rects": [
+                [
+                  0.08209,
+                  0.69269,
+                  0.45766,
+                  0.70913
+                ]
+              ]
+            }
+          ],
+          "pdf": "/showcase/release-a5ef948891f667.pdf"
+        },
+        "d04": {
+          "id": "d04",
+          "name": "银行付款回单.pdf",
+          "title": "银行付款回单",
+          "page": 1,
+          "version": "合成演练 · R5",
+          "media": "pdf",
+          "image": "/assets/release-bd90ca9dcf6bbf.jpg",
+          "page_sha256": "bd90ca9dcf6bbffe9e0b60495e777acf8e203e6ab7023639ef3cfdf57eb7cbae",
+          "source_sha256": "1b296d33a0d6bacfd2834049bee82db521cca6fe4ae5545af9280ed8609e852b",
+          "size": 49188,
+          "lines": [
+            {
+              "ref": "d04/p1/l9",
+              "label": "回单付款日",
+              "value": "付款日期：2026年9月24日",
+              "line": 9,
+              "rects": [
+                [
+                  0.08209,
+                  0.43516,
+                  0.37492,
+                  0.4516
+                ]
+              ]
+            }
+          ],
+          "pdf": "/showcase/release-1b296d33a0d6ba.pdf"
+        }
+      },
+      "rows": {
+        "authority": {
+          "doc": "d03",
+          "ref": "d03/p1/l19",
+          "value": "演练林岚",
+          "line": 19
+        },
+        "date": {
+          "doc": "d01",
+          "ref": "d01/p1/l9",
+          "value": "2026年9月23日",
+          "line": 9
+        },
+        "signer": {
+          "doc": "d01",
+          "ref": "d01/p1/l10",
+          "value": "演练林岚（已签字）",
+          "line": 10
+        },
+        "hold": {
+          "doc": "d05",
+          "ref": "d05/p1/l16",
+          "value": "付款意见：第二期验收款暂缓支付",
+          "line": 16
+        },
+        "paid": {
+          "doc": "d04",
+          "ref": "d04/p1/l9",
+          "value": "2026年9月24日",
+          "line": 9
+        }
+      },
+      "notes": [],
+      "timing": "unknown",
+      "dates": {
+        "paid": "2026-09-24",
+        "signed": null
+      },
+      "bank_status": "missing"
+    },
+    {
+      "key": "comment",
+      "rev": 6,
+      "report_sha256": "1838f91cd383cef7bd35c6939595aa36685ce0bffac809d85525a9a70f092985",
+      "stage": "H04-6",
+      "status": "scope_pending",
+      "record": {
+        "doc": "d01",
+        "fields": [
+          "d01/p1/f8"
+        ],
+        "id": "release-original/d01",
+        "kind": "word",
+        "notes": [
+          "release-word/d01/n1"
+        ],
+        "original_sha256": "e82298c73eba5fc0b2ae177db05ad99e33943b0f7f71b39d8332feed19bf1677",
+        "pages": [
+          {
+            "layer": "text",
+            "ref": "d01/p1",
+            "sha256": "e9ccb95d5f51258d2ae629802fc6aa1d3f612b0b5f1547538a478cef42c8d29c",
+            "text_only": true
+          }
+        ],
+        "review": "release-word/d01",
+        "state": "word_review",
+        "unit": "d01",
+        "unplaced": 0
+      },
+      "docs": {
+        "d01": {
+          "id": "d01",
+          "name": "付款放行单.docx",
+          "title": "付款放行单",
+          "page": 1,
+          "version": "合成演练 · R6",
+          "media": "word",
+          "image": "/assets/release-e9ccb95d5f5125.jpg",
+          "page_sha256": "e9ccb95d5f51258d2ae629802fc6aa1d3f612b0b5f1547538a478cef42c8d29c",
+          "source_sha256": "e82298c73eba5fc0b2ae177db05ad99e33943b0f7f71b39d8332feed19bf1677",
+          "size": 37752,
+          "lines": [
+            {
+              "ref": "d01/p1/l9",
+              "label": "所列签字日",
+              "value": "放行签字日期：2026 年 9 月 23 日",
+              "line": 9,
+              "rects": [
+                [
+                  0.14761,
+                  0.40874,
+                  0.27073,
+                  0.4233
+                ],
+                [
+                  0.28518,
+                  0.41019,
+                  0.32035,
+                  0.4199
+                ],
+                [
+                  0.32601,
+                  0.40922,
+                  0.34422,
+                  0.4233
+                ],
+                [
+                  0.34925,
+                  0.41019,
+                  0.35678,
+                  0.4199
+                ],
+                [
+                  0.36307,
+                  0.40922,
+                  0.37751,
+                  0.42282
+                ],
+                [
+                  0.38568,
+                  0.41019,
+                  0.40327,
+                  0.4199
+                ],
+                [
+                  0.41143,
+                  0.40971,
+                  0.42399,
+                  0.42282
+                ]
+              ]
+            },
+            {
+              "ref": "d01/p1/l10",
+              "label": "签认栏",
+              "value": "审批签认：演练林岚（已签字）",
+              "line": 10,
+              "rects": [
+                [
+                  0.14887,
+                  0.44612,
+                  0.40955,
+                  0.46068
+                ]
+              ]
+            },
+            {
+              "ref": "d01/p1/l8",
+              "label": "批注锚点",
+              "value": "放行决定：解除第二期验收款暂缓，自签字日起恢复支付",
+              "line": 8,
+              "rects": [
+                [
+                  0.14761,
+                  0.37184,
+                  0.44033,
+                  0.38592
+                ],
+                [
+                  0.44472,
+                  0.37184,
+                  0.63693,
+                  0.38592
+                ]
+              ]
+            }
+          ],
+          "original": "/showcase/release-e82298c73eba5f.docx"
+        },
+        "d03": {
+          "id": "d03",
+          "name": "采购合同.pdf",
+          "title": "采购合同",
+          "page": 1,
+          "version": "合成演练 · R6",
+          "media": "pdf",
+          "image": "/assets/release-fd0972536ec9c5.jpg",
+          "page_sha256": "fd0972536ec9c5b4fcb5f1ee57d9a1d24247f8c3b4e7c1be6ef137ea367ea5f7",
+          "source_sha256": "bb74c623ac716cc52fa17877d7e314b852492339e31c4ed70d6a123310e2cf35",
+          "size": 64562,
+          "lines": [
+            {
+              "ref": "d03/p1/l19",
+              "label": "合同授权",
+              "value": "放行约定：第二期暂缓自验收日起执行，须经甲方演练林岚签字放行",
+              "line": 19,
+              "rects": [
+                [
+                  0.08209,
+                  0.8032,
+                  0.83516,
+                  0.821
+                ]
+              ]
+            }
+          ],
+          "pdf": "/showcase/release-bb74c623ac716c.pdf"
+        },
+        "d05": {
+          "id": "d05",
+          "name": "验收报告.pdf",
+          "title": "验收报告",
+          "page": 1,
+          "version": "合成演练 · R6",
+          "media": "pdf",
+          "image": "/assets/release-dfc04e56ac5880.jpg",
+          "page_sha256": "dfc04e56ac5880737bc976489894155dd2b1c6595e03bda8305c61adbd2ae478",
+          "source_sha256": "a5ef948891f6676b8b549e1eafddea198c9b7d94569de0be63769c7a4b122b67",
+          "size": 61870,
+          "lines": [
+            {
+              "ref": "d05/p1/l16",
+              "label": "验收单意见",
+              "value": "付款意见：第二期验收款暂缓支付",
+              "line": 16,
+              "rects": [
+                [
+                  0.08209,
+                  0.69269,
+                  0.45766,
+                  0.70913
+                ]
+              ]
+            }
+          ],
+          "pdf": "/showcase/release-a5ef948891f667.pdf"
+        }
+      },
+      "rows": {
+        "authority": {
+          "doc": "d03",
+          "ref": "d03/p1/l19",
+          "value": "演练林岚",
+          "line": 19
+        },
+        "date": {
+          "doc": "d01",
+          "ref": "d01/p1/l9",
+          "value": "2026 年 9 月 23 日",
+          "line": 9
+        },
+        "signer": {
+          "doc": "d01",
+          "ref": "d01/p1/l10",
+          "value": "演练林岚（已签字）",
+          "line": 10
+        },
+        "hold": {
+          "doc": "d05",
+          "ref": "d05/p1/l16",
+          "value": "付款意见：第二期验收款暂缓支付",
+          "line": 16
+        },
+        "annotation": {
+          "doc": "d01",
+          "ref": "d01/p1/l8",
+          "value": "解除第二期验收款暂缓",
+          "line": 8
+        }
+      },
+      "notes": [
+        {
+          "text": "本单为待签草稿，须经财务负责人会签后执行。",
+          "author": "演练财务复核员",
+          "anchor": "解除第二期验收款暂缓"
+        }
+      ],
+      "timing": null,
+      "dates": {
+        "paid": null,
+        "signed": null
+      },
+      "bank_status": null
+    },
+    {
+      "key": "scan",
+      "rev": 6,
+      "report_sha256": "7c8b69784730be7b998026015f886e7ebcfebd2aed6e748be6476ca89fa0f711",
+      "stage": "H04-6",
+      "status": "scope_pending",
+      "record": {
+        "doc": "d01",
+        "fields": [
+          "d01/p1/f8"
+        ],
+        "id": "release-original/d01",
+        "kind": "image",
+        "notes": [],
+        "original_sha256": "b426133b3726204697549c381b1d0ef3352048a5fc78cef449593699cb4b26c9",
+        "pages": [
+          {
+            "layer": "image",
+            "ref": "d01/p1",
+            "sha256": "8af562286434ebb01bf7d36add07cf42f43a308158ef87b4d6ae16bfe2d81069",
+            "text_only": false
+          }
+        ],
+        "review": null,
+        "state": "photo",
+        "unit": "d01",
+        "unplaced": 0
+      },
+      "docs": {
+        "d01": {
+          "id": "d01",
+          "name": "付款放行单.jpg",
+          "title": "付款放行单",
+          "page": 1,
+          "version": "合成演练 · R6",
+          "media": "image",
+          "image": "/assets/release-8af562286434eb.jpg",
+          "page_sha256": "8af562286434ebb01bf7d36add07cf42f43a308158ef87b4d6ae16bfe2d81069",
+          "source_sha256": "b426133b3726204697549c381b1d0ef3352048a5fc78cef449593699cb4b26c9",
+          "size": 141671,
+          "lines": [],
+          "original": "/showcase/release-b426133b372620.jpg"
+        },
+        "d03": {
+          "id": "d03",
+          "name": "采购合同.pdf",
+          "title": "采购合同",
+          "page": 1,
+          "version": "合成演练 · R6",
+          "media": "pdf",
+          "image": "/assets/release-fd0972536ec9c5.jpg",
+          "page_sha256": "fd0972536ec9c5b4fcb5f1ee57d9a1d24247f8c3b4e7c1be6ef137ea367ea5f7",
+          "source_sha256": "bb74c623ac716cc52fa17877d7e314b852492339e31c4ed70d6a123310e2cf35",
+          "size": 64562,
+          "lines": [
+            {
+              "ref": "d03/p1/l19",
+              "label": "合同授权",
+              "value": "放行约定：第二期暂缓自验收日起执行，须经甲方演练林岚签字放行",
+              "line": 19,
+              "rects": [
+                [
+                  0.08209,
+                  0.8032,
+                  0.83516,
+                  0.821
+                ]
+              ]
+            }
+          ],
+          "pdf": "/showcase/release-bb74c623ac716c.pdf"
+        },
+        "d05": {
+          "id": "d05",
+          "name": "验收报告.pdf",
+          "title": "验收报告",
+          "page": 1,
+          "version": "合成演练 · R6",
+          "media": "pdf",
+          "image": "/assets/release-dfc04e56ac5880.jpg",
+          "page_sha256": "dfc04e56ac5880737bc976489894155dd2b1c6595e03bda8305c61adbd2ae478",
+          "source_sha256": "a5ef948891f6676b8b549e1eafddea198c9b7d94569de0be63769c7a4b122b67",
+          "size": 61870,
+          "lines": [
+            {
+              "ref": "d05/p1/l16",
+              "label": "验收单意见",
+              "value": "付款意见：第二期验收款暂缓支付",
+              "line": 16,
+              "rects": [
+                [
+                  0.08209,
+                  0.69269,
+                  0.45766,
+                  0.70913
+                ]
+              ]
+            }
+          ],
+          "pdf": "/showcase/release-a5ef948891f667.pdf"
+        }
+      },
+      "rows": {
+        "authority": {
+          "doc": "d03",
+          "ref": "d03/p1/l19",
+          "value": "演练林岚",
+          "line": 19
+        },
+        "signer": {
+          "doc": "d01",
+          "ref": null,
+          "value": "演练林岚（已签字）",
+          "line": null
+        },
+        "hold": {
+          "doc": "d05",
+          "ref": "d05/p1/l16",
+          "value": "付款意见：第二期验收款暂缓支付",
+          "line": 16
+        }
+      },
+      "notes": [],
+      "timing": null,
+      "dates": {
+        "paid": null,
+        "signed": null
+      },
+      "bank_status": null
+    }
+  ]
+}

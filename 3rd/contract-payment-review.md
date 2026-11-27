@@ -1,5 +1,11 @@
 # 合同付款批注与财务复核交互
 
+## 采购放行的身份与签署版本
+
+《企业内部控制应用指引第 7 号》第十三条要求付款审核结合预算、合同、单据凭证及审批程序。演练合同自行约定第二期暂缓须由指定人签字解除。项目据此分别留存合同授权条款、验收原单、放行单签认栏和付款日期。[财政部采购业务应用指引，第 30 页](https://kjs.mof.gov.cn/zhengcefabu/201005/P020230421440664863663.pdf#page=30)
+
+《电子签名法》第十三条涉及制作数据与签名人的关系、签署时的控制以及对后续改动的可发现性，第十四条规定可靠电子签名的法律效力。项目核对签名对 PDF 修订的覆盖范围，保留证书摘要，并交由审计员补核实际签署人、代表权限及审批链。公开 PDF 采用自签测试证书。[《中华人民共和国电子签名法》](https://ynca.miit.gov.cn/zwgk/zcwj/flfg/art/2022/art_a6ec461de9174d6b87ef092d15615652.html) · [PDF 签名核验技术资料](pdf-signature-review.md)
+
 ## 核对同一协议的排印内容与审阅记录
 
 2026 年 11 月 27 日查阅。Microsoft Word 将批注与所选文字关联，修订可逐项接受或拒绝。本项目把 Word 的原生选区和批注正文并排出示，分别核对提交文件与打印页摘要。相同的打印页仍可来自不同的审阅版本。[Word 批注与修订](https://support.microsoft.com/en-us/word/give-and-receive-feedback-in-word) · [接受或拒绝修订](https://support.microsoft.com/en-us/word/training/accept-tracked-changes)

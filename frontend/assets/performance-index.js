@@ -139,6 +139,10 @@ const PerformanceIndex = (() => {
   }
   function specialist(item) {
     const target=id=>document.getElementById(id);
+    if (item.payment_opinion?.release?.signature_records?.length && releaseProofs(item,state.bundle.report).length===1) {
+      const bundle=state.bundle;
+      return action('核对放行原件',()=>{if (state.bundle===bundle) ReleaseEvidence.reveal(target('case-panel'),item,bundle.report);},'text-button');
+    }
     if (item.warranty_difference) return WarrantyRegisterEvidence.jump(item);
     if (item.execution_basis && target('payment-proof')) return PaymentProof.jump(item);
     if (item.signer_timing && target('signer-timing')) return SignerEvidence.jump(item);
@@ -156,6 +160,7 @@ const PerformanceIndex = (() => {
     return selected?evidenceJump(selected[2],selected[1]):null;
   }
   const pdfSources={
+    release:{kinds:['payment_release'],field:'approval_signer',format:'payment-release-execution-v1',labels:ReleaseCard.states},
     addendum:{kinds:['contract_addendum'],field:['buyer_signature','seller_signature'],labels:{
       typeset:'仅见排印文字',visual:'签章影像待核',current:'签名覆盖本版',earlier:'签名覆盖较早版',
       mismatch:'签名校验不符',review:'签署凭证待核'}},
@@ -178,7 +183,8 @@ const PerformanceIndex = (() => {
     if (!doc || !/^[a-f0-9]{64}$/.test(doc.sha256) || doc.sha256!==record.original_sha256 ||
         doc.sha256!==node.sha256 || index.nodes.get(doc.id)?.type!=='document' || index.nodes.get(doc.id).sha256!==doc.sha256) return null;
     const unit=(graph.audit_documents || graph.documents).find(u=>u.id===record.unit);
-    if (!unit || (unit.source || unit.id)!==doc.id || !kinds.some(k=>graph.documents_by_kind?.[k]?.includes(unit.id))) return null;
+    if (!unit || (unit.source || unit.id)!==doc.id || !(kinds.some(k=>graph.documents_by_kind?.[k]?.includes(unit.id)) ||
+        kinds.includes('payment_release') && ReleaseEvidence.filedUnit(graph,unit.id))) return null;
     if (!Number.isSafeInteger(doc.pages) || doc.pages<1 || !Number.isSafeInteger(doc.size) || doc.size<1 ||
         record.pages.length!==(unit.source?1:doc.pages) ||
         unit.source && (!Number.isSafeInteger(unit.page) || unit.page<1 || unit.page>doc.pages)) return null;
@@ -198,7 +204,7 @@ const PerformanceIndex = (() => {
   }
   function unitPdfOriginal(graph,id,kind) {
     const family=kind+'_pdf', {kinds,field,labels}=pdfSources[kind];
-    if (graph[family+'_sources']?.format!=='pdf-'+kind+'-execution-v1') return null;
+    if (graph[family+'_sources']?.format!==(pdfSources[kind].format || 'pdf-'+kind+'-execution-v1')) return null;
     const inspected=graphIndex(graph).unitPdfOriginals ??= new Map();
     if (inspected.has(id)) return inspected.get(id);
     const source=unitSource(graph,id,family,kinds,field);
@@ -369,6 +375,36 @@ const PerformanceIndex = (() => {
     },'ref');
     open.dataset.acceptanceCitation=id;open.setAttribute('aria-haspopup','dialog');open.setAttribute('aria-controls','performance-index');
     return open;
+  }
+  function releaseProofs(item,report) {
+    const {graph,policy}=report,release=item.payment_opinion?.release,format='payment-release-execution-v1';
+    if (!['H04','H05'].includes(item.rule) || policy?.release_execution!==format ||
+        graph.release_pdf_sources?.format!==format || graph.release_original_sources?.format!==format ||
+        !['release_execution.py','pdf_execution.py','original_records.py','acceptance_comments.py'].every(f=>/^[a-f0-9]{64}$/.test(policy.code_sha256?.[f])) ||
+        !release?.signature_records?.length || new Set(release.signature_records).size!==release.signature_records.length) return [];
+    const cited=issuedReferences(item,graph), rows=new Map(originals(item,graph).map(r=>[r.fact.id,r])),proofs=[];
+    // A Word comment can anchor to a native line whose model field category is still under review.
+    for (const printed of ReleaseEvidence.sources(graph,item)) {
+      if (!printed.line || !printed.native) continue;
+      for (const ref of printed.facts) {
+        const row=rows.get(ref),f=row?.fact,loc=f?.source_line;
+        if (row && !row.line && f.status==='visual' && loc?.rects?.length && loc.number===printed.line &&
+            loc.text===printed.quote && f.quote===printed.quote && f.doc===printed.doc && f.page===printed.page) {
+          rows.set(ref,{...row,line:printed.line});
+        }
+      }
+    }
+    for (const id of release.signature_records) {
+      const source=id.startsWith('release-pdf/')?unitPdfOriginal(graph,id,'release'):
+        MandateOriginals.bind(graph,unitSource(graph,id,'release_original',['payment_release'],'approval_signer'),rows,'release');
+      if (!issuedSource(source,cited,report.calls?.pages) || !release.units.includes(source.record.unit) ||
+          ![id,...source.refs].every(ref=>release.evidence.includes(ref)) ||
+          !graph.payment_release_sources.pages.some(p=>p.role==='release' && p.unit===source.record.unit && p.doc===source.doc.id)) return [];
+      const fields=graph.facts.filter(f=>f.doc===source.doc.id && (f.unit || f.doc)===source.record.unit && f.field==='approval_signer');
+      if (fields.length!==source.record.fields.length || fields.some((f,i)=>source.record.fields[i]!==f.id)) return [];
+      proofs.push(source);
+    }
+    return proofs;
   }
   const mandateSides={buyer:'甲方授权',seller:'乙方授权',unassigned:'委托书归属待核'};
   const mandatePending=['missing','risk','issue'];
@@ -800,5 +836,5 @@ const PerformanceIndex = (() => {
     summary.append(dialog);
     return summary;
   }
-  return {includes,groups,count,originals,fieldLinks,issuedLimitBreach,receiptCitation,receiptEvidence,nativeReceiptCitation,mandateCitation,mandateEvidence,addendumEvidence,overview};
+  return {includes,groups,count,originals,fieldLinks,issuedLimitBreach,receiptCitation,receiptEvidence,nativeReceiptCitation,mandateCitation,mandateEvidence,addendumEvidence,releaseProofs,overview};
 })();

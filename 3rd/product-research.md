@@ -1,5 +1,9 @@
 # 审计与会计软件的公开界面
 
+## 放行审批的原件对照
+
+Dext 允许经办人显示原始资料预览、切换横排或竖排并调整阅读密度。Ramp 的 Bill Pay 分别提供账单审批和支付视图。Fish Audit 在付款放行场景采用单项复核视图，按需打开原行，并让原件上所列签字日与已关联回单日期各自可点击。「间隔 1 天」来自一份有水印的采购底稿。[Dext 的原件预览](https://help.dext.com/en/articles/760441-how-to-customise-the-line-item-editor-in-dext) · [Ramp 的账单与支付视图](https://support.ramp.com/managing-bills-and-payments-on-bill-pay/) · [本项目手机实拍](../docs/interaction-design/release-dates-mobile.webp)
+
 ## 扫描原件的局部核对
 
 Adobe Acrobat 的 Pan & Zoom 通过缩略图上的矩形标记当前视野，移动矩形可以检查页内其他区域。Fish Audit 的扫描件阅读器借鉴这一操作，在兼容键盘和触屏的工具条上提供放大、旋转、适页和页内定位。缩略图框表示当前可见区域，原件的签认位置由审计员查看。[Adobe Acrobat 页面放大和平移](https://helpx.adobe.com/acrobat/using/adjusting-pdf-views.html) · [手机实拍](../docs/interaction-design/scan-viewport-mobile.webp)

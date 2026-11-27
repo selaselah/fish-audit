@@ -195,7 +195,7 @@ export async function checkPublicTopics(ctx) {
   const routes=[
     ['signing',['signing','word-signing','contract-dates','pdf-signing','addendum-signing'],'signing-example',['company','word','calendar','pdf','addendum']],
     ['inspection',['acceptance','batch-standards','acceptance-signers','inspection','named-inspection','suppliers','word-comments'],'inspection-example',['readings','standards','signers','equipment','named','supplier','comments']],
-    ['folios',['guarantee-period','warranty-register','addendum-invoice','contract-comments','payment-proof','signer-clock','signer-timing','payment-acceptance','folios'],'payment-example',['guarantee','warranty','invoice','comments','proof','clock','timing','reference','folios']],
+    ['folios',['guarantee-period','warranty-register','addendum-invoice','contract-comments','payment-release','payment-proof','signer-clock','signer-timing','payment-acceptance','folios'],'payment-example',['guarantee','warranty','invoice','comments','release','proof','clock','timing','reference','folios']],
   ];
   await call('Page.navigate',{url:root+'/#workflow'});
   await wait(q('.scene-tabs')+'?.hidden===false','product workflow ready');
@@ -227,7 +227,11 @@ export async function checkPublicTopics(ctx) {
     assert.ok(Math.abs(scales[0]-scales[1])<.007,'originals share the same print scale at '+width+' '+scales.join('/'));
     for (const [ref,line,file] of [['d02/p1/f13',14,'contract'],['d04/p1/f11',12,'acceptance']]) {
       const anchor=q('#inspection-readings [data-ref="'+ref+'"]');
-      await wait(anchor+'.querySelector(".temperature-sheet img").naturalWidth===320','physical page miniature');
+      const thumbnail=anchor+'.querySelector(".temperature-sheet img")';
+      await wait(thumbnail+'.complete && '+thumbnail+'.naturalWidth>0','physical page miniature');
+      const [source,w,h]=await evaluate('['+thumbnail+'.currentSrc,'+thumbnail+'.naturalWidth,'+thumbnail+'.naturalHeight]');
+      assert.ok(['purchase-'+file+'-thumb-112.webp','purchase-'+file+'-thumb-168.webp','temperature-'+file+'-thumb.webp']
+        .includes(new URL(source).pathname.split('/').at(-1)) && Math.abs(h/w-453/320)<.03);
       const rect=await evaluate(q('#sample-compare figure[data-fact="'+ref+'"]')+'.dataset.rect.split(",").map(Number)');
       const top=await evaluate('parseFloat('+anchor+'.querySelector(".temperature-sheet i").style.top)');
       assert.ok(Math.abs(top-rect[1]*100)<.0001);

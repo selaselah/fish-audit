@@ -5,7 +5,7 @@ const PublicCaseFinder = (() => {
     'inspection-example':{readings:'实测 温度 柜温 超限',standards:'补充协议 标准变更 批次 温度',signers:'人员 联签 签字',
       equipment:'数量 设备',named:'编号 序列号 设备',supplier:'供货 主体 签署',comments:'Word 审阅批注 验收签认原件 排印签认 数量签收 扫描验收单 整改复验 复验签认 实测超限 批注 docx'},
     'payment-example':{guarantee:'预付款 保函 担保 有效期 到期 过期 展期',warranty:'质保金 报修 维修 工单 缺陷 关闭 期满 整改 风扇',invoice:'第二期 验收款 买方 发票 收票 实付 前提 补充协议 Word docx 批注 排印 扫描 照片',comments:'分期 比例 批注 docx',reference:'回单 批次 单号',
-      timing:'验收 签字 扣款 日期',clock:'签字 扣款 时分',proof:'扣款 银行 受理 申请',folios:'多页 合同号 续页'}
+      release:'放行单 放行权限 签认 暂缓 签署版本 签名覆盖本版 前版 签后追加 草稿 会签 提前付款 扫描签认栏',timing:'验收 签字 扣款 日期',clock:'签字 扣款 时分',proof:'扣款 银行 受理 申请',folios:'多页 合同号 续页'}
   };
   function mount(tabs,pickers,choose) {
     const opener=document.getElementById('find-case'), dialog=document.getElementById('case-finder');

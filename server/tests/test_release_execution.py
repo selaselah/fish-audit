@@ -6,11 +6,29 @@ from controls import VERSION, execute
 from performance import verify_findings
 import release_execution as execution
 from test_acceptance_originals import filed
+from test_acceptance_execution import printed
 from test_mandate_originals import word_source
 from test_payment_releases import RELEASE, fixture
+from test_pdf_execution import signed_copy
 
 
 class ReleaseExecutionTests(unittest.TestCase):
+    def test_pdf_digest_conflict_reaches_only_the_held_phase(self):
+        raw = signed_copy(printed(fixture()[0], "d05"))
+        # A change to the binary header comment leaves the printed release unchanged.
+        offset = raw.index(b"%", raw.index(b"\n")+1)+1
+        damaged = raw[:offset] + bytes([raw[offset]^1]) + raw[offset+1:]
+        paper, text = filed(damaged, lambda:fixture()[0], unit="d05", ext=".pdf", render=True)
+        record, = paper["graph"][execution.PDF]["records"]
+        self.assertEqual(record["state"], "mismatch")
+        checks = [f for f in paper["findings"] if record["id"] in f["evidence"]]
+        self.assertEqual([(f["rule"], f["status"], f["stage"]["name"]) for f in checks],
+                         [("H04","risk","第二期"),("H05","risk","第二期")])
+        for f in checks:
+            self.assertTrue(f["payment_opinion"]["release"]["signature_mismatch"])
+            self.assertIn("电子签名与所签内容校验不符",f["detail"])
+        execution.verify(paper, lambda _:damaged, text, signing=True)
+
     def test_word_comment_links_to_its_release_and_original(self):
         raw = word_source(rows=RELEASE, anchor_field="approval_signer", comment=True, note="请另经财务会签")
         paper, text = filed(raw, lambda: fixture()[0], unit="d05", render=True)

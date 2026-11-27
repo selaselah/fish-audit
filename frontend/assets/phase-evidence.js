@@ -165,7 +165,8 @@ const PhaseEvidence = (() => {
     const release=opinion && phase.payment_opinion.release;
     if (release) {
       const matched=release.state==='matched', signatureDay=ReleaseEvidence.fact(graph,phase,release.date_ref);
-      point('release','具名放行','journal-text',matched?'ok':'missing',null,()=>select('opinion'));
+      const mismatch=release.signature_records && (release.signature_mismatch || ['reference_mismatch','signer_mismatch'].includes(release.state));
+      point('release',release.signature_records?'放行签认':'具名放行','journal-text',matched?'ok':mismatch?'risk':'missing',null,()=>select('opinion'));
       const hold=notes.length===1 && notes[0].stance==='hold' ? notes[0] : null;
       const held=phase.payment_opinion.record_dates.find(d=>d.unit===hold?.unit && d.date===release.held_on);
       const mandate=ReleaseEvidence.one(ReleaseEvidence.sources(graph,phase),'authority');
@@ -176,6 +177,7 @@ const PhaseEvidence = (() => {
           open:()=>openPage(hold.doc,hold.page,observation?.id,observation?null:hold.line)});
       }
       if (matched && signatureDay?.field==='release_signed_on') event('release','签字放行',release.signed_on,signatureDay,'ok');
+      if (release.state==='signature_pending' && signatureDay?.field==='release_signed_on') event('release','单上所列签字日',release.signed_on,signatureDay,'missing');
     }
     if (!checkpoints.length && !events.length && !opinion) return null;
     const root=el('section','','phase-evidence');
@@ -266,10 +268,12 @@ const PhaseEvidence = (() => {
     else if (payments.some(p=>p.payment_change?.applies==='same_day')) timing='生效与实付同日 · 时分待核';
     else if (dated.some(e=>e.status==='missing' && e.day===e.payment.invoice_receipt.receipt.received_on)) timing='同日收付 · 时分待核';
     const released=payments.map(p=>p.payment_opinion?.release).filter(Boolean);
-    const before=released.filter(r=>r.timing==='before');
+    const before=released.filter(r=>(r.written_timing || r.timing)==='before');
     let releaseTiming='';
-    if (before.length===1) releaseTiming='实付早于放行 '+(Date.parse(before[0].signed_on)-Date.parse(before[0].paid_on))/86400000+' 天';
+    if (before.length===1) releaseTiming=(before[0].written_timing?'早于所列签字日 ':'实付早于放行 ')+(Date.parse(before[0].signed_on)-Date.parse(before[0].paid_on))/86400000+' 天';
+    else if (before.length && before.some(r=>r.written_timing)) releaseTiming=before.length+' 笔早于所列签字日';
     else if (before.length) releaseTiming=before.length+' 笔实付早于放行';
+    else if (released.some(r=>r.written_timing==='same_day')) releaseTiming='两单同日 · 时分待核';
     else if (released.some(r=>r.timing==='same_day')) releaseTiming='放行与实付同日 · 时分待核';
     if (releaseTiming) timing=[releaseTiming,timing].filter(Boolean).join(' · ');
     const shortcuts=new Map();
@@ -321,7 +325,7 @@ const PhaseEvidence = (() => {
       for (const payment of payments) linked(payment,'receipt-payment-date',payments.length===1?'对照收付日期':'对照收付日期 · '+payment.id,more);
     }
     if (more!==tools && !more.children.length) more.parentElement.remove();
-    const modes=[['checks','条件核对',checks],['timeline','时间线',rail],['batch','本批原件',batchPanel],['warranty','质保时点',warranty],['tickets','维修工单',tickets],['opinion','付款意见',opinion]].filter(([, ,view])=>view?.children.length);
+    const modes=[['checks','条件核对',checks],['timeline','时间线',rail],['batch','本批原件',batchPanel],['warranty','质保时点',warranty],['tickets','维修工单',tickets],['opinion',release?.signature_records?.length?'放行依据':'付款意见',opinion]].filter(([, ,view])=>view?.children.length);
     function select(key) {
       index.phaseViews.set(phase.id,key);
       root.dataset.mode=key;
@@ -330,7 +334,7 @@ const PhaseEvidence = (() => {
         view.hidden=!active;
         controls.querySelector('[data-mode="'+mode+'"]').setAttribute('aria-pressed',String(active));
       }
-      count.textContent=key==='tickets' || key==='warranty' || key==='batch'?'':key==='opinion'?(release?ReleaseEvidence.caption(release,ReleaseEvidence.sources(graph,phase)):AcceptanceOpinion.caption(phase.payment_opinion)):key==='checks'?checkpoints.filter(s=>s.status==='ok').length+' / '+checkpoints.length+' 项相符':
+      count.textContent=key==='tickets' || key==='warranty' || key==='batch' || key==='opinion' && opinion.classList.contains('release-proof')?'':key==='opinion'?(release?ReleaseEvidence.caption(release,ReleaseEvidence.sources(graph,phase)):AcceptanceOpinion.caption(phase.payment_opinion)):key==='checks'?checkpoints.filter(s=>s.status==='ok').length+' / '+checkpoints.length+' 项相符':
         timing || events.length+' 项日期记录';
       count.classList.toggle('timing-alert',Boolean(timing && key==='timeline' || key==='opinion' && phase.payment_opinion.state!=='assent' && release?.state!=='matched'));
       if (key==='opinion') opinion.dispatchEvent(new Event('show-opinion'));
