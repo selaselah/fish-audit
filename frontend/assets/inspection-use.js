@@ -1,6 +1,6 @@
 // A payment restriction can be present on the original even when neither reader transcribed it as a field.
 const InspectionUse = (() => {
-  const format='cited-inspection-payment-use-v1';
+  const firstFormat='cited-inspection-payment-use-v1', format='cited-inspection-payment-use-v2';
   const labels={ban:'与回单用途冲突',approval:'另行审批待核',conditional:'签字条件待核',unclear:'适用范围待核',
     other_document:'附注来自另一份单据',other_stage:'附注属于其他期次'};
   const same=(left,right)=>Array.isArray(left) && Array.isArray(right) && left.length===right.length && left.every((v,i)=>v===right[i]);
@@ -23,13 +23,13 @@ const InspectionUse = (() => {
 
   function bind(item,report) {
     const c=item.inspection_use;
-    if (!c || item.rule!=='H05' || item.execution_basis || !Object.hasOwn(labels,c.state) || c.format!==format ||
-        report.policy.inspection_use!==format || !/^[a-f0-9]{64}$/u.test(report.policy.code_sha256?.['inspection_use.py'])) return null;
+    if (!c || item.rule!=='H05' || item.execution_basis || !Object.hasOwn(labels,c.state) || ![firstFormat,format].includes(c.format) ||
+        report.policy.inspection_use!==c.format || !/^[a-f0-9]{64}$/u.test(report.policy.code_sha256?.['inspection_use.py'])) return null;
     const g=report.graph, idx=graphIndex(g), ledger=g.inspection_use_sources, link=receipt(item,report);
     const node=idx.nodes.get('finding/'+item.id), supported=new Set(traceReferences(g,item));
     if (!link || c.cited!==link.cited || c.number!==link.number || c.bank!==link.bank || c.citation!==link.citation ||
         c.number_ref!==link.own || !item.stage?.clause_ref || node?.detail!==item.detail || node.status!==item.status ||
-        ledger?.format!==format || !Array.isArray(ledger.rows) || !Array.isArray(c.notes) || !c.notes.length ||
+        ledger?.format!==c.format || !Array.isArray(ledger.rows) || !Array.isArray(c.notes) || !c.notes.length ||
         !Array.isArray(c.evidence) || !c.evidence.every(ref=>supported.has(ref)) ||
         ![c.citation,c.number_ref,item.stage.clause_ref].every(ref=>c.evidence.includes(ref))) return null;
     const rows=ledger.rows.filter(r=>link.units.includes(r.unit));
@@ -38,7 +38,6 @@ const InspectionUse = (() => {
     const expected=c.notes.filter(n=>n.scope==='cited').map(n=>n.row);
     if (!same(edges.map(e=>e.to),expected) || edges.some(e=>!same(e.evidence,[c.citation,c.number_ref,e.to]))) return null;
     const stage=/^第([\d零一二两三四五六七八九十]+)期$/u.exec(item.stage.name);
-    const review=g.acceptance_word_reviews?.documents?.some(d=>d.units.includes(c.cited) && (d.notes.length || d.coverage!=='complete'));
     const bound=[], active=[];
     for (const [i,r] of rows.entries()) {
       const pageId=r.doc+'/p'+r.page, node=idx.nodes.get(r.id), page=idx.nodes.get(pageId);
@@ -58,8 +57,14 @@ const InspectionUse = (() => {
               f.source_line?.number===r.line && f.source_line.text===r.quote;
           })) return null;
       let scope='cited';
+      const review=g.acceptance_word_reviews?.documents?.some(d=>d.units.includes(r.unit) && (d.notes.length || d.coverage!=='complete'));
       const applies=stage && (r.index==null || BatchPhase.sameOrdinal(stage[1],r.index) || /^\d+$/u.test(stage[1]) && Number(stage[1])===r.index);
-      if (r.unit!==c.cited) scope=r.kind==='approval' && !/本(?:单|报告|复验单|复验报告|验收单|验收报告)/u.test(r.quote)?'unresolved':'other_document';
+      if (r.unit!==c.cited) {
+        const foreignTitle=r.unit===item.retest_reference?.units?.original && /本复验(?:单|报告)/u.test(r.quote);
+        const local=c.format===firstFormat ? r.kind!=='approval' || /本(?:单|报告|复验单|复验报告|验收单|验收报告)/u.test(r.quote) :
+          ['ban','conditional'].includes(r.kind) && r.rects.length && !(r.disputed || foreignTitle || review);
+        scope=local?'other_document':'unresolved';
+      }
       else if (r.disputed || !r.rects.length || review) scope='unresolved';
       else if (stage && r.index && !applies) scope='other_stage';
       else if (!stage || !['ban','approval','conditional'].includes(r.kind) || (r.role!=null && r.role!=='验收款')) scope='unresolved';
@@ -113,7 +118,8 @@ const InspectionUse = (() => {
     const c=item.inspection_use, root=el('section','','inspection-use');
     root.id='inspection-use-'+item.id;root.setAttribute('aria-label','验收单的付款用途');
     Object.assign(root.dataset,{useFinding:item.id,caseId:report.case_id,rev:String(rev),status:c.status});
-    root.append(box('inspection-use-heading',el('h4','验收单的付款用途'),el('span',labels[c.state])));
+    const cross=c.state==='unclear' && bound.some(b=>b.scope==='unresolved' && b.row.unit!==c.cited);
+    root.append(box('inspection-use-heading',el('h4','验收单的付款用途'),el('span',cross?'附注所指范围待核':labels[c.state])));
     for (const entry of bound) {
       const {row,doc,scope}=entry;
       const place=doc.name+' · 第 '+row.page+' 页'+(row.rects.length?' · 第 '+row.line+' 行':'');

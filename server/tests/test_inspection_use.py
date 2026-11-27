@@ -5,6 +5,7 @@ from config import PERFORMANCE
 from controls import execute
 import inspection_use as use
 from performance import verify_findings
+from test_delivery_batches import receipt
 from test_payment_acceptance import specimen, transfers
 from test_retest_reference import payments, sample
 
@@ -81,6 +82,49 @@ class InspectionUseTests(unittest.TestCase):
         g[use.KEY]["rows"][0]["disputed"]=True
         _,check=next(use.checks(g,p["findings"]))
         self.assertEqual(check["state"],"unclear")
+        p,_,_=packet([(2,BAN.replace("复验单","验收单"))])
+        g=p["graph"]
+        g["acceptance_word_reviews"]["documents"]=[{"id":"review/d02","units":["d02"],"coverage":"incomplete","notes":[]}]
+        _,check=next(use.checks(g,p["findings"]))
+        self.assertEqual(check["state"],"unclear")
+        self.assertIn("review/d02",check["evidence"])
+
+    def test_note_on_the_initial_sheet_can_refer_to_the_final_or_whole_installment(self):
+        for text in ("用途说明：复验单 FY-02 不得作为第二期验收款的付款依据。", BAN,
+                     "审批说明：本验收单仅确认质量，第二期验收款须另经财务负责人审批。",
+                     "付款说明：本合同所有验收单不得作为付款依据。"):
+            with self.subTest(text=text):
+                p,read,layout=packet([(2,text)])
+                f,=payments(p)
+                self.assertEqual((f["inspection_use"]["state"],f["inspection_use"]["notes"][0]["scope"]),("unclear","unresolved"))
+                self.assertNotEqual(f["status"],"ok")
+                self.assertEqual(use.edges(p["findings"]),[])
+                use.verify(p,read,read_layout=layout)
+
+    def test_archived_other_sheet_conclusion_replays_and_needs_reaudit_to_sign(self):
+        for text,legacy_ok in ((BAN.replace("复验单","验收单"),True),("用途说明：复验单 FY-02 不得作为第二期验收款的付款依据。",False)):
+            p,read,layout=packet([(2,text)])
+            g=p["graph"];g[use.KEY]["format"]=use.FIRST_FORMAT
+            p["policy"].update(version="2026.11.27.19",inspection_use=use.FIRST_FORMAT)
+            p["findings"]=execute(g,PERFORMANCE)
+            for f in p["findings"]:
+                f["version"]=p["policy"]["version"]
+            self.assertEqual(payments(p)[0]["inspection_use"]["state"],"other_document")
+            use.verify(p,read,read_layout=layout)
+            if legacy_ok:
+                use.verify(p,read,read_layout=layout,signing=True)
+            else:
+                with self.assertRaisesRegex(ValueError,"重审"):
+                    use.verify(p,read,read_layout=layout,signing=True)
+
+    def test_batch_reference_keeps_a_number_match_separate_from_an_ambiguous_exception(self):
+        second=[(k,l,"本验收单不得作为第三期验收款的付款依据。" if k=="acceptance_exception" else v) for k,l,v in receipt(2)]
+        g,_=specimen(("YS-10","YS-20"),second=second)
+        wrong,right=transfers(g)
+        self.assertEqual([f["payment_acceptance"]["state"] for f in (wrong,right)],["other_batch","matched"])
+        self.assertEqual([f["inspection_use"]["state"] for f in (wrong,right)],["unclear","unclear"])
+        self.assertEqual([f["status"] for f in (wrong,right)],["risk","missing"])
+        self.assertEqual(use.edges([wrong,right]),[])
 
     def test_forged_links_and_legacy_release_are_rejected(self):
         p,read,layout=packet([(4,BAN)])

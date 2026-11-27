@@ -120,6 +120,11 @@ def save_note(store, workspace, author, role, data):
             cited = proof.get(use_pin[1],set()) if use_pin else set().union(*proof.values())
             if not cited or raw and raw not in cited:
                 raise CaseError("所选版本的付款发现没有引用该用途原行。",404)
+            if context.get("raw_ref") and not db.execute("""SELECT 1 FROM reports,
+                        json_each(content,'$.graph.inspection_use_sources.rows') AS r
+                        WHERE case_id=? AND rev=? AND json_extract(r.value,'$.id')=?
+                        AND json_array_length(r.value,'$.rects')>0""",(context["case_id"],context["rev"],raw)).fetchone():
+                raise CaseError("所选版本没有可定位的付款用途行框。",404)
         if context["screen"] == "case" and (pin := QUALITY_PIN.fullmatch(anchor) or RETEST_PIN.fullmatch(anchor)):
             retest = pin.re == RETEST_PIN
             row = db.execute("""SELECT json_extract(f.value,?) FROM reports, json_each(content,'$.findings') AS f

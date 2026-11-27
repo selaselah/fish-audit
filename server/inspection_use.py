@@ -9,10 +9,12 @@ from delivery_batches import NUM, ordinal
 from payment_acceptance import GRAPH_KEY, LEVEL
 
 
-FORMAT = "cited-inspection-payment-use-v1"
+FIRST_FORMAT = "cited-inspection-payment-use-v1"
+FORMAT = "cited-inspection-payment-use-v2"
 KEY = "inspection_use_sources"
 RECTS = "inspection_use_rects"
 SINCE = (2026, 11, 27, 19)
+CROSS_DOCUMENT_SINCE = (2026, 11, 27, 20)
 PURPOSE_HEADINGS = {"用途说明", "付款用途说明", "付款依据说明", "审批说明", "凭证用途", "用途限制"}
 HEADINGS = PURPOSE_HEADINGS | {"付款说明", "付款意见", "验收备注", "复验备注"}
 SHEET = r"本(?:单|报告|复验单|复验报告|验收单|验收报告)"
@@ -41,9 +43,9 @@ def classify(quote):
     return None
 
 
-def sources(graph, read_text, read_layout):
+def sources(graph, read_text, read_layout, version=FORMAT):
     from graph import LABELS, PRINTED_TITLES
-    ledger = {"format":FORMAT, "rows":[]}
+    ledger = {"format":version, "rows":[]}
     if not any(r["role"]=="bank_receipt" and r["kind"]=="citation" for r in graph.get(GRAPH_KEY,{}).get("rows",())):
         return ledger
     nodes = {p["id"]:p for p in graph["nodes"] if p["type"]=="page"}
@@ -104,7 +106,8 @@ def reference(f):
 
 
 def checks(graph, findings):
-    rows = graph.get(KEY,{}).get("rows",())
+    ledger = graph.get(KEY,{})
+    rows = ledger.get("rows",())
     if not rows:
         return
     for f in findings:
@@ -116,16 +119,25 @@ def checks(graph, findings):
         stage = re.fullmatch("第("+NUM+")期",f["stage"]["name"])
         index = ordinal(stage[1]) if stage else None
         notes,refs,active = [],[citation,number_ref,f["stage"]["clause_ref"]],[]
+        review_units = {cited}
+        if ledger["format"] == FORMAT:
+            review_units.update(r["unit"] for r in rows if r["unit"] in units)
         reviews = [d for d in graph.get("acceptance_word_reviews",{}).get("documents",())
-                   if cited in d["units"] and (d["notes"] or d["coverage"] != "complete")]
+                   if review_units.intersection(d["units"]) and (d["notes"] or d["coverage"] != "complete")]
         for r in rows:
             if r["unit"] not in units:
                 continue
-            if r["unit"]!=cited and r["kind"]=="approval" and not re.search(SHEET,r["quote"]):
-                scope = "unresolved"
-            elif r["unit"]!=cited:
-                scope = "other_document"
-            elif r["disputed"] or not r["rects"] or reviews:
+            review = any(r["unit"] in d["units"] for d in reviews)
+            if r["unit"] != cited:
+                if ledger["format"] == FIRST_FORMAT:
+                    local = r["kind"] != "approval" or bool(re.search(SHEET,r["quote"]))
+                else:
+                    # A note filed on the initial sheet can explicitly govern a different sheet or the whole installment.
+                    initial = f.get("retest_reference",{}).get("units",{}).get("original")
+                    foreign_title = r["unit"] == initial and re.search(r"本复验(?:单|报告)", r["quote"])
+                    local = r["kind"] in ("ban","conditional") and r["rects"] and not (r["disputed"] or foreign_title or review)
+                scope = "other_document" if local else "unresolved"
+            elif r["disputed"] or not r["rects"] or review:
                 scope = "unresolved"
             elif r["index"] and index and r["index"]!=index:
                 scope = "other_stage"
@@ -144,7 +156,7 @@ def checks(graph, findings):
         if active:
             state = active[0] if len(active)==1 else "unclear"
         status = "risk" if state=="ban" else "missing" if active else "ok"
-        yield f, {"format":FORMAT,"bank":bank,"cited":cited,"citation":citation,"number_ref":number_ref,"number":number,
+        yield f, {"format":ledger["format"],"bank":bank,"cited":cited,"citation":citation,"number_ref":number_ref,"number":number,
                   "state":state,"status":status,"notes":notes,"evidence":list(dict.fromkeys(refs))}
 
 
@@ -194,7 +206,8 @@ def verify(report, read_text, *, read_layout=None, signing=False):
     claims = {f["id"]:f["inspection_use"] for f in fs if "inspection_use" in f}
     by_page = {(c["doc"],c["page"]):c for c in calls}
     layout = read_layout or (lambda d,n:{"lines":by_page.get((d,n),{}).get(RECTS,{})})
-    if tuple(map(int,p.get("version","0").split(".")))<SINCE:
+    revision = tuple(map(int,p.get("version","0").split(".")))
+    if revision<SINCE:
         if KEY in g or p.get("inspection_use") or "inspection_use.py" in p.get("code_sha256",{}) or claims or actual_nodes or source_edges or links or any(RECTS in c for c in calls):
             raise ValueError("历史底稿含未出具的验收单付款用途判断")
         if signing and any(f["rule"]=="H05" and reference(f) for f in fs):
@@ -202,8 +215,9 @@ def verify(report, read_text, *, read_layout=None, signing=False):
             if any(c["status"]=="risk" or f["status"]=="ok" and c["status"]=="missing" for f,c in checks(current,fs)):
                 raise ValueError("旧底稿所引验收单另有付款用途限制，请重审后签收")
         return
-    ledger=sources(g,read_text,layout)
-    if (p.get("inspection_use")!=FORMAT or "code_sha256" in p and "inspection_use.py" not in p["code_sha256"] or
+    version = FIRST_FORMAT if revision < CROSS_DOCUMENT_SINCE else FORMAT
+    ledger=sources(g,read_text,layout,version)
+    if (p.get("inspection_use")!=version or "code_sha256" in p and "inspection_use.py" not in p["code_sha256"] or
             g.get(KEY)!=ledger or (actual_nodes,source_edges)!=source_graph(ledger) or links!=edges(fs)):
         raise ValueError("验收单付款用途原文、方法或图关系不符")
     expected={f["id"]:c for f,c in checks(g,fs)}
@@ -221,3 +235,8 @@ def verify(report, read_text, *, read_layout=None, signing=False):
             if r["rects"]:
                 coords[r["doc"],r["page"]][str(r["line"])]=r["rects"]
         verify_page_geometry(calls,line_numbers(ledger["rows"]),coords,RECTS,"验收单付款用途",read_layout)
+    if signing and version == FIRST_FORMAT:
+        current = {**g,KEY:{**ledger,"format":FORMAT}}
+        for f,updated in checks(current,fs):
+            if expected[f["id"]]["status"] == "ok" and updated["status"] != "ok":
+                raise ValueError("旧底稿将另一份验收单的付款附注列作仅适用于原单，其所指单据或本期审批范围待核，请重审后签收")

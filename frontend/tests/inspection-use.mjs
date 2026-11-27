@@ -81,8 +81,10 @@ export async function checkInspectionUse(ctx,cid) {
     const a=notes.find(n=>n.text===cardNote).context, b=notes.find(n=>n.text===pageNote).context;
     assert.deepEqual([a.case_id,a.rev,a.anchor,a.target,a.params],[cid,rev,control.slice(1),label,{view:'payment-checks',stage:id}]);
     assert.deepEqual([b.case_id,b.rev,b.doc,b.page,b.line,b.raw_ref],[cid,rev,row.doc,row.page,row.line,row.id]);
-    for (const [context,status] of [[{...a,rev:rev-1},404],[{...a,anchor:card.slice(1)+'-'+row.doc+'-p1-l1'},404],
-      [{...a,params:{view:'payment-checks',stage:'H05-999'}},400],[{...b,line:1},400],[{...b,rev:rev-1},404]]) {
+    const prior=rev>1 && (await json(api+'/reports/'+(rev-1))).report.findings.find(f=>f.id===id);
+    const absent=prior && !prior.inspection_use?.notes.some(n=>n.row===row.id) ? rev-1 : task.rev+1;
+    for (const [context,status] of [[{...a,rev:absent},404],[{...a,anchor:card.slice(1)+'-'+row.doc+'-p1-l1'},404],
+      [{...a,params:{view:'payment-checks',stage:'H05-999'}},400],[{...b,line:1},400],[{...b,rev:absent},404]]) {
       const r=await fetch(root+'/api/walkthrough',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({id:'3'.repeat(32),context,text:cardNote})});assert.equal(r.status,status);
     }
