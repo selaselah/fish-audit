@@ -41,6 +41,7 @@ import installment_approval
 import approval_names
 import approval_changes
 import party_readings
+import installment_counts
 import warranty_service
 import warranty_register
 import payment_windows
@@ -563,11 +564,14 @@ def stage_terms(text):
     return ratio[0] if len(ratio) == 1 else "", "", ""
 
 
-def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=(),release_terms=(),prior_terms=(),folio_sources=None, guarantees=(), named_approvals=()):
+def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=(),release_terms=(),prior_terms=(),folio_sources=None, guarantees=(), named_approvals=(), count_row=None):
     fields = ("payment_term","payment_stage","adjustment")
     refs = contract.evidence("contract",*fields)
     rows, counts, issues = [], set(), []
     seen_lines = set()
+    if count_row:
+        counts.add(count_row["count"])
+        seen_lines.add(norm(count_row["quote"]))
     for fact in contract.fields["payment_term"] + contract.fields["payment_stage"]:
         line = norm(fact["quote"])
         if line in seen_lines:
@@ -639,7 +643,13 @@ def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=
         issues.append("完整付款方式或各期比例待核")
     elif any(Decimal(r["share"]) <= 0 for r in rows) or sum(Decimal(r["share"]) for r in rows) != 100:
         issues.append("各期正数比例未能合计至 100%")
-    if contract.fields["adjustment"] or contract.incomplete(*fields):
+    incomplete = contract.incomplete(*fields)
+    if count_row:
+        # Only the readings of this particular header have been reconciled.
+        incomplete = contract.incomplete("payment_stage","adjustment") or any(
+            g.get("field")=="payment_term" and (g.get("quality"),g.get("line"),g.get("quote"))!=
+            ("uncovered",count_row["line"],count_row["quote"]) for g in contract.gaps)
+    if contract.fields["adjustment"] or incomplete:
         issues.append("付款条款存在变更或原页覆盖缺口")
     assigned={(r["doc"],r["page"],r["line"],r["quote"]) for r,index,kind in named_approvals
               if sum(v["index"]==index and v["kind"]==kind for v in rows)==1}
@@ -760,6 +770,8 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True, recheck_
         party_readings.attach(graph,results)
         approval_names.apply_conditions(graph,results)
         approval_changes.apply(graph,results)
+        for count in graph.get(installment_counts.KEY,{}).get("rows",()):
+            installment_counts.attach(results,count)
     return results
 
 
@@ -857,6 +869,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
     invoice_terms = [s for s in ledger["lines"] if s["role"]=="clause"] if ledger else []
     guarantees = advance_guarantee.scoped_terms(graph,contract.unit) if version==FORMAT else ()
     plan, rows = schedule(contract, warranty_checks=version in WARRANTY_FORMATS, deadlines=version in PAYMENT_WINDOW_FORMATS,release_terms=cash.get("lines",[]),guarantees=guarantees,
+                          count_row=next((r for r in graph.get(installment_counts.KEY,{}).get("rows",()) if r["unit"]==contract.unit and r["rects"]),None) if version==FORMAT else None,
                           named_approvals=approval_names.stage_terms(graph,contract.unit) if version==FORMAT else (),
                           prior_terms=graph.get("prior_installment_sources",{}).get("lines",[]) if version==FORMAT else (),
                           folio_sources=graph.get("contract_folio_sources") if version==FORMAT else None,
@@ -1354,6 +1367,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("retest_reference") != entry.get("retest_reference")
                 or saved.get("inspection_use") != entry.get("inspection_use")
                 or saved.get("party_readings") != entry.get("party_readings")
+                or saved.get("installment_count") != entry.get("installment_count")
                 or saved.get("warranty_difference") != entry.get("warranty_difference")
                 or saved.get("contract_folios") != entry.get("contract_folios")
                 or saved.get("prior_installment") != entry.get("prior_installment")

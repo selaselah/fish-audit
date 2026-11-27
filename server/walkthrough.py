@@ -18,6 +18,7 @@ RETEST_PIN = re.compile(r"retest-(H05-[1-9][0-9]{0,7})(?:-(clause|citation|payme
 USE_PIN = re.compile(r"(?:inspection-use|payment-approval|payment-clock|contract-approver)-(H05-[1-9][0-9]{0,7})(?:-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7}))?")
 CHANGE_PIN = re.compile(r"approver-change-(H0[45]-[1-9][0-9]{0,7})(?:-(approval-change|contract-approver|payment-approval|payment-clock|inspection-use)-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7}))?")
 PARTY_PIN = re.compile(r"party-reading-(d[0-9]{2,8})-p1-(f[1-9][0-9]{0,7})")
+COUNT_PIN = re.compile(r"installment-count-(H0[3456]-[1-9][0-9]{0,7})")
 
 
 def check_context(value):
@@ -31,7 +32,7 @@ def check_context(value):
         patterns["intake"] = r"contract|purchase|travel|payment"
     if screen == "case":
         patterns.update(case_id=r"[a-f0-9]{32}", tab=r"report|evidence|graph|activity", doc=r"d[0-9]{2,8}",
-                        raw_ref=r"(?:inspection-use|payment-approval|payment-clock|contract-approver|approval-change)/d[0-9]{2,8}/p[1-9][0-9]{0,7}/l[1-9][0-9]{0,7}")
+                        raw_ref=r"(?:inspection-use|payment-approval|payment-clock|contract-approver|approval-change|installment-count)/d[0-9]{2,8}/p[1-9][0-9]{0,7}/l[1-9][0-9]{0,7}")
         if "case_id" not in value:
             raise CaseError("走查底稿编号缺失。", 400)
     result = {"screen": screen}
@@ -64,8 +65,8 @@ def check_context(value):
     if raw := result.get("raw_ref"):
         if not result.get("rev") or raw.partition("/")[2] != f"{result.get('doc')}/p{result.get('page')}/l{result.get('line')}" or params:
             raise CaseError("请选择该版底稿中对应的付款用途原行。",400)
-    if screen == "case" and anchor.startswith(("quality-H","retest-H","inspection-use-","payment-approval-","payment-clock-","contract-approver-","approver-change-")):
-        pin = QUALITY_PIN.fullmatch(anchor) or RETEST_PIN.fullmatch(anchor) or USE_PIN.fullmatch(anchor) or CHANGE_PIN.fullmatch(anchor)
+    if screen == "case" and anchor.startswith(("quality-H","retest-H","inspection-use-","payment-approval-","payment-clock-","contract-approver-","approver-change-","installment-count-")):
+        pin = QUALITY_PIN.fullmatch(anchor) or RETEST_PIN.fullmatch(anchor) or USE_PIN.fullmatch(anchor) or CHANGE_PIN.fullmatch(anchor) or COUNT_PIN.fullmatch(anchor)
         if not pin or not result.get("rev") or params != {"view":"payment-checks", "stage":pin[1]}:
             raise CaseError("请选择底稿版本及相应验收款检查项。", 400)
     if screen == "case" and (params.get("view") == "board-decision" or {"filing","part"}.intersection(params)):
@@ -128,7 +129,19 @@ def save_note(store, workspace, author, role, data):
                 raise CaseError("所选版本没有引用这个主体字段和原件行。",404)
         use_pin = USE_PIN.fullmatch(anchor)
         change_pin=CHANGE_PIN.fullmatch(anchor)
-        if context["screen"] == "case" and (use_pin or change_pin or context.get("raw_ref")):
+        count_pin=COUNT_PIN.fullmatch(anchor)
+        count_raw=context.get("raw_ref","").startswith("installment-count/")
+        if context["screen"]=="case" and (count_pin or count_raw):
+            finding=count_pin[1] if count_pin else None
+            raw=context.get("raw_ref")
+            linked=db.execute("""SELECT 1 FROM reports,json_each(content,'$.findings') f,json_each(content,'$.graph.installment_count_sources.rows') r
+                WHERE case_id=? AND rev=? AND json_extract(content,'$.policy.installment_count')='printed-installment-count-v1'
+                AND json_extract(f.value,'$.installment_count')=json_extract(r.value,'$.id') AND json_array_length(r.value,'$.rects')>0
+                AND (? IS NULL OR json_extract(f.value,'$.id')=?) AND (? IS NULL OR json_extract(r.value,'$.id')=?)""",
+                (context["case_id"],context["rev"],finding,finding,raw,raw)).fetchone()
+            if not linked:
+                raise CaseError("所选底稿没有引用这条合同分期总述。",404)
+        elif context["screen"] == "case" and (use_pin or change_pin or context.get("raw_ref")):
             rows = db.execute("""SELECT json_extract(f.value,'$.id'),json_extract(f.value,'$.inspection_use.notes'),
                               json_extract(f.value,'$.inspection_use.approval.rows'),json_extract(f.value,'$.inspection_use.approval.clock.rows'),
                               json_extract(f.value,'$.inspection_use.approval.names.rows')

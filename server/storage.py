@@ -61,6 +61,7 @@ import payment_quality
 import retest_reference
 import inspection_use
 import party_readings
+import installment_counts
 import board_execution
 from invoice_conditions import verify as verify_invoice_conditions
 from repair_completion import verify as verify_repair_completion
@@ -84,7 +85,7 @@ FULL_PAGE_EVIDENCE = (
     "effect_review", "warranty_check", "warranty_difference", "payment_window", "acceptance_reservations", "acceptance_comments",
     "contract_comments", "stage_payments", "invoice_receipt", "payment_change", "payment_opinion",
     "equipment_models", "inspection_coverage", "payment_acceptance", "execution_basis", "contract_folios",
-    "prior_installment", "advance_guarantee", "payment_quality", "retest_reference", "inspection_use", "party_readings","approval_change","approval_change_scope",
+    "prior_installment", "advance_guarantee", "payment_quality", "retest_reference", "inspection_use", "party_readings","approval_change","approval_change_scope","installment_count",
 )
 
 
@@ -832,6 +833,10 @@ class Store:
             except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
                 raise CaseError(f"签收前核对主体原行失败。{error}",409) from error
             try:
+                installment_counts.verify_originals(paper,read_original)
+            except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
+                raise CaseError(f"签收前核对合同分期总述原件失败。{error}",409) from error
+            try:
                 inspection_use.verify_originals(paper,read_original)
             except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
                 raise CaseError(f"签收前核对验收单付款用途失败。{error}",409) from error
@@ -970,6 +975,10 @@ class Store:
             except (KeyError,TypeError,ValueError) as error:
                 raise CaseError(f"签收前核对主体原行失败。{error}",409) from error
             try:
+                installment_counts.verify(paper,page_text,signing=True,read_layout=page_layout)
+            except (KeyError,TypeError,ValueError) as error:
+                raise CaseError(f"签收前核对合同分期总述失败。{error}",409) from error
+            try:
                 inspection_use.verify(paper,page_text,signing=True,read_layout=page_layout)
             except (KeyError,TypeError,ValueError) as error:
                 raise CaseError(f"签收前核对验收单付款用途失败。{error}",409) from error
@@ -1056,7 +1065,7 @@ class Store:
         execution_checked = any(f.get("execution_basis") for f in paper["findings"])
         bank_acceptance_checked = any(f.get("payment_acceptance") for f in paper["findings"])
         inspection_checked = any(f.get("inspection_coverage") for f in paper["findings"])
-        folios_checked = any(f.get("contract_folios") for f in paper["findings"])
+        folios_checked = any(f.get("contract_folios") or f.get("installment_count") for f in paper["findings"])
         multi_transfers = any(f.get("stage_payments") for f in paper["findings"])
         packets_checked = bool(graph.get("receipt_packet_sources",{}).get("packets")) and any(f["rule"]=="H02" for f in paper["findings"])
         if graph.get("profile")!=BANK and (contract_comments_checked or comments_checked or folios_checked or changed or named_acceptance or chronology or batches or packets_checked or multi_transfers or invoice_terms_checked or guarantee_checked or model_checked or inspection_checked or bank_acceptance_checked or execution_checked or effect_checked or warranty_checked or windows_checked or reservations_checked or any(f.get("delegations") for f in paper["findings"])):

@@ -56,6 +56,7 @@ import payment_quality
 import retest_reference
 import inspection_use
 import party_readings
+import installment_counts
 import board_execution
 from invoice_conditions import verify as verify_invoice_conditions
 from repair_completion import verify as verify_repair_completion
@@ -312,6 +313,8 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
     inspection_use.verify(report,page_text)
     party_readings.verify(report,page_text)
     party_readings.verify_originals(report,read_original)
+    installment_counts.verify(report,page_text)
+    installment_counts.verify_originals(report,read_original)
     board_execution.verify(report, read_original, page_text)
     verify_repair_completion(report,page_text)
     verify_reinspection_wait(report,page_text)
@@ -531,6 +534,8 @@ def render_addendum_sources(bundle, report, nodes):
                 require(layout["lines"].get(line_number, []) == rects, "付款凭证说明的行坐标未能从原件重现")
             for line_number, rects in trace.get(inspection_use.RECTS, {}).items():
                 require(layout["lines"].get(line_number, []) == rects, "验收单付款用途附注的行坐标未能从原件重现")
+            for line_number, rects in trace.get(installment_counts.RECTS, {}).items():
+                require(layout["lines"].get(line_number, []) == rects, "分期总述的行坐标未能从合同原件重现")
             for line_number, rects in trace.get(advance_guarantee.RECTS, {}).items():
                 require(layout["lines"].get(line_number, []) == rects, "预付款保函的行坐标未能从原件重现")
             for line_number, rects in trace.get("signer_timing_rects", {}).items():

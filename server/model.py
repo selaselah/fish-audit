@@ -370,6 +370,9 @@ def audit_graph(graph, controls):
                     used=set(clock["rows"])
                     procedure["bank_clock_lines"]=[{k:r[k] for k in ("id","quote","field","doc","page","line")}
                         for page in graph["inspection_use_sources"]["bank_clocks"] for r in page["rows"] if r["id"] in used]
+        if declared:=finding.get("installment_count"):
+            count=next(r for r in graph["installment_count_sources"]["rows"] if r["id"]==declared)
+            procedure["installment_count"]={k:count[k] for k in ("id","count","quote","model_quote","model_ref","doc","page","line")}
         if scope:=finding.get("approval_change_scope"):
             procedure["approval_change_scope"]=scope
             procedure["change_scope_line"]=next({k:r[k] for k in ("id","quote","field","doc","page","line")}
