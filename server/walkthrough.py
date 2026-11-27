@@ -9,7 +9,7 @@ from storage import encode, stamp
 
 SCREENS = {"home", "desk", "case", "rules", "library", "team", "account"}
 HOME_PARAMS = {"scene", "slip", "copy", "edition", "batch", "record", "pdf", "carrier", "term", "agreement"}
-CASE_PARAMS = {"view", "stage", "instrument", "receipt", "ticket", "call", "agreement", "acceptance", "finding", "fact", "prior", "entry"}
+CASE_PARAMS = {"view", "stage", "instrument", "receipt", "ticket", "call", "agreement", "acceptance", "finding", "fact", "prior", "entry", "filing", "part"}
 
 
 def check_context(value):
@@ -45,6 +45,11 @@ def check_context(value):
     if ("doc" in result) != ("page" in result) or ("line" in result and "page" not in result):
         raise CaseError("走查原页位置不完整。", 400)
     params = result.get("params", {})
+    if screen == "case" and (params.get("view") == "board-decision" or {"filing","part"}.intersection(params)):
+        if (params.get("view") != "board-decision" or not result.get("rev") or set(params)-{"view","filing","part"}
+                or "filing" in params and not re.fullmatch(r"(?:d[0-9]{2,8}|unit/d[0-9]{2,8}/p[1-9][0-9]{0,7})",params["filing"])
+                or params.get("part","decision") not in ("decision","signing","payments")):
+            raise CaseError("请选择底稿所据的董事会审批原件与位置。",400)
     if screen == "case" and (params.get("view") == "revision-comparison" or {"prior","entry"}.intersection(params)):
         if (params.get("view") != "revision-comparison" or not re.fullmatch(r"[1-9][0-9]{0,7}", params.get("prior",""))
                 or int(params["prior"]) >= result.get("rev",0) or set(params)-{"view","prior","entry"}
@@ -87,6 +92,13 @@ def save_note(store, workspace, author, role, data):
                                                (context["case_id"], context["rev"])).fetchone():
             raise CaseError("未找到记录时的底稿版本。", 404)
         position = context.get("params",{})
+        if position.get("view") == "board-decision" and ("filing" in position or "part" in position):
+            records = db.execute("""SELECT json_extract(f.value,'$.effect_review.board_decision.records')
+                              FROM reports, json_each(content,'$.findings') AS f WHERE case_id=? AND rev=?
+                              AND json_extract(f.value,'$.rule')='H01'""", (context["case_id"],context["rev"])).fetchall()
+            proofs = [ref for row in records if row[0] for ref in json.loads(row[0])]
+            if not proofs or "filing" in position and not any(ref.partition("/")[2] == position["filing"] for ref in proofs):
+                raise CaseError("所选版本没有引用这份董事会审批原件。",404)
         if position.get("view") == "revision-comparison":
             prior = int(position["prior"])
             if not db.execute("SELECT 1 FROM reports WHERE case_id=? AND rev=?", (context["case_id"],prior)).fetchone():

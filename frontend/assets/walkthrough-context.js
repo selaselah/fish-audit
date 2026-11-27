@@ -5,7 +5,7 @@ const dialogs = {'page-dialog':'资料原页','sample-review':'演练原件','sa
   'review-dialog':'人工验收','peer-dialog':'复核签收','amend-dialog':'补录原文','case-preview':'任务速览',
   'quick-dialog':'快速定位','case-finder':'查找案例'};
 const homeKeys = ['scene','slip','copy','edition','batch','record','pdf','carrier'];
-const caseKeys = ['view','stage','instrument','receipt','ticket','call','agreement','acceptance','finding','fact','prior','entry'];
+const caseKeys = ['view','stage','instrument','receipt','ticket','call','agreement','acceptance','finding','fact','prior','entry','filing','part'];
 const identifier = /^[a-zA-Z][a-zA-Z0-9_-]{0,95}$/;
 const factID = /^d\d{2}\/p[1-9]\d*\/(?:[ft][1-9]\d*|h[a-f0-9]{12})$/;
 function knownParams(search, keys) {
@@ -61,6 +61,9 @@ export function captureContext(owner, element) {
           const payment=element.closest('[data-warranty-payment]')?.dataset.warrantyPayment;
           context.params={view:'warranty-certificate',stage:/^H05-[1-9]\d*$/.test(payment || '')?payment:certificate};
         }
+        const board=element ? element.closest('#board-decision') : view==='board-decision' ? document.getElementById('board-decision') : null;
+        if (board?.dataset.boardFiling) context.params={view:'board-decision',filing:board.dataset.boardFiling,part:board.dataset.boardPart};
+        else if (view==='board-decision' && document.getElementById('board-unavailable')) context.params={view:'board-decision'};
         const comparison=element?element.closest('#revision-comparison'):document.getElementById('revision-comparison');
         if (comparison && !comparison.hidden && comparison.dataset.entry)
           context.params={view:'revision-comparison',prior:comparison.dataset.prior,entry:comparison.dataset.entry};
@@ -88,8 +91,14 @@ export function captureContext(owner, element) {
     const item=element.closest('.release-instrument'), file=item?.querySelector('.release-instrument-name')?.textContent;
     const control=element.closest('.release-decision-line') ? '放行决定' : element.closest('.release-compare-field')?.querySelector('small')?.textContent;
     const note=element.closest('[data-warranty-note]');
+    const boardNote=element.closest('[data-board-note]');
+    const boardFile=boardNote?.closest('#board-decision')?.querySelector('.warranty-file')?.textContent;
+    const boardRow=element.closest('[data-board-row]');
     const date=element.closest('.warranty-date-source'), order=element.closest('[data-warranty-order]');
-    const sourceLabel = date ? ['small','time','.warranty-date-place span'].map(s=>date.querySelector(s).textContent).join(' · ') :
+    const sourceLabel = element.id==='board-unavailable' ? element.textContent :
+      boardRow ? [boardRow.querySelector('small').textContent,boardRow.querySelector('button').textContent].join(' · ') :
+      boardNote ? [boardFile,'原批注',boardNote.querySelector('button')?.textContent].filter(Boolean).join(' · ') :
+      date ? ['small','time','.warranty-date-place span'].map(s=>date.querySelector(s).textContent).join(' · ') :
       order ? '两单日期 · '+order.textContent : note?'期满确认单批注'+(note.querySelector('button')?' · '+note.querySelector('button').textContent:''):
       file && control ? file+' · '+control : element.closest('.source-plane,#sample-review canvas') ? '原件页图' :
       element.closest('.evidence-row,.sample-records [data-ref]') ? '证据引文' :
@@ -108,7 +117,8 @@ export function captureContext(owner, element) {
 export function describeContext(c) {
   const screen = c.screen==='case' ? screens.case+' '+c.case_id.slice(0,8) : screens[c.screen];
   const edition=c.params?.view==='revision-comparison' ? '履约对照 R'+c.params.prior+' / R'+c.rev : c.rev && 'R'+c.rev;
-  return [screen, c.example || sections[c.section], edition, caseTabs[c.tab], dialogs[c.dialog],
+  const board=c.params?.view==='board-decision' && ({decision:'董事会决议原文',signing:'董事会签发版本',payments:'董事会决议关联期款'}[c.params.part] || '董事会审批原件');
+  return [screen, c.example || sections[c.section], edition, caseTabs[c.tab], board, dialogs[c.dialog],
     c.doc && (c.doc+' · 第 '+c.page+' 页'), c.line && '第 '+c.line+' 行', c.target].filter(Boolean).join(' › ');
 }
 export function returnUrl(c, workspace) {

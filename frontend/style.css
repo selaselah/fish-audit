@@ -1485,3 +1485,20 @@ button.mandate-day.signing-day[aria-pressed=true] { box-shadow:inset 0 0 0 1px c
 .preview-no-receipt { display:block; font-size:.79rem; padding:10px 0 2px; color:var(--muted); }
 .preview-other > summary { cursor:pointer; min-height:40px; align-content:center; font-size:.88rem; color:var(--secondary); font-weight:550; }
 .preview-check:is(:hover,:focus-visible),.preview-phase-tab:hover { border-color:var(--accent); }
+
+.board-decision { min-width:0; margin:8px 0; padding:12px; border:1px solid var(--line); border-radius:8px; background:var(--surface); }
+.board-tabs { display:flex; flex-wrap:wrap; gap:3px; width:fit-content; max-width:100%; margin:10px 0; padding:3px; border-radius:7px; background:var(--canvas); }
+.board-tabs button { min-height:36px; padding:4px 10px; font-size:.8rem; }
+.board-tabs button[aria-pressed=true] { color:var(--accent); background:var(--surface); box-shadow:0 1px 3px #17244025; }
+.board-rows { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.board-row { display:grid; align-content:start; justify-items:start; gap:5px; padding:9px; background:var(--canvas); border-radius:6px; }
+.board-row small,.board-body details { font-size:.78rem; color:var(--secondary); }
+.board-row q,.board-row button { overflow-wrap:anywhere; text-align:start; }
+.board-body details { margin-top:8px; }
+.board-body summary { width:fit-content; cursor:pointer; padding:5px 0; }
+.board-payment { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; padding:5px 0; }
+.board-body .text-button { font-size:.8rem; }
+@media (max-width:650px) {
+  .board-rows { grid-template-columns:minmax(0,1fr); }
+  .board-tabs button { min-height:42px; }
+}

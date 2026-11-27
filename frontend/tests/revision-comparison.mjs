@@ -70,6 +70,12 @@ export async function checkRevisionComparison(ctx,cid) {
     await click(area+' .revision-links a');
     await wait('state.bundle?.rev==='+meta.rev+' && state.traceId==='+JSON.stringify(item.id),'versioned finding in the graph');
     await navigate(pinned);await wait(q('#revision-comparison')+'?.dataset.entry==='+JSON.stringify(entry),'fixed comparison');
+    const board=area+' .revision-links a[id$="-board"]';
+    if (item.board_decision) {
+      await click(board);
+      await wait('state.bundle?.rev==='+meta.rev+' && '+q('#board-decision')+'?.dataset.boardFiling','board filing from the selected revision');
+      await navigate(pinned);await wait(q('#revision-comparison')+'?.dataset.entry==='+JSON.stringify(entry),'fixed comparison after board filing');
+    } else assert.equal(await evaluate(q(board)),null);
   }
   if (process.env.AUDIT_COMPARISON_RESILIENCE && versions.length>1) {
     const alternate=versions.find(v=>v.rev!==prior).rev;

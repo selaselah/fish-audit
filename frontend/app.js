@@ -1560,6 +1560,8 @@ async function refresh() {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='[data-audit-scope="'+requestedScope.id+'"]';
       } else if (requestedView==='revision-comparison' && state.openedCitation!==location.hash && state.bundle) {
         state.openedCitation=location.hash;state.tab='report';focusFinding='#revision-comparison';
+      } else if (requestedView==='board-decision' && state.openedCitation!==location.hash && state.bundle) {
+        state.openedCitation=location.hash;state.tab='report';focusFinding='#board-decision';
       } else if (requestedView==='execution' && state.openedCitation!==location.hash && state.bundle) {
         state.openedCitation=location.hash; state.tab='activity'; focusFinding='#execution-trace-page';
       } else if (['warranty-register','warranty-certificate','addendum-signing','payment-release'].includes(requestedView) && state.openedCitation!==location.hash && state.bundle) {
@@ -1606,7 +1608,11 @@ async function refresh() {
       renderCase(Boolean(focusFinding));
       if (focusFinding) {
         const target = $(focusFinding);
-        if (requestedView==='addendum-signing' && target) {
+        if (requestedView==='board-decision' && !target) {
+          const message=el('p','本版没有可定位的董事会审批原件。','note');
+          message.id='board-unavailable';message.dataset.caseId=state.bundle.report.case_id;message.dataset.rev=String(state.bundle.rev);
+          message.setAttribute('role','status');$('#case-panel').prepend(message);
+        } else if (requestedView==='addendum-signing' && target) {
           AddendumSigning.locate(target,route.params);
         } else if (requestedView==='warranty-register' && target) {
           WarrantyRegisterEvidence.locate(target,route.params);
@@ -1622,6 +1628,9 @@ async function refresh() {
             target.dispatchEvent(new CustomEvent('open-acceptance-source',{detail:route.params.getAll('acceptance').length===1 &&
               route.params.getAll('rev').length===1 && route.params.getAll('view').length===1?route.params.get('acceptance'):null}));
           else target.click();
+        } else if (target?.id==='board-decision') {
+          target.dispatchEvent(new CustomEvent('select-board-decision',{detail:route.params}));
+          revealPaperTarget(target);
         } else if (target?.id==='payment-proof') {
           if (route.params.has('receipt')) target.dispatchEvent(new CustomEvent('select-proof',{detail:route.params.get('receipt')}));
           revealPaperTarget(target);

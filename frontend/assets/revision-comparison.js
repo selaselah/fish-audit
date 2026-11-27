@@ -73,6 +73,10 @@ const RevisionComparison = (() => {
       new URLSearchParams({rev:meta.rev,view:'warranty-certificate',stage:item.id})));
     links.firstChild.id=card.id+'-finding';
     if (item.certificate) links.lastChild.id=card.id+'-certificate';
+    if (item.board_decision) {
+      const board=Team.paperLink('董事会审批原件',cid,'text-button',new URLSearchParams({rev:meta.rev,view:'board-decision'}));
+      board.id=card.id+'-board';links.append(board);
+    }
     card.append(links);
     return card;
   }

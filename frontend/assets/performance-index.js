@@ -139,6 +139,10 @@ const PerformanceIndex = (() => {
   }
   function specialist(item) {
     const target=id=>document.getElementById(id);
+    if (item.effect_review?.board_decision && boardProofs(item,state.bundle.report)?.proofs.length) {
+      return Team.paperLink('核对董事会审批原件',state.bundle.report.case_id,'text-button',
+        new URLSearchParams({rev:state.bundle.rev,view:'board-decision'}));
+    }
     if (item.warranty_check?.certificate && warrantyProofs(item,state.bundle.report).length) {
       const bundle=state.bundle;
       return action('核对期满确认单',()=>{if (state.bundle===bundle) WarrantyTimeline.reveal(target('case-panel'),item,bundle.report);},'text-button');
@@ -165,6 +169,7 @@ const PerformanceIndex = (() => {
     return selected?evidenceJump(selected[2],selected[1]):null;
   }
   const pdfSources={
+    board:{kinds:['contract_approval'],field:'approval_signer',format:'board-decision-execution-v1',labels:ReleaseCard.states},
     warranty:{kinds:['warranty'],field:'acceptance_signer',format:'warranty-certificate-execution-v1',labels:ReleaseCard.states},
     release:{kinds:['payment_release'],field:'approval_signer',format:'payment-release-execution-v1',labels:ReleaseCard.states},
     addendum:{kinds:['contract_addendum'],field:['buyer_signature','seller_signature'],labels:{
@@ -411,6 +416,43 @@ const PerformanceIndex = (() => {
       proofs.push(source);
     }
     return proofs;
+  }
+  function boardProofs(item,report) {
+    const {graph,policy}=report, check=item.effect_review?.board_decision, format=pdfSources.board.format;
+    if (item.rule!=='H01' || policy.board_decision!==format || !check?.records?.length ||
+        typeof check.linked!=='boolean' || !Array.isArray(check.evidence) ||
+        !['board_execution.py','pdf_execution.py','original_records.py','acceptance_comments.py'].every(k=>/^[a-f0-9]{64}$/.test(policy.code_sha256?.[k])) ||
+        ![graph.board_pdf_sources,graph.board_original_sources].every(l=>l?.format===format && Array.isArray(l.records))) return null;
+    const records=[...graph.board_pdf_sources.records,...graph.board_original_sources.records].filter(r=>item.scope.includes(r.unit));
+    const units=item.scope.filter(u=>graph.documents_by_kind.contract_approval?.includes(u));
+    if (records.length!==check.records.length || new Set(check.records).size!==records.length ||
+        records.some((r,i)=>r.id!==check.records[i]) || check.state!==(records.length===1 && units.length===1?records[0].state:'multiple')) return null;
+    const rows=new Map(originals(item,graph).map(r=>[r.fact.id,r])), cited=issuedReferences(item,graph);
+    if (!check.evidence.every(ref=>cited.has(ref))) return null;
+    const proofs=[];
+    for (const record of records) {
+      const source=record.id.startsWith('board-pdf/')?unitPdfOriginal(graph,record.id,'board'):
+        MandateOriginals.bind(graph,unitSource(graph,record.id,'board_original',['contract_approval'],'approval_signer'),rows,'board');
+      if (!issuedSource(source,cited,report.calls?.pages) || ![record.id,...source.refs].every(ref=>check.evidence.includes(ref))) return null;
+      const fields=graph.facts.filter(f=>(f.unit || f.doc)===record.unit && f.doc===record.doc && f.field==='approval_signer');
+      if (fields.length!==record.fields.length || fields.some((f,i)=>f.id!==record.fields[i])) return null;
+      proofs.push(source);
+    }
+    const fields={};
+    for (const [kind,ref] of Object.entries(check.fields || {})) {
+      let row=rows.get(ref);
+      const f=row?.fact;
+      if (kind==='approved_on' && !row?.line && row?.printedLine) {
+        // Word can insert spaces around 年/月/日. Keep every digit group and the printed line.
+        const date=s=>s.normalize('NFKC').trim().match(/^(审批日期|批准日期|决定日期)\s*:\s*(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日$/u)?.slice(1).join('/');
+        const printed=date(f.source_line.text);
+        if (printed && printed===date(f.quote)) row={...row,line:row.printedLine};
+      }
+      const scope=kind==='effect_clause'?graph.documents_by_kind.contract:units;
+      if (!row?.line || f.field!==kind || !check.evidence.includes(ref) || !scope?.includes(f.unit || f.doc)) return null;
+      fields[kind]=row;
+    }
+    return {proofs,fields};
   }
   function warrantyProofs(item,report) {
     const {graph,policy}=report, cert=item.warranty_check?.certificate, format=pdfSources.warranty.format;
@@ -872,5 +914,5 @@ const PerformanceIndex = (() => {
     summary.append(dialog);
     return summary;
   }
-  return {includes,groups,count,originals,fieldLinks,issuedLimitBreach,receiptCitation,receiptEvidence,nativeReceiptCitation,mandateCitation,mandateEvidence,addendumEvidence,releaseProofs,warrantyProofs,overview};
+  return {includes,groups,count,originals,fieldLinks,issuedLimitBreach,receiptCitation,receiptEvidence,nativeReceiptCitation,mandateCitation,mandateEvidence,addendumEvidence,releaseProofs,warrantyProofs,boardProofs,overview};
 })();

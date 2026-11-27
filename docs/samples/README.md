@@ -1,5 +1,21 @@
 # 合成财会审计演练
 
+## 董事会决议、柜温验收和第二期付款
+
+母本是同一份带水印的采购底稿 R4，共五份原件。生成器先校验 R4 底稿及各原件的 SHA-256 与水印。四组输入分别使用签名覆盖提交版的 PDF、签后有增量修订的 PDF、有原生批注的 Word 及整页 JPEG。`hot` 使用同一份有批注的审批单，将验收单唯一一处实测值从 3℃ 改为 8℃，保留「合格」结论及第二期 6 万元回单。PDF 使用本次演练生成的测试证书。[九案与固定底稿](../acceptance.md#董事会批准条件及第二期验收款)
+
+```sh
+curl --fail http://127.0.0.1:8000/api/cases/9c84d34e49034b2096bb2edfe14918d6/reports/4/bundle -o /tmp/board-R4.zip
+server/.venv/bin/python docs/samples/board_decisions.py /tmp/board-R4.zip /tmp/board-inputs
+```
+
+在生成命令末尾加 `--cases hot --run --check-fields`，可在本机上传该案、运行多模态解析和复检，并按生成的水印原行执行演练核字。以下命令可以独立核对已出具的组合案例，重新生成页图并从发布历史复算。
+
+```sh
+curl --fail http://127.0.0.1:8000/api/cases/64cd9e64345841bab358728a6730f3d8/reports/7/bundle -o /tmp/board-hot-R7.zip
+server/.venv/bin/python server/verify.py /tmp/board-hot-R7.zip --render-performance --rules-from-git 1683c51
+```
+
 ## 质保回单与期满单所列日期
 
 用固定底稿 R11 的六份水印原件生成三组演练。回单均列 11 月 24 日，Word 期满单分别列 26 日、24 日和数字断开的「2 2 日」。三组都保留同一条 Word 原批注。生成器检查母本摘要、水印、原行与数字分组。使用 `--run --check-fields` 可向本机提交材料、调用模型并按水印件核字。[逐案验收](../acceptance.md#从质保金回单核对期满单原行)

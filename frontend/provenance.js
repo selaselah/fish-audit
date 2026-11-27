@@ -702,7 +702,8 @@ function repairPageReferences(graph, doc, page, facts) {
 
 function contractEffectPanel(finding,graph) {
   const {conditions,mixed_pages,approval_pages=[]}=finding.effect_review;
-  if (!conditions.length && !mixed_pages.length && !approval_pages.length) return null;
+  const decisionCard=finding.effect_review.board_decision && BoardDecision.panel(finding,state.bundle.report);
+  if (!conditions.length && !mixed_pages.length && !approval_pages.length && !decisionCard) return null;
   const {facts,documents}=graphIndex(graph);
   const seals=finding.effect_review.seals;
   const panel=box('effect-review',el('h4',approval_pages.length?'董事会决议与合同生效':seals?'双方盖章与合同生效日':'需核对的生效条件'));
@@ -714,8 +715,13 @@ function contractEffectPanel(finding,graph) {
       dates.append(box('warranty-date',el('dt',label),el('dd',value || '待核')));
     panel.append(dates);
   }
+  if (decisionCard) panel.append(decisionCard);
+  const displayed=decisionCard?.dataset?.boardFiling;
   const cited=new Set(conditions.flatMap(s=>s.facts));
+  if (displayed && finding.effect_review.board_decision.fields.effect_clause) cited.add(finding.effect_review.board_decision.fields.effect_clause);
+  const openedPage=decisionCard?.querySelector('[data-board-page]')?.dataset.boardPage;
   for (const page of approval_pages) {
+    if (openedPage===page.doc+'/p'+page.page) continue;
     const decision=finding.evidence.map(ref=>facts.get(ref)).find(f=>f?.doc===page.doc && f.page===page.page && f.field==='approval_result');
     const title=(documents.get(page.doc)?.name || '审批记录')+' · 第 '+page.page+' 页';
     const button=action(title,()=>openPage(page.doc,page.page,decision?.id),'ref');

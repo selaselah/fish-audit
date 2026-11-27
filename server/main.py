@@ -290,9 +290,23 @@ def create_app(store, worker):
             args["finding"] = ref
         if "view" in request.args:
             view = request.args["view"]
-            if view not in ("replay", "execution", "revision-comparison", "warranty-register", "warranty-certificate", "addendum-signing", "reinspection", "inspection", "entities", "trial", "contract-pages", "signatures", "calendar", "suppliers", "acceptance-comments", "contract-comments", "payment-acceptance", "signer-timing", "payment-proof", "payment-release", "contract-checks", "acceptance-checks", "payment-checks") or set(args)!={"rev"}:
+            if view not in ("replay", "execution", "revision-comparison", "board-decision", "warranty-register", "warranty-certificate", "addendum-signing", "reinspection", "inspection", "entities", "trial", "contract-pages", "signatures", "calendar", "suppliers", "acceptance-comments", "contract-comments", "payment-acceptance", "signer-timing", "payment-proof", "payment-release", "contract-checks", "acceptance-checks", "payment-checks") or set(args)!={"rev"}:
                 raise CaseError("请选择有效的底稿视图及版本。",400)
             args["view"] = view
+        if args.get("view") == "board-decision" or "filing" in request.args or "part" in request.args:
+            if (args.get("view") != "board-decision" or set(request.args)-{"rev","view","filing","part"}
+                    or any(len(request.args.getlist(k)) != 1 for k in request.args)):
+                raise CaseError("请选择一版底稿所据的董事会审批单。",400)
+            if "filing" in request.args:
+                unit = request.args["filing"]
+                if not re.fullmatch(r"(?:d[0-9]{2,8}|unit/d[0-9]{2,8}/p[1-9][0-9]{0,7})",unit):
+                    raise CaseError("审批原件位置无效。",400)
+                args["filing"] = unit
+            if "part" in request.args:
+                part = request.args["part"]
+                if part not in ("decision","signing","payments"):
+                    raise CaseError("请选择决议原文、签发版本或关联期款。",400)
+                args["part"] = part
         if args.get("view") == "revision-comparison" or "prior" in request.args or "entry" in request.args:
             prior = request.args.get("prior", "")
             if (args.get("view") != "revision-comparison" or not re.fullmatch(r"[1-9][0-9]{0,8}",prior)

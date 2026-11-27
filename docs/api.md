@@ -8,6 +8,14 @@
 
 企业工作区使用 `/api/w/<wid>/walkthrough`，沿用成员身份和写入时的 CSRF 校验，清单仅列出当前账号在该企业内的记录。企业实例的公开页使用浏览器存储。[服务端实现](../server/walkthrough.py)
 
+## 董事会审批单的决定与签发版本
+
+合同明确以董事会批准为生效条件时，H01 的 `effect_review.board_decision` 可含 `state`、`linked`、`records`、`fields` 和 `evidence`。`linked` 表示审批单原行的合同编号、双方和机构已与送审合同对应。审批结果、批准人身份和议决权限仍按各自的证据评估。`fields` 按字段引用实际原页，含可定位的 `effect_clause`、`approval_result` 等。字段缺失时，客户端可从资料入口查看整页。
+
+程序由 `policy.board_decision = board-decision-execution-v1` 标记。`graph.board_pdf_sources.records` 给出 PDF 签署范围、签名状态、文件与页图摘要。`graph.board_original_sources` 保存 Word 或影像资料及可定位的原批注。同一期款 H04 或实付 H05 若引用该凭证，可沿图边 `supports_result` 查询引用方向及依据。归档验证会重新读取提交原件，核对版本、批注和图关系。[原件核验程序](../server/board_execution.py)
+
+固定链接采用 `/workpaper/<case_id>?rev=<rev>&view=board-decision&filing=<unit>&part=<tab>`。`part` 可选 `decision`、`signing` 或 `payments`。`filing` 指已出具底稿的资料单元。保存走查意见时校验案件、版次、访问范围及 H01 引用的单据，意见可另带所点选控件的 `anchor`。该版未附单据时，可对整个视图记录意见。两版履约对照每条记录的 `earlier.board_decision` 与 `later.board_decision` 分别指示该侧的 H01 是否附有这项凭证。[实际固定链接](http://127.0.0.1:8000/workpaper/fe94943d9e304d729d783bc373d35342?rev=5&view=board-decision&filing=d01&part=signing)
+
 ## 两版履约发现对照
 
 `GET /api/cases/<case_id>/reports/<rev>/comparison/<prior>` 读取同一案件的两份已出具底稿，要求 `0 < prior < rev`。在企业模式使用 `/api/w/<wid>/cases/…`。读取沿用审计权限，未登录、员工权限、跨企业案件分别返回 401、403、404。版本顺序错误返回 400，查无版本返回 404，底稿摘要与归档内容不符返回 409。[接口实现](../server/main.py)

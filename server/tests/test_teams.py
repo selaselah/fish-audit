@@ -471,6 +471,25 @@ class EnterpriseFlow(unittest.TestCase):
         self.assertEqual(other.post(url,headers=oh,json=second).json["rev"],3)
         self.assertEqual(other.post(url,headers=oh,json=second).json["rev"],3)
 
+    def test_board_decision_link_and_feedback_require_a_scoped_issued_filing(self):
+        owner,wid,headers=self.register("board-walkthrough")
+        case=self.submit(owner,wid,headers)
+        self.worker.run(self.store.claim())
+        path=f"/w/{wid}/workpaper/{case}?rev=1&view=board-decision"
+        self.assertEqual(owner.get(path+"&filing=d01&part=signing").status_code,302)
+        for suffix in ("&rev=2","&filing=d01&filing=d02","&filing=unknown","&part=amount","&stage=H05-1"):
+            self.assertEqual(owner.get(path+suffix).status_code,400)
+        location={"screen":"case","case_id":case,"rev":1,"tab":"report"}
+        def save(params):
+            return owner.post(f"/api/w/{wid}/walkthrough",headers=headers,json={"id":"f"*32,"text":"核对审批签发",
+                              "context":{**location,"params":params}})
+        self.assertEqual(save({"view":"board-decision","filing":"d01","part":"signing"}).status_code,404)
+        self.assertEqual(save({"view":"board-decision","part":"amount"}).status_code,400)
+        self.assertEqual(save({"view":"execution","filing":"d01"}).status_code,400)
+        self.assertEqual(owner.get(f"/api/w/{wid}/walkthrough").json["notes"],[])
+        self.assertEqual(save({"view":"board-decision"}).status_code,201)
+        self.assertEqual(owner.get(f"/api/w/{wid}/walkthrough").json["notes"][0]["context"]["params"],{"view":"board-decision"})
+
     def test_revision_comparison_reuses_both_issued_hashes_and_the_case_access_rules(self):
         owner,wid,headers=self.register("compare-owner")
         other,outside,_=self.register("compare-other")

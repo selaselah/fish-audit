@@ -176,7 +176,10 @@ def side(item, other):
     comparison = (f.get("warranty_payment") or {}).get("comparison") or {}
     preferred = [ref for ref in (comparison.get("stated_ref"), (comparison.get("bank") or {}).get("ref"), stage.get("clause_ref")) if ref]
     fields = PRIORITY[f["rule"]]
-    if f["rule"] == "H01" and len(f.get("delegations", [])) == 1:
+    board = f.get("effect_review", {}).get("board_decision")
+    if f["rule"] == "H01" and board:
+        preferred = [board["fields"][k] for k in ("effect_clause", "approval_result", "approval_signer") if k in board["fields"]]
+    elif f["rule"] == "H01" and len(f.get("delegations", [])) == 1:
         grant = f["delegations"][0]
         fields = ("grant_signature", "grant_scope", grant.get("signature_field"), *fields)
     elif f["rule"] == "H02" and f["status"] == "issue" and "实测" in f["detail"]:
@@ -195,7 +198,8 @@ def side(item, other):
             preview[-1] = changed
     return {"id": f["id"], "rule": f["rule"], "title": f["title"], "status": f["status"], "detail": f["detail"], "basis": f.get("basis"),
             "stage": stage.get("name"), "instrument": item["instrument"], "source_count": len(sources), "sources": preview,
-            "certificate": bool(((f.get("warranty_check") or {}).get("certificate") or {}).get("records"))}
+            "certificate": bool(((f.get("warranty_check") or {}).get("certificate") or {}).get("records")),
+            "board_decision": bool(board and board["records"])}
 
 
 def pair(older, newer):
