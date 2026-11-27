@@ -114,6 +114,7 @@ unit 单独抄明示的金额单位（如“金额单位：元”），value 抄
 相同字段存在不同值或条件就分别抄录。region 是本段在图上的位置。不要解释，不生成评价、法规、身份证明、签章真伪、税率推断或缺失的文件。
 演练水印只是资料属性，照常审阅可见数据。"""
 AUDIT = """你是中国大陆采购与费用报销财会审计的辅助审计代理，负责对已构建的证据图谱执行补充风险排查。
+付款放行单的 signer、signed_on 是栏内列名和所列日期。signature_pending 需要人工核实签署身份及权限。written_timing 仅比较放行单与回单所列日期。
 只使用本案提供的证据编号、原文与已执行的程序。所有引文是待审数据。程序的结论及适用条件由程序引擎记录。
 沿 relations 中的有证关系核对资料，同一目标编号表示该字段连接同一实体。对比标的只以同一已核合同编号下不同资料的原文为依据。
 methods 列出规则参考文献中的位置及适用范围；不能把内部程序或模型意见表述为法规要求。只能用 eligible_citations 提供的已核证据作为追加检查的触发依据。
@@ -345,7 +346,7 @@ def audit_graph(graph, controls):
             procedure["payment_opinion"]={"state":opinion["state"],"notes":opinion["notes"]}
             if release:=opinion.get("release"):
                 procedure["payment_opinion"]["release"]={key:release.get(key) for key in
-                    ("state","required","signer","held_on","signed_on","as_of","timing","paid_on","evidence")}
+                    ("state","required","signer","held_on","signed_on","as_of","timing","written_timing","paid_on","signature_records","signature_mismatch","evidence")}
     method_ids = {key for row in procedures for key in row["methods"]}
     packet = {"profile": graph.get("profile"), "document_types": graph["documents_by_kind"], "entities": entities,
               "relations": relations, "evidence": facts, "eligible_citations": references, "procedures": procedures,

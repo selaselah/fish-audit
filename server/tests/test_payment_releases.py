@@ -37,14 +37,15 @@ def findings(graph):
 
 class SignedPaymentReleaseTests(unittest.TestCase):
     def test_current_conditions_and_each_bank_date(self):
-        for signed,expected,when in [("23","ok","after"),("24","missing","same_day"),("25","risk","before")]:
+        for signed,expected,when in [("23","missing","after"),("24","missing","same_day"),("25","risk","before")]:
             with self.subTest(signed=signed):
                 g,_=fixture(edit=lambda i,k,l,v:"2026-09-"+signed if k=="release_signed_on" else v)
                 fs=compute(g)
-                self.assertEqual([f["status"] for f in fs[:6]],["ok"]*6)
+                self.assertEqual([f["status"] for f in fs[:6]],["ok","ok","ok","ok","missing","ok"])
                 stage=fs[4]["payment_opinion"];pay=fs[-1]
-                self.assertEqual((stage["state"],stage["release"]["state"]),("hold","matched"))
-                self.assertEqual((pay["status"],pay["payment_opinion"]["release"]["timing"]),(expected,when))
+                self.assertEqual((stage["state"],stage["release"]["state"]),("hold","signature_pending"))
+                self.assertEqual((pay["status"],pay["payment_opinion"]["release"]["written_timing"]),(expected,when))
+                self.assertEqual(pay["payment_opinion"]["release"]["timing"],"unknown")
                 self.assertFalse(any("payment_opinion" in fs[i] for i in (3,5)))
                 r=stage["release"]
                 for key in ("signature_ref","date_ref","original_ref","receipt_ref"):
@@ -54,8 +55,8 @@ class SignedPaymentReleaseTests(unittest.TestCase):
     def test_each_slip_and_quality_keep_their_own_facts(self):
         earlier=[(k,l,"2026-09-22" if k=="paid_on" else v) for k,l,v in BANK]
         g,_=fixture(extra=[earlier]);_,payments=findings(g)
-        self.assertEqual([p["payment_opinion"]["release"]["timing"] for p in payments],["after","before"])
-        self.assertEqual([p["status"] for p in payments],["ok","risk"])
+        self.assertEqual([p["payment_opinion"]["release"]["written_timing"] for p in payments],["after","before"])
+        self.assertEqual([p["status"] for p in payments],["missing","risk"])
         g,_=fixture(edit=lambda i,k,l,v:"柜温8℃" if k=="measured_result" else v)
         self.assertEqual([f["status"] for f in compute(g)],["ok","issue","ok","ok","risk","risk","missing"])
 
@@ -69,7 +70,8 @@ class SignedPaymentReleaseTests(unittest.TestCase):
                 g,_=fixture(edit=lambda i,k,l,v:value if i==5 and k==field else v)
                 stages,bank=findings(g)
                 self.assertEqual(stages[1]["payment_opinion"]["release"]["state"],state)
-                self.assertEqual([f["status"] for f in [*stages,*bank]],["ok","missing","ok","missing"])
+                expected="risk" if state in ("reference_mismatch","signer_mismatch") else "missing"
+                self.assertEqual([f["status"] for f in [*stages,*bank]],["ok",expected,"ok",expected])
         g,_=fixture(attestations={"d05/p1/f9":{"decision":"dispute"}})
         self.assertNotEqual(findings(g)[0][1]["status"],"ok")
         g,_=fixture(release=[*RELEASE[:-2],("approved_on","审批日期","2026-09-23"),RELEASE[-1]])
@@ -89,7 +91,7 @@ class SignedPaymentReleaseTests(unittest.TestCase):
         release=[r for r in RELEASE if r[1]!="放行决定"]
         g,_=fixture(authority=None,release=release,omissions=[(1,MANDATE[1]+"："+MANDATE[2]),(5,RELEASE[6][1]+"："+RELEASE[6][2])])
         stages,bank=findings(g)
-        self.assertEqual((stages[1]["status"],bank[0]["status"]),("ok","ok"))
+        self.assertEqual((stages[1]["status"],bank[0]["status"]),("missing","missing"))
         rows=stages[1]["payment_opinion"]["release"]["sources"]
         self.assertTrue(all(r["line"] and not r["facts"] for r in rows if r["role"] in ("authority","decision")))
         g,read=fixture()

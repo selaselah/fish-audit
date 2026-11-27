@@ -42,6 +42,7 @@ import acceptance_reservations
 import inspection_register
 import acceptance_payments
 import payment_releases
+import release_execution
 import repair_completion
 import reinspection_wait
 from performance_versions import (FIRST_FORMAT, BOARD_FORMAT, REINSPECTION_FORMAT, DELEGATION_FORMAT, IDENTITY_FORMAT,
@@ -1129,10 +1130,14 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
                                                 separate_opinions=opinion_lines)
             payment_windows.attach_stage(check,window)
         opinion=opinions.get(row["ref"])
-        if opinion and cash and opinion["state"]=="hold":
+        if opinion and cash:
             record=next((r for r in [*receipts,*retests] if opinion["units"]==[r.unit]),None)
-            release=payment_releases.assess(graph,contract,record,opinion,row)
+            candidate=release_execution.proposed(graph,contract,opinion,row,record)
+            release=payment_releases.assess(graph,contract,record,opinion,row) if candidate or opinion["state"]=="hold" else None
             if release:
+                if candidate:
+                    release["state"]="scope_pending"
+                release_execution.apply(release,graph)
                 opinion={**opinion,"release":release,"units":list(dict.fromkeys([*opinion["units"],*release["units"]])),
                          "evidence":list(dict.fromkeys([*opinion["evidence"],*release["evidence"]]))}
         acceptance_payments.attach(check,opinion)

@@ -49,6 +49,7 @@ from acceptance_comments import FORMAT as WORD_REVIEWS
 from contract_comments import FORMAT as CONTRACT_WORD_REVIEWS
 from acceptance_reservations import FORMAT as RESERVATIONS
 from payment_releases import FORMAT as PAYMENT_RELEASES
+from release_execution import FORMAT as RELEASE_EXECUTION
 from contract_changes import FORMAT as ADDENDUM_FORMAT
 from delegation import FORMAT as DELEGATION_FORMAT
 from transfers import RULES as TRANSFER_RULES, check_transfers
@@ -78,6 +79,7 @@ CATALOG = {
     "T05": ("出差人员关联", "对照报销单与具名票据中的出差人，缺姓名、别名和不一致均交人工。"),
 }
 VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING, "performance_checks":PERFORMANCE_FORMAT,
+           "release_execution": RELEASE_EXECUTION,
            "advance_guarantee":ADVANCE_GUARANTEE,
            "invoice_receipt_conditions":INVOICE_RECEIPT, "acceptance_reservations":RESERVATIONS, "acceptance_word_reviews":WORD_REVIEWS, "contract_word_reviews":CONTRACT_WORD_REVIEWS, "payment_releases":PAYMENT_RELEASES, "equipment_models":EQUIPMENT_MODELS, "repair_completion":REPAIR_COMPLETION, "reinspection_wait": REINSPECTION_WAIT, "contract_folios": CONTRACT_FOLIOS, "inspection_coverage":INSPECTION_COVERAGE, "prior_installment":PRIOR_INSTALLMENT,
            "quality_number_classification":QUALITY_NUMBER_FORMAT, "quality_references":QUALITY_REFERENCE_FORMAT,

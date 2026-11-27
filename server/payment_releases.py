@@ -168,6 +168,8 @@ def assess(graph,contract,record,opinion,row):
            "date_ref":None,"signature_ref":None,"receipt_ref":None,"original_ref":None,"held_on":None,"as_of":graph.get("payment_release_as_of"),
            "evidence":list(dict.fromkeys(evidence))}
     notes=opinion["notes"]
+    if "release_pdf_sources" in graph and len(clauses)==1 and clauses[0]["line"]:
+        check["required"]=mandate(clauses[0]["quote"])[1]
     if (len(clauses)!=1 or not clauses[0]["line"] or opinion["state"]!="hold" or len(notes)!=1 or notes[0]["scope"]!="phase"
             or notes[0]["kind"]!="acceptance" or row["kind"]!="acceptance" or not record):
         return check
@@ -233,10 +235,14 @@ def at_payment(opinion,contract,bank):
     when,ref=exact_day(bank,"paid_on")
     paid=when if when and release["as_of"] and when<=release["as_of"] and bank_identity(contract,bank) else None
     timing="unknown"
-    if release["state"]=="matched" and paid and paid>release["held_on"]:
+    if release["state"] in ("matched","signature_pending") and paid and paid>release["held_on"]:
         timing="same_day" if paid==release["signed_on"] else "before" if paid<release["signed_on"] else "after"
+    written = {}
+    if "signature_records" in release:
+        written = {"written_timing":timing}
+        timing = "unknown"
     refs=list(dict.fromkeys([*release["evidence"],*bank.evidence("paid_on","payment_designation")]))
-    return {**opinion,"release":{**release,"timing":timing,"paid_on":paid,"paid_ref":ref if paid else None,"evidence":refs},
+    return {**opinion,"release":{**release,**written,"timing":timing,"paid_on":paid,"paid_ref":ref if paid else None,"evidence":refs},
             "evidence":list(dict.fromkeys([*opinion["evidence"],*refs]))}
 
 
@@ -254,12 +260,27 @@ def apply_release(finding,release):
         else:
             finding["detail"]+=f" 原暂缓所据验收单号与放行单一致，合同指定人{release['signer']}已签认，放行日为 {release['signed_on']}。"
             return
+    elif release["state"]=="signature_pending":
+        detail=f"放行单签认栏列名{release['signer']}，与合同指定人一致。须核实本人签署、权限及放行时间。"
+        if release.get("written_timing")=="before":
+            status="risk"
+            detail+=f"回单付款日 {release['paid_on']} 早于单上所列签字日 {release['signed_on']}，请核查提前支付依据。"
+        elif release.get("written_timing")=="same_day":
+            detail+="回单与单上所列签字日同日，请核对当日签批及付款流水时分。"
+    elif "signature_records" in release and release["state"] in ("signer_mismatch","reference_mismatch"):
+        status="risk"
+        detail=(f"签认栏列名{release['signer']}，与合同指定人{release['required']}不同，请核对授权。"
+                if release["state"]=="signer_mismatch" else "放行单所引验收单号与暂缓所据原单不同，请核对付款对象。")
     else:
         detail={"absent":"合同约定由具名人员签字放行，尚缺相应放行单。",
                 "signer_mismatch":f"放行单签认人为{release['signer']}，与合同指定人{release['required']}不同，请核对授权或补充审批。",
                 "reference_mismatch":"放行单所引原验收单号与暂缓款所据原件不同，请核对所放行的业务。",
                 "future":"放行签字日期晚于本案资料提交日，请核对实际签发时间。",
+                "scope_pending":"合同与验收单提及本期暂缓，需核对所附放行单的业务归属、签署版本和审批权限。",
                 "pending":"原件载明暂缓，放行依据的范围、所据原单、具名签认及时间尚须核对。"}[release["state"]]
+    if release.get("signature_mismatch"):
+        status="risk"
+        detail+="放行单 PDF 电子签名与所签内容校验不符，请核对签署平台原件。"
     if finding["status"]=="ok":
         finding.update(status=status,detail=detail)
     else:

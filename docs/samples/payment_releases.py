@@ -48,6 +48,16 @@ def review(cid,folder,records,*,old=False):
 
 def check(report,mode):
     findings=report["findings"]
+    if report["policy"].get("release_execution"):
+        phase, = [f for f in findings if f["rule"]=="H04" and f.get("payment_opinion",{}).get("release")]
+        bank, = [f for f in findings if f["rule"]=="H05"]
+        release=phase["payment_opinion"]["release"]
+        assert release["state"]=={"reference":"reference_mismatch","signer":"signer_mismatch","approval_only":"pending"}.get(mode,"signature_pending")
+        assert release["signature_records"] and phase["status"]!="ok" and bank["status"]!="ok"
+        assert bank["payment_opinion"]["release"]["timing"]=="unknown"
+        if mode in ("late","reference","signer"):
+            assert bank["status"]=="risk"
+        return
     assert [f["status"] for f in findings if f["rule"] in ("H01","H02","H03")]==["ok"]*3
     stages=[f for f in findings if f["rule"]=="H04"]
     paid,=[f for f in findings if f["rule"]=="H05"]

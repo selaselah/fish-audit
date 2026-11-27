@@ -49,6 +49,7 @@ from inspection_coverage import verify as verify_inspection
 from payment_acceptance import verify as verify_payment_acceptance
 from prior_installment import verify as verify_prior_installment
 from payment_releases import verify as verify_payment_releases
+import release_execution
 from invoice_conditions import verify as verify_invoice_conditions
 from repair_completion import verify as verify_repair_completion
 from contract_folios import verify as verify_contract_folios
@@ -296,6 +297,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
     advance_guarantee.verify(report,page_text)
     verify_prior_installment(report,page_text,submitted=submitted,signed=signed)
     verify_payment_releases(report,page_text,submitted=submitted,signed=signed)
+    release_execution.verify(report, read_original, page_text)
     verify_repair_completion(report,page_text)
     verify_reinspection_wait(report,page_text)
     verify_contract_folios(report,page_text)
@@ -467,7 +469,7 @@ def render_addendum_sources(bundle, report, nodes):
     selected.update(p["doc"] for p in graph.get("contract_folio_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("reinspection_wait_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("payment_acceptance_sources",{}).get("pages",[]))
-    for key in ("acceptance_pdf_sources", "acceptance_original_sources", "addendum_pdf_sources", "addendum_original_sources", "mandate_pdf_sources", "mandate_original_sources"):
+    for key in ("acceptance_pdf_sources", "acceptance_original_sources", "addendum_pdf_sources", "addendum_original_sources", "mandate_pdf_sources", "mandate_original_sources", release_execution.PDF, release_execution.NATIVE):
         selected.update(r["doc"] for r in graph.get(key,{}).get("records",[]))
     selected.update(p["doc"] for p in graph.get("inspection_coverage_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("equipment_model_sources",{}).get("pages",[]))
