@@ -1,5 +1,17 @@
 # 本机审计接口
 
+## 付款安排待核与回单引用
+
+自规则 `2026.11.28.7` 起，`policy.retest_reference` 与 `graph.retest_reference_sources.format` 为 `reinspection-receipt-reference-v2`。当可逐项清点合同原页时，`graph.retest_reference_sources.schedule_page` 标记对应的页节点。H05 核实回单引用且 H03 存在可从原件复算的分期差异时，`retest_reference.schedule_review` 保存以下字段。
+
+| 字段 | 来源及含义 |
+| --- | --- |
+| `declared`、`listed` | 合同总述明列的总期数、正文按序列出的期数，均为整数。 |
+| `share_total` | 逐条相加的百分比，用十进制字符串表示，例如 `"90"`。 |
+| `header`、`clauses` | 总述引用及按印刷顺序排列的逐期引用。可用图中事实或已定位的总述原行查回页码和行框。 |
+
+H05 的 `retest_reference.state` 表示回单引用指向，H03 的状态表示分期是否完整。在示例 R6 中，走查接口接受控件锚点 `retest-H05-8-schedule`，并核对固定版次 H03 和 H05 的共同引文。向缺少该控件的 R5 提交同一定位会返回 HTTP 404。旧版证据包按 v1 回放，若当前程序查出旧版漏列的付款风险，须重审后方可签收通过。[R6 回单及合同依据](http://127.0.0.1:8000/workpaper/7aa5e0f3f63340b290e64bdc84d61676?rev=6&view=payment-checks&stage=H05-8)
+
 ## 合同分期总述与走查定位
 
 规则 `2026.11.28.5` 起，符合条件的底稿包含 `policy.installment_count` 和 `graph.installment_count_sources.format`，取值均为 `printed-installment-count-v1`。行记录含 `count`、完整引文 `quote`、模型事实 `model_ref` 及其原摘录 `model_quote`，并固定原件、物理页行、行框、原件摘要及页图摘要。图谱中的 `locates_installment_count` 关系连接原页和完整行。引用该行的 H03、分期 H04/H05/H06 发现带有 `installment_count`。

@@ -2,11 +2,11 @@
 const WarrantyDates = (() => {
   const format='warranty-written-dates-v1';
   const labels={warranty_release:['质保期满确认','质保期满记录'],paid_on:['付款日期','转账日期','交易日期','支付日期'],
-    accepted_on:['验收日期','验收时间','复验日期','复验时间']};
+    accepted_on:['验收日期','验收时间','复验日期','复验时间'],repaired_on:['整改完成日期']};
   const literal='(?<literal>(?<year>[0-9]{4}) *(?:年 *(?<month>[0-9]{1,2}) *月 *(?<day>[0-9]{1,2}) *日|(?<sep>[-/.]) *(?<nmonth>[0-9]{1,2}) *\\k<sep> *(?<nday>[0-9]{1,2})))';
   const dateOnly=new RegExp('^ *'+literal+' *$','u');
   const patterns={warranty_release:new RegExp('^ *'+literal+' *(?:双方确认 *)?质保期(?:已届满|届满|已满) *。? *$','u'),
-    paid_on:dateOnly,accepted_on:dateOnly};
+    paid_on:dateOnly,accepted_on:dateOnly,repaired_on:dateOnly};
   const fold=s=>s.replace(/[０-９：／－．]/gu,c=>String.fromCharCode(c.charCodeAt(0)-0xfee0)).replace(/[\u00a0\u2002\u2003\u2009\u202f\u3000]/gu,' ');
   const same=(a,b)=>Array.isArray(a) && Array.isArray(b) && a.length===b.length && a.every((v,i)=>v===b[i]);
   function calendarDay(groups) {
