@@ -97,6 +97,36 @@ if (!restoreWorkspaceLink()) {
   const examples={company:{scene:'signing',revision:9},word:{scene:'word-signing',revision:6},calendar:{scene:'contract-dates',revision:6},pdf:{scene:'pdf-signing'},addendum:{scene:'addendum-signing'}};
   const inspectionRoutes={readings:'acceptance',standards:'batch-standards',signers:'acceptance-signers',equipment:'inspection',named:'named-inspection',supplier:'suppliers',comments:'word-comments'};
   const paymentRoutes={comments:'contract-comments',guarantee:'guarantee-period',warranty:'warranty-register',invoice:'addendum-invoice',reference:'payment-acceptance',timing:'signer-timing',clock:'signer-clock',proof:'payment-proof',folios:'folios'};
+  const scripts=new Map(), loadedScripts=new Set(), opening=new WeakSet();
+  function loadScript(name) {
+    if (!scripts.has(name)) {
+      scripts.set(name,new Promise((resolve,reject)=>{
+        const script=document.createElement('script');
+        script.addEventListener('load',()=>{loadedScripts.add(name);resolve();},{once:true});
+        script.addEventListener('error',()=>{script.remove();scripts.delete(name);reject(new Error(name));},{once:true});
+        script.src='/assets/'+name+'.js';document.head.append(script);
+      }));
+    }
+    return scripts.get(name);
+  }
+  function openCase(slot,component,presenter,open) {
+    if (opening.has(slot)) return;
+    const previous=slot.querySelector(':scope > .case-tools-retry');
+    if (previous?.contains(document.activeElement)) {slot.tabIndex=-1;slot.focus({preventScroll:true});}
+    previous?.remove();
+    if (loadedScripts.has(component) && loadedScripts.has(presenter)) {open();return;}
+    opening.add(slot);slot.setAttribute('aria-busy','true');
+    Promise.all([loadScript(component),loadScript(presenter)]).then(()=>{
+      opening.delete(slot);slot.removeAttribute('aria-busy');
+      if (!slot.closest('[hidden]')) open();
+    },()=>{
+      opening.delete(slot);slot.removeAttribute('aria-busy');
+      const fallback=document.createElement('div'), notice=document.createElement('span'), retry=document.createElement('button');
+      fallback.className='case-tools-retry';notice.setAttribute('role','status');notice.textContent='案例控件未载入';
+      retry.type='button';retry.className='standard-retry';retry.textContent='重新载入';
+      retry.addEventListener('click',()=>openCase(slot,component,presenter,open));fallback.append(notice,retry);slot.append(fallback);
+    });
+  }
   function sceneAddress(name) {
     const url=new URL(location.href);
     const scene=name==='inspection'?inspectionRoutes[inspectionExample.value]:name==='folios'?paymentRoutes[paymentExample.value]:name;
@@ -144,24 +174,24 @@ if (!restoreWorkspaceLink()) {
     if (!invoice.hidden && !paymentsScene.hidden) PublicAddendumSigning.openInvoice();
     if (!warranty.hidden) {
       edition.textContent=warranty.dataset.revision?'合成案例 · R'+warranty.dataset.revision:'合成案例';
-      if (!paymentsScene.hidden) PublicWarrantyRegister.open();
+      if (!paymentsScene.hidden) openCase(warranty,'warranty-register','public-warranty-register',()=>PublicWarrantyRegister.open());
     }
     if (!period.hidden) {
       edition.textContent=period.dataset.revision?'合成案例 · R'+period.dataset.revision:'合成案例';
-      if (!paymentsScene.hidden) PublicGuaranteePeriod.open();
+      if (!paymentsScene.hidden) openCase(period,'guarantee-period-card','public-guarantee-period',()=>PublicGuaranteePeriod.open());
     }
     if (!proof.hidden) {
       edition.textContent=proof.dataset.revision?'合成案例 · R'+proof.dataset.revision:'合成案例';
-      if (!paymentsScene.hidden) PublicPaymentProof.open();
+      if (!paymentsScene.hidden) openCase(proof,'payment-proof-card','public-payment-proof',()=>PublicPaymentProof.open());
     }
     if (reference) {
       edition.textContent=demo.dataset.revision?'合成案例 · R'+demo.dataset.revision:'合成案例';
-      if (!paymentsScene.hidden) PublicPaymentAcceptance.open();
+      if (!paymentsScene.hidden) openCase(demo,'payment-reference-card','public-payment-acceptance',()=>PublicPaymentAcceptance.open());
     }
     if (!timing.hidden || !clock.hidden) {
       const active=clock.hidden?timing:clock;
       edition.textContent=active.dataset.revision?'合成案例 · R'+active.dataset.revision:'合成案例';
-      if (!paymentsScene.hidden) PublicSignerTiming.open(!clock.hidden);
+      if (!paymentsScene.hidden) openCase(active,'signer-timeline','public-signer-timing',()=>PublicSignerTiming.open(active===clock));
     }
     if (comments && !paymentsScene.hidden) PublicAcceptanceComments.open('contract');
   }
@@ -201,12 +231,12 @@ if (!restoreWorkspaceLink()) {
     version.textContent=inspectionRevisions[choice]?'合成案例 · R'+inspectionRevisions[choice]:'合成案例';
     if (inspectionScene.hidden || choice==='readings') return;
     if (choice==='standards') { PublicBatchStandards.open(); return; }
-    if (choice==='supplier') {PublicSuppliers.open();return;}
+    if (choice==='supplier') {openCase(document.getElementById('inspection-supplier'),'supplier-card','public-suppliers',()=>PublicSuppliers.open());return;}
     if (choice==='comments') {PublicAcceptanceComments.open();return;}
     if (choice==='signers') {
       const rev=document.getElementById('inspection-signers').dataset.revision;
       if (rev) version.textContent='合成案例 · R'+rev;
-      PublicAcceptanceRoster.open(); return;
+      openCase(document.getElementById('inspection-signers'),'acceptance-roster-card','public-acceptance-roster',()=>PublicAcceptanceRoster.open());return;
     }
     if (loadedInspections.has(choice)) return;
     loadedInspections.add(choice);
@@ -300,14 +330,19 @@ if (!restoreWorkspaceLink()) {
         link.href=doc.pdf; link.target='_blank'; link.rel='noopener';
         link.setAttribute('aria-label',row.label+'，'+row.value+'，查看合同原行');
         link.setAttribute('aria-haspopup','dialog');
-        const image=new Image(); image.alt=''; image.decoding='async';
-        image.onload=()=>{link.append(image);quote.replaceWith(link);};
+        const image=new Image(); image.alt=''; image.decoding='async';image.loading='lazy';
+        image.width=row.width;image.height=row.height;
+        image.onload=()=>{
+          if (image.naturalWidth!==row.width || image.naturalHeight!==row.height) {image.remove();return;}
+          quote.hidden=true;link.dataset.ready='true';
+        };
+        image.onerror=()=>image.remove();
         link.addEventListener('click',event=>{
           if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
           const request=new CustomEvent('inspect-sample-line',{cancelable:true,detail:{doc,ref:row.ref,opener:link}});
           if (!document.dispatchEvent(request)) event.preventDefault();
         });
-        image.src=row.crop;
+        quote.replaceWith(link);link.append(quote,image);image.src=row.crop;
       }
     } catch { /* The printed terms remain readable in the markup. */ }
   }

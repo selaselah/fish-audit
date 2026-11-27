@@ -24,7 +24,9 @@
         ]
       ],
       "rect": "0.08209,0.63059,0.40659,0.64749",
-      "crop": "/assets/installment-clause-16.webp"
+      "crop": "/assets/installment-clause-16.webp",
+      "width": 540,
+      "height": 65
     },
     {
       "ref": "d02/p1/f16",
@@ -40,7 +42,9 @@
         ]
       ],
       "rect": "0.08209,0.66301,0.45701,0.67945",
-      "crop": "/assets/installment-clause-17.webp"
+      "crop": "/assets/installment-clause-17.webp",
+      "width": 618,
+      "height": 64
     },
     {
       "ref": "d02/p1/f17",
@@ -56,7 +60,9 @@
         ]
       ],
       "rect": "0.08209,0.69498,0.40659,0.71142",
-      "crop": "/assets/installment-clause-18.webp"
+      "crop": "/assets/installment-clause-18.webp",
+      "width": 540,
+      "height": 64
     }
   ]
 }

@@ -89,8 +89,39 @@ async function stepEvidence(ctx,slot,doc,width) {
   assert.equal(await evaluate(q('#sample-review [data-scale=line]')+'.getAttribute("aria-pressed")'),'true');
   await key(ctx,'Escape');await wait('document.activeElement==='+link,'return to the same source page');
 }
+async function caseScripts(ctx) {
+  const {call,evaluate,wait,root}=ctx;
+  await home(ctx);
+  const count=path=>'performance.getEntriesByType("resource").filter(e=>new URL(e.name).pathname==='+JSON.stringify('/assets/'+path)+').length';
+  await wait(q('#sheet-acceptance .purchase-line')+'?.naturalWidth>0','default acceptance evidence');
+  const optional=['warranty-register','guarantee-period-card','payment-reference-card','payment-proof-card','supplier-card','acceptance-roster-card','signer-timeline',
+    'public-warranty-register','public-guarantee-period','public-payment-acceptance','public-payment-proof','public-suppliers','public-acceptance-roster','public-signer-timing'];
+  for (const name of optional) assert.equal(await evaluate(count(name+'.js')),0,'defer '+name);
+  for (const name of ['purchase-contract-line-10.webp','purchase-transfer-line-7.webp']) assert.equal(await evaluate(count(name)),0);
+  await call('Network.enable');await call('Network.setBlockedURLs',{urls:['*public-warranty-register.js*']});
+  const select=q('#payment-example'), slot='#payment-warranty-register';
+  const choose=name=>select+'.value='+JSON.stringify(name)+';'+select+'.dispatchEvent(new Event("change"));';
+  await evaluate(choose('warranty')+q('#scene-tab-folios')+'.click()');
+  const retry=q(slot+' .case-tools-retry button');
+  await wait(retry+'?.getClientRects().length','original payment proof while case script is unavailable');
+  const original=await evaluate(q(slot+' .period-fallback a')+'.pathname');
+  assert.equal(original,'/showcase/warranty-register-certificate.pdf');
+  assert.equal((await fetch(root+original)).status,200);
+  await call('Network.setBlockedURLs',{urls:[]});await evaluate(retry+'.focus()');await browserInput(ctx).key('Enter');
+  await wait(q(slot)+'.dataset.revision && !'+retry,'retry only the missing script');
+  assert.equal(await evaluate(count('warranty-register.js')),1);
+  await evaluate(choose('clock')+choose('timing'));
+  await wait(q('#payment-signer-timing')+'.dataset.revision','latest selection owns the loaded timeline');
+  assert.equal(await evaluate(q('#payment-signer-clock')+'.hasAttribute("data-revision")'),false);
+  await evaluate(choose('clock'));
+  await wait(q('#payment-signer-clock')+'.dataset.revision','mount second timeline from the same loaded scripts');
+  for (const name of ['signer-timeline.js','public-signer-timing.js']) assert.equal(await evaluate(count(name)),1);
+  await noTenantRequests(ctx);
+}
+
 export async function checkPurchasePreview(ctx) {
   const {root,call,wait,evaluate}=ctx;
+  await call('Network.enable');await call('Network.setCacheDisabled',{cacheDisabled:true});
   const indexBytes=await (await fetch(root+'/assets/purchase-preview.json')).arrayBuffer();
   const record=JSON.parse(Buffer.from(indexBytes));
   const {mode}=await (await fetch(root+'/api/session')).json();
@@ -107,6 +138,9 @@ export async function checkPurchasePreview(ctx) {
     await call('Emulation.setDeviceMetricsOverride',{width,height:width<600?844:900,deviceScaleFactor:1,mobile:width<600});
     await home(ctx,'?width='+width);
     await wait(q('#sheet-acceptance .purchase-line')+'?.naturalWidth>0','real source crop rendered');
+    if (width<1024) {
+      await wait(q('#sheet-acceptance .purchase-sheet img')+'.currentSrc.endsWith("/purchase-acceptance-thumb-112.webp")','archived thumbnail sized for a narrow screen');
+    }
     assert.equal(await evaluate(q('#sample')+'.dataset.evidenceIntegrity'),'sha256-'+createHash('sha256').update(Buffer.from(indexBytes)).digest('base64'));
     const imagePaths=Object.values(record.documents).map(d=>d.image);
     assert.ok(await evaluate('!performance.getEntriesByType("resource").some(e=>'+JSON.stringify(imagePaths)+'.includes(new URL(e.name).pathname))'),'full pages load on demand');
@@ -165,6 +199,7 @@ export async function checkPurchasePreview(ctx) {
   }
   await noTenantRequests(ctx);
   await call('Network.setBlockedURLs',{urls:[]});
+  await caseScripts(ctx);
   for (const alias of Object.keys(profiles)) {
     await home(ctx); await start(ctx,alias);
     if (mode==='saas') await guest(ctx,alias); else await upload(ctx,alias,'本机工作区');

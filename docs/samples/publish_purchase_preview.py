@@ -73,6 +73,11 @@ def publish(archive, check):
                 thumb.thumbnail((420, 600), Image.Resampling.LANCZOS)
                 thumb_name = "purchase-" + slug + "-thumb.webp"
                 output[thumb_name] = webp(thumb)
+                for width in (112, 168):
+                    small = original_page.copy()
+                    small.thumbnail((width, original_page.height), Image.Resampling.LANCZOS)
+                    verify(small.width == width, slug, "窄屏原页缩略尺寸")
+                    output[f"purchase-{slug}-thumb-{width}.webp"] = webp(small)
                 entry = {"title":Path(document["name"]).stem,"version":"合成采购 · R8","page":1,"pdf":"/showcase/"+source.name,
                          "image":"/assets/"+public_page,"thumb":"/assets/"+thumb_name,"size":list(original_page.size),
                          "source_sha256":document["sha256"],"page_sha256":page["sha256"],"finding":finding["id"],"lines":[]}

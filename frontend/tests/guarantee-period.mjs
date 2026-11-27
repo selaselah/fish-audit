@@ -176,7 +176,7 @@ export async function checkPublicGuaranteePeriod(ctx) {
     assert.equal(await evaluate('performance.getEntriesByType("resource").some(e=>new URL(e.name).pathname.startsWith("/api/"))'),false);
   }
   await call('Page.navigate',{url:root+'/?scene=contract-comments#workflow'});
-  await wait(q(slot)+' && typeof PublicGuaranteePeriod!=="undefined" && '+q('#payment-example')+'.value==="comments"','load recovery control');
+  await wait(q(slot)+' && '+q('#payment-example')+'?.value==="comments" && !'+q('#payment-example-choice')+'.hidden','load recovery control');
   const el=q(slot), retry=q(slot+' .standard-retry'), select=q('#payment-example');
   await call('Network.enable'); await call('Network.setBlockedURLs',{urls:['*guarantee-period-sample.json*']});
   await evaluate(select+'.value="guarantee";'+select+'.dispatchEvent(new Event("change"))');
