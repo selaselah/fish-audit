@@ -62,6 +62,46 @@ class EnterpriseFlow(unittest.TestCase):
         self.worker.run(self.store.claim())
         return cid
 
+    def test_personal_walkthrough_notes_are_scoped_and_retryable(self):
+        admin,wid,headers = self.register("walk-owner")
+        invite = admin.post("/api/workspaces/"+wid+"/invites",headers=headers,json={"role":"employee"}).json["token"]
+        employee,_,eh = self.register("walk-member",invite=invite)
+        outsider,_,_ = self.register("walk-outside")
+        cid = self.submit(admin,wid,headers)
+        url = "/api/w/"+wid+"/walkthrough"
+        note = {"id":"c"*32, "text":"  合同一栏可以加宽。  ", "context":{"screen":"case","case_id":cid,"tab":"report"}}
+        self.assertEqual(admin.post(url,json=note).status_code,403)
+        self.assertEqual(admin.get("/api/walkthrough").status_code,404)
+        first = admin.post(url,headers=headers,json=note)
+        self.assertEqual(first.status_code,201)
+        self.assertEqual(first.json["note"]["text"],note["text"].strip())
+        repeat = admin.post(url,headers=headers,json=note)
+        self.assertEqual(repeat.status_code,200)
+        self.assertEqual(first.json,repeat.json)
+        self.assertEqual(admin.post(url,headers=headers,json={**note,"text":"另一条"}).status_code,409)
+        for position in ({"rev":9999}, {"doc":"d98","page":99}):
+            out=admin.post(url,headers=headers,json={**note,"id":"b"*32,"context":{**note["context"],**position}})
+            self.assertEqual(out.status_code,404)
+        self.assertEqual(employee.get(url).json["notes"],[])
+        self.assertEqual(employee.post(url,headers=eh,json=note).status_code,404)
+        self.assertEqual(employee.post(url,headers=eh,json={**note,"context":{"screen":"desk"}}).status_code,201)
+        self.assertIn(outsider.get(url).status_code,(403,404))
+        self.assertEqual(admin.get(url).json["notes"],[first.json["note"]])
+        self.assertEqual(self.app.test_client().get(url).status_code,401)
+
+    def test_local_walkthrough_notes_persist_independently_of_audits(self):
+        with patch.dict(os.environ,{"AUDIT_ACCESS_MODE":"local","AUDIT_PUBLIC_ORIGIN":""}):
+            client = create_app(self.store,self.worker).test_client()
+            url = "/api/walkthrough"
+            note = {"id":"a"*32,"text":"按钮位置","context":{"screen":"home","section":"workflow","params":{"scene":"payment-release"}}}
+            self.assertEqual(client.post(url,json=note,headers={"Origin":"https://example.invalid"}).status_code,403)
+            for invalid in ({"screen":[]}, {"screen":"home","url":"https://example.invalid"}, {"screen":"home","params":{"token":"abc"}}, {"screen":"case"}):
+                self.assertEqual(client.post(url,json={**note,"context":invalid}).status_code,400)
+            self.assertEqual(client.post(url,json=note).status_code,201)
+            restarted = create_app(Store(self.store.root),self.worker).test_client()
+            self.assertEqual(restarted.get(url).json["notes"][0]["context"],note["context"])
+            self.assertEqual(restarted.get("/api/cases").json["cases"],[])
+
     def test_concurrent_approvals_recheck_invoice_history_inside_the_write_transaction(self):
         from concurrent.futures import ThreadPoolExecutor
         from threading import Barrier

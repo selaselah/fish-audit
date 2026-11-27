@@ -21,6 +21,7 @@ import {checkAcceptanceRoster,checkAcceptancePdf} from './acceptance-roster.mjs'
 import {checkEvidenceCompare,checkMandateCompare,checkPhaseEvidence,checkPaymentChange} from './evidence-compare.mjs';
 import {checkPaymentOpinions} from './payment-opinions.mjs';
 import {checkRelease,checkPublicRelease} from './payment-release.mjs';
+import {checkWalkthrough} from './walkthrough.mjs';
 import {checkBatchPhase} from './batch-phase.mjs';
 import {checkBatchStandard} from './batch-standard.mjs';
 import {checkGuaranteePeriod,checkPublicGuaranteePeriod} from './guarantee-period.mjs';
@@ -60,6 +61,8 @@ await new Promise(resolve => socket.close(resolve));
 const sampleDesk = process.argv.includes('--sample-desk');
 const product = process.argv.includes('--product');
 const publicRelease=process.argv.includes('--public-release');
+const walkthroughLocal=process.argv.includes('--walkthrough-local');
+const walkthroughTeam=process.argv.includes('--walkthrough-team');
 const publicPurchase=process.argv.includes('--public-purchase-preview');
 const publicPeriod=process.argv.includes('--public-guarantee-period');
 const publicWarrantyRegister=process.argv.includes('--public-warranty-register');
@@ -185,8 +188,14 @@ async function until(read, label, timeout = 15000) {
 }
 let ws;
 try {
+  let walkthroughCase;
+  if (walkthroughLocal) {
+    walkthroughCase=execFileSync(process.env.AUDIT_PYTHON || 'server/.venv/bin/python',
+      ['frontend/tests/walkthrough-fixture.py',join(scratch,'data')],{encoding:'utf8',
+        env:{...process.env,AUDIT_ACCESS_MODE:'local',AUDIT_PUBLIC_ORIGIN:''}}).trim();
+  }
   if (!seeded) start(process.env.AUDIT_PYTHON || 'server/.venv/bin/python', ['server/main.py'], {...process.env,
-    PORT:String(port), AUDIT_BIND:'127.0.0.1', AUDIT_ACCESS_MODE:'saas', AUDIT_PUBLIC_ORIGIN:root,
+    PORT:String(port), AUDIT_BIND:'127.0.0.1', AUDIT_ACCESS_MODE:walkthroughLocal?'local':'saas', AUDIT_PUBLIC_ORIGIN:walkthroughLocal?'':root,
     AUDIT_DATA_DIR:join(scratch, 'data')});
   await until(async () => (await fetch(root+'/api/health')).ok,'service');
   const chrome = process.env.CHROME_BIN || (process.platform === 'darwin'
@@ -225,7 +234,10 @@ try {
   const click = (label, container='document') => evaluate('[...'+container+'.querySelectorAll("button,a")].find(b=>b.textContent==='+JSON.stringify(label)+' && b.getClientRects().length).click()');
   await call('Runtime.enable');
   await call('Page.navigate',{url:product || publicAcceptanceOriginals || publicOriginals || publicAddendum || publicWarrantyRegister || publicPeriod || publicStandards || publicPurchase || isolatedEntry ? root : root+'/app'});
-  if (isolatedEntry) {
+  if (walkthroughLocal || walkthroughTeam) {
+    assert.ok(!seeded && !['8000','8010'].includes(new URL(root).port));
+    await checkWalkthrough({root,call,evaluate,wait,entry,click},walkthroughCase,scratch);
+  } else if (isolatedEntry) {
     assert.ok(!seeded && !['8000','8010'].includes(new URL(root).port));
     await checkIntakeEntry({root,call,evaluate,wait,entry,click});
   } else if (privateAcceptanceOriginals || publicAcceptanceOriginals) {

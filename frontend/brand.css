@@ -99,4 +99,14 @@
 .ic-receipt::before { content: "\f50f"; }
 .ic-card-checklist::before { content: "\f224"; }
 .ic-paperclip::before { content: "\f4b3"; }
+.walk-launch {
+  position:fixed; inset:auto max(14px,env(safe-area-inset-right)) max(14px,env(safe-area-inset-bottom)) auto;
+  z-index:35; display:inline-flex; justify-content:center; align-items:center; gap:6px;
+  min-height:44px; padding:4px 12px; border:1px solid var(--field-line); border-radius:8px;
+  color:var(--secondary); background:var(--surface); box-shadow:0 2px 8px #20243114;
+  font:550 .8rem/1.4 var(--font-ui); cursor:pointer;
+}
+.walk-launch:hover,.walk-launch:focus-visible { color:var(--accent-hover); border-color:var(--accent); }
+dialog button.walk-launch { position:static; display:inline-flex; width:auto; white-space:nowrap; margin-inline-start:auto; flex-shrink:0; box-shadow:none; }
+.walk-mark { outline:3px solid var(--accent)!important; outline-offset:2px; }
 .ic-eye::before { content: "\f341"; }

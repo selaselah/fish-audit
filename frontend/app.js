@@ -645,7 +645,10 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
   const originalButton = action('看原页', () => jumpTo(left,overlay.querySelector('rect')));
   const quotesButton = action('看引文', () => jumpTo(right,right.querySelector('.located')));
   originalButton.setAttribute('aria-controls',left.id); quotesButton.setAttribute('aria-controls',right.id);
-  $('#page-content').replaceChildren(box('viewer-nav', originalButton, quotesButton), box('page-view', left, right));
+  const pageView = box('page-view', left, right);
+  pageView.dataset.doc = docId; pageView.dataset.page = String(pageNumber);
+  if (lineHint) pageView.dataset.line = String(lineHint);
+  $('#page-content').replaceChildren(box('viewer-nav', originalButton, quotesButton), pageView);
   if (!$('#page-dialog').open) $('#page-dialog').showModal();
   if (focusRow) {
     const fact=pageFacts.find(f=>f.id===highlight);
@@ -1538,6 +1541,11 @@ async function refresh() {
       state.detail = data; state.bundle = rev ? bundle : null;
       const requestedFinding = route.params.get('finding');
       const requestedView=route.params.get('view');
+      const walkTab=route.params.get('walktab');
+      if (state.bundle && Object.hasOwn(tabs,walkTab) && !requestedView && !requestedFinding && state.openedCitation!==location.hash) {
+        state.tab=walkTab;
+        if (!route.params.has('fact') && !route.params.has('walkdoc')) state.openedCitation=location.hash;
+      }
       const requestedScope=requestedView?.endsWith('-checks') && state.bundle &&
         PerformanceIndex.groups(bundle.report.findings).find(g=>g.id+'-checks'===requestedView);
       let focusFinding;
@@ -1641,6 +1649,15 @@ async function refresh() {
       if (target && state.openedCitation !== location.hash && state.bundle) {
         const fact = state.bundle.report.graph.facts.find(f => f.id === target);
         if (fact) { state.openedCitation = location.hash; openPage(fact.doc,fact.page,fact.id); }
+      }
+      if (route.params.has('walkdoc') && !target && state.openedCitation!==location.hash) {
+        const graph=state.bundle?.report.graph;
+        const doc=(graph?.documents || data.documents).find(item=>item.id===route.params.get('walkdoc'));
+        const page=Number(route.params.get('walkpage')), line=Number(route.params.get('walkline'));
+        if (doc && OriginalReader.pageNumbers(doc,graph).includes(page)) {
+          state.openedCitation=location.hash;
+          openPage(doc.id,page,undefined,Number.isSafeInteger(line) && line>0?line:undefined);
+        }
       }
       if (['queued','running'].includes(data.status)) interval = 1600;
       if (data.status === 'in_review') interval = 6000;

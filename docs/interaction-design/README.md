@@ -1,5 +1,13 @@
 # Fish Audit 产品界面与交互设计
 
+## 在页面上记录走查意见
+
+在首页、工作台或站内原件阅读器点「提意见」，可边操作边写。点选控件为本条意见补充位置，按 Esc 可退出点选。底稿意见会记录当时的版本和标签页，站内原件还带资料编号与页码。打开有稳定元素编号的链接，页面会短暂标出相应位置。上传表单的链接保留审计范围。[手机点选原控件实拍](walkthrough-mobile.webp)
+
+「已记录」里的位置链接可以重新打开。桌面和手机都可以把整轮清单复制给 Codex 或下载成 Markdown。本机模式的记录存入本地数据库。企业工作区按企业和账号保存个人意见，企业实例的公开页保存在当前浏览器。提交的内容是意见及位置，原件、截图和表单输入留在原界面。[本地案例](http://127.0.0.1:8000/?scene=payment-release&slip=late#workflow) · [走查接口](../api.md#产品走查意见)
+
+在 Codex 内置浏览器预览本机站点时，也可用工具栏的「Ask for changes」点选元素并将意见发到当前对话，适合当场讨论某个改动。[OpenAI 内置浏览器说明](https://help.openai.com/en/articles/20001277-using-the-built-in-browser-in-the-chatgpt-desktop-app)
+
 ## 审计员怎样核对一张付款放行单
 
 「签署版本」直接显示提交版本。点击 PDF 修订明细，可看签名范围及签后增加的字节。Word 草稿则显示审阅者的批注，点击所选正文可回到打印页。签认栏是照片时，入口打开对应整页。[签后追加 349 字节](http://127.0.0.1:8000/?scene=payment-release&slip=earlier#workflow) · [Word 会签批注](http://127.0.0.1:8000/?scene=payment-release&slip=comment#workflow)

@@ -135,6 +135,9 @@ class Store:
         with self.connect() as db:
             db.execute("PRAGMA journal_mode=WAL")
             db.executescript("""
+                CREATE TABLE IF NOT EXISTS walkthrough_notes(
+                    workspace TEXT NOT NULL, author TEXT NOT NULL, id TEXT NOT NULL, created TEXT NOT NULL,
+                    note TEXT NOT NULL, context TEXT NOT NULL, PRIMARY KEY(workspace,author,id));
                 CREATE TABLE IF NOT EXISTS cases(
                     id TEXT PRIMARY KEY, title TEXT NOT NULL, created TEXT NOT NULL, updated TEXT NOT NULL,
                     status TEXT NOT NULL, stage TEXT NOT NULL, progress INTEGER NOT NULL, message TEXT NOT NULL,

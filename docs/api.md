@@ -1,5 +1,13 @@
 # 本机审计接口
 
+## 产品走查意见
+
+本机服务的 `GET /api/walkthrough` 返回 `{"notes":[...]}`，按保存时间倒序排列。每条含 `id`、UTC 时间 `created`、意见 `text` 和页面定位 `context`。在同一台机器上工作的 Codex 可直接读取这一清单。[本机走查清单](http://127.0.0.1:8000/api/walkthrough)
+
+向同一地址 POST JSON 可保存意见。`id` 为前端生成的 32 位小写十六进制编号，`text` 为 1 至 2000 字。定位字段按页面校验，底稿记录关联案件、版次、原页等编号。首次写入返回 201，重试相同内容返回已有记录及 200，同一编号提交不同内容返回 409。走查记录与审计签收、原件和底稿版本分别存储。
+
+企业工作区使用 `/api/w/<wid>/walkthrough`，沿用成员身份和写入时的 CSRF 校验，清单仅列出当前账号在该企业内的记录。企业实例的公开页使用浏览器存储。[服务端实现](../server/walkthrough.py)
+
 ## 付款放行单的签署凭证
 
 规则 `2026.11.27.11` 的 `policy.release_execution` 为 `payment-release-execution-v1`。PDF 凭证在 `graph.release_pdf_sources.records`，Word 和图像凭证在 `graph.release_original_sources.records`，Word 审阅记录在同一对象的 `documents`。每个凭证绑定提交文件摘要、单元、物理页和签认字段。发现经 `supports_result` 引用凭证，Word 批注另有指向原页的关系。[生成与核验](../server/release_execution.py)

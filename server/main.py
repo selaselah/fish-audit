@@ -38,6 +38,7 @@ from model import FIELDS
 from review import review_text
 from rule_replay import RulesUnavailable, replay_from_git
 from storage import Store, encode, stamp
+from walkthrough import list_notes, save_note
 from workbench import inbox, search_evidence
 
 
@@ -203,8 +204,16 @@ def create_app(store, worker):
         if case_id:
             owner = g.actor["id"] if g.role == "employee" else None
             store.require_case(case_id, g.workspace, owner)
-        if g.role == "employee" and action not in {"cases","ledger","submit","detail","original","page_image"}:
+        if g.role == "employee" and action not in {"cases","ledger","submit","detail","original","page_image","walkthrough_notes"}:
             raise CaseError("此操作需要审计人员或管理员权限。", 403)
+
+    @business.route("/walkthrough", methods=["GET", "POST"])
+    def walkthrough_notes():
+        author = g.actor["id"] if g.actor else "local"
+        if request.method == "POST":
+            note, status = save_note(store, g.workspace, author, g.role, json_body())
+            return jsonify(note=note), status
+        return jsonify(notes=list_notes(store, g.workspace, author))
 
     def signer(data):
         return g.actor["name"] if g.actor else text_field(data.get("reviewer"), "审计人员姓名", 50)
