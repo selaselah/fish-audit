@@ -17,7 +17,7 @@ WORD = {".doc", ".docx"}
 @dataclass(frozen=True)
 class Family:
     role: str
-    kind: str
+    kinds: tuple[str, ...]
     label: str
     inspection: str
     fields: tuple[str, ...]
@@ -28,7 +28,7 @@ class Family:
 def filings(graph, family):
     from config import FORMATS
 
-    assigned = set(graph.get("documents_by_kind", {}).get(family.kind, ()))
+    assigned = {unit for kind in family.kinds for unit in graph.get("documents_by_kind", {}).get(kind, ())}
     units = defaultdict(list)
     for unit in graph.get("audit_documents", graph["documents"]):
         if unit["id"] in assigned:
@@ -37,7 +37,7 @@ def filings(graph, family):
             if doc["id"] in units and doc.get("ext") in FORMATS and doc["ext"] != ".pdf"]
 
 
-def sources(graph, read_original, read_text, family):
+def sources(graph, read_original, read_text, family, *, reviews=None):
     from config import MAX_PAGES
 
     available = set()
@@ -50,15 +50,15 @@ def sources(graph, read_original, read_text, family):
             available.add(doc["id"])
         return raw
 
-    documents = word.sources(graph, original, read_text, kinds=(family.kind,),
+    documents = reviews if reviews is not None else word.sources(graph, original, read_text, kinds=family.kinds,
                              role=family.role, format_id=family.format, compare=family.compare)["documents"]
-    reviews = {r["doc"]: r for r in documents}
+    by_doc = {r["doc"]: r for r in documents}
     nodes = {n["id"]: n for n in graph["nodes"] if n["type"] == "page"}
     records = []
     for doc, units in filings(graph, family):
         ident, ext = doc["id"], doc["ext"]
-        review = reviews.get(ident)
-        if ext not in WORD:
+        review = by_doc.get(ident)
+        if ext not in WORD or reviews is not None:
             original(doc)
         total = doc.get("pages")
         if total is None:
@@ -103,13 +103,16 @@ def sources(graph, read_original, read_text, family):
                             "original_sha256": doc["sha256"], "kind": "word" if review else "image", "state": state,
                             "pages": pages, "fields": fields, "review": review["id"] if review else None,
                             "notes": notes, "unplaced": unplaced})
-    return {"format": family.format, "records": records, "documents": documents}
+    ledger = {"format": family.format, "records": records}
+    if reviews is None:
+        ledger["documents"] = documents
+    return ledger
 
 
-def source_graph(ledger, family):
+def source_graph(ledger, family, *, reviews=None):
     nodes, edges = unit_graph(ledger, family.role + "_original", family.inspection)
-    word_nodes, word_edges = word.source_graph(ledger, role=family.role, label=family.label, relation=family.role + "_word_review")
-    notes = {n["id"]: n for doc in ledger["documents"] for n in doc["notes"]}
+    documents = ledger["documents"] if reviews is None else reviews
+    notes = {n["id"]: n for doc in documents for n in doc["notes"]}
     for record in ledger["records"]:
         if record["review"]:
             refs = [record["doc"], record["review"]]
@@ -117,6 +120,9 @@ def source_graph(ledger, family):
             for ident in record["notes"]:
                 edges.append({"from": record["id"], "to": ident, "type": family.role + "_original_comment",
                               "evidence": refs + note_page_refs(record["doc"], notes[ident])})
+    if reviews is not None:
+        return nodes, edges
+    word_nodes, word_edges = word.source_graph(ledger, role=family.role, label=family.label, relation=family.role + "_word_review")
     return nodes + word_nodes, edges + word_edges
 
 

@@ -42,6 +42,7 @@ import payment_windows
 import invoice_conditions
 import payment_amendments
 import acceptance_comments
+import acceptance_originals
 import contract_comments
 import acceptance_reservations
 import payment_releases
@@ -346,6 +347,10 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     reviews = acceptance_comments.sources(graph, read_original, lambda doc, number: texts[doc, number])
     graph["acceptance_word_reviews"] = reviews
     nodes, edges = acceptance_comments.source_graph(reviews)
+    graph["nodes"].extend(nodes)
+    graph["edges"].extend(edges)
+    graph[acceptance_originals.KEY] = acceptance_originals.sources(graph, read_original, lambda d, p: texts[d, p], reviews)
+    nodes, edges = acceptance_originals.source_graph(graph[acceptance_originals.KEY], reviews)
     graph["nodes"].extend(nodes)
     graph["edges"].extend(edges)
     contract_reviews = contract_comments.sources(graph, read_original, lambda doc, number: texts[doc, number])

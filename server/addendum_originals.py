@@ -7,7 +7,7 @@ from contract_comments import line_key
 FORMAT = "addendum-original-execution-v1"
 SINCE = (2026, 11, 27, 9)
 KEY = "addendum_original_sources"
-FAMILY = originals.Family("addendum", "contract_addendum", "补充协议", "补充协议原件签署凭证",
+FAMILY = originals.Family("addendum", ("contract_addendum",), "补充协议", "补充协议原件签署凭证",
                           ("buyer_signature", "seller_signature"), FORMAT, compare=line_key)
 DETAIL = {
     "word_text": "补充协议 Word 打印页仅见排印文字，请取得双方签署的定稿或对应签署记录。",

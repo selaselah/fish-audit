@@ -7,7 +7,7 @@ from pdf_execution import apply_unit_records
 
 FORMAT = "mandate-original-execution-v1"
 SINCE = (2026, 11, 27, 4)
-FAMILY = originals.Family("mandate", "power_of_attorney", "委托书", "委托书原件签发凭证", ("grant_signature",), FORMAT)
+FAMILY = originals.Family("mandate", ("power_of_attorney",), "委托书", "委托书原件签发凭证", ("grant_signature",), FORMAT)
 DETAIL = {
     "word_text": "委托书 Word 打印页仅见排印文字。请核对委托方签发的原件或对应签署记录。",
     "word_visual": "委托书 Word 页含图形或其他版面元素。请对照签章栏与委托方的签发记录。",

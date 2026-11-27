@@ -7,6 +7,7 @@ from functools import cache
 from unicodedata import normalize
 
 import acceptance_execution
+import acceptance_originals
 import acceptance_comments
 import equipment_models
 from acceptance_authority import CLAUSE, LABELS as SIGNING_LABELS, covers, instruction, parts, required_names, signed_name
@@ -692,6 +693,7 @@ def inspect(graph,contract,receipts,*,other_terms,native_spacing=False,requireme
     for item in records:
         acceptance_comments.apply(item, graph, {item["unit"]})
         acceptance_execution.apply(item,acceptance_execution.relevant(graph,{item["unit"]}))
+        acceptance_originals.apply(item, graph, {item["unit"]})
     if model_checks:
         by_unit = {r["unit"]: r for r in model_checks["records"]}
         for item in records:

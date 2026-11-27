@@ -325,3 +325,4 @@ def verify(report, read_original, read_text, *, signing=False):
     ledger = sources(graph,read_original,read_text)
     if graph.get("acceptance_word_reviews")!=ledger or (nodes,edges)!=source_graph(ledger):
         raise ValueError("Word 验收批注、原件位置或图谱引用与原件不符")
+    return ledger

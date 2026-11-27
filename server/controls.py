@@ -36,6 +36,7 @@ from receipt_packets import FORMAT as RECEIPT_PACKETS
 from delivery_batches import FORMAT as DELIVERY_BATCHES
 from contract_effect import FORMAT as CONTRACT_EFFECT
 from acceptance_execution import FORMAT as ACCEPTANCE_PDF
+from acceptance_originals import FORMAT as ACCEPTANCE_ORIGINALS
 from addendum_originals import FORMAT as ADDENDUM_ORIGINALS
 from addendum_execution import FORMAT as ADDENDUM_PDF
 from mandate_execution import FORMAT as MANDATE_PDF
@@ -81,7 +82,7 @@ VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING
            "invoice_receipt_conditions":INVOICE_RECEIPT, "acceptance_reservations":RESERVATIONS, "acceptance_word_reviews":WORD_REVIEWS, "contract_word_reviews":CONTRACT_WORD_REVIEWS, "payment_releases":PAYMENT_RELEASES, "equipment_models":EQUIPMENT_MODELS, "repair_completion":REPAIR_COMPLETION, "reinspection_wait": REINSPECTION_WAIT, "contract_folios": CONTRACT_FOLIOS, "inspection_coverage":INSPECTION_COVERAGE, "prior_installment":PRIOR_INSTALLMENT,
            "quality_number_classification":QUALITY_NUMBER_FORMAT, "quality_references":QUALITY_REFERENCE_FORMAT,
            "delegation_checks":DELEGATION_FORMAT, "quality_addenda":ADDENDUM_FORMAT, "acceptance_authority":ACCEPTANCE_AUTHORITY,"delivery_batches":DELIVERY_BATCHES,"receipt_packets":RECEIPT_PACKETS,"stage_payments":STAGE_PAYMENTS, "payment_acceptance":PAYMENT_ACCEPTANCE, "payment_execution":PAYMENT_EXECUTION,
-           "supplier_page_inspection": SUPPLIER_PAGE_INSPECTION, "pdf_execution": PDF_EXECUTION, "acceptance_pdf": ACCEPTANCE_PDF, "addendum_pdf": ADDENDUM_PDF, "addendum_originals": ADDENDUM_ORIGINALS, "mandate_pdf": MANDATE_PDF, "mandate_originals": MANDATE_ORIGINALS, "contract_effect":CONTRACT_EFFECT,"warranty_checks":WARRANTY_CHECKS,"payment_windows":PAYMENT_WINDOWS,"sources": SOURCES, "rule_sources": MAPPING, "invoice_sources": INVOICE_SOURCE_FORMAT,
+           "supplier_page_inspection": SUPPLIER_PAGE_INSPECTION, "pdf_execution": PDF_EXECUTION, "acceptance_pdf": ACCEPTANCE_PDF, "acceptance_originals": ACCEPTANCE_ORIGINALS, "addendum_pdf": ADDENDUM_PDF, "addendum_originals": ADDENDUM_ORIGINALS, "mandate_pdf": MANDATE_PDF, "mandate_originals": MANDATE_ORIGINALS, "contract_effect":CONTRACT_EFFECT,"warranty_checks":WARRANTY_CHECKS,"payment_windows":PAYMENT_WINDOWS,"sources": SOURCES, "rule_sources": MAPPING, "invoice_sources": INVOICE_SOURCE_FORMAT,
            "invoice_approval": INVOICE_APPROVAL_FORMAT,"invoice_identity":INVOICE_IDENTITY_FORMAT,"invoice_lookup":INVOICE_LOOKUP,
            "invoice_number_masks":MASK_FORMAT,"payment_references":PAYMENT_REFERENCE_FORMAT,"payment_checks":PAYMENT_CHECKS}
 FULL_TERMS = {"验收后一次性全额结算", "验收后一次性付清", "一次性全额结算", "一次性付清",
@@ -153,7 +154,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
     def with_performance():
         for item in performance:
             record(item["rule"],item["status"],item["detail"],item["evidence"],item["scope"])
-            for key in ("stage","reinspection","delegations","quality_change","acceptance_authority","acceptance_execution",
+            for key in ("stage","reinspection","delegations","quality_change","acceptance_authority","acceptance_execution","acceptance_originals",
                         "signer_timing","date_checks","batch_acceptance","effect_review","warranty_check","warranty_payment","warranty_difference",
                         "payment_window","invoice_receipt","payment_change","payment_opinion","acceptance_reservations",
                         "acceptance_comments","contract_comments","stage_payments","payment_acceptance","execution_basis",

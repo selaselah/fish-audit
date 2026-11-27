@@ -38,6 +38,7 @@ from delivery_batches import verify_sources as verify_delivery_batches
 from contract_effect import verify as verify_contract_effect
 from pdf_execution import verify as verify_pdf_execution
 from acceptance_execution import verify as verify_acceptance_pdf
+from acceptance_originals import verify as verify_acceptance_originals
 from addendum_originals import verify as verify_addendum_originals
 from addendum_execution import verify as verify_addendum_pdf
 from mandate_execution import verify as verify_mandate_pdf
@@ -774,6 +775,11 @@ class Store:
                                       (case_id, doc, page)).fetchone()
                 return page_row[0] if page_row else None
             try:
+                reviews = verify_word_reviews(paper, read_original, read_text, signing=True)
+                verify_acceptance_originals(paper, read_original, read_text, signing=True, verified_reviews=reviews)
+            except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
+                raise CaseError(f"签收前核对验收签认原件失败。{error}", 409) from error
+            try:
                 verify_addendum_originals(paper, read_original, read_text, signing=True)
             except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
                 raise CaseError(f"签收前核对补充协议原件失败。{error}", 409) from error
@@ -782,7 +788,6 @@ class Store:
             except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
                 raise CaseError(f"签收前核对委托书原件失败。{error}", 409) from error
             try:
-                verify_word_reviews(paper, read_original, read_text, signing=True)
                 verify_contract_reviews(paper, read_original, read_text, signing=True)
             except (ValueError, OSError, KeyError, TypeError) as error:
                 raise CaseError(f"签收前核对 Word 审阅记录失败。{error}", 409) from error
@@ -791,7 +796,7 @@ class Store:
             except (KeyError, TypeError, ValueError) as error:
                 raise CaseError(f"签收前核对回单所据验收原件失败。{error}", 409) from error
             if row["profile"]!=BANK:
-                signing_proofs = {r["id"] for key in ("acceptance_pdf_sources", "addendum_pdf_sources", "addendum_original_sources", "mandate_pdf_sources", "mandate_original_sources")
+                signing_proofs = {r["id"] for key in ("acceptance_pdf_sources", "acceptance_original_sources", "addendum_pdf_sources", "addendum_original_sources", "mandate_pdf_sources", "mandate_original_sources")
                               for r in graph.get(key, {}).get("records", [])}
                 full_page_checks = [f for f in paper["findings"] if any(f.get(key) for key in FULL_PAGE_EVIDENCE)
                                     or signing_proofs.intersection(f["evidence"])]

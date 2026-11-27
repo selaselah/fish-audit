@@ -23,6 +23,7 @@ import pdf_execution
 import mandate_execution
 import mandate_originals
 import acceptance_execution
+import acceptance_originals
 import addendum_execution
 import contract_calendar
 import signing_parties
@@ -788,6 +789,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
     by_unit = {r["unit"]:r for r in authority["records"]} if authority else {}
     pdf_records = acceptance_execution.relevant(graph,{r.unit for r in [*receipts,*retests]})
     pending_signatures = {r["unit"] for r in pdf_records if r["state"] in acceptance_execution.DETAIL}
+    pending_signatures.update(r["unit"] for r in graph.get(acceptance_originals.KEY, {}).get("records", ()))
     def signatory(record):
         if record.unit in pending_signatures:
             return False
@@ -796,7 +798,9 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         quantity = change.get("quantity") if change else None
         criterion = (change["applied_criterion"] or "") if change and not (quantity and change["scope_clear"]) else None
         finding = acceptance(contract,selected,criterion=criterion,quantity_change=quantity,signature_ok=signatory if authority else None)
-        acceptance_execution.apply(finding,[r for r in pdf_records if any(doc.unit==r["unit"] for doc in selected)])
+        units = {doc.unit for doc in selected}
+        acceptance_execution.apply(finding,[r for r in pdf_records if r["unit"] in units])
+        acceptance_originals.apply(finding, graph, units)
         return finding
     if version in (REINSPECTION_FORMAT, *MANDATE_FORMATS):
         ledger = graph.get("repair_completion_sources") if version == FORMAT else None
@@ -965,7 +969,9 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
             accepted_on = None
             if accepted.get("reinspection"):
                 accepted["reinspection"]["state"] = "open"
-    if acceptance_execution.apply(accepted,pdf_records):
+    pdf_pending = acceptance_execution.apply(accepted,pdf_records)
+    native_pending = acceptance_originals.apply(accepted, graph, {r.unit for r in [*receipts,*retests]})
+    if pdf_pending or native_pending:
         accepted_on = None
         if accepted.get("reinspection"):
             accepted["reinspection"]["state"] = "open"
@@ -1274,6 +1280,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("reinspection") != entry.get("reinspection") or saved.get("delegations") != entry.get("delegations")
                 or saved.get("quality_change") != entry.get("quality_change")
                 or saved.get("acceptance_execution") != entry.get("acceptance_execution")
+                or saved.get("acceptance_originals") != entry.get("acceptance_originals")
                 or saved.get("acceptance_authority") != entry.get("acceptance_authority")
                 or saved.get("date_checks") != entry.get("date_checks")
                 or saved.get("batch_acceptance") != entry.get("batch_acceptance")

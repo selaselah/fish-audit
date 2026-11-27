@@ -34,6 +34,7 @@ from delivery_batches import verify_sources as verify_delivery_batches
 from contract_effect import verify as verify_contract_effect
 from pdf_execution import verify as verify_pdf_execution
 from acceptance_execution import verify as verify_acceptance_pdf
+from acceptance_originals import verify as verify_acceptance_originals
 from addendum_originals import verify as verify_addendum_originals
 from addendum_execution import verify as verify_addendum_pdf
 from mandate_execution import verify as verify_mandate_pdf
@@ -283,7 +284,8 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
         raise ValueError("重验 PDF 签署凭证需要安装 server/requirements.txt 中的依赖，请使用服务端虚拟环境运行校验。") from error
     verify_addendum_originals(report, read_original, page_text)
     verify_mandate_originals(report, read_original, page_text)
-    verify_word_reviews(report, read_original, page_text)
+    reviews = verify_word_reviews(report, read_original, page_text)
+    verify_acceptance_originals(report, read_original, page_text, verified_reviews=reviews)
     verify_contract_reviews(report, read_original, page_text)
     verify_warranty(report,page_text,submitted=submitted,signed=signed)
     verify_payment_windows(report,page_text)
@@ -465,7 +467,7 @@ def render_addendum_sources(bundle, report, nodes):
     selected.update(p["doc"] for p in graph.get("contract_folio_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("reinspection_wait_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("payment_acceptance_sources",{}).get("pages",[]))
-    for key in ("acceptance_pdf_sources", "addendum_pdf_sources", "addendum_original_sources", "mandate_pdf_sources", "mandate_original_sources"):
+    for key in ("acceptance_pdf_sources", "acceptance_original_sources", "addendum_pdf_sources", "addendum_original_sources", "mandate_pdf_sources", "mandate_original_sources"):
         selected.update(r["doc"] for r in graph.get(key,{}).get("records",[]))
     selected.update(p["doc"] for p in graph.get("inspection_coverage_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("equipment_model_sources",{}).get("pages",[]))
