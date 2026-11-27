@@ -796,6 +796,9 @@ class Store:
                 raise CaseError(f"签收前核对付款放行单原件失败。{error}", 409) from error
             try:
                 board_execution.verify(paper, read_original, read_text, signing=True)
+            except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
+                raise CaseError(f"签收前核对董事会审批原件失败。{error}", 409) from error
+            try:
                 warranty_execution.verify(paper, read_original, read_text, signing=True)
                 warranty_dates.verify(paper, read_text, read_original=read_original)
             except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
