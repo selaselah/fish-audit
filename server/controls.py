@@ -53,6 +53,7 @@ from release_execution import FORMAT as RELEASE_EXECUTION
 from release_comparison import FORMAT as RELEASE_COMPARISON
 from warranty_execution import FORMAT as WARRANTY_EXECUTION
 from payment_quality import FORMAT as PAYMENT_QUALITY
+from retest_reference import FORMAT as RETEST_REFERENCE
 from warranty_dates import FORMAT as WARRANTY_DATES
 from board_execution import FORMAT as BOARD_DECISION
 from contract_changes import FORMAT as ADDENDUM_FORMAT
@@ -85,7 +86,7 @@ CATALOG = {
 }
 VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING, "performance_checks":PERFORMANCE_FORMAT,
            "release_execution": RELEASE_EXECUTION, "release_comparison": RELEASE_COMPARISON, "warranty_execution": WARRANTY_EXECUTION,
-           "warranty_dates": WARRANTY_DATES, "board_decision": BOARD_DECISION, "payment_quality": PAYMENT_QUALITY,
+           "warranty_dates": WARRANTY_DATES, "board_decision": BOARD_DECISION, "payment_quality": PAYMENT_QUALITY, "retest_reference": RETEST_REFERENCE,
            "advance_guarantee":ADVANCE_GUARANTEE,
            "invoice_receipt_conditions":INVOICE_RECEIPT, "acceptance_reservations":RESERVATIONS, "acceptance_word_reviews":WORD_REVIEWS, "contract_word_reviews":CONTRACT_WORD_REVIEWS, "payment_releases":PAYMENT_RELEASES, "equipment_models":EQUIPMENT_MODELS, "repair_completion":REPAIR_COMPLETION, "reinspection_wait": REINSPECTION_WAIT, "contract_folios": CONTRACT_FOLIOS, "inspection_coverage":INSPECTION_COVERAGE, "prior_installment":PRIOR_INSTALLMENT,
            "quality_number_classification":QUALITY_NUMBER_FORMAT, "quality_references":QUALITY_REFERENCE_FORMAT,
@@ -164,7 +165,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
             record(item["rule"],item["status"],item["detail"],item["evidence"],item["scope"])
             for key in ("stage","reinspection","delegations","quality_change","acceptance_authority","acceptance_execution","acceptance_originals",
                         "signer_timing","date_checks","batch_acceptance","effect_review","warranty_check","warranty_payment","warranty_difference",
-                        "payment_window","payment_quality","invoice_receipt","payment_change","payment_opinion","acceptance_reservations",
+                        "payment_window","payment_quality","retest_reference","invoice_receipt","payment_change","payment_opinion","acceptance_reservations",
                         "acceptance_comments","contract_comments","stage_payments","payment_acceptance","execution_basis",
                         "equipment_models","inspection_coverage","prior_installment","contract_folios","advance_guarantee"):
                 if key in item:

@@ -35,15 +35,19 @@ def column(text):
 
 
 def sources(graph, read_text):
+    kinds = graph["documents_by_kind"]
+    if not kinds.get("contract") or not kinds.get("acceptance") or not any(f["field"]=="measured_result" for f in graph["facts"]):
+        return {"format":FORMAT, "rows":[]}
+    return {"format":FORMAT,"rows":printed_rows(graph,read_text,ROLES)}
+
+
+def printed_rows(graph, read_text, roles, *, extra_labels=None):
     from graph import LABELS
     from performance import DATE_LABELS, STAGE_PREFIX
 
-    ledger = {"format":FORMAT, "rows":[]}
-    kinds = graph["documents_by_kind"]
-    if not kinds.get("contract") or not kinds.get("acceptance") or not any(f["field"]=="measured_result" for f in graph["facts"]):
-        return ledger
-    labels = {role:{label:field for field in fields for label in DATE_LABELS.get(field,LABELS[field])}
-              for role,fields in ROLES.items()}
+    rows = []
+    labels = {role:{label:field for field in fields for label in (*DATE_LABELS.get(field,LABELS[field]),*(extra_labels or {}).get(field,()))}
+              for role,fields in roles.items()}
     nodes = {n["id"]:n for n in graph["nodes"] if n["type"]=="page"}
     files = {d["id"]:d["sha256"] for d in graph["documents"]}
     refs = defaultdict(list)
@@ -54,7 +58,7 @@ def sources(graph, read_text):
             refs[f["doc"], f["page"], loc["number"], loc["text"]].append(f["id"])
     for p in graph.get("payment_window_sources",{}).get("pages",[]):
         doc, page, role, unit = p["doc"], p["page"], p["document_kind"], p["unit"]
-        if role not in ROLES or not p["native"]:
+        if role not in roles or not p["native"]:
             continue
         text = read_text(doc,page)
         if not isinstance(text,str) or sha256(text.encode()).hexdigest()!=nodes[f"{doc}/p{page}"]["text_sha256"]:
@@ -65,9 +69,9 @@ def sources(graph, read_text):
             if role=="contract" and STAGE_PREFIX.match(printed(raw)):
                 field = "payment_stage"
             if field:
-                ledger["rows"].append({"doc":doc,"page":page,"unit":unit,"line":number,"field":field,
-                                       "quote":raw,"facts":refs[doc,page,number,raw]})
-    return ledger
+                rows.append({"doc":doc,"page":page,"unit":unit,"line":number,"field":field,
+                             "quote":raw,"facts":refs[doc,page,number,raw]})
+    return rows
 
 
 def witness(rows, material, field, *, clause=None):
@@ -85,7 +89,7 @@ def witness(rows, material, field, *, clause=None):
     if (r["facts"] != [f["id"]] or not loc.get("rects") or (r["doc"],r["page"],r["line"],r["quote"]) !=
             (f["doc"],f["page"],loc["number"],loc["text"])):
         return None
-    if field in ("accepted_on","paid_on"):
+    if field in ("accepted_on","paid_on","repaired_on"):
         from performance import DATE_LABELS
         reading = read_date(f,DATE_LABELS[field],RECEIPT)
         return (f["id"],reading["iso"]) if reading else None
@@ -234,14 +238,18 @@ def verify(report, read_text, *, read_original=None):
     if any(f.get("payment_quality")!=expected.get(f["id"]) or f["id"] in expected and f["status"] not in ("risk","issue") for f in findings):
         raise ValueError("验收款质量发现、所据期次或付款日期不符")
     if expected and read_original:
-        from original_records import verify_rendered
         units = {u for r in expected.values() for u in (r["contract"],r["receipt"],r.get("payment",{}).get("bank")) if u}
-        nodes = {n["id"]:n for n in g["nodes"] if n["type"]=="page"}
-        files = []
-        for page in g["payment_window_sources"]["pages"]:
-            if page["unit"] in units:
-                ref = f"{page['doc']}/p{page['page']}"
-                node = nodes[ref]
-                files.append({"doc":page["doc"],"pages":[{"ref":ref,"sha256":node["sha256"],"layer":node["layer"],
-                                                        "text_only":node.get("clause_text_only") is True}]})
-        verify_rendered(g,files,read_original,"验收款质量凭证")
+        verify_units(g,units,read_original,"验收款质量凭证")
+
+
+def verify_units(graph, units, read_original, label):
+    from original_records import verify_rendered
+    nodes = {n["id"]:n for n in graph["nodes"] if n["type"]=="page"}
+    files = []
+    for page in graph["payment_window_sources"]["pages"]:
+        if page["unit"] in units:
+            ref = f"{page['doc']}/p{page['page']}"
+            node = nodes[ref]
+            files.append({"doc":page["doc"],"pages":[{"ref":ref,"sha256":node["sha256"],"layer":node["layer"],
+                                                     "text_only":node.get("clause_text_only") is True}]})
+    verify_rendered(graph,files,read_original,label)

@@ -180,7 +180,7 @@ def apply(graph,findings):
         register.append({"unit":unit,"batch":record["index"],"number_row":ref["id"] if ref else None,"number":code or None,
                          "scope_ref":record["scope_ref"],"identity_refs":doc.evidence(*LINK_KEYS),"identified":identifiable})
     for payment in findings:
-        if payment["rule"]!="H05" or payment.get("execution_basis"):
+        if payment["rule"]!="H05" or payment.get("execution_basis") or payment.get("retest_reference"):
             continue
         units = bank_units.intersection(payment["scope"])
         if len(units)!=1:

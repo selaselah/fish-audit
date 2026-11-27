@@ -78,7 +78,7 @@ def materials(archive, target, *, master=MASTER, title=TITLE, decision=("放行�
     return report["policy"]["profile"], groups
 
 
-def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MASTER[2], kind="payment_release", reviewer="水印放行单演练", replacement=None):
+def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MASTER[2], kind="payment_release", reviewer="水印放行单演练", replacement=None, addition=None, visual_fields=()):
     """Reconcile visible sample fields against the fixed, previously reviewed originals."""
     from config import PERFORMANCE
     from documents import prepare
@@ -102,6 +102,7 @@ def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MAS
             page, = prepare(path,1,save_images=False)
             archived_lines = bundle.read(f"pages/{base['id']}/1.txt").decode().splitlines()
             old_row = new_row = None
+            printed_fields = [f for f in master["facts"] if f["doc"] == base["id"]]
             if replacement and name==replacement[0]:
                 label, value = replacement[1:]
                 position, = [i for i,r in enumerate(archived_lines) if r.startswith(label+"：")]
@@ -109,6 +110,12 @@ def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MAS
                 require(normalize(new_row)==normalize(label+"："+value) and re.findall(r"[0-9]+",new_row)==re.findall(r"[0-9]+",value),
                         "新水印样本的原行、日期及数字分组")
                 old_row, archived_lines[position] = archived_lines[position], new_row
+            if addition and name==addition[0]:
+                _, field, label, value, region = addition
+                last = page["text"].splitlines()[-1]
+                require(last == label+"："+value and not any(r.startswith(label+"：") for r in archived_lines), "新增水印原行")
+                archived_lines.append(last)
+                printed_fields.append({"field":field,"quote":last,"value":value,"region":region,"status":"anchored"})
             require(archived_lines[0] == WATERMARK and next(n for n in report["graph"]["nodes"]
                     if n["id"] == doc["id"]+"/p1")["sha256"] == page["sha256"], "物理页及水印")
             if path.suffix == ".jpg":
@@ -116,7 +123,7 @@ def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MAS
             else:
                 require(list(map(normalize, page["text"].splitlines())) == list(map(normalize, archived_lines)),
                         "载体变更后的全部打印行")
-            for source in (f for f in master["facts"] if f["doc"] == base["id"]):
+            for source in printed_fields:
                 if source["quote"] == old_row:
                     source = {**source,"quote":new_row,"value":new_row.partition("：")[2]}
                 quote = source["quote"]
@@ -126,15 +133,19 @@ def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MAS
                             and f["page"] == 1 and normalize(f["quote"]) == normalize(quote)]
                 same = [f for f in observed if f["field"] == source["field"]
                         and normalize(f["value"]) == normalize(source["value"])]
-                if not same and (len(observed) == 1 or not observed and source["field"] == kind):
+                added = addition and name==addition[0] and quote==last
+                if not same and (len(observed) == 1 or not observed and (source["field"] == kind or added)):
                     post(api+"/amend", {"rev":get(api)["rev"], "reviewer":reviewer, "doc":doc["id"], "page":1,
                          "target":observed[0]["id"] if observed else None, "field":source["field"], "value":source["value"],
                          "quote":quote, "region":source["region"], "note":"对照水印原件的同一可见行，补正字段类别或抄录。"})
                     report = wait(case)
                     same = [f for f in report["graph"]["facts"] if f["doc"] == doc["id"] and f["field"] == source["field"]
                             and normalize(f["quote"]) == normalize(quote) and normalize(f["value"]) == normalize(source["value"])]
+                physical = (source["field"] in visual_fields and page["text"].splitlines().count(quote)==1 and len(same)==1
+                            and same[0]["quote"]==quote and same[0]["value"]==source["value"]
+                            and same[0].get("source_line",{}).get("text")==quote and same[0]["source_line"].get("rects"))
                 if len(same) == 1 and same[0]["status"] in ("anchored","visual") and (source["status"] == "confirmed"
-                        or same[0]["status"] == "visual" and source["field"] == kind):
+                        or same[0]["status"] == "visual" and (source["field"] == kind or physical)):
                     confirm.append(same[0]["id"])
         if confirm:
             post(api+"/attest", {"rev":get(api)["rev"], "reviewer":reviewer, "decision":"confirm", "facts":confirm,

@@ -351,6 +351,8 @@ def audit_graph(graph, controls):
                     procedure["payment_opinion"]["release"]["instruments"] = release["instruments"]
         if board := finding.get("effect_review", {}).get("board_decision"):
             procedure["board_decision"] = board
+        if reference := finding.get("retest_reference"):
+            procedure["retest_reference"] = reference
         if quality := finding.get("payment_quality"):
             procedure["payment_quality"] = quality
         warranty = finding.get("warranty_check", {})
