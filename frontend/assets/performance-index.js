@@ -816,6 +816,7 @@ const PerformanceIndex = (() => {
       detail.dataset.quality=String(Boolean(quality));
       detail.replaceChildren(box('scope-check-state',el('span',item.id,'mono'),tag(item.status)),heading);
       for (const ref of item.party_readings || []) detail.append(PartyReadings.citation(state.bundle.report,ref,item));
+      if (item.installment_count) detail.append(InstallmentCount.citation(state.bundle.report,item.installment_count,item,true));
       if (item.approval_change) detail.append(ApprovalChange.panel(item,state.bundle.report,rev));
       if (item.approval_change_scope) {
         const link=InspectionUse.citation(item.approval_change_scope.scope_ref,item,state.bundle.report);
@@ -920,7 +921,7 @@ const PerformanceIndex = (() => {
     }
     function open(scope, stage) {
       previous=null; back.hidden=true;
-      const item=stage && scope.items.find(f=>['H04','H05'].includes(f.rule) && f.id===stage);
+      const item=stage && scope.items.find(f=>['H03','H04','H05','H06'].includes(f.rule) && f.id===stage);
       showGroup(scope,item,Boolean(stage && !item));
       dialog.showModal();
       dialog.scrollTop=0;

@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## 合同分期总述与走查定位
+
+规则 `2026.11.28.5` 起，符合条件的底稿包含 `policy.installment_count` 和 `graph.installment_count_sources.format`，取值均为 `printed-installment-count-v1`。行记录含 `count`、完整引文 `quote`、模型事实 `model_ref` 及其原摘录 `model_quote`，并固定原件、物理页行、行框、原件摘要及页图摘要。图谱中的 `locates_installment_count` 关系连接原页和完整行。引用该行的 H03、分期 H04/H05/H06 发现带有 `installment_count`。
+
+打开固定版的 `view=payment-checks` 时，`stage` 可指定本案的 H03、H04、H05 或 H06 检查项。走查接口接受分期按钮锚点（如 `installment-count-H03-4`）或原页定位（如 `raw_ref=installment-count/d04/p1/l15`）。保存时校验案件、版次和实际引用的页行。规则 `2026.11.28.6` 同时在签收事务中核对回单所引初验、整改与复验事实的行框。发生变化时返回 HTTP 409。[本机固定底稿](http://127.0.0.1:8000/workpaper/744d182cfd7f46a49d3e5bb8da0e2685?rev=11&view=payment-checks&stage=H03-4)
+
 ## 付款签批名单变更
 
 `cited-inspection-payment-use-v7` 起，`graph.inspection_use_sources.approver_changes` 保存补充协议的原始字段、页行、行框及事实引用。H04 或 H05 有 `approval_change` 时，`pending` 表示条款范围待核，`terms` 表示两份名单已定位。`before`、`same_day`、`after` 分别表示审批单日期早于、等于或晚于双方盖章栏所记的较晚日期。`days_from_seals` 为审批日期减去较晚的纸面日期。`printed_difference` 只比较证据指向的具名栏，`execution` 可追到相应 PDF 的签署检查。

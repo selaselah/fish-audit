@@ -33,6 +33,7 @@ import {checkReviewDecisions} from './review-decisions.mjs';
 import {checkWarrantyTimeline} from './warranty-timeline.mjs';
 import {checkRevisionComparison} from './revision-comparison.mjs';
 import {checkInspectionUse} from './inspection-use.mjs';
+import {checkInstallmentCount} from './installment-counts.mjs';
 import {checkPartyReadings} from './party-readings.mjs';
 import {checkRetestReference} from './retest-reference.mjs';
 import {checkPaymentQuality} from './payment-quality.mjs';
@@ -124,7 +125,8 @@ const mandateOriginalCase = caseArgument('--mandate-original-case');
 const reviewDecisionCase = caseArgument('--review-controls-case');
 const warrantyCase = caseArgument('--warranty-case');
 const revisionCase = caseArgument('--revision-comparison');
-const useCase = caseArgument('--inspection-use');
+const countCase = caseArgument('--installment-count');
+const useCase = countCase || caseArgument('--inspection-use');
 const partyCase = caseArgument('--party-reading');
 const retestCase = caseArgument('--retest-reference');
 const qualityCase = caseArgument('--payment-quality');
@@ -380,7 +382,8 @@ try {
   } else if (partyCase) {
     await checkPartyReadings({root,call,evaluate,wait},partyCase);
   } else if (useCase) {
-    await checkInspectionUse({root,call,evaluate,wait},useCase);
+    if (countCase) await checkInstallmentCount({root,call,evaluate,wait},countCase);
+    else await checkInspectionUse({root,call,evaluate,wait},useCase);
   } else if (retestCase) {
     await checkRetestReference({root,call,evaluate,wait},retestCase);
   } else if (qualityCase) {

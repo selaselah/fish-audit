@@ -327,6 +327,9 @@
 .approval-change summary, .approval-change-details > summary { padding:10px; min-height:44px; color:var(--accent-hover); font-size:.8rem; cursor:pointer; }
 .approval-times .time-label { color:var(--secondary); font-size:.75rem; }
 .approval-times strong { font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.installment-count-link { display:inline-flex; align-items:center; flex-wrap:wrap; gap:6px; max-width:100%; min-height:44px; text-align:left; }
+.installment-count-link small { color:var(--secondary); }
+.scope-detail > .installment-count-link { display:flex; width:fit-content; margin-block-end:8px; }
 .installment-approval .inspection-use-heading .risk { color:var(--issue); }
 .installment-approval summary { display:flex; align-items:center; gap:6px; min-height:44px; padding:0 10px; color:var(--accent-hover); cursor:pointer; font-size:.8rem; }
 .installment-approval summary::before { content:'▸'; }
