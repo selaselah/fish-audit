@@ -30,6 +30,7 @@
   <script src="/assets/warranty-register.js" defer></script>
   <script src="/assets/warranty-register-evidence.js" defer></script>
   <script src="/assets/warranty-dates.js" defer></script>
+  <script src="/assets/revision-comparison.js" defer></script>
   <script src="/assets/warranty-timeline.js" defer></script>
   <script src="/assets/field-receipt.js" defer></script>
   <script src="/assets/warranty-images.js" defer></script>
@@ -181,7 +182,8 @@
       </details>
       <section id="supplement-family" class="panel" aria-label="补件往来" hidden></section>
       <div id="report-tools" hidden><nav class="tabs" aria-label="底稿视图" id="tabs"></nav>
-        <label class="version"><span>底稿版本</span> <select id="version"></select></label></div>
+        <div class="report-versions"><span id="revision-launch" hidden></span><label class="version"><span>底稿版本</span> <select id="version"></select></label></div></div>
+      <section id="revision-comparison" class="panel" aria-label="履约版本对照" tabindex="-1" hidden></section>
       <div id="case-panel"></div>
     </section>
     <p id="network-error" role="alert" hidden></p>

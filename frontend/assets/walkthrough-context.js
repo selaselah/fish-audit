@@ -5,7 +5,7 @@ const dialogs = {'page-dialog':'资料原页','sample-review':'演练原件','sa
   'review-dialog':'人工验收','peer-dialog':'复核签收','amend-dialog':'补录原文','case-preview':'任务速览',
   'quick-dialog':'快速定位','case-finder':'查找案例'};
 const homeKeys = ['scene','slip','copy','edition','batch','record','pdf','carrier'];
-const caseKeys = ['view','stage','instrument','receipt','ticket','call','agreement','acceptance','finding','fact'];
+const caseKeys = ['view','stage','instrument','receipt','ticket','call','agreement','acceptance','finding','fact','prior','entry'];
 const identifier = /^[a-zA-Z][a-zA-Z0-9_-]{0,95}$/;
 const factID = /^d\d{2}\/p[1-9]\d*\/(?:[ft][1-9]\d*|h[a-f0-9]{12})$/;
 function knownParams(search, keys) {
@@ -61,6 +61,9 @@ export function captureContext(owner, element) {
           const payment=element.closest('[data-warranty-payment]')?.dataset.warrantyPayment;
           context.params={view:'warranty-certificate',stage:/^H05-[1-9]\d*$/.test(payment || '')?payment:certificate};
         }
+        const comparison=element?element.closest('#revision-comparison'):document.getElementById('revision-comparison');
+        if (comparison && !comparison.hidden && comparison.dataset.entry)
+          context.params={view:'revision-comparison',prior:comparison.dataset.prior,entry:comparison.dataset.entry};
       }
       if (owner?.id === 'page-dialog') {
         const page = document.querySelector('#page-content .page-view');
@@ -94,7 +97,9 @@ export function captureContext(owner, element) {
     const text = sourceLabel || element.getAttribute('aria-label') || fieldLabel?.textContent ||
       (element.matches('button,a,summary,label,h1,h2,h3,h4,[role=tab]') && element.textContent) || element.title;
     const label = text && text.replace(/\s+/g,' ').trim();
-    context.target = label && label.length <= 96 ? label : '所选位置';
+    const side=element.closest('#revision-comparison .revision-side')?.querySelector('h3')?.textContent;
+    const target=label && (side?side+' · '+label:label);
+    context.target = target && target.length <= 96 ? target : '所选位置';
     const named = element.closest('[id]');
     if (named && identifier.test(named.id) && !['content','case-panel','main'].includes(named.id)) context.anchor = named.id;
   }
@@ -102,7 +107,8 @@ export function captureContext(owner, element) {
 }
 export function describeContext(c) {
   const screen = c.screen==='case' ? screens.case+' '+c.case_id.slice(0,8) : screens[c.screen];
-  return [screen, c.example || sections[c.section], c.rev && 'R'+c.rev, caseTabs[c.tab], dialogs[c.dialog],
+  const edition=c.params?.view==='revision-comparison' ? '履约对照 R'+c.params.prior+' / R'+c.rev : c.rev && 'R'+c.rev;
+  return [screen, c.example || sections[c.section], edition, caseTabs[c.tab], dialogs[c.dialog],
     c.doc && (c.doc+' · 第 '+c.page+' 页'), c.line && '第 '+c.line+' 行', c.target].filter(Boolean).join(' › ');
 }
 export function returnUrl(c, workspace) {

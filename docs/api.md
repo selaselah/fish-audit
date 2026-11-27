@@ -8,6 +8,16 @@
 
 企业工作区使用 `/api/w/<wid>/walkthrough`，沿用成员身份和写入时的 CSRF 校验，清单仅列出当前账号在该企业内的记录。企业实例的公开页使用浏览器存储。[服务端实现](../server/walkthrough.py)
 
+## 两版履约发现对照
+
+`GET /api/cases/<case_id>/reports/<rev>/comparison/<prior>` 读取同一案件的两份已出具底稿，要求 `0 < prior < rev`。在企业模式使用 `/api/w/<wid>/cases/…`。读取沿用审计权限，未登录、员工权限、跨企业案件分别返回 401、403、404。版本顺序错误返回 400，查无版本返回 404，底稿摘要与归档内容不符返回 409。[接口实现](../server/main.py)
+
+响应格式为 `contract-revision-comparison-v1`。`earlier` 和 `later` 各含版次、出具时间、规则版本、底稿 SHA-256 和当版建议。`rows` 只比较合同履约程序 H01 至 H07。签署与付款安排按所据合同对应，验收还核对验收、复验资料及合并件内的物理页。分期期次使用合同条款原行，实付另核回单，质保工单另核期满确认单与工单。两边各有唯一归属才能形成一对。仅有同号线索、材料归属不明或存在多项候选时，各条发现分别留在所属版次。[对应关系与字段](../server/report_comparison.py)
+
+每行保留两版已有的状态、发现原文和核对依据。`changes` 列出状态 `status`、发现原文 `detail`、核对依据 `basis`、可定位引文字段 `citations`、其余程序记录 `records` 的差异。每侧的 `sources` 预览最多 3 个字段，包含当版字段编号、取值、引文、转录状态、文件、物理页、原行号与原文，`source_count` 为可定位字段总数。完整记录可通过该版底稿接口读取。对照请求只读。
+
+固定入口为 `/workpaper/<case_id>?rev=<rev>&view=revision-comparison&prior=<prior>`，企业模式在前面加 `/w/<wid>`。可加 `entry` 精确到一项，值为 `new-` 或 `old-` 加该侧已出具的发现编号。保存走查意见时 `context.rev` 指后版，`context.params` 保留视图、前版及所选项，`context.anchor` 可进一步标到前版或后版的一条原件链接。[水印案固定位置](http://127.0.0.1:8000/workpaper/fd51542fc29c401196842a0a207f1e8b?rev=6&view=revision-comparison&prior=5&entry=new-H05-8)
+
 ## 质保金两单所列日期
 
 规则 `2026.11.27.14` 在 `policy.warranty_dates` 声明 `warranty-written-dates-v1`。`graph.warranty_date_sources.pages` 列出银行回单单元的物理页与原生文字层状态，`lines` 保存相关日期原行，包括模型漏录的候选行。期满单的原行取自 `graph.warranty_sources.lines`。

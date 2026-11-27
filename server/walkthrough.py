@@ -9,7 +9,7 @@ from storage import encode, stamp
 
 SCREENS = {"home", "desk", "case", "rules", "library", "team", "account"}
 HOME_PARAMS = {"scene", "slip", "copy", "edition", "batch", "record", "pdf", "carrier", "term", "agreement"}
-CASE_PARAMS = {"view", "stage", "instrument", "receipt", "ticket", "call", "agreement", "acceptance", "finding", "fact"}
+CASE_PARAMS = {"view", "stage", "instrument", "receipt", "ticket", "call", "agreement", "acceptance", "finding", "fact", "prior", "entry"}
 
 
 def check_context(value):
@@ -44,6 +44,12 @@ def check_context(value):
             raise CaseError("走查位置无效。", 400)
     if ("doc" in result) != ("page" in result) or ("line" in result and "page" not in result):
         raise CaseError("走查原页位置不完整。", 400)
+    params = result.get("params", {})
+    if screen == "case" and (params.get("view") == "revision-comparison" or {"prior","entry"}.intersection(params)):
+        if (params.get("view") != "revision-comparison" or not re.fullmatch(r"[1-9][0-9]{0,7}", params.get("prior",""))
+                or int(params["prior"]) >= result.get("rev",0) or set(params)-{"view","prior","entry"}
+                or "entry" in params and not re.fullmatch(r"(?:old|new)-H0[1-7]-[1-9][0-9]{0,7}",params["entry"])):
+            raise CaseError("请记录同一底稿中可定位的两版履约发现。",400)
     return result
 
 
@@ -80,6 +86,17 @@ def save_note(store, workspace, author, role, data):
         if "rev" in context and not db.execute("SELECT 1 FROM reports WHERE case_id=? AND rev=?",
                                                (context["case_id"], context["rev"])).fetchone():
             raise CaseError("未找到记录时的底稿版本。", 404)
+        position = context.get("params",{})
+        if position.get("view") == "revision-comparison":
+            prior = int(position["prior"])
+            if not db.execute("SELECT 1 FROM reports WHERE case_id=? AND rev=?", (context["case_id"],prior)).fetchone():
+                raise CaseError("未找到记录时选作对照的历史底稿。",404)
+            if "entry" in position:
+                side, fid = position["entry"].split("-",1)
+                rev = prior if side == "old" else context["rev"]
+                if not db.execute("""SELECT 1 FROM reports, json_each(reports.content,'$.findings') AS f
+                             WHERE case_id=? AND rev=? AND json_extract(f.value,'$.id')=?""",(context["case_id"],rev,fid)).fetchone():
+                    raise CaseError("所选版本没有这项履约发现。",404)
         if "doc" in context and not db.execute("SELECT 1 FROM pages WHERE case_id=? AND doc=? AND number=?",
                                                (context["case_id"], context["doc"], context["page"])).fetchone():
             raise CaseError("未找到记录时的资料原页。", 404)

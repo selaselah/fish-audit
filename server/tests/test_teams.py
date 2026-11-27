@@ -471,6 +471,51 @@ class EnterpriseFlow(unittest.TestCase):
         self.assertEqual(other.post(url,headers=oh,json=second).json["rev"],3)
         self.assertEqual(other.post(url,headers=oh,json=second).json["rev"],3)
 
+    def test_revision_comparison_reuses_both_issued_hashes_and_the_case_access_rules(self):
+        owner,wid,headers=self.register("compare-owner")
+        other,outside,_=self.register("compare-other")
+        token=owner.post("/api/workspaces/"+wid+"/invites",headers=headers,json={"role":"employee"}).json["token"]
+        employee,_,eh=self.register("compare-member",invite=token)
+        case=self.submit(employee,wid,eh)
+        self.worker.run(self.store.claim())
+        base=f"/api/w/{wid}/cases/{case}"
+        self.assertEqual(owner.post(base+"/rerun",headers=headers,json={"rev":1}).status_code,202)
+        self.worker.run(self.store.claim())
+        url=base+"/reports/2/comparison/1"
+        self.assertEqual(employee.get(url).status_code,403)
+        self.assertEqual(other.get(url.replace(wid,outside)).status_code,404)
+        self.assertEqual(self.app.test_client().get(url).status_code,401)
+        self.assertEqual(owner.get(url.replace("/2/comparison/1","/2/comparison/2")).status_code,400)
+        self.assertEqual(owner.get(url.replace("/2/comparison/1","/3/comparison/1")).status_code,404)
+        before=self.store.detail(case)
+        d=owner.get(url).json
+        self.assertEqual((d["earlier"]["sha256"],d["later"]["sha256"]),tuple(self.store.report(case,r)["sha256"] for r in (1,2)))
+        self.assertEqual(self.store.detail(case),before)
+        link=f"/w/{wid}/workpaper/{case}?rev=2&view=revision-comparison&prior=1"
+        self.assertEqual(owner.get(link).status_code,302)
+        for suffix in ("&prior=1","&rev=2","&stage=H05-1","&entry=wrong"):
+            self.assertEqual(owner.get(link+suffix).status_code,400)
+        notes=f"/api/w/{wid}/walkthrough"
+        params={"view":"revision-comparison","prior":"1"}
+        context={"screen":"case","case_id":case,"rev":2,"tab":"report","params":params}
+        body={"id":"d"*32,"text":"演练核对两次验收记录。","context":context}
+        def note_at(**position):
+            return owner.post(notes,headers=headers,json={**body,"context":{**context,"params":{**params,**position}}})
+        self.assertEqual(note_at(prior="2").status_code,400)
+        self.assertEqual(note_at(entry="new-H05-9999").status_code,404)
+        self.assertEqual(note_at(entry="old-H05-9999").status_code,404)
+        self.assertEqual(employee.post(notes,headers=eh,json=body).status_code,403)
+        self.assertEqual(note_at().status_code,201)
+        self.assertEqual(note_at().status_code,200)
+        self.assertEqual(self.store.detail(case),before)
+        for r in (1,2):
+            with self.store.connect(write=True) as db:
+                saved=db.execute("SELECT hash FROM reports WHERE case_id=? AND rev=?",(case,r)).fetchone()[0]
+                db.execute("UPDATE reports SET hash='different' WHERE case_id=? AND rev=?",(case,r))
+            self.assertEqual(owner.get(url).status_code,409)
+            with self.store.connect(write=True) as db:
+                db.execute("UPDATE reports SET hash=? WHERE case_id=? AND rev=?",(saved,case,r))
+
     def test_rule_replay_is_scoped_to_the_selected_immutable_workpaper(self):
         owner,wid,headers=self.register("replay-owner")
         other,other_space,other_headers=self.register("replay-other")

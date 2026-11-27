@@ -1438,6 +1438,7 @@ function renderCase(forcePanel = false) {
   PageProgress.render(data,bundle?.rev);
   renderSupplementFamily(data,bundle?.rev);
   $('#report-tools').hidden = !bundle;
+  RevisionComparison.sync(data,bundle);
   const previousLog = $('#case-panel .execution-events');
   const log = previousLog?.dataset.case === data.id ? previousLog : undefined;
   const logFocus = log?.contains(document.activeElement) ? document.activeElement : null;
@@ -1481,6 +1482,7 @@ function renderCase(forcePanel = false) {
   displayedPaper = {bundle, tab: state.tab, context};
 }
 function clearCaseView() {
+  RevisionComparison.clear();
   state.detail = null; state.bundle = null;
   OriginalReader.sync();
   displayedPaper = null;
@@ -1556,6 +1558,8 @@ async function refresh() {
         state.tab=traced?'graph':'report'; focusFinding=traced?'#trace-select':'[data-finding="'+requestedFinding+'"]';
       } else if (requestedScope && state.openedCitation!==location.hash) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='[data-audit-scope="'+requestedScope.id+'"]';
+      } else if (requestedView==='revision-comparison' && state.openedCitation!==location.hash && state.bundle) {
+        state.openedCitation=location.hash;state.tab='report';focusFinding='#revision-comparison';
       } else if (requestedView==='execution' && state.openedCitation!==location.hash && state.bundle) {
         state.openedCitation=location.hash; state.tab='activity'; focusFinding='#execution-trace-page';
       } else if (['warranty-register','warranty-certificate','addendum-signing','payment-release'].includes(requestedView) && state.openedCitation!==location.hash && state.bundle) {

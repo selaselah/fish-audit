@@ -69,6 +69,36 @@ progress::-webkit-progress-value { background: var(--accent); }
 #report-tools { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 20px 0 13px; flex-wrap: wrap; }
 .tabs { gap: 4px; flex-wrap: wrap; }
 .version { display: flex; align-items: center; gap: 6px; font-size: .85rem; margin: 0; }
+.report-versions { display:flex; align-items:center; gap:12px; margin-inline-start:auto; }
+#revision-launch a { display:inline-flex; align-items:center; min-height:36px; }
+#revision-comparison { margin:0 0 16px; min-width:0; }
+.revision-head,.revision-side-head,.revision-options,.revision-links { display:flex; align-items:center; flex-wrap:wrap; gap:6px 12px; }
+.revision-head { justify-content:space-between; }
+.revision-head h2 { margin:0; font-size:1.13rem; }
+.revision-options { margin:12px 0 8px; align-items:end; }
+.revision-options label { display:grid; gap:3px; margin:0; min-width:0; color:var(--secondary); font-size:.77rem; }
+.revision-options select { width:100%; min-height:38px; max-width:100%; }
+.revision-options label:last-child { flex:1 1 11rem; max-width:28rem; }
+.revision-change { margin:6px 0 8px; color:var(--secondary); font-size:.8rem; }
+.revision-columns { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+.revision-side { min-width:0; padding:12px 14px; border:1px solid var(--line); border-radius:7px; background:var(--surface); }
+.revision-side-head h3 { margin:0; font:650 1rem var(--font-number); color:var(--ink); }
+.revision-side-head small,.revision-side summary { color:var(--secondary); font-size:.77rem; }
+.revision-side-head .tag { margin-inline-start:auto; }
+.revision-side blockquote { margin:10px 0; line-height:1.55; font-size:.9rem; overflow-wrap:anywhere; }
+.revision-side details { margin:6px 0; font-size:.85rem; }
+.revision-side summary { cursor:pointer; padding:4px 0; }
+.revision-sources { list-style:none; margin:5px 0; padding:0; }
+.revision-sources li { margin:6px 0; }
+.revision-sources a,.revision-sources q { display:block; overflow-wrap:anywhere; }
+.revision-sources q { color:var(--secondary); font-size:.8rem; }
+.revision-sources small { display:block; margin-top:2px; color:var(--secondary); font-size:.75rem; overflow-wrap:anywhere; }
+.revision-links .text-button { display:inline-flex; align-items:center; min-height:32px; font-size:.8rem; }
+@media (max-width:650px) {
+  .revision-columns { grid-template-columns:minmax(0,1fr); gap:8px; }
+  .revision-options select { min-height:44px; }
+  .revision-side { padding:10px; }
+}
 label { display: grid; gap: 6px; margin-top: 14px; color: var(--ink); font-weight: 550; }
 input, textarea, select { max-width: 100%; border: 1px solid var(--field-line); background: white; border-radius: 5px; padding: 8px 10px; color: var(--ink); }
 input[type=file] { padding: 14px; background: var(--canvas); border-style: dashed; }

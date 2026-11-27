@@ -36,6 +36,7 @@ from field_sources import PaymentSourceError
 from payment_index import LegacyPartialTransfer
 from model import FIELDS
 from review import review_text
+from report_comparison import compare as compare_reports
 from rule_replay import RulesUnavailable, replay_from_git
 from storage import Store, encode, stamp
 from walkthrough import list_notes, save_note
@@ -289,9 +290,20 @@ def create_app(store, worker):
             args["finding"] = ref
         if "view" in request.args:
             view = request.args["view"]
-            if view not in ("replay", "execution", "warranty-register", "warranty-certificate", "addendum-signing", "reinspection", "inspection", "entities", "trial", "contract-pages", "signatures", "calendar", "suppliers", "acceptance-comments", "contract-comments", "payment-acceptance", "signer-timing", "payment-proof", "payment-release", "contract-checks", "acceptance-checks", "payment-checks") or set(args)!={"rev"}:
+            if view not in ("replay", "execution", "revision-comparison", "warranty-register", "warranty-certificate", "addendum-signing", "reinspection", "inspection", "entities", "trial", "contract-pages", "signatures", "calendar", "suppliers", "acceptance-comments", "contract-comments", "payment-acceptance", "signer-timing", "payment-proof", "payment-release", "contract-checks", "acceptance-checks", "payment-checks") or set(args)!={"rev"}:
                 raise CaseError("请选择有效的底稿视图及版本。",400)
             args["view"] = view
+        if args.get("view") == "revision-comparison" or "prior" in request.args or "entry" in request.args:
+            prior = request.args.get("prior", "")
+            if (args.get("view") != "revision-comparison" or not re.fullmatch(r"[1-9][0-9]{0,8}",prior)
+                    or int(prior) >= int(args["rev"]) or any(len(request.args.getlist(k)) != 1 for k in ("rev","view","prior"))):
+                raise CaseError("请选择同一案件中较早的底稿版本。",400)
+            args["prior"] = prior
+            if "entry" in request.args:
+                entry = request.args["entry"]
+                if len(request.args.getlist("entry")) != 1 or not re.fullmatch(r"(?:old|new)-H0[1-7]-[1-9][0-9]{0,7}",entry):
+                    raise CaseError("履约版本对照位置无效。",400)
+                args["entry"] = entry
         if args.get("view") == "addendum-signing" and any(len(request.args.getlist(k)) != 1 for k in ("rev","view")):
             raise CaseError("请选择一版底稿的补充协议签署凭证。",400)
         if "agreement" in request.args:
@@ -450,6 +462,12 @@ def create_app(store, worker):
     @business.get("/cases/<case_id>/reports/<int:rev>")
     def report(case_id, rev):
         return jsonify(store.report(case_id, rev))
+
+    @business.get("/cases/<case_id>/reports/<int:rev>/comparison/<int:prior>")
+    def compare_revisions(case_id, rev, prior):
+        if not 0 < prior < rev <= 999999999:
+            raise CaseError("请选择先后出具的两版底稿。",400)
+        return jsonify(compare_reports(case_id, store.report(case_id, prior), store.report(case_id, rev)))
 
     @business.post("/cases/<case_id>/reports/<int:rev>/replay")
     def replay(case_id, rev):

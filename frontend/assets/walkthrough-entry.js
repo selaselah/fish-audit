@@ -50,10 +50,20 @@ function returnToControl() {
   for (const old of document.querySelectorAll('.walk-mark')) old.classList.remove('walk-mark');
   const url=new URL(location.href), anchor=url.searchParams.get('walkat');
   if (!anchor || !/^[a-zA-Z][a-zA-Z0-9_-]{0,95}$/.test(anchor)) return;
+  const [path,query]=url.hash.split('?'), params=new URLSearchParams(query);
+  const comparison=anchor.startsWith('revision-') && params.get('view')==='revision-comparison'
+    ? document.getElementById('revision-comparison') : null;
   url.searchParams.delete('walkat');
   history.replaceState(history.state,'',url);
   function locate() {
+    if (comparison && (url.hash!==location.hash || comparison.dataset.caseId!==path.split('/').at(-1) ||
+        comparison.dataset.rev!==params.get('rev') || comparison.dataset.prior!==params.get('prior') ||
+        (params.has('entry') && comparison.dataset.entry!==params.get('entry')))) return false;
     const el = document.getElementById(anchor);
+    if (el?.closest('#revision-comparison:not([hidden])')) {
+      for (let parent=el.parentElement;parent && parent.id!=='revision-comparison';parent=parent.parentElement)
+        if (parent.tagName==='DETAILS') parent.open=true;
+    }
     if (!el?.getClientRects().length) return false;
     el.scrollIntoView({block:'center'});
     el.classList.add('walk-mark');
@@ -63,8 +73,8 @@ function returnToControl() {
   }
   if (!locate()) {
     jumpObserver = new MutationObserver(locate);
-    jumpObserver.observe(document.body, {subtree:true, childList:true, attributes:true, attributeFilter:['hidden','open']});
-    jumpTimer = setTimeout(() => jumpObserver.disconnect(), 6000);
+    jumpObserver.observe(comparison || document.body, {subtree:true, childList:true, attributes:true, attributeFilter:['hidden','open']});
+    if (!comparison) jumpTimer = setTimeout(() => jumpObserver.disconnect(), 6000);
   }
 }
 addEventListener('hashchange', returnToControl);
