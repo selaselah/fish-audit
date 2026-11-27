@@ -39,6 +39,7 @@ import retest_reference
 import inspection_use
 import installment_approval
 import approval_names
+import approval_changes
 import party_readings
 import warranty_service
 import warranty_register
@@ -758,6 +759,7 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True, recheck_
         payment_quality.apply(graph,results)
         party_readings.attach(graph,results)
         approval_names.apply_conditions(graph,results)
+        approval_changes.apply(graph,results)
     return results
 
 
@@ -1349,6 +1351,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("advance_guarantee") != entry.get("advance_guarantee")
                 or saved.get("payment_acceptance") != entry.get("payment_acceptance")
                 or saved.get("stage_approvers") != entry.get("stage_approvers")
+                or saved.get("approval_change") != entry.get("approval_change")
                 or saved.get("signer_timing") != entry.get("signer_timing")
                 or saved.get("execution_basis") != entry.get("execution_basis")
                 or saved.get("inspection_coverage") != entry.get("inspection_coverage")

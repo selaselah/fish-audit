@@ -84,7 +84,7 @@ FULL_PAGE_EVIDENCE = (
     "effect_review", "warranty_check", "warranty_difference", "payment_window", "acceptance_reservations", "acceptance_comments",
     "contract_comments", "stage_payments", "invoice_receipt", "payment_change", "payment_opinion",
     "equipment_models", "inspection_coverage", "payment_acceptance", "execution_basis", "contract_folios",
-    "prior_installment", "advance_guarantee", "payment_quality", "retest_reference", "inspection_use", "party_readings",
+    "prior_installment", "advance_guarantee", "payment_quality", "retest_reference", "inspection_use", "party_readings","approval_change",
 )
 
 
@@ -854,7 +854,8 @@ class Store:
                 named = {ref for f in checks for ref in f["evidence"]}
                 units = {d["id"]:d.get("source", d["id"]) for d in graph.get("audit_documents", graph["documents"])}
                 originals = {units[unit] for finding in checks for unit in finding["scope"]}
-                approval_required = any(r["kind"]=="approval" for r in graph.get(inspection_use.KEY,{}).get("rows",()))
+                use=graph.get(inspection_use.KEY,{})
+                approval_required = bool(use.get("approver_changes")) or any(r["kind"]=="approval" for r in use.get("rows",()))
                 if approval_required or any(f.get("advance_guarantee",{}).get("period") or f.get("warranty_difference") for f in checks):
                     # These comparisons also inspect the rest of the submission for qualifications.
                     submitted={r[0] for r in db.execute("SELECT id FROM docs WHERE case_id=?",(case_id,))}

@@ -16,6 +16,7 @@ RETEST_PIN = re.compile(r"retest-(H05-[1-9][0-9]{0,7})(?:-(clause|citation|payme
                         r"(?:original|final)_(?:acceptance_number|accepted_on|acceptance_result|acceptance_scope|defect_number)|"
                         r"(?:repair|final)_(?:original_acceptance|repair_number)|repair_(?:repaired_on|defect_number)|final_defect_closure))?")
 USE_PIN = re.compile(r"(?:inspection-use|payment-approval|payment-clock|contract-approver)-(H05-[1-9][0-9]{0,7})(?:-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7}))?")
+CHANGE_PIN = re.compile(r"approver-change-(H0[45]-[1-9][0-9]{0,7})(?:-(approval-change|contract-approver|payment-approval|payment-clock|inspection-use)-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7}))?")
 PARTY_PIN = re.compile(r"party-reading-(d[0-9]{2,8})-p1-(f[1-9][0-9]{0,7})")
 
 
@@ -30,7 +31,7 @@ def check_context(value):
         patterns["intake"] = r"contract|purchase|travel|payment"
     if screen == "case":
         patterns.update(case_id=r"[a-f0-9]{32}", tab=r"report|evidence|graph|activity", doc=r"d[0-9]{2,8}",
-                        raw_ref=r"(?:inspection-use|payment-approval|payment-clock|contract-approver)/d[0-9]{2,8}/p[1-9][0-9]{0,7}/l[1-9][0-9]{0,7}")
+                        raw_ref=r"(?:inspection-use|payment-approval|payment-clock|contract-approver|approval-change)/d[0-9]{2,8}/p[1-9][0-9]{0,7}/l[1-9][0-9]{0,7}")
         if "case_id" not in value:
             raise CaseError("走查底稿编号缺失。", 400)
     result = {"screen": screen}
@@ -63,8 +64,8 @@ def check_context(value):
     if raw := result.get("raw_ref"):
         if not result.get("rev") or raw.partition("/")[2] != f"{result.get('doc')}/p{result.get('page')}/l{result.get('line')}" or params:
             raise CaseError("请选择该版底稿中对应的付款用途原行。",400)
-    if screen == "case" and anchor.startswith(("quality-H","retest-H","inspection-use-","payment-approval-","payment-clock-","contract-approver-")):
-        pin = QUALITY_PIN.fullmatch(anchor) or RETEST_PIN.fullmatch(anchor) or USE_PIN.fullmatch(anchor)
+    if screen == "case" and anchor.startswith(("quality-H","retest-H","inspection-use-","payment-approval-","payment-clock-","contract-approver-","approver-change-")):
+        pin = QUALITY_PIN.fullmatch(anchor) or RETEST_PIN.fullmatch(anchor) or USE_PIN.fullmatch(anchor) or CHANGE_PIN.fullmatch(anchor)
         if not pin or not result.get("rev") or params != {"view":"payment-checks", "stage":pin[1]}:
             raise CaseError("请选择底稿版本及相应验收款检查项。", 400)
     if screen == "case" and (params.get("view") == "board-decision" or {"filing","part"}.intersection(params)):
@@ -126,7 +127,8 @@ def save_note(store, workspace, author, role, data):
             if not linked:
                 raise CaseError("所选版本没有引用这个主体字段和原件行。",404)
         use_pin = USE_PIN.fullmatch(anchor)
-        if context["screen"] == "case" and (use_pin or context.get("raw_ref")):
+        change_pin=CHANGE_PIN.fullmatch(anchor)
+        if context["screen"] == "case" and (use_pin or change_pin or context.get("raw_ref")):
             rows = db.execute("""SELECT json_extract(f.value,'$.id'),json_extract(f.value,'$.inspection_use.notes'),
                               json_extract(f.value,'$.inspection_use.approval.rows'),json_extract(f.value,'$.inspection_use.approval.clock.rows'),
                               json_extract(f.value,'$.inspection_use.approval.names.rows')
@@ -151,17 +153,28 @@ def save_note(store, workspace, author, role, data):
             if use_pin and use_pin[2]:
                 raw = f"{prefix}/{use_pin[2]}/p{use_pin[3]}/l{use_pin[4]}"
             cited = proof.get(use_pin[1],set()) if use_pin else set().union(*proof.values())
-            if not use_pin and raw and raw.startswith("contract-approver/") and raw not in cited:
+            if change_pin:
+                if change_pin[2]:raw=f"{change_pin[2]}/{change_pin[3]}/p{change_pin[4]}/l{change_pin[5]}"
+            if not use_pin and (change_pin or raw and raw not in cited):
+                permitted=db.execute("""SELECT json_extract(f.value,'$.approval_change.evidence') FROM reports,json_each(content,'$.findings') f
+                    WHERE case_id=? AND rev=? AND json_type(f.value,'$.approval_change')='object' AND (? IS NULL OR json_extract(f.value,'$.id')=?)
+                    AND json_extract(content,'$.policy.inspection_use')='cited-inspection-payment-use-v7'""",
+                    (context["case_id"],context["rev"],change_pin[1] if change_pin else None,change_pin[1] if change_pin else None)).fetchall()
+                change_refs={ref for item in permitted for ref in json.loads(item[0])}
+                if change_pin and (not permitted or raw and raw not in change_refs):
+                    raise CaseError("所选版本的签批人变更核对没有引用该位置。",404)
+                cited.update(change_refs)
+            if not use_pin and not change_pin and raw and raw.startswith("contract-approver/") and raw not in cited:
                 stage=db.execute("""SELECT 1 FROM reports,json_each(content,'$.findings') f,
                     json_each(f.value,'$.evidence') e WHERE case_id=? AND rev=? AND e.value=?
                     AND json_extract(f.value,'$.rule') IN ('H03','H04','H05')
-                    AND json_extract(content,'$.policy.inspection_use') IN ('cited-inspection-payment-use-v5','cited-inspection-payment-use-v6')""",
+                    AND json_extract(content,'$.policy.inspection_use') IN ('cited-inspection-payment-use-v5','cited-inspection-payment-use-v6','cited-inspection-payment-use-v7')""",
                     (context["case_id"],context["rev"],raw)).fetchone()
                 if stage:
                     cited.add(raw)
             if use_pin and (prefix,use_pin[1]) not in sections or raw and raw not in cited:
                 raise CaseError("所选版本的付款发现没有引用该用途原行。",404)
-            if context.get("raw_ref"):
+            if context.get("raw_ref") or change_pin and raw:
                 location = db.execute("""WITH paper AS (SELECT content FROM reports WHERE case_id=? AND rev=?),
                     lines AS (SELECT r.value AS line FROM paper,json_each(content,'$.graph.inspection_use_sources.rows') r
                         UNION ALL SELECT r.value FROM paper,json_each(content,'$.graph.inspection_use_sources.approvals') p,
@@ -169,6 +182,8 @@ def save_note(store, workspace, author, role, data):
                         UNION ALL SELECT r.value FROM paper,json_each(content,'$.graph.inspection_use_sources.bank_clocks') p,
                         json_each(p.value,'$.rows') r
                         UNION ALL SELECT r.value FROM paper,json_each(content,'$.graph.inspection_use_sources.approver_terms') p,
+                        json_each(p.value,'$.rows') r
+                        UNION ALL SELECT r.value FROM paper,json_each(content,'$.graph.inspection_use_sources.approver_changes') p,
                         json_each(p.value,'$.rows') r)
                     SELECT 1 FROM lines WHERE json_extract(line,'$.id')=? AND json_array_length(line,'$.rects')>0""",
                     (context["case_id"],context["rev"],raw)).fetchone()

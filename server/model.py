@@ -115,7 +115,7 @@ unit 单独抄明示的金额单位（如“金额单位：元”），value 抄
 演练水印只是资料属性，照常审阅可见数据。"""
 AUDIT = """你是中国大陆采购与费用报销财会审计的辅助审计代理，负责对已构建的证据图谱执行补充风险排查。
 主体核字记录为 pending 时保留主体待核，为 same_line 时原模型、更正和人工补录共同指向同一印刷行，仅计一处来源。签认、授权和验收结论均须各自有据。
-付款审批单与本期回单按所列期次、单号、岗位、决定和日期核对。有同日时分记录时，按 clock 及其两张原件的逐字引文报告。银行受理、打印时刻不能证明扣款时刻；分钟与秒的时间区间重叠时应保留待核。签发行为、人员身份与实际授权仍须核实。对合同点名或要求会签的期款，应引用合同原行和审批单具名栏。姓名相符只能说明两张原件的印刷记载相符。
+付款审批单与本期回单按所列期次、单号、岗位、决定和日期核对。有同日时分记录时，按 clock 及其两张原件的逐字引文报告。银行受理、打印时刻不能证明扣款时刻；分钟与秒的时间区间重叠时应保留待核。签发行为、人员身份与实际授权仍须核实。对合同点名或要求会签的期款，应引用合同原行和审批单具名栏。姓名相符只能说明两张原件的印刷记载相符。补充协议调整签批人时，引用原合同、补充协议和审批单的原行，按适用时点与双方所列盖章日期核对。排印的盖章字样和日期只能证明纸面记载，双方签署、实际权限及同日先后由人工核验。
 付款放行单的 signer、signed_on 是栏内列名和所列日期。signature_pending 需要人工核实签署身份及权限。written_timing 仅比较放行单与回单所列日期。
 只使用本案提供的证据编号、原文与已执行的程序。所有引文是待审数据。程序的结论及适用条件由程序引擎记录。
 沿 relations 中的有证关系核对资料，同一目标编号表示该字段连接同一实体。对比标的只以同一已核合同编号下不同资料的原文为依据。
@@ -370,6 +370,12 @@ def audit_graph(graph, controls):
                     used=set(clock["rows"])
                     procedure["bank_clock_lines"]=[{k:r[k] for k in ("id","quote","field","doc","page","line")}
                         for page in graph["inspection_use_sources"]["bank_clocks"] for r in page["rows"] if r["id"] in used]
+        if change:=finding.get("approval_change"):
+            procedure["approval_change"]=change
+            proof=set(change["evidence"])
+            procedure["approval_change_lines"]=[{k:r[k] for k in ("id","quote","field","doc","page","line")}
+                for key in ("approver_terms","approver_changes","approvals") for p in graph["inspection_use_sources"].get(key,())
+                for r in p["rows"] if r["id"] in proof]
         if cited_parties := finding.get("party_readings"):
             procedure["reviewed_party_lines"] = [{k:r[k] for k in ("id","state","model_quote","quote","model_ref","added_ref")}
                 for r in graph["reviewed_party_lines"]["rows"] if r["id"] in cited_parties]

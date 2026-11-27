@@ -100,7 +100,7 @@ def contents(page, version=approval_names.FORMAT):
         return None
     values={k:column(r["quote"])[1] for k,r in fields.items() if k!="title"}
     if ("signed_by" in values and not approval_names.listed(values["signed_by"],version)
-            and not (version==approval_names.FORMAT and values["signed_by"] in approval_names.UNNAMED)):
+            and not (version!=approval_names.FIRST_FORMAT and values["signed_by"] in approval_names.UNNAMED)):
         return None
     phase=STAGE.fullmatch(values["stage"])
     decision=DECISIONS.get(values["decision"])

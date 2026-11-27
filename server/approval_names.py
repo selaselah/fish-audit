@@ -33,7 +33,7 @@ WORDING = {
 
 def name(value, version=FORMAT):
     from acceptance_authority import person
-    if version==FORMAT and (value in UNNAMED or value in POINTER):
+    if version!=FIRST_FORMAT and (value in UNNAMED or value in POINTER):
         return False
     return bool(re.fullmatch(NAME,value) and person(value) and not re.search(r"或|以及|共同|及其|授权|任选|两人|任一|另见|同上|详见|任何|其他|全体|双方|其本人|签批人|审批人|当事人|经授权|等$",value))
 
