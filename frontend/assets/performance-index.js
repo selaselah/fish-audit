@@ -817,6 +817,10 @@ const PerformanceIndex = (() => {
       else if (item.payment_quality) detail.append(el('p','验收款质量对照的原行待核。','scope-empty'));
       if (retest) detail.append(retest);
       else if (item.retest_reference) detail.append(el('p','请在字段引文中核对回单所引的验收原件。','scope-empty'));
+      const use=InspectionUse.panel(item,state.bundle.report,rev);
+      if (use && retest) retest.insertBefore(use,retest.querySelector('.quality-terms'));
+      else if (use) detail.append(use);
+      else if (item.inspection_use) detail.append(el('p','付款用途附注的原行待核。','scope-empty'));
       for (const proof of addendumEvidence(state.bundle.report).filter(p=>p.related.includes(item))) {
         const control=AddendumSigning.jump(proof);
         control.addEventListener('click',()=>dialog.close(),{capture:true});

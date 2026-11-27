@@ -35,3 +35,7 @@ Ramp 的付款列表区分发起、在途和已付款，单据详情可以查看
 兴业银行的个人网银说明明确限定了转账回单的证明范围。建设银行的企业网银指南分别说明查询交易明细、打印回执和查询正式回单的入口。两家产品的用语说明了审计员需要核对具体单据载明的范围。水印案例中的措辞由项目自行编写，各项判断回引本案原件。[兴业银行转账回单查询说明](https://www.cib.com.cn/cn/e-banking/personal/faqs/tips/notice4.html) · [建设银行企业网银指南，第 13–15 页](https://www.ccb.com/chn/attachDir/2020/07/2020070614245962247.pdf#page=13)
 
 付款凭证复核沿用 Xero 逐笔对读和 Ramp 按处理状态浏览的交互。复核员可以从状态栏或页脚直接打开该笔原页。风险用图形和文字共同标注。[Xero 银行对账](https://www.xero.com/us/accounting-software/reconcile-bank-transactions/) · [Ramp 账单与付款视图](https://support.ramp.com/managing-bills-and-payments-on-bill-pay/)
+
+## 验收单的付款用途
+
+财政部会计司解读《企业内部控制应用指引第7号——采购业务》时，在第（七）项讨论到货验收，在第（八）项讨论付款前核查合同、凭证、审批手续和审核人权限。演练中的质量结论、单据用途与实际扣款分别对应不同的原始记录。案例所称「财务负责人」来自水印复验单上的具名岗位，实际案件须结合送审单位的授权及签批材料核实。[财政部会计司原文](https://kjs.mof.gov.cn/zhengcejiedu/201006/t20100611_322435.htm) · [用途附注演练](../docs/acceptance.md#复验合格后第二期付款所据的用途附注)

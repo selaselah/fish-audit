@@ -214,7 +214,8 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
   const word=WordSigning.resolve(paper?.findings.find(f=>f.rule==='H01'),paper?.graph,paper?.calls.pages);
   const registerRefs=ReinspectionTrail.pageReferences(paper?.findings.find(f=>f.rule==='H02'),paper?.graph,docId,pageNumber);
   const timingRows=ReinspectionTiming.pageReferences(paper?.findings.find(f=>f.rule==='H02'),paper?.graph,docId,pageNumber);
-  const otherRefs = [...(printedSource?[printedSource]:[]), ...registerRefs, ...boardRefs, ...repairRefs, ...PhaseEvidence.pageReferences(paper?.graph,docId,pageNumber,pageFacts,lineHint,paper?.calls.pages)];
+  const useRefs=InspectionUse.pageReferences(paper,docId,pageNumber);
+  const otherRefs = [...(printedSource?[printedSource]:[]), ...useRefs, ...registerRefs, ...boardRefs, ...repairRefs, ...PhaseEvidence.pageReferences(paper?.graph,docId,pageNumber,pageFacts,lineHint,paper?.calls.pages)];
   const timingRefs=timingRows.filter(s=>!otherRefs.some(r=>r.rawLine===s.rawLine));
   const contractRefs=[...ContractFolios.pageReferences(docId,pageNumber),...ContractCalendar.pageReferences(docId,pageNumber)];
   const preferred=[...contractRefs,...otherRefs].find(r=>r.ref===rawRef);
@@ -562,9 +563,9 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
     const label = {inspection_reference:'设备检验原行',contract_signing_reference:'合同签章原行',payment_release_reference:'放行依据原行',acceptance_opinion_reference:'付款意见原行',payment_amendment_reference:'付款变更所据原行',invoice_receipt_reference:'收票条件所据原行',repair_completion_reference:'整改记录原行',equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',approval_reference:'董事会审批记录原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
     const timingRow=timingRefs.find(r=>r.rawLine===gap.line);
     const raw = rawLines.find(source => source.rawLine === gap.line);
-    const heading=contractRefs.includes(raw) || ['acceptance_clock_source','signer_date_source','payment_execution_source','batch_stamp_source','advance_guarantee_source','warranty_date_source'].includes(raw?.quality)
+    const heading=contractRefs.includes(raw) || ['acceptance_clock_source','signer_date_source','payment_execution_source','batch_stamp_source','advance_guarantee_source','warranty_date_source','inspection_use_source'].includes(raw?.quality)
       ? raw.label : timingRow?.label || (gap.quality==='register_reference'?'复验附注':label);
-    const quote=['batch_stamp_source','advance_guarantee_source','warranty_date_source'].includes(raw?.quality)?raw.quote:gap.quote;
+    const quote=['batch_stamp_source','advance_guarantee_source','warranty_date_source','inspection_use_source'].includes(raw?.quality)?raw.quote:gap.quote;
     const section = box('evidence-row',el('h4',heading+' · 第 '+gap.line+' 行'),el('blockquote',quote));
     section.dataset.gapLine = String(gap.line);
     if (raw) {
@@ -668,6 +669,9 @@ function citation(ref,finding) {
   if ((ref.startsWith('addendum-pdf/') || ref.startsWith('addendum-original/') || ref.startsWith('addendum-word/')) && state.bundle) return AddendumSigning.citation(ref,finding);
   if (ref.startsWith('advance-guarantee/')) {
     return AdvanceGuarantee.citation(ref,finding,state.bundle?.report) || el('span','保函引文待核','small');
+  }
+  if (ref.startsWith('inspection-use/')) {
+    return InspectionUse.citation(ref,finding,state.bundle?.report) || el('span','付款用途原行待核','small');
   }
   if (ref.startsWith('mandate-pdf/') && state.bundle) return PerformanceIndex.mandateCitation(state.bundle.report,ref);
   if (ref.startsWith('mandate-original/') || ref.startsWith('mandate-word/')) {
@@ -928,7 +932,7 @@ function finding(item) {
   if (item.payment_window) node.append(paymentWindowPanel(item,state.bundle.report.graph));
   if (item.payment_quality) node.append(Team.paperLink('查看验收款质量对照',state.bundle.report.case_id,'source-jump',
     new URLSearchParams({rev:state.bundle.rev,view:'payment-checks',stage:item.id})));
-  if (item.retest_reference) node.append(Team.paperLink('核对回单所引的验收单',state.bundle.report.case_id,'source-jump',
+  if (item.retest_reference || item.inspection_use) node.append(Team.paperLink(item.inspection_use?'查看验收单付款用途':'核对回单所引的验收单',state.bundle.report.case_id,'source-jump',
     new URLSearchParams({rev:state.bundle.rev,view:'payment-checks',stage:item.id})));
   if (item.payment_opinion) {
     const graph=state.bundle.report.graph, rows=AcceptanceOpinion.rows(graph,item);
@@ -1675,7 +1679,9 @@ async function refresh() {
         const page=Number(route.params.get('walkpage')), line=Number(route.params.get('walkline'));
         if (doc && OriginalReader.pageNumbers(doc,graph).includes(page)) {
           state.openedCitation=location.hash;
-          openPage(doc.id,page,undefined,Number.isSafeInteger(line) && line>0?line:undefined);
+          const raw=route.params.get('walkraw');
+          const ref=raw==='inspection-use/'+doc.id+'/p'+page+'/l'+line ? raw : undefined;
+          openPage(doc.id,page,undefined,Number.isSafeInteger(line) && line>0?line:undefined,undefined,ref);
         }
       }
       if (['queued','running'].includes(data.status)) interval = 1600;

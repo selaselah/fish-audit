@@ -1,5 +1,22 @@
 # 合成财会审计演练
 
+## 复验单付款用途
+
+以下命令生成五组水印材料，每组六份 PDF。它们沿用同一合同、初验、整改、复验及扣款，只改一条用途附注。五组生成件已逐一与实际上传版本比对摘要。[样本生成器](retest_use_notes.py) · [每种写法对应的实付判断](../acceptance.md#复验合格后第二期付款所据的用途附注)
+
+```sh
+server/.venv/bin/python docs/samples/retest_use_notes.py /tmp/inspection-use
+```
+
+任选一组上传到本机网站即可审计，也可给生成器加 `--run` 实际提交。若需演练字段复核，另加 `--check-against` 并提供对照版水印证据包。人工核字记录随案例留存。已出具的风险样本可用后两条命令独立核验。
+
+```sh
+curl --fail http://127.0.0.1:8000/api/cases/003c1f67ef1a46cead3b42fcaadeb1ba/reports/8/bundle -o /tmp/inspection-master-R8.zip
+server/.venv/bin/python docs/samples/retest_use_notes.py /tmp/inspection-use --run --check-against /tmp/inspection-master-R8.zip
+curl --fail http://127.0.0.1:8000/api/cases/66fa88c60aed4799a64ab73c0eb92495/reports/10/bundle -o /tmp/inspection-ban-R10.zip
+server/.venv/bin/python server/verify.py /tmp/inspection-ban-R10.zip --render-performance --rules-from-git dd32a53
+```
+
 ## 回单引用初验或复验
 
 全新检出项目可以离线生成五组资料。母本是同一台冷藏柜的六份水印 PDF。生成器保留采购合同、初验、整改、复验及质保单，分别在银行回单末行写入初验号、复验号或一位差异的编号，并设置付款日期。生成后任选一组上传到网站，也可以加 `--run` 调用本机服务。[五组实测与固定版底稿](../acceptance.md#第二期回单究竟引用哪一张验收单)

@@ -206,7 +206,8 @@ def side(item, other):
     return {"id": f["id"], "rule": f["rule"], "title": f["title"], "status": f["status"], "detail": f["detail"], "basis": f.get("basis"),
             "stage": stage.get("name"), "instrument": item["instrument"], "source_count": len(sources), "sources": preview,
             "certificate": bool(((f.get("warranty_check") or {}).get("certificate") or {}).get("records")),
-            "board_decision": bool(board and board["records"]), "payment_quality": bool(quality), "retest_reference": bool(retest)}
+            "board_decision": bool(board and board["records"]), "payment_quality": bool(quality), "retest_reference": bool(retest),
+            "inspection_use": bool(f.get("inspection_use"))}
 
 
 def pair(older, newer):

@@ -1504,8 +1504,8 @@ function traceEvidence(finding, index, references) {
       const group = prior.case_id + '/' + prior.rev;
       if (!archived.has(group)) archived.set(group,[]);
       archived.get(group).push(prior);
-    } else if (index.nodes.get(ref)?.type==='page') {
-      other.push(citation(ref));
+    } else if (['page','inspection_use_line'].includes(index.nodes.get(ref)?.type)) {
+      other.push(citation(ref,finding));
     }
   }
   const panel = box('trace-part trace-sources',el('h3','取用的原文'));

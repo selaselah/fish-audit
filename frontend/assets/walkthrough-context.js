@@ -56,8 +56,8 @@ export function captureContext(owner, element) {
         if (stage && /^H04-[1-9]\d*$/.test(stage)) context.params = {view:'payment-release',stage};
         const instrument=element?.closest('[data-release-set] [data-instrument]');
         if (instrument) context.params={view:'payment-release',stage:instrument.parentElement.dataset.releaseSet,instrument:instrument.dataset.instrument};
-        const receiptCard=element?.closest('[data-quality-finding],[data-retest-finding]') ||
-          (!element && owner?.id==='performance-index' && owner.querySelector('[data-quality-finding],[data-retest-finding]'));
+        const receiptSelector='[data-quality-finding],[data-retest-finding],[data-use-finding]';
+        const receiptCard=element?.closest(receiptSelector) || (!element && owner?.id==='performance-index' && owner.querySelector(receiptSelector));
         const certificate=element?.closest('.warranty-certificate')?.closest('[data-phase-finding]')?.dataset.phaseFinding;
         if (certificate) {
           const payment=element.closest('[data-warranty-payment]')?.dataset.warrantyPayment;
@@ -70,7 +70,7 @@ export function captureContext(owner, element) {
         if (comparison && !comparison.hidden && comparison.dataset.entry)
           context.params={view:'revision-comparison',prior:comparison.dataset.prior,entry:comparison.dataset.entry};
         if (receiptCard) {
-          context.params={view:'payment-checks',stage:receiptCard.dataset.qualityFinding || receiptCard.dataset.retestFinding};
+          context.params={view:'payment-checks',stage:receiptCard.dataset.useFinding || receiptCard.dataset.qualityFinding || receiptCard.dataset.retestFinding};
           if (!element) {context.anchor=receiptCard.id;context.target=receiptCard.getAttribute('aria-label');}
         }
       }
@@ -91,7 +91,11 @@ export function captureContext(owner, element) {
           if (fact && fact.doc===context.doc && fact.page===context.page) {
             context.params={fact:cited};
             if (fact.source_line?.number>0) context.line=fact.source_line.number;
-          } else if (+row?.dataset.gapLine>0) context.line=+row.dataset.gapLine;
+          } else if (+row?.dataset.gapLine>0) {
+            context.line=+row.dataset.gapLine;
+            const source='inspection-use/'+context.doc+'/p'+context.page+'/l'+context.line;
+            if (context.rev && row.dataset.sourceRef===source) context.raw_ref=source;
+          }
         }
       }
     }
@@ -132,7 +136,8 @@ export function describeContext(c) {
   const screen = c.screen==='case' ? screens.case+' '+c.case_id.slice(0,8) : screens[c.screen];
   const edition=c.params?.view==='revision-comparison' ? '履约对照 R'+c.params.prior+' / R'+c.rev : c.rev && 'R'+c.rev;
   const board=c.params?.view==='board-decision' && ({decision:'董事会决议原文',signing:'董事会签发版本',payments:'董事会决议关联期款'}[c.params.part] || '董事会审批原件');
-  const receipt=c.params?.view==='payment-checks' && (c.anchor?.startsWith('retest-')?'复验回单核对 '+c.params.stage:
+  const receipt=c.params?.view==='payment-checks' && (c.anchor?.startsWith('inspection-use-')?'验收单付款用途 '+c.params.stage:
+    c.anchor?.startsWith('retest-')?'复验回单核对 '+c.params.stage:
     c.anchor?.startsWith('quality-') && '验收款核对 '+c.params.stage);
   return [screen, c.example || sections[c.section], edition, caseTabs[c.tab], board, receipt, dialogs[c.dialog],
     c.doc && (c.doc+' · 第 '+c.page+' 页'), c.line && '第 '+c.line+' 行', c.target].filter(Boolean).join(' › ');
@@ -154,6 +159,7 @@ export function returnUrl(c, workspace) {
   if (c.doc && !query.has('fact')) {
     query.set('walkdoc', c.doc); query.set('walkpage', c.page);
     if (c.line) query.set('walkline', c.line);
+    if (c.rev && c.raw_ref==='inspection-use/'+c.doc+'/p'+c.page+'/l'+c.line) query.set('walkraw',c.raw_ref);
   }
   return base+'case/'+c.case_id+(query.size?'?'+query:'');
 }

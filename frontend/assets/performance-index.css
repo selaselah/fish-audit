@@ -298,3 +298,17 @@
 .retest-reference .retest-match { border-color:var(--accent); background:var(--accent-soft); }
 .retest-reference .quality-readings button { padding-right:18px; }
 .retest-note { margin:0 12px 12px; color:var(--secondary); font-size:.83rem; }
+
+.inspection-use { min-width:0; margin:0 0 12px; border:1px solid var(--line); border-radius:7px; background:var(--surface); }
+.retest-reference .inspection-use { margin:3px 10px 10px; }
+.inspection-use-heading { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:3px 8px; padding:9px 10px 5px; }
+.inspection-use-heading h4 { margin:0; font-size:.86rem; }
+.inspection-use-heading span { color:var(--secondary); font-size:.78rem; font-weight:600; }
+.inspection-use[data-status=risk] .inspection-use-heading span { color:var(--issue); }
+.inspection-use button.inspection-use-row { position:relative; display:grid; gap:4px; width:100%; min-height:44px; padding:6px 28px 9px 10px;
+  border:0; border-radius:0 0 6px 6px; text-align:left; background:var(--surface); color:var(--ink); overflow-wrap:anywhere; }
+.inspection-use-row strong { font-size:.86rem; font-weight:520; line-height:1.5; }
+.inspection-use-row small { color:var(--secondary); font-size:.75rem; line-height:1.4; }
+.inspection-use-row .ui-glyph { position:absolute; right:9px; top:9px; color:var(--accent-hover); font-size:.72rem; }
+.inspection-use button.inspection-use-row:is(:hover,:focus-visible) { background:var(--accent-soft); }
+.inspection-use-row:focus-visible { outline:2px solid var(--focus); outline-offset:-2px; }

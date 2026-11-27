@@ -15,6 +15,7 @@ QUALITY_PIN = re.compile(r"quality-(H0[45]-[1-9][0-9]{0,7})(?:-(clause|acceptanc
 RETEST_PIN = re.compile(r"retest-(H05-[1-9][0-9]{0,7})(?:-(clause|citation|payment_designation|transfer_status|paid_on|terms|order|"
                         r"(?:original|final)_(?:acceptance_number|accepted_on|acceptance_result|acceptance_scope|defect_number)|"
                         r"(?:repair|final)_(?:original_acceptance|repair_number)|repair_(?:repaired_on|defect_number)|final_defect_closure))?")
+USE_PIN = re.compile(r"inspection-use-(H05-[1-9][0-9]{0,7})(?:-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7}))?")
 
 
 def check_context(value):
@@ -27,7 +28,8 @@ def check_context(value):
     if screen == "desk":
         patterns["intake"] = r"contract|purchase|travel|payment"
     if screen == "case":
-        patterns.update(case_id=r"[a-f0-9]{32}", tab=r"report|evidence|graph|activity", doc=r"d[0-9]{2,8}")
+        patterns.update(case_id=r"[a-f0-9]{32}", tab=r"report|evidence|graph|activity", doc=r"d[0-9]{2,8}",
+                        raw_ref=r"inspection-use/d[0-9]{2,8}/p[1-9][0-9]{0,7}/l[1-9][0-9]{0,7}")
         if "case_id" not in value:
             raise CaseError("走查底稿编号缺失。", 400)
     result = {"screen": screen}
@@ -51,8 +53,11 @@ def check_context(value):
         raise CaseError("走查原页位置不完整。", 400)
     params = result.get("params", {})
     anchor = result.get("anchor", "")
-    if screen == "case" and anchor.startswith(("quality-H","retest-H")):
-        pin = QUALITY_PIN.fullmatch(anchor) or RETEST_PIN.fullmatch(anchor)
+    if raw := result.get("raw_ref"):
+        if not result.get("rev") or raw != f"inspection-use/{result.get('doc')}/p{result.get('page')}/l{result.get('line')}" or params:
+            raise CaseError("请选择该版底稿中对应的付款用途原行。",400)
+    if screen == "case" and anchor.startswith(("quality-H","retest-H","inspection-use-")):
+        pin = QUALITY_PIN.fullmatch(anchor) or RETEST_PIN.fullmatch(anchor) or USE_PIN.fullmatch(anchor)
         if not pin or not result.get("rev") or params != {"view":"payment-checks", "stage":pin[1]}:
             raise CaseError("请选择底稿版本及相应验收款检查项。", 400)
     if screen == "case" and (params.get("view") == "board-decision" or {"filing","part"}.intersection(params)):
@@ -103,6 +108,18 @@ def save_note(store, workspace, author, role, data):
             raise CaseError("未找到记录时的底稿版本。", 404)
         position = context.get("params",{})
         anchor = context.get("anchor","")
+        use_pin = USE_PIN.fullmatch(anchor)
+        if context["screen"] == "case" and (use_pin or context.get("raw_ref")):
+            rows = db.execute("""SELECT json_extract(f.value,'$.id'),json_extract(f.value,'$.inspection_use.notes')
+                              FROM reports, json_each(content,'$.findings') AS f WHERE case_id=? AND rev=?
+                              AND json_type(f.value,'$.inspection_use.notes')='array'""",(context["case_id"],context["rev"]))
+            proof = {fid: {n["row"] for n in json.loads(notes)} for fid,notes in rows}
+            raw = context.get("raw_ref")
+            if use_pin and use_pin[2]:
+                raw = f"inspection-use/{use_pin[2]}/p{use_pin[3]}/l{use_pin[4]}"
+            cited = proof.get(use_pin[1],set()) if use_pin else set().union(*proof.values())
+            if not cited or raw and raw not in cited:
+                raise CaseError("所选版本的付款发现没有引用该用途原行。",404)
         if context["screen"] == "case" and (pin := QUALITY_PIN.fullmatch(anchor) or RETEST_PIN.fullmatch(anchor)):
             retest = pin.re == RETEST_PIN
             row = db.execute("""SELECT json_extract(f.value,?) FROM reports, json_each(content,'$.findings') AS f

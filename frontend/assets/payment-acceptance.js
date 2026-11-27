@@ -39,14 +39,14 @@ const PaymentAcceptance = (() => {
     const fact=observation(row,graph);
     openPage(row.doc,row.page,fact?.id,fact?undefined:row.line);
   }
-  function panel(report) {
-    if (report?.policy.payment_acceptance!==format) return null;
+  function itemsFor(report) {
+    if (report?.policy.payment_acceptance!==format) return [];
     const graph=report.graph,idx=graphIndex(graph),rows=new Map(sources(graph).map(r=>[r.id,r]));
     const checks=report.findings.filter(f=>f.rule==='H05' && f.payment_acceptance?.format===format);
-    if (!checks.length) return null;
+    if (!checks.length) return [];
     const units=graph.documents_by_kind, contract=units.contract?.length===1 && units.contract[0];
     const batch=report.findings.find(f=>f.rule==='H02')?.batch_acceptance;
-    const items=checks.map((f,i)=>{
+    return checks.map((f,i)=>{
       const p=f.payment_acceptance, refs=new Set(traceReferences(graph,f));
       function validFact(id,field,unit,supported=refs) {
         const fact=idx.facts.get(id),pg=fact && idx.nodes.get(fact.doc+'/p'+fact.page);
@@ -103,6 +103,10 @@ const PaymentAcceptance = (() => {
         total:total?.stage_payments.seen,
         basis:[clause && factSource(clause,'合同期款原行'),allocation && factSource(allocation,'分批交付原行'),designated && factSource(designated,'回单用途原行')].filter(Boolean)};
     });
+  }
+  function panel(report) {
+    const items=itemsFor(report);
+    if (!items.length) return null;
     const card=PaymentReferenceCard.render(items,'payment-acceptance');
     card.addEventListener('change-reference',event=>{
       if (event.detail.clauseRef) card.dispatchEvent(new CustomEvent('select-contract-phase',{detail:event.detail.clauseRef}));
@@ -136,5 +140,5 @@ const PaymentAcceptance = (() => {
     },'text-button');
     b.setAttribute('aria-controls','payment-acceptance');return b;
   }
-  return {sources,observation,open,panel,jump};
+  return {sources,observation,open,itemsFor,panel,jump};
 })();

@@ -8,11 +8,14 @@ const BatchPhase = (() => {
     return Array.isArray(left) && Array.isArray(right) && left.length === right.length &&
       new Set(left).size === left.length && left.every(id => right.includes(id));
   }
-  function batchPrefix(text, index) {
+  function sameOrdinal(text,index) {
     const digits = '零一二三四五六七八九', tens = Math.floor(index / 10), ones = index % 10;
     const ordinal = tens ? (tens === 1 ? '' : digits[tens]) + '十' + (ones ? digits[ones] : '') : digits[ones];
+    return [String(index),ordinal,ordinal?.replace(/二/g,'两')].includes(text);
+  }
+  function batchPrefix(text, index) {
     const refs = [...clean(text).matchAll(/第([\d零一二两三四五六七八九十]+)批/gu)];
-    return refs.length === 1 && refs[0].index === 0 && [String(index), ordinal, ordinal.replace(/二/g, '两')].includes(refs[0][1]);
+    return refs.length === 1 && refs[0].index === 0 && sameOrdinal(refs[0][1],index);
   }
   function resolve(phase, acceptance, graph, pages) {
     const stage = phase?.stage, index = stage?.batch_index;
@@ -172,5 +175,5 @@ const BatchPhase = (() => {
     select(proof.standard?'standard':proof.quality?'quality':'receipt');
     return root;
   }
-  return {resolve, panel, label, batchPrefix};
+  return {resolve, panel, label, batchPrefix, sameOrdinal};
 })();

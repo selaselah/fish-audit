@@ -61,7 +61,7 @@ function returnToControl() {
   const comparison=anchor.startsWith('revision-') && params.get('view')==='revision-comparison'
     ? document.getElementById('revision-comparison') : null;
   const board=params.get('view')==='board-decision' && anchor.startsWith('board-');
-  const receipt=params.get('view')==='payment-checks' && /^(?:quality|retest)-/.test(anchor);
+  const receipt=params.get('view')==='payment-checks' && /^(?:quality|retest|inspection-use)-/.test(anchor);
   url.searchParams.delete('walkat');
   history.replaceState(history.state,'',url);
   function locate() {
@@ -70,9 +70,9 @@ function returnToControl() {
         (params.has('entry') && comparison.dataset.entry!==params.get('entry')))) return false;
     const el = document.getElementById(anchor);
     if (receipt) {
-      const card=el?.closest('#performance-index[open] :is([data-quality-finding],[data-retest-finding])');
+      const card=el?.closest('#performance-index[open] :is([data-quality-finding],[data-retest-finding],[data-use-finding])');
       if (!card || url.hash!==location.hash || card.dataset.caseId!==path.split('/').at(-1) ||
-          card.dataset.rev!==params.get('rev') || (card.dataset.qualityFinding || card.dataset.retestFinding)!==params.get('stage')) return false;
+          card.dataset.rev!==params.get('rev') || (card.dataset.useFinding || card.dataset.qualityFinding || card.dataset.retestFinding)!==params.get('stage')) return false;
     }
     if (board) {
       const card=el?.closest('#board-decision,#board-unavailable');
@@ -80,7 +80,7 @@ function returnToControl() {
           (params.has('filing') && card.dataset.boardFiling!==params.get('filing')) ||
           (params.has('part') && card.dataset.boardPart!==params.get('part'))) return false;
     }
-    if (el?.closest('#revision-comparison:not([hidden]),#board-decision,[data-quality-finding],[data-retest-finding]')) {
+    if (el?.closest('#revision-comparison:not([hidden]),#board-decision,[data-quality-finding],[data-retest-finding],[data-use-finding]')) {
       for (let parent=el.parentElement;parent && parent.id!=='revision-comparison';parent=parent.parentElement)
         if (parent.tagName==='DETAILS') parent.open=true;
     }

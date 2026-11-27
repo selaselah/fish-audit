@@ -14,6 +14,8 @@ H05 还列有对应的成功回单、款项用途、交易状态及日期字段�
 
 ## 产品走查意见
 
+对付款用途附注点选意见时，控件 `anchor` 形如 `inspection-use-H05-8-d01-p1-l21`。在 PDF 原页上填写时，`context.raw_ref` 形如 `inspection-use/d01/p1/l21`，须与同一底稿版本的文档、页、行及付款发现相符。旧版没有这行用途依据时，写入会返回 404。[试用复验单第 21 行](http://127.0.0.1:8000/workpaper/66fa88c60aed4799a64ab73c0eb92495?rev=10&view=payment-checks&stage=H05-8)
+
 在验收款质量对照里提意见时，固定链接沿用 `view=payment-checks&stage=H05-8`。走查上下文保留 `case_id`、`rev`、检查项及控件 `anchor`，如 `quality-H05-8-measured_result`。服务器按工作区、账号和所选版本检查该发现及字段。复制的清单含现场链接、文件名和页行。[点选验收款原行](interaction-design/README.md#在页面上记录走查意见)
 
 本机服务的 `GET /api/walkthrough` 返回 `{"notes":[...]}`，按保存时间倒序排列。每条含 `id`、UTC 时间 `created`、意见 `text` 和页面定位 `context`。在同一台机器上工作的 Codex 可直接读取这一清单。[本机走查清单](http://127.0.0.1:8000/api/walkthrough)
@@ -21,6 +23,12 @@ H05 还列有对应的成功回单、款项用途、交易状态及日期字段�
 向同一地址 POST JSON 可保存意见。`id` 为前端生成的 32 位小写十六进制编号，`text` 为 1 至 2000 字。定位字段按页面校验，底稿记录关联案件、版次、原页等编号。首次写入返回 201，重试相同内容返回已有记录及 200，同一编号提交不同内容返回 409。走查记录与审计签收、原件和底稿版本分别存储。
 
 企业工作区使用 `/api/w/<wid>/walkthrough`，沿用成员身份和写入时的 CSRF 校验，清单仅列出当前账号在该企业内的记录。企业实例的公开页使用浏览器存储。[服务端实现](../server/walkthrough.py)
+
+## 实付发现中的验收单用途
+
+方法 `policy.inspection_use` 标记为 `cited-inspection-payment-use-v1`。H05 的 `inspection_use` 给出回单、所引完整单号、单号来源、用途附注及逐项证据。状态 `ban` 表示原文明示禁止该用途，`approval` 和 `conditional` 分别表示另行审批及签批条件待核。`other_document`、`other_stage` 标出另一份原件或另一期款的说明。`unclear` 提示核对存在歧义的原文。整笔实付沿用该发现里最高的风险等级。
+
+原行节点在 `graph.inspection_use_sources.rows`，按文档、物理页和行号标识。页图与原行通过 `inspection_use_source` 关联。附注来自回单所引单据且适用于该期款时，`cites_inspection_use` 将回单引用栏指向相应附注。调用记录按页保留 `inspection_use_rects` 供复验和阅读器定位。版本对照两侧的 `inspection_use` 标志分别控制该版的原件入口。[归档验证](../server/inspection_use.py)
 
 ## 董事会审批单的决定与签发版本
 

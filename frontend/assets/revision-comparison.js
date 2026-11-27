@@ -81,8 +81,8 @@ const RevisionComparison = (() => {
       const quality=Team.paperLink('验收款质量对照',cid,'text-button',new URLSearchParams({rev:meta.rev,view:'payment-checks',stage:item.id}));
       quality.id=card.id+'-quality';links.append(quality);
     }
-    if (item.retest_reference) {
-      const receipt=Team.paperLink('回单所引验收单',cid,'text-button',new URLSearchParams({rev:meta.rev,view:'payment-checks',stage:item.id}));
+    if (item.retest_reference || item.inspection_use) {
+      const receipt=Team.paperLink(item.inspection_use?'验收单付款用途':'回单所引验收单',cid,'text-button',new URLSearchParams({rev:meta.rev,view:'payment-checks',stage:item.id}));
       receipt.id=card.id+'-retest';links.append(receipt);
     }
     card.append(links);

@@ -4,7 +4,7 @@
 
 周末走查时，在页面右下角点「提意见」。在原件、付款检查或上传窗口里，入口在关闭按钮旁。写下希望怎么改，点「保存意见」，也可以按 ⌘ + Enter 或 Ctrl + Enter。要指明某个字段，先点「点选控件」，再点那个字段。「已记录」能回到原位置，也能复制给 Codex 或下载 Markdown。在本机直接告诉 Codex「读取本机走查意见，按清单修改」即可。[走查交互说明](interaction-design/README.md#在页面上记录走查意见)
 
-可从一张引用了不合格初验单的回单开始。点回单上的单号查看原行，再点复验单号查看另一份凭证。对其中任一处写意见，清单会记住底稿版次和对应位置。[打开第二期付款走查](http://127.0.0.1:8000/workpaper/e4cc7a317fe34db4a3df9acc0a165b99?rev=7&view=payment-checks&stage=H05-8)
+试走查这笔第二期验收款。回单引用的复验单写了「合格」，第 21 行同时写明本单不得作为该期付款依据。点这行就能核对原件，也能现场写修改意见。[打开付款用途原行](http://127.0.0.1:8000/workpaper/66fa88c60aed4799a64ab73c0eb92495?rev=10&view=payment-checks&stage=H05-8) · [对照引用初验单的另一笔回单](http://127.0.0.1:8000/workpaper/e4cc7a317fe34db4a3df9acc0a165b99?rev=7&view=payment-checks&stage=H05-8)
 
 可用这笔 10 万元的冷藏柜采购做周末走查。合同上限 4℃，验收单实测 8℃ 却列「合格」，第二期 6 万元已付。点选实测值或付款日写意见，清单会记住这张回单、底稿版次和所据原行。董事会审批单上要求另行表决的批注也可点选。[走查第二期实付](http://127.0.0.1:8000/workpaper/64cd9e64345841bab358728a6730f3d8?rev=8&view=payment-checks&stage=H05-8) · [走查董事会批注](http://127.0.0.1:8000/workpaper/64cd9e64345841bab358728a6730f3d8?rev=8&view=board-decision&filing=d01&part=signing)
 
