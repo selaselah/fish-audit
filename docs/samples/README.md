@@ -1,5 +1,19 @@
 # 合成财会审计演练
 
+## 同一补充协议的 Word 批注与扫描件
+
+本地已签发的两份 R5 和一份 R2 均可离线复算。以下命令核对固定报告摘要、逐页调用记录、公开原件及精确裁片所据的行坐标，两份 Word 的打印页须逐字节相同。[水印演练记录](../acceptance.md#word-与扫描版补充协议的收票条件)
+
+```sh
+server/.venv/bin/python docs/samples/publish_addendum_originals.py --check
+```
+
+离线运行时添加 `--archives /path/to/bundles`，目录应包含 `word_text.zip`、`word_review.zip`、`photo.zip`。要在本地生成演练输入，提供上一组第二期收票案的 R10 水印包和输出目录。添加 `--run` 会通过本机上传接口建立演练并调用模型。`--check-fields` 核对本次水印案的打印栏文字或扫描件标题，并留存模拟复核记录。[第二期收票 R10](http://127.0.0.1:8000/api/cases/8c2a157237cf4712856f64225466ee2c/reports/10/bundle)
+
+```sh
+server/.venv/bin/python docs/samples/addendum_originals_demo.py /path/to/payment-R10.zip /tmp/fish-agreement-demo --run --check-fields
+```
+
 ## 补充协议的签名覆盖与收票前提
 
 三份柜温协议保留相同水印版面。电子签名使用演练时生成的自签名证书，签后修订版在同一已签文件末尾追加元数据。收票案的补充协议和银行回单来自另一组采购原件。打开现有演练或重建静态资料均无需新调用模型。[演练与固定底稿](../acceptance.md#补充协议签署柜温标准与验收款收票前提)

@@ -8,22 +8,29 @@ const MandateOriginals = (() => {
     photo:'照片原件，授权方签章待核',
     review:'委托书原件的签发依据待核'
   };
+  const families={
+    mandate:{kind:'power_of_attorney',labels},
+    addendum:{kind:'contract_addendum',labels:{
+      word_text:'Word 排印原件',word_visual:'Word 签章页待核图',word_review:'Word 定稿待核',
+      photo:'补充协议影像',review:'原件签署依据待核'
+    }}
+  };
   const digest=value=>typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
   const same=(a,b)=>Array.isArray(a) && a.length===b.length && a.every((v,i)=>v===b[i]);
   function edge(graph,from,to,type,evidence) {
     const edges=graph.edges.filter(e=>e.type===type && e.to===to);
     return edges.length===1 && edges[0].from===from && same(edges[0].evidence,evidence);
   }
-  function wordReview(graph,source,rows) {
-    const {record,doc}=source, index=graphIndex(graph), ledger=graph.mandate_original_sources;
+  function wordReview(graph,source,rows,role) {
+    const {record,doc}=source, index=graphIndex(graph), ledger=graph[role+'_original_sources'];
     const documents=ledger.documents.filter(d=>d?.doc===doc.id || d?.id===record.review), [word]=documents;
     const units=(graph.audit_documents || graph.documents).filter(u=>(u.source || u.id)===doc.id);
-    const mandates=units.filter(u=>graph.documents_by_kind.power_of_attorney.includes(u.id));
-    if (documents.length!==1 || word.id!==record.review || word.id!=='mandate-word/'+doc.id || word.doc!==doc.id ||
-        word.original_sha256!==doc.sha256 || !same(word.units,mandates.map(u=>u.id)) ||
-        index.nodes.get(word.id)?.type!=='mandate_word_review' || index.nodes.get(word.id).doc!==doc.id ||
-        !edge(graph,doc.id,word.id,'mandate_word_review_source',[doc.id]) ||
-        !edge(graph,word.id,record.id,'mandate_original_word',[doc.id,word.id])) return null;
+    const assigned=units.filter(u=>graph.documents_by_kind[families[role].kind].includes(u.id));
+    if (documents.length!==1 || word.id!==record.review || word.id!==role+'-word/'+doc.id || word.doc!==doc.id ||
+        word.original_sha256!==doc.sha256 || !same(word.units,assigned.map(u=>u.id)) ||
+        index.nodes.get(word.id)?.type!==role+'_word_review' || index.nodes.get(word.id).doc!==doc.id ||
+        !edge(graph,doc.id,word.id,role+'_word_review_source',[doc.id]) ||
+        !edge(graph,word.id,record.id,role+'_original_word',[doc.id,word.id])) return null;
     if (!['complete','partial','unreadable'].includes(word.coverage) || !Array.isArray(word.limitations) ||
         !Array.isArray(word.notes) || (word.coverage==='complete')!==!word.limitations.length ||
         (word.coverage==='unreadable' ? word.count!==null || word.notes.length :
@@ -33,14 +40,14 @@ const MandateOriginals = (() => {
     const notes=[], refs=[word.id];
     let unplaced=0;
     for (const [i,n] of word.notes.entries()) {
-      if (n?.id!==word.id+'/n'+(i+1) || index.nodes.get(n.id)?.type!=='mandate_word_comment' ||
-          index.nodes.get(n.id).doc!==doc.id || !edge(graph,word.id,n.id,'mandate_word_review_comment',[doc.id,word.id]) ||
+      if (n?.id!==word.id+'/n'+(i+1) || index.nodes.get(n.id)?.type!==role+'_word_comment' ||
+          index.nodes.get(n.id).doc!==doc.id || !edge(graph,word.id,n.id,role+'_word_review_comment',[doc.id,word.id]) ||
           typeof n.text!=='string' || typeof n.author!=='string' || typeof n.shortened!=='boolean' ||
           !AcceptanceComments.validAnchor(n.anchor)) return null;
       const loc=n.location;
       let fact;
       if (loc===null) {
-        if (graph.edges.some(e=>e.to===n.id && e.type==='mandate_word_review_anchor')) return null;
+        if (graph.edges.some(e=>e.to===n.id && e.type===role+'_word_review_anchor')) return null;
         if (record.unit!==doc.id) { unplaced++; continue; }
       } else {
         if (!loc || !n.anchor || !Number.isSafeInteger(loc.page) || loc.page<1 || loc.page>doc.pages ||
@@ -50,7 +57,7 @@ const MandateOriginals = (() => {
         const split=units.filter(u=>u.source && u.page===loc.page);
         if (split.length>1 || loc.unit!==(split[0]?.id || doc.id) || page?.type!=='page' || page.layer!=='text' ||
             !digest(loc.page_sha256) || page.sha256!==loc.page_sha256 || !digest(loc.text_sha256) ||
-            page.text_sha256!==loc.text_sha256 || !edge(graph,pageId,n.id,'mandate_word_review_anchor',[pageId,...loc.facts])) return null;
+            page.text_sha256!==loc.text_sha256 || !edge(graph,pageId,n.id,role+'_word_review_anchor',[pageId,...loc.facts])) return null;
         if (loc.unit!==record.unit) continue;
         const printed=loc.printed ?? n.anchor.quote;
         if (!record.pages.some(p=>p.ref===pageId) || typeof printed!=='string' ||
@@ -65,19 +72,20 @@ const MandateOriginals = (() => {
       }
       const evidence=[doc.id,word.id];
       if (loc) evidence.push(doc.id+'/p'+loc.page,...loc.facts);
-      if (!edge(graph,record.id,n.id,'mandate_original_comment',evidence)) return null;
+      if (!edge(graph,record.id,n.id,role+'_original_comment',evidence)) return null;
       refs.push(n.id);
       notes.push({...n,open:fact?()=>openPage(doc.id,loc.page,fact):null,openPage:loc && !fact?()=>openPage(doc.id,loc.page):null});
     }
-    const owned=graph.edges.filter(e=>e.from===record.id && e.type==='mandate_original_comment');
+    const owned=graph.edges.filter(e=>e.from===record.id && e.type===role+'_original_comment');
     if (!same(record.notes,notes.map(n=>n.id)) || record.unplaced!==unplaced ||
         owned.length!==notes.length || !owned.every(e=>record.notes.includes(e.to))) return null;
-    return {word:{id:word.id,coverage:word.coverage},notes,refs};
+    return {word:{id:word.id,coverage:word.coverage,limitations:word.limitations,part:word.part,part_sha256:word.part_sha256},notes,refs};
   }
-  function bind(graph,source,rows) {
-    if (!source || !Array.isArray(graph.mandate_original_sources.documents)) return null;
+  function bind(graph,source,rows,role='mandate') {
+    const ledger=graph[role+'_original_sources'];
+    if (!source || !Array.isArray(ledger?.documents)) return null;
     const {record,doc}=source, index=graphIndex(graph);
-    if (!Object.hasOwn(labels,record.state) || !Array.isArray(record.notes) ||
+    if (!Object.hasOwn(families[role].labels,record.state) || !Array.isArray(record.notes) ||
         !Number.isSafeInteger(record.unplaced) || record.unplaced<0 || record.pages.some(p=>{
           const page=index.nodes.get(p.ref);
           return p.layer!==page.layer || p.text_only!==(page.clause_text_only===true) ||
@@ -88,25 +96,24 @@ const MandateOriginals = (() => {
       if (section?.type!=='document_section' || section.source!==doc.id || ref!==doc.id+'/p'+section.page ||
           !edge(graph,doc.id,record.unit,'contains_section',[ref]) || !edge(graph,record.unit,ref,'section_page',[ref])) return null;
     }
-    const proof={...source,label:labels[record.state]};
+    const proof={...source,label:families[role].labels[record.state]};
     if (record.kind==='image') {
       if (!images.has(doc.ext) || !['photo','review'].includes(record.state) || record.review!==null || record.notes.length || record.unplaced ||
-          graph.mandate_original_sources.documents.some(d=>d?.doc===doc.id) ||
-          graph.edges.some(e=>e.to===record.id && e.type==='mandate_original_word' ||
-            e.from===record.id && e.type==='mandate_original_comment') ||
+          ledger.documents.some(d=>d?.doc===doc.id) ||
+          graph.edges.some(e=>e.to===record.id && e.type===role+'_original_word' ||
+            e.from===record.id && e.type===role+'_original_comment') ||
           record.state==='photo' && !record.pages.every(p=>p.layer==='image' && !p.text_only)) return null;
       return proof;
     }
     if (record.kind!=='word' || !['.doc','.docx'].includes(doc.ext) || record.state==='photo') return null;
-    const review=wordReview(graph,source,rows);
+    const review=wordReview(graph,source,rows,role);
     if (!review) return null;
     const pending=Boolean(review.notes.length || record.unplaced || review.word.coverage!=='complete');
     if (record.state!=='review' && (record.state==='word_review')!==pending) return null;
     const textOnly=record.pages.every(p=>p.text_only);
     const emptyText='e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
     if (record.state==='word_text' && (!textOnly || record.pages.every(p=>index.nodes.get(p.ref).text_sha256===emptyText))) return null;
-    if (record.state==='word_visual' && (record.pages.some(p=>!['text','image_overlay'].includes(p.layer)) ||
-        textOnly && [...rows.values()].some(({line,fact})=>line && (fact.unit || fact.doc)===record.unit))) return null;
+    if (record.state==='word_visual' && !record.pages.some(p=>p.layer==='image_overlay' || p.layer==='text' && !p.text_only)) return null;
     return {...proof,word:review.word,notes:review.notes,refs:[...new Set([...proof.refs,...review.refs])]};
   }
   function wordFile(proof) {

@@ -15,10 +15,11 @@ const AddendumCard = (() => {
     else label.textContent=value;
     return label;
   }
-  function termPanel(terms) {
+  function termPanel(terms,embedded=false) {
     const change=element('section','','addendum-terms'), header=element('div','','addendum-terms-head');
     const title=element('div','','addendum-terms-title');
-    title.append(element('strong','协议所列变更'),element('small','生效日待核'));
+    if (!embedded) title.append(element('strong','协议所列变更'));
+    title.append(element('small','生效日待核'));
     const toggle=element('button','对照原行','addendum-original-mode');
     toggle.type='button';toggle.setAttribute('role','switch');toggle.setAttribute('aria-checked','false');
     const track=element('i');track.setAttribute('aria-hidden','true');toggle.prepend(track);
@@ -63,9 +64,9 @@ const AddendumCard = (() => {
     function show(model) {
       root.dataset.agreement=model.key;
       for (const button of switches.children) button.setAttribute('aria-pressed',String(button.dataset.agreement===model.key));
-      const card=PdfSignatureCard.render({...model.pdf,id:id+'-pdf'});
+      const card=model.native?AddendumOriginalCard.render(model.native,model.terms,id):PdfSignatureCard.render({...model.pdf,id:id+'-pdf'});
       body.replaceChildren(card);
-      if (model.terms.length) body.append(termPanel(model.terms));
+      if (!model.native && model.terms.length) body.append(termPanel(model.terms));
       if (model.related) body.append(model.related());
       if (model.permalink) body.append(model.permalink());
       model.onSelect?.();

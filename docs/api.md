@@ -1,5 +1,13 @@
 # 本机审计接口
 
+## Word 与影像补充协议的签署凭证
+
+规则 `2026.11.27.09` 在 `policy.addendum_originals` 写入 `addendum-original-execution-v1`。报告的 `graph.addendum_original_sources.records` 按协议单元列出 `id`、`unit`、`doc`、原件 SHA-256、物理页清单、签章字段及审阅来源。状态 `word_text` 表示所检查页仅见排印文字，`word_visual` 表示页中有图形或需核对的版面，`word_review` 表示存在批注、修订或审阅范围待核，`photo` 表示上传的影像。其他待核原件使用 `review`。
+
+`documents` 保存 Word 原包的审阅覆盖范围、正文及批注部件摘要、批注文字和选区。能唯一对应的批注另存 `location`。数量 `unplaced` 记录合册中所属单元尚待核实的批注。验收变更及付款变更在 `quality_change.original_execution`、`payment_change.original_execution` 引用实际协议单元的记录，程序所据的页、字段和批注保留在该项 `evidence` 中。[签署依据程序](../server/addendum_originals.py)
+
+`/workpaper/<case_id>?rev=N&view=addendum-signing&agreement=d04` 可直接定位该版证据面板。企业工作区使用 `/w/<wid>/workpaper/<case_id>` 及相同查询参数。历史版复用其实际引用，只有当前可复核版本提供起草补件入口。[带批注的固定版](http://127.0.0.1:8000/workpaper/28dbf5e427094fc59f84a32eb13c0fd5?rev=5&view=addendum-signing&agreement=d04)
+
 ## 补充协议 PDF 的签署凭证
 
 `policy.addendum_pdf` 使用 `pdf-addendum-execution-v1`。`graph.addendum_pdf_sources.records` 按补充协议单元记录物理文件、原件摘要、所属页、签章字段及嵌入式签名记录。可以从 `addendum_pdf_source` 找到该单元的签署检查节点。签署状态沿用 PDF 检查的六个值，即 `typeset`、`visual`、`current`、`earlier`、`mismatch`、`review`。

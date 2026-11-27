@@ -171,3 +171,17 @@ class AddendumOriginalTests(unittest.TestCase):
                 self.assertEqual((a["unplaced"], b["unplaced"], a["notes"]), (1, 1, []))
             else:
                 self.assertEqual((a["state"], b["state"], a["notes"]), ("word_review", "word_text", [note["id"]]))
+
+    def test_independently_paged_word_preserves_old_reading_without_applying_it(self):
+        raw = word_source(rows=CHANGE)
+        report, text = filed(raw, ".docx", case, physical=True)
+        old = old_paper(report)
+        prior, = changes(old)
+        self.assertEqual((prior["state"], prior["effective_on"]), ("applied", "2026-09-12"))
+        revised, = changes(report)
+        self.assertEqual((revised["buyer_sealed_on"], revised["seller_sealed_on"]), ("2026-09-10", "2026-09-12"))
+        self.assertEqual(revised["revised_criterion"], prior["revised_criterion"])
+        self.assertEqual((revised["state"], revised["effective_on"], revised["applied_criterion"]), ("pending", None, None))
+        originals.verify(report, lambda _: raw, text, signing=True)
+        with self.assertRaisesRegex(ValueError, "重审"):
+            originals.verify(old, lambda _: raw, text, signing=True)

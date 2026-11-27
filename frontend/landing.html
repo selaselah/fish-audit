@@ -26,6 +26,8 @@
   <script src="/assets/pdf-signature-card.js" defer></script>
   <link rel="stylesheet" href="/assets/addendum-card.css">
   <script src="/assets/addendum-card.js" defer></script>
+  <script src="/assets/addendum-original-card.js" defer></script>
+  <script src="/assets/public-agreement-carriers.js" defer></script>
   <script src="/assets/public-addendum-signing.js" defer></script>
   <script src="/assets/public-pdf-signing.js" defer></script>
   <link rel="stylesheet" href="/assets/supplier-pages.css">
@@ -80,7 +82,7 @@
           <div class="hero-actions"><a class="button" href="/app">进入工作台</a><a class="text-link open-sample-review" href="/showcase/acceptance.pdf" target="_blank" rel="noopener" data-ref="d04/p1/f11">试核验收原件 <i aria-hidden="true" class="ui-glyph ic-arrows-angle-expand"></i></a></div>
           <p class="formats" aria-label="支持上传的资料格式">PDF（含扫描件） · 照片 · Word</p>
         </div>
-        <div class="specimen document-mat app-frame" data-visual id="sample" role="region" aria-label="交互演示，切换文件核对证据">
+        <div class="specimen document-mat app-frame" data-visual id="sample" data-evidence-integrity="sha256-sSybT5S1wXZk033l0JrnkLgplwaNptT2h2DgG99lYn4=" role="region" aria-label="交互演示，切换文件核对证据">
           <div class="specimen-head"><span class="folder-caption">采购审计底稿</span><span class="sample-label">合成案例 · R8</span></div>
           <div class="file-tabs" role="tablist" aria-label="选择演练原件">
             <button type="button" id="tab-contract" role="tab" aria-selected="false" aria-controls="sheet-contract" tabindex="-1"><i class="ui-glyph ic-journal-text" aria-hidden="true"></i>采购合同</button>
@@ -289,7 +291,7 @@
                 <a href="/showcase/guarantee-period-bank.pdf" target="_blank" rel="noopener">查看水印付款回单 ↗</a></div>
             </div>
             <div id="payment-execution" hidden><a href="/showcase/payment-execution-notice.pdf" target="_blank" rel="noopener">查看演练付款回单</a></div>
-            <div id="payment-addendum-invoice" data-integrity="sha256-mqSg2921XNORClx1k3ylAWkkyv4qj0zRll+YE0nPwTs=" hidden>
+            <div id="payment-addendum-invoice" data-carrier-integrity="sha256-dkvfB58F4m88Njxi1u0GsjKK9RRXp3/1yCbmhTLPHpM=" data-integrity="sha256-mqSg2921XNORClx1k3ylAWkkyv4qj0zRll+YE0nPwTs=" hidden>
               <div class="period-fallback"><a href="/showcase/addendum-invoice-agreement.pdf" target="_blank" rel="noopener">打开水印补充协议 ↗</a>
                 <a href="/showcase/addendum-invoice-bank.pdf" target="_blank" rel="noopener">打开水印付款回单 ↗</a></div>
             </div>

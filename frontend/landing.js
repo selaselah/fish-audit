@@ -105,6 +105,7 @@ if (!restoreWorkspaceLink()) {
     else url.searchParams.delete('pdf');
     if (url.searchParams.get('scene')==='addendum-signing') PublicAddendumSigning.address(url);
     else url.searchParams.delete('copy');
+    PublicAgreementCarriers.address(url);
     if (scene==='batch-standards') PublicBatchStandards.address(url);
     else { url.searchParams.delete('edition'); url.searchParams.delete('batch'); }
     url.hash='workflow';
@@ -245,7 +246,8 @@ if (!restoreWorkspaceLink()) {
   document.getElementById('inspection-example-choice').hidden=false;
   showInspection();
   scenes.hidden = false;
-  PublicCaseFinder.mount(sceneTabs,[contractExample,inspectionExample,paymentExample],(tab,picker,value)=>{
+  PublicCaseFinder.mount(sceneTabs,[contractExample,inspectionExample,paymentExample],(tab,picker,value,query)=>{
+    if (picker===paymentExample && value==='invoice') PublicAgreementCarriers.forQuery(query);
     picker.value=value; selectScene(tab); picker.dispatchEvent(new Event('change'));
     picker.focus({preventScroll:true});
     document.getElementById(tab.getAttribute('aria-controls')).scrollIntoView({block:'center',behavior:'instant'});

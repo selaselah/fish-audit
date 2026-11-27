@@ -24,7 +24,7 @@ const VerifiedSamplePage = (() => {
   }
   function link(row) {
     const anchor=document.createElement('a');
-    anchor.href=row.doc.pdf; anchor.target='_blank'; anchor.rel='noopener';
+    anchor.href=row.doc.original || row.doc.pdf; anchor.target='_blank'; anchor.rel='noopener';
     anchor.setAttribute('aria-haspopup','dialog'); anchor.setAttribute('aria-controls','sample-review');
     anchor.addEventListener('click',event=>{
       if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;

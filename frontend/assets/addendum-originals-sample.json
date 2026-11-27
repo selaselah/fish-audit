@@ -1,0 +1,324 @@
+{
+  "rule_version": "2026.11.27.09",
+  "editions": [
+    {
+      "key": "word_text",
+      "case_id": "d5f0bf6237204e48849fdf4726d6727e",
+      "rev": 5,
+      "report_sha256": "6b163db3c1f7a39a2369e7823ea5f8deb4d46fe7b8e9fcd3b826aa1eb1c123e5",
+      "record_id": "addendum-original/d04",
+      "finding": "H03-4",
+      "status": "missing",
+      "applies": "pending",
+      "effective_on": null,
+      "doc": {
+        "id": "d04",
+        "title": "采购合同补充协议",
+        "name": "采购合同补充协议.docx",
+        "media": "word",
+        "page": 1,
+        "version": "合成案例 · R5",
+        "source_sha256": "9af700effc8fed3d2a1c2f856c510490960168605c418b613c193cd8b904cd84",
+        "page_sha256": "ce0754ed471d55e7302ad1472cde633b9d3e1b5bf241bd8b678d6b89cb88a034",
+        "original": "/showcase/addendum-original-printed.docx",
+        "image": "/assets/addendum-original-word.jpg",
+        "lines": [
+          {
+            "ref": "d04/p1/f8",
+            "field": "previous_payment_stage",
+            "label": "原付款条款",
+            "value": "第二期：最终验收合格后支付 60%",
+            "quote": "原付款条款：第二期：最终验收合格后支付 60%",
+            "line": 9,
+            "rect": [
+              0.14824,
+              0.40874,
+              0.5559,
+              0.4233
+            ],
+            "rects": [
+              [
+                0.14824,
+                0.40874,
+                0.51947,
+                0.4233
+              ],
+              [
+                0.5245,
+                0.41019,
+                0.5559,
+                0.42087
+              ]
+            ]
+          },
+          {
+            "ref": "d04/p1/f9",
+            "field": "revised_payment_stage",
+            "label": "变更后付款条款",
+            "value": "第二期：最终验收合格且买方收到本合同对应的发票后支付 60%",
+            "quote": "变更后付款条款：第二期：最终验收合格且买方收到本合同对应的发票后支付 60%",
+            "line": 10,
+            "rect": [
+              0.14824,
+              0.44612,
+              0.8505,
+              0.46068
+            ],
+            "rects": [
+              [
+                0.14824,
+                0.44612,
+                0.81344,
+                0.46068
+              ],
+              [
+                0.81847,
+                0.44709,
+                0.8505,
+                0.45777
+              ]
+            ]
+          },
+          {
+            "ref": "d04/p1/f12",
+            "field": "buyer_signature",
+            "label": "甲方签章",
+            "value": "青禾演练采购中心（已盖章）",
+            "quote": "甲方签章：青禾演练采购中心（已盖章）",
+            "line": 13,
+            "rect": [
+              0.15013,
+              0.55777,
+              0.48807,
+              0.57184
+            ],
+            "rects": [
+              [
+                0.15013,
+                0.55777,
+                0.48807,
+                0.57184
+              ]
+            ]
+          },
+          {
+            "ref": "d04/p1/f14",
+            "field": "seller_signature",
+            "label": "乙方签章",
+            "value": "云桥演练设备中心（已盖章）",
+            "quote": "乙方签章：云桥演练设备中心（已盖章）",
+            "line": 15,
+            "rect": [
+              0.1495,
+              0.63204,
+              0.48807,
+              0.6466
+            ],
+            "rects": [
+              [
+                0.1495,
+                0.63204,
+                0.48807,
+                0.6466
+              ]
+            ]
+          }
+        ]
+      },
+      "notes": [],
+      "review": {
+        "coverage": "complete"
+      }
+    },
+    {
+      "key": "word_review",
+      "case_id": "28dbf5e427094fc59f84a32eb13c0fd5",
+      "rev": 5,
+      "report_sha256": "e9ce394f2ab7245b6141418945aec677dc0b8aadc6daf2e399efa18ea84cc325",
+      "record_id": "addendum-original/d04",
+      "finding": "H03-4",
+      "status": "missing",
+      "applies": "pending",
+      "effective_on": null,
+      "doc": {
+        "id": "d04",
+        "title": "采购合同补充协议",
+        "name": "采购合同补充协议.docx",
+        "media": "word",
+        "page": 1,
+        "version": "合成案例 · R5",
+        "source_sha256": "04b114ef4752e8616b932fe7ce599f99a1f441ed657df0bf6686982be144f42d",
+        "page_sha256": "ce0754ed471d55e7302ad1472cde633b9d3e1b5bf241bd8b678d6b89cb88a034",
+        "original": "/showcase/addendum-original-commented.docx",
+        "image": "/assets/addendum-original-word.jpg",
+        "lines": [
+          {
+            "ref": "d04/p1/f8",
+            "field": "previous_payment_stage",
+            "label": "原付款条款",
+            "value": "第二期：最终验收合格后支付 60%",
+            "quote": "原付款条款：第二期：最终验收合格后支付 60%",
+            "line": 9,
+            "rect": [
+              0.14824,
+              0.40874,
+              0.5559,
+              0.4233
+            ],
+            "rects": [
+              [
+                0.14824,
+                0.40874,
+                0.51947,
+                0.4233
+              ],
+              [
+                0.5245,
+                0.41019,
+                0.5559,
+                0.42087
+              ]
+            ]
+          },
+          {
+            "ref": "d04/p1/f9",
+            "field": "revised_payment_stage",
+            "label": "变更后付款条款",
+            "value": "第二期：最终验收合格且买方收到本合同对应的发票后支付 60%",
+            "quote": "变更后付款条款：第二期：最终验收合格且买方收到本合同对应的发票后支付 60%",
+            "line": 10,
+            "rect": [
+              0.14824,
+              0.44612,
+              0.8505,
+              0.46068
+            ],
+            "rects": [
+              [
+                0.14824,
+                0.44612,
+                0.7544,
+                0.46068
+              ],
+              [
+                0.75565,
+                0.44612,
+                0.81344,
+                0.46019
+              ],
+              [
+                0.81847,
+                0.44709,
+                0.8505,
+                0.45777
+              ]
+            ]
+          },
+          {
+            "ref": "d04/p1/f12",
+            "field": "buyer_signature",
+            "label": "甲方签章",
+            "value": "青禾演练采购中心（已盖章）",
+            "quote": "甲方签章：青禾演练采购中心（已盖章）",
+            "line": 13,
+            "rect": [
+              0.15013,
+              0.55777,
+              0.48807,
+              0.57184
+            ],
+            "rects": [
+              [
+                0.15013,
+                0.55777,
+                0.48807,
+                0.57184
+              ]
+            ]
+          },
+          {
+            "ref": "d04/p1/f14",
+            "field": "seller_signature",
+            "label": "乙方签章",
+            "value": "云桥演练设备中心（已盖章）",
+            "quote": "乙方签章：云桥演练设备中心（已盖章）",
+            "line": 15,
+            "rect": [
+              0.1495,
+              0.63204,
+              0.48807,
+              0.6466
+            ],
+            "rects": [
+              [
+                0.1495,
+                0.63204,
+                0.48807,
+                0.6466
+              ]
+            ]
+          }
+        ]
+      },
+      "notes": [
+        {
+          "anchor": {
+            "end": 31,
+            "paragraph": 10,
+            "quote": "变更后付款条款：第二期：最终验收合格且买方收到本合同对应的发票后支付60%",
+            "selected": "且买方收到本合同对应的发票",
+            "start": 18
+          },
+          "author": "演练采购复核员",
+          "date": "2026-09-15T02:00:00Z",
+          "id": "addendum-word/d04/n1",
+          "key": "0",
+          "location": {
+            "facts": [
+              "d04/p1/f9"
+            ],
+            "line": 10,
+            "page": 1,
+            "page_sha256": "ce0754ed471d55e7302ad1472cde633b9d3e1b5bf241bd8b678d6b89cb88a034",
+            "printed": "变更后付款条款：第二期：最终验收合格且买方收到本合同对应的发票后支付 60%",
+            "text_sha256": "a554febb8fe8a6ed654c14f4907fec35c1c855227cd04d626da9736749617a7d",
+            "unit": "d04"
+          },
+          "shortened": false,
+          "text": "收票条件尚待双方确认，请以签署定稿为准。"
+        }
+      ],
+      "review": {
+        "coverage": "complete",
+        "part": "word/comments.xml",
+        "part_sha256": "3150d6483f08233f100a57d734f3ef80311b59ba6c8ead05b4a7160c66f866c6"
+      }
+    },
+    {
+      "key": "photo",
+      "case_id": "6de2c55a4be14c19a0acf0b78218ff66",
+      "rev": 2,
+      "report_sha256": "ff1ff301fe1841eebcb675838bfa3abd9be7d2f5311530b43cb1509c8c2e4480",
+      "record_id": "addendum-original/d04",
+      "finding": "H03-4",
+      "status": "missing",
+      "applies": "pending",
+      "effective_on": null,
+      "doc": {
+        "id": "d04",
+        "title": "采购合同补充协议",
+        "name": "采购合同补充协议.jpg",
+        "media": "image",
+        "page": 1,
+        "version": "合成案例 · R2",
+        "source_sha256": "b5bbab80ee346dfb71b823c2ee152b25e9d69ed5954953fa28de1ad88c88b983",
+        "page_sha256": "9bc0bafa2f85a8c1e883086d0e4e07ae93f3b8590f474028206e28982721a9de",
+        "original": "/assets/addendum-invoice-agreement.jpg",
+        "image": "/assets/addendum-original-scan.jpg",
+        "lines": []
+      },
+      "notes": [],
+      "review": null
+    }
+  ]
+}

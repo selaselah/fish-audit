@@ -1,5 +1,11 @@
 # 合同付款批注与财务复核交互
 
+## 核对同一协议的排印内容与审阅记录
+
+2026 年 11 月 27 日查阅。Microsoft Word 将批注与所选文字关联，修订可逐项接受或拒绝。本项目把 Word 的原生选区和批注正文并排出示，分别核对提交文件与打印页摘要。相同的打印页仍可来自不同的审阅版本。[Word 批注与修订](https://support.microsoft.com/en-us/word/give-and-receive-feedback-in-word) · [接受或拒绝修订](https://support.microsoft.com/en-us/word/training/accept-tracked-changes)
+
+Workiva 支持从文档历史选两版比较，并切换修订展示方式。DataSnipper 的 Alwin 支持从工作簿打开对应原件，点击高亮位置选择相关单元格，并用箭头逐条核查多个证据位置。Fish Audit 在首页使用物理行顺序的前后导航，在底稿中保留独立的条款、批注和签章栏入口。定位结果须能回到本版留存的文件或页图。[Workiva 版本对照](https://support.workiva.com/hc/en-us/articles/360036002711-Create-and-view-document-blacklines) · [DataSnipper 证据核查](https://knowledge.datasnipper.com/en/articles/882479-how-to-review-a-task-s-output-in-alwin)
+
 ## 补充协议的签署版本与原文对照
 
 Adobe Acrobat 允许在签名面板中打开签名属性和证书，另有比较已签修订的入口。Docusign 将签署参与者、动作和时间留在交易历史与完成证书中。本项目据此把文件覆盖范围、身份与授权、归档原行做成独立的检查入口。演练里的 349 字节是从两份水印 PDF 长度和签名范围得到的实际差值。[Adobe 签名属性与证书](https://helpx.adobe.com/acrobat/desktop/e-sign-documents/manage-digital-signatures/validate-digital-sign.html) · [Acrobat 比较已签版本](https://helpx.adobe.com/acrobat/desktop/e-sign-documents/manage-digital-signatures/compare-versions.html) · [Docusign 交易记录与完成证书](https://www.docusign.com/trust/security/transaction-data-use)

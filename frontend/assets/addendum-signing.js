@@ -1,18 +1,40 @@
 const AddendumSigning = (() => {
-  function jump(proof) {
+  function jump(proof,review=false,note=null) {
     const button=action('',()=>{
       const target=document.getElementById('addendum-signing');
       if (!target || !PerformanceIndex.addendumEvidence(state.bundle.report).includes(proof)) return;
       target.hidden=false;
       target.dispatchEvent(new CustomEvent('select-agreement',{detail:proof.record.id}));
+      if (review) {
+        target.querySelector('[data-agreement-view=notes]')?.click();
+        const pane=target.querySelector('.agreement-notes');
+        if (pane) {
+          if (note) pane.dispatchEvent(new CustomEvent('select-agreement-note',{detail:note.id}));
+          revealPaperTarget(pane);return;
+        }
+      }
       revealPaperTarget(target);
     },'addendum-jump');
-    button.append(glyph('file-earmark-text'),el('strong','补充协议签署'),el('span',proof.label),glyph('chevron-down'));
+    const loc=note?.location;
+    const title=review?(note?'补充协议原批注':'补充协议审阅记录'):'补充协议签署';
+    const detail=loc?'第 '+loc.page+' 页 · 第 '+loc.line+' 行':proof.label;
+    button.append(glyph('file-earmark-text'),el('strong',title),el('span',detail),glyph('chevron-down'));
+    if (note) button.dataset.agreementNote=note.id;
     button.dataset.proof=proof.record.id; return button;
   }
   function citation(ref,finding) {
-    const proof=PerformanceIndex.addendumEvidence(state.bundle.report).find(p=>p.record.id===ref && (!finding || p.related.includes(finding)));
-    return proof?jump(proof):el('span','补充协议签署来源待核','small');
+    const proofs=PerformanceIndex.addendumEvidence(state.bundle.report).filter(p=>
+      (!finding || p.related.includes(finding) && finding.evidence.includes(ref)) &&
+      (p.record.id===ref || p.record.review===ref || p.record.notes?.includes(ref)));
+    if (proofs.length===1) {
+      const [proof]=proofs;
+      if (proof.record.id===ref) return jump(proof);
+      const note=proof.notes?.find(n=>n.id===ref);
+      if (note || proof.notes?.length || proof.record.unplaced || proof.word?.coverage!=='complete') return jump(proof,true,note);
+    }
+    // A file-wide review can be shared by several physical units in the same Word original.
+    if (proofs.length && proofs.every(p=>p.record.review===ref && p.doc.id===proofs[0].doc.id)) return MandateOriginals.wordFile(proofs[0]);
+    return el('span','补充协议签署来源待核','small');
   }
   function panel(report) {
     const proofs=PerformanceIndex.addendumEvidence(report);
@@ -28,9 +50,22 @@ const AddendumSigning = (() => {
       const {record,doc}=proof, original=workpaperSource(doc.id,'original');
       const open=f=>()=>{if (current()) openPage(doc.id,f.page,f.id);};
       const rows=proof.lines.filter(r=>record.fields.includes(r.fact.id)).map(({fact,line})=>({
-        side:fact.field==='buyer_signature'?'甲方签章栏':'乙方签章栏',page:fact.page,line,quote:fact.source_line.text,
+        ref:fact.id,side:fact.field==='buyer_signature'?'甲方签章栏':'乙方签章栏',page:fact.page,line,quote:fact.source_line.text,
         excerpt:async()=>current() && EvidenceCompare.lineExcerpt(fact,index),open:open(fact),
       }));
+      const control=(run,where)=>{
+        const button=action('',()=>{if(current()) run();});
+        button.setAttribute('aria-haspopup','dialog'); button.setAttribute('aria-controls','page-dialog');
+        if (where) button.dataset.fact=where;
+        return button;
+      };
+      const native=record.kind && {record,filename:doc.name,original,label:proof.label,page:proof.page,sourceHash:doc.sha256,
+        pages:record.pages.map(p=>{const number=Number(p.ref.split('/p').pop());
+          return {number,hash:p.sha256,image:workpaperSource(doc.id,'pages/'+number),control:()=>control(()=>openPage(doc.id,number))};}),
+        rows:rows.map(row=>({...row,control:()=>control(row.open,row.ref)})),
+        word:proof.word,notes:(proof.notes || []).map(n=>({...n,open:n.open && (()=>{if(current()) n.open();}),
+          openPage:n.openPage && (()=>{if(current()) n.openPage();})})),
+        request:canReviewCurrentPaper()?()=>{if(current() && canReviewCurrentPaper()) draftSupplement(doc.name+'。请提供双方签署的补充协议定稿及对应签署记录。');}:null};
       const terms=[];
       for (const [before,after] of [['previous_criterion','revised_criterion'],['previous_quantity','revised_quantity'],['previous_payment_stage','revised_payment_stage']]) {
         const first=proof.lines.filter(r=>r.fact.field===before), last=proof.lines.filter(r=>r.fact.field===after);
@@ -49,7 +84,8 @@ const AddendumSigning = (() => {
       const pdf={record:proof.signature,state:record.state,filename:doc.name,original,originalLabel:'下载原件',rows,
         thumbnail:workpaperSource(doc.id,'pages/'+proof.page),page:()=>{if(current()) openPage(doc.id,proof.page);},
         request:canReviewCurrentPaper()?text=>{if(current() && canReviewCurrentPaper()) draftSupplement(doc.name+'。'+text);}:null};
-      const phases=proof.related.filter(f=>f.stage && ['H04','H05'].includes(f.rule));
+      const phases=proof.related.filter(f=>f.stage && ['H04','H05'].includes(f.rule) &&
+        (!record.kind || f.payment_change?.original_execution?.includes(record.id)));
       const related=phases.length && (()=>{
         const box=el('div','','pdf-related'); box.append(el('small','引用此协议'));
         for (const f of phases) {
@@ -68,7 +104,7 @@ const AddendumSigning = (() => {
         const link=Team.paperLink('固定链接',report.case_id,'addendum-permalink',params);
         link.setAttribute('aria-label','固定链接，'+label+'，底稿 R'+bundle.rev); return link;
       };
-      return {key:record.id,label,pdf,terms,related,permalink};
+      return {key:record.id,label,pdf,native,terms,related,permalink};
     }
     return AddendumCard.render(proofs.map(model),'addendum-signing');
   }
@@ -82,7 +118,7 @@ const AddendumSigning = (() => {
       target.dispatchEvent(new CustomEvent('select-agreement',{detail:selected.record.id})); revealPaperTarget(target); return;
     }
     if (target) target.hidden=true;
-    const detail=written?(target?'本版没有所选补充协议的签署凭证。':'本版未收录补充协议 PDF 签署凭证。'):'请选择一个明确的底稿版本。';
+    const detail=written?(target?'本版没有所选补充协议的签署凭证。':'本版未收录补充协议签署凭证。'):'请选择一个明确的底稿版本。';
     const message=el('p',detail,'note');
     message.setAttribute('role','status'); message.tabIndex=-1;
     container.prepend(message); revealPaperTarget(message);

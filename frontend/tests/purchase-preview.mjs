@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {createHash,randomUUID} from 'node:crypto';
-import {inspect} from './review-screen.mjs';
+import {browserInput,inspect} from './review-screen.mjs';
 
 const q=selector=>'document.querySelector('+JSON.stringify(selector)+')';
 const profiles={
@@ -56,8 +56,9 @@ async function pickOnPaper(ctx,doc,width) {
     await ctx.call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});
     await ctx.call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
   } else {
+    await ctx.call('Emulation.setTouchEmulationEnabled',{enabled:false});
     await ctx.call('Input.dispatchMouseEvent',{type:'mouseMoved',...point});
-    assert.equal(await ctx.evaluate(canvas+'.style.cursor'),'zoom-in');
+    await ctx.wait(canvas+'.style.cursor==="zoom-in"','marked paper row shows its zoom affordance');
     await ctx.call('Input.dispatchMouseEvent',{type:'mousePressed',...point,button:'left',clickCount:1});
     await ctx.call('Input.dispatchMouseEvent',{type:'mouseReleased',...point,button:'left',clickCount:1});
   }
@@ -65,9 +66,33 @@ async function pickOnPaper(ctx,doc,width) {
   assert.equal(await ctx.evaluate('document.activeElement.dataset.ref'),target.ref);
   if (width<600) await ctx.call('Emulation.setTouchEmulationEnabled',{enabled:false});
 }
+async function stepEvidence(ctx,slot,doc,width) {
+  const {evaluate,call,wait}=ctx,select=q(slot+' select'),link=q(slot+' a');
+  const {key:press}=browserInput(ctx);
+  const physical=[...doc.lines].sort((a,b)=>a.line-b.line),prev=q(slot+' [data-step="-1"]'),next=q(slot+' [data-step="1"]');
+  const fresh=async ref=>wait(link+'.dataset.fact==='+JSON.stringify(ref)+' && '+q(slot+' .purchase-line')+'?.dataset.fact==='+JSON.stringify(ref),'navigator and crop select '+ref+' in '+doc.title+' at '+width);
+  await evaluate(select+'.selectedIndex=0;'+select+'.dispatchEvent(new Event("change"))');
+  await fresh(physical[0].ref);assert.equal(await evaluate(prev+'.getAttribute("aria-disabled")'),'true');
+  await evaluate(next+'.focus()');await press('Enter');await fresh(physical[1].ref);
+  await press('Enter');await fresh(physical[2].ref);
+  assert.equal(await evaluate(next+'.getAttribute("aria-disabled")'),'true');
+  await press('Enter');assert.equal(await evaluate(select+'.value'),physical[2].ref);
+  await evaluate(prev+'.focus()');await press('Enter');await fresh(physical[1].ref);
+  assert.ok(await evaluate(q(slot+' [role=status]')+'.textContent.includes('+JSON.stringify('第 '+physical[1].line+' 行')+')'));
+  if (width<1024) return;
+  const other=physical[0], [l,t,r,b]=other.rects[0];
+  const coords=await evaluate('(()=>{const thumb='+q(slot+' .purchase-sheet img')+';thumb.scrollIntoView({block:"center",behavior:"instant"});'+
+    'const r=thumb.getBoundingClientRect();return {x:r.left+r.width*'+((l+r)/2)+',y:r.top+r.height*'+((t+b)/2)+'};})()');
+  await call('Input.dispatchMouseEvent',{type:'mouseMoved',...coords});
+  for (const type of ['mousePressed','mouseReleased']) await call('Input.dispatchMouseEvent',{type,button:'left',clickCount:1,...coords});
+  await wait(q('#sample-review')+'.open && '+q('#sample-review canvas')+'.dataset.fact==='+JSON.stringify(other.ref),'paper hit opens exactly the clicked original line');
+  assert.equal(await evaluate(q('#sample-review [data-scale=line]')+'.getAttribute("aria-pressed")'),'true');
+  await key(ctx,'Escape');await wait('document.activeElement==='+link,'return to the same source page');
+}
 export async function checkPurchasePreview(ctx) {
   const {root,call,wait,evaluate}=ctx;
-  const record=await (await fetch(root+'/assets/purchase-preview.json')).json();
+  const indexBytes=await (await fetch(root+'/assets/purchase-preview.json')).arrayBuffer();
+  const record=JSON.parse(Buffer.from(indexBytes));
   const {mode}=await (await fetch(root+'/api/session')).json();
   assert.equal(record.revision,8);
   assert.deepEqual(Object.keys(record.documents).sort(),['acceptance','contract','transfer']);
@@ -82,6 +107,7 @@ export async function checkPurchasePreview(ctx) {
     await call('Emulation.setDeviceMetricsOverride',{width,height:width<600?844:900,deviceScaleFactor:1,mobile:width<600});
     await home(ctx,'?width='+width);
     await wait(q('#sheet-acceptance .purchase-line')+'?.naturalWidth>0','real source crop rendered');
+    assert.equal(await evaluate(q('#sample')+'.dataset.evidenceIntegrity'),'sha256-'+createHash('sha256').update(Buffer.from(indexBytes)).digest('base64'));
     const imagePaths=Object.values(record.documents).map(d=>d.image);
     assert.ok(await evaluate('!performance.getEntriesByType("resource").some(e=>'+JSON.stringify(imagePaths)+'.includes(new URL(e.name).pathname))'),'full pages load on demand');
     assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),'home fits '+width);
@@ -91,6 +117,7 @@ export async function checkPurchasePreview(ctx) {
       const slot='#sheet-'+slug+' .purchase-locator',select=q(slot+' select'),link=q(slot+' a');
       assert.equal(await evaluate(select+'.options.length'),3);
       assert.equal(await evaluate(link+'.pathname'),doc.pdf);
+      await stepEvidence(ctx,slot,doc,width);
       for (const line of doc.lines) {
         const ref=JSON.stringify(line.ref), marker=q(slot+' .purchase-sheet i');
         await evaluate(select+'.value='+ref+';'+select+'.dispatchEvent(new Event("change"))');

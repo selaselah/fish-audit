@@ -234,7 +234,7 @@ export async function checkPrivateAddendumSigning(ctx) {
   assert.equal(detail.rev,e.rev);assert.deepEqual(detail.decisions,[]);assert.deepEqual(detail.referrals,[]);
   for (const rev of [14,15]) {
     await call('Page.navigate',{url:fixed(root,{...e,rev})});
-    await wait('document.activeElement.textContent==="本版未收录补充协议 PDF 签署凭证。"','old revision without substituted evidence');
+    await wait('document.activeElement.textContent==="本版未收录补充协议签署凭证。"','old revision without substituted evidence');
     assert.equal(await evaluate('!!'+q(privateCard)),false);
   }
   const invoice={case_id:'8c2a157237cf4712856f64225466ee2c',rev:10};

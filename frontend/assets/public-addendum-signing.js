@@ -72,8 +72,7 @@ const PublicAddendumSigning = (() => {
   }
   function openInvoice() {
     const slot=document.getElementById('payment-addendum-invoice');
-    if (slot.querySelector('.addendum-card')) return;
-    return load(slot,'/assets/addendum-invoice-sample.json',s=>{
+    return PublicAgreementCarriers.open(slot,pdfPanel=>load(pdfPanel,'/assets/addendum-invoice-sample.json',s=>{
       const {agreement,bank}=s.documents;
       const sha=/^[a-f0-9]{64}$/;
       if (s.record_id!=='addendum-pdf/'+agreement.id || !sha.test(s.report_sha256) ||
@@ -95,7 +94,7 @@ const PublicAddendumSigning = (() => {
         link.append(caption,day);li.append(link);dates.append(li);
       }
       panel.append(dates); return panel;
-    });
+    }));
   }
   return {open,openInvoice,address};
 })();

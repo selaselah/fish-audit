@@ -240,10 +240,21 @@ const PerformanceIndex = (() => {
     return proof && cited.has(proof.record.id) && proof.refs.every(ref=>cited.has(ref)) && Array.isArray(calls) &&
       proof.record.pages.every(p=>calls.some(c=>c.doc===proof.doc.id && proof.doc.id+'/p'+c.page===p.ref && c.page_sha256===p.sha256));
   }
+  function nativeAddendum(graph,id,rows) {
+    const fields=['buyer_signature','seller_signature'];
+    const source=unitSource(graph,id,'addendum_original',['contract_addendum'],fields);
+    if (!source) return null;
+    const filed=graph.facts.filter(f=>f.doc===source.doc.id && (f.unit || f.doc)===source.record.unit && fields.includes(f.field));
+    if (filed.length!==source.record.fields.length || filed.some((f,i)=>f.id!==source.record.fields[i])) return null;
+    return MandateOriginals.bind(graph,source,rows,'addendum');
+  }
   function addendumEvidence(report) {
     const {graph,policy}=report;
-    if (policy?.addendum_pdf!=='pdf-addendum-execution-v1' || !graph.addendum_pdf_sources?.records?.length ||
-        !/^[a-f0-9]{64}$/.test(policy.code_sha256?.['addendum_execution.py'])) return [];
+    const hashed=name=>/^[a-f0-9]{64}$/.test(policy?.code_sha256?.[name]);
+    const pdf=policy?.addendum_pdf==='pdf-addendum-execution-v1' && graph.addendum_pdf_sources?.records?.length && hashed('addendum_execution.py');
+    const native=policy?.addendum_originals==='addendum-original-execution-v1' && graph.addendum_original_sources?.format===policy.addendum_originals &&
+      graph.addendum_original_sources.records?.length && hashed('addendum_originals.py') && hashed('original_records.py');
+    if (!pdf && !native) return [];
     const index=graphIndex(graph);
     if (index.addendumEvidence) return index.addendumEvidence;
     const proofs=new Map(), procedures=new Map(), calls=report.calls?.pages || [];
@@ -258,11 +269,16 @@ const PerformanceIndex = (() => {
         edge?.from===control.id && edge.evidence?.length===f.evidence.length && edge.evidence.every((ref,i)=>ref===f.evidence[i]);
     });
     for (const owner of issued) for (const change of [owner.quality_change,owner.payment_change]) {
-      if (!['H02','H03','H04','H05'].includes(owner.rule) || !Array.isArray(change?.execution) ||
-          new Set(change.execution).size!==change.execution.length || (change.state || change.applies)!=='pending' || change.effective_on!==null) continue;
-      const cited=issuedReferences(owner,graph);
-      for (const id of change.execution) {
-        const proof=unitPdfOriginal(graph,id,'addendum');
+      if (!['H02','H03','H04','H05'].includes(owner.rule) || !change ||
+          (change.state || change.applies)!=='pending' || change.effective_on!==null) continue;
+      const cited=issuedReferences(owner,graph), rows=new Map(originals(owner,graph).map(r=>[r.fact.id,r]));
+      const ids=[];
+      for (const [enabled,list,prefix] of [[pdf,change.execution,'addendum-pdf/'],[native,change.original_execution,'addendum-original/']]) {
+        if (enabled && Array.isArray(list) && new Set(list).size===list.length &&
+            list.every(id=>typeof id==='string' && id.startsWith(prefix))) ids.push(...list);
+      }
+      for (const id of ids) {
+        const proof=id.startsWith('addendum-original/')?nativeAddendum(graph,id,rows):unitPdfOriginal(graph,id,'addendum');
         if (!issuedSource(proof,cited,calls) || !owner.scope?.includes(proof.record.unit) || !change.units?.includes(proof.record.unit) ||
             ![id,...proof.refs].every(ref=>change.evidence?.includes(ref)) ||
             !proof.record.pages.every(p=>{
@@ -274,7 +290,7 @@ const PerformanceIndex = (() => {
           proofs.set(id,{...proof,related,bindings:[],lines:[]});
         }
         const record=proofs.get(id);
-        const lines=originals(owner,graph).filter(r=>r.line && r.fact.doc===proof.doc.id &&
+        const lines=[...rows.values()].filter(r=>r.line && r.fact.doc===proof.doc.id &&
           (r.fact.unit || r.fact.doc)===proof.record.unit && change.evidence.includes(r.fact.id));
         record.bindings.push({owner,change,lines});
         for (const row of lines) if (!record.lines.some(r=>r.fact.id===row.fact.id)) record.lines.push(row);

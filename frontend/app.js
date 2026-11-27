@@ -661,7 +661,7 @@ function citation(ref,finding) {
     return Team.paperLink(label,prior.case_id,'button ref',new URLSearchParams({rev:String(prior.rev),fact:prior.fact}));
   }
   const source = index?.nodes.get(ref);
-  if (ref.startsWith('addendum-pdf/') && state.bundle) return AddendumSigning.citation(ref,finding);
+  if ((ref.startsWith('addendum-pdf/') || ref.startsWith('addendum-original/') || ref.startsWith('addendum-word/')) && state.bundle) return AddendumSigning.citation(ref,finding);
   if (ref.startsWith('advance-guarantee/')) {
     return AdvanceGuarantee.citation(ref,finding,state.bundle?.report) || el('span','保函引文待核','small');
   }

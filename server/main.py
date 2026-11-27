@@ -324,7 +324,8 @@ def create_app(store, worker):
 
     @app.get("/showcase/<filename>")
     def showcase_document(filename):
-        if filename in {"signing-text.docx", "acceptance-review.docx", "contract-payment-review.docx"}:
+        if filename in {"signing-text.docx", "acceptance-review.docx", "contract-payment-review.docx",
+                        "addendum-original-printed.docx", "addendum-original-commented.docx"}:
             return send_file(FRONTEND / "showcase" / filename, as_attachment=True,
                              mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
         if filename not in {"contract.pdf", "acceptance.pdf", "transfer.pdf", "signing-contract.pdf",
