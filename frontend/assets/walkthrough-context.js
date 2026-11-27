@@ -58,6 +58,19 @@ export function captureContext(owner, element, pagePoint) {
         if (context.params.fact || (view && viewTab!==state.tab) || (context.params.finding && state.traceId!==context.params.finding)) context.params={};
         const finding = element?.closest('[data-finding]')?.dataset.finding;
         if (finding && /^[A-Z]\d{2}-[1-9]\d*$/.test(finding)) context.params = {finding};
+        let limits=element?.closest('[data-limit-finding]');
+        if (!element && !owner && state.tab==='report') {
+          const center=document.elementFromPoint(Math.floor(innerWidth/2),Math.floor(innerHeight*.4));
+          limits=center?.closest('[data-limit-finding]');
+          if (!limits && view==='acceptance-limits') {
+            const card=document.querySelector('[data-limit-finding]'), rect=card?.getBoundingClientRect();
+            if (rect?.height && rect.top<innerHeight && rect.bottom>0) limits=card;
+          }
+        }
+        if (limits && limits.dataset.caseId===cid && limits.dataset.rev===String(context.rev)) {
+          context.params={view:'acceptance-limits'};
+          if (!element) {context.anchor=limits.id;context.target=limits.getAttribute('aria-label');}
+        }
         const stage = element?.closest('.release-card')?.closest('[data-phase-finding]')?.dataset.phaseFinding;
         if (stage && /^H04-[1-9]\d*$/.test(stage)) context.params = {view:'payment-release',stage};
         const instrument=element?.closest('[data-release-set] [data-instrument]');
@@ -155,7 +168,8 @@ export function describeContext(c) {
     c.anchor?.startsWith('inspection-use-')?'验收单付款用途 '+c.params.stage:
     c.anchor?.startsWith('retest-')?'复验回单核对 '+c.params.stage:
     c.anchor?.startsWith('quality-') && '验收款核对 '+c.params.stage);
-  return [screen, c.example || sections[c.section], edition, caseTabs[c.tab], board, receipt, dialogs[c.dialog],
+  const limits=c.params?.view==='acceptance-limits' && '验收限值对照';
+  return [screen, c.example || sections[c.section], edition, caseTabs[c.tab], board, receipt, limits, dialogs[c.dialog],
     c.doc && (c.doc+' · 第 '+c.page+' 页'), c.line && '第 '+c.line+' 行', c.target, c.page_point && pointLabel(c.page_point)].filter(Boolean).join(' › ');
 }
 export function returnUrl(c, workspace) {

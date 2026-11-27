@@ -12,6 +12,7 @@ HOME_PARAMS = {"scene", "slip", "copy", "edition", "batch", "record", "pdf", "ca
 CASE_PARAMS = {"view", "stage", "instrument", "receipt", "ticket", "call", "agreement", "acceptance", "finding", "fact", "prior", "entry", "filing", "part"}
 QUALITY_PIN = re.compile(r"quality-(H0[45]-[1-9][0-9]{0,7})(?:-(clause|acceptance_criteria|inspection_basis|measured_result|"
                          r"acceptance_scope|acceptance_result|accepted_on|payment_designation|transfer_status|paid_on|terms|order))?")
+LIMIT_PIN = re.compile(r"limits-(H02-[1-9][0-9]{0,7})(?:-(acceptance_criteria|inspection_basis|measured_result|acceptance_result))?")
 RETEST_PIN = re.compile(r"retest-(H05-[1-9][0-9]{0,7})(?:-(clause|citation|payment_designation|transfer_status|paid_on|terms|order|schedule|"
                         r"(?:original|final)_(?:acceptance_number|accepted_on|acceptance_result|acceptance_scope|defect_number)|"
                         r"(?:repair|final)_(?:original_acceptance|repair_number)|repair_(?:repaired_on|defect_number)|final_defect_closure))?")
@@ -62,6 +63,10 @@ def check_context(value):
         raise CaseError("走查原页位置不完整。", 400)
     params = result.get("params", {})
     anchor = result.get("anchor", "")
+    if anchor.startswith("limits-H"):
+        pin = LIMIT_PIN.fullmatch(anchor)
+        if not pin or screen!="case" or not result.get("rev") or params!={"view":"acceptance-limits"}:
+            raise CaseError("请选择该版底稿中相应的验收限值。",400)
     if "page_point" in result and (not result.get("rev") or not result.get("doc") or result.get("dialog") != "page-dialog"
                                    or params or {"line", "raw_ref", "anchor"}.intersection(result)):
         raise CaseError("请在选定版本的资料原页上标记位置。", 400)
@@ -221,11 +226,12 @@ def save_note(store, workspace, author, role, data):
                     (context["case_id"],context["rev"],raw)).fetchone()
                 if not location:
                     raise CaseError("所选版本没有可定位的付款依据行框。",404)
-        if context["screen"] == "case" and (pin := QUALITY_PIN.fullmatch(anchor) or RETEST_PIN.fullmatch(anchor)):
+        if context["screen"] == "case" and (pin := QUALITY_PIN.fullmatch(anchor) or RETEST_PIN.fullmatch(anchor) or LIMIT_PIN.fullmatch(anchor)):
             retest = pin.re == RETEST_PIN
+            path = "$.quality_comparison" if pin.re==LIMIT_PIN else ("$.retest_reference" if retest else "$.payment_quality")
             row = db.execute("""SELECT json_extract(f.value,?) FROM reports, json_each(content,'$.findings') AS f
                            WHERE case_id=? AND rev=? AND json_extract(f.value,'$.id')=?""",
-                             ("$.retest_reference" if retest else "$.payment_quality",context["case_id"],context["rev"],pin[1])).fetchone()
+                             (path,context["case_id"],context["rev"],pin[1])).fetchone()
             check = json.loads(row[0]) if row and row[0] else {}
             field = pin[2]
             has_order = "days_from_final" in check if retest else bool(check.get("payment"))

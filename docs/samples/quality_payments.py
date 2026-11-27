@@ -21,6 +21,11 @@ CASES = {
 
 def materials(archive, folder, key):
     title, field, value = CASES[key]
+    paths, profile = replace_printed_field(archive,folder,"银行付款回单.pdf",field,value)
+    return title, paths, profile
+
+
+def replace_printed_field(archive, folder, name, field, value):
     folder.mkdir(parents=True, exist_ok=True)
     with ZipFile(archive) as pack:
         content = pack.read("report.json")
@@ -33,14 +38,15 @@ def materials(archive, folder, key):
             lines = pack.read(f"pages/{unit}/1.txt").decode().splitlines()
             require(lines[0] == WATERMARK and digest(raw) == doc["sha256"] and doc["pages"] == 1, "原件摘要及水印")
             dest = folder/doc["name"]
-            if doc["name"] == "银行付款回单.pdf":
+            if doc["name"] == name:
                 rows = [line.split("：",1) for line in lines[2:]]
-                require(lines[1] == "银行付款回单" and sum(k == field for k,_ in rows) == 1, "回单原行")
+                require(lines[1] == Path(name).stem and sum(k == field for k,_ in rows) == 1, "水印原件唯一的目标行")
                 pdf(dest, lines[1], [(k,value if k == field else v) for k,v in rows], font=embedded_font("QualityTransfer"), spacing=28)
             else:
                 dest.write_bytes(raw)
             paths.append(dest)
-    return title, paths, paper["policy"]["profile"]
+    require(sum(path.name == name for path in paths)==1, "水印母本中待替换的原件")
+    return paths, paper["policy"]["profile"]
 
 
 if __name__ == "__main__":

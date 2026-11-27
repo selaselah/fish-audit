@@ -66,6 +66,7 @@ function returnToControl() {
   const board=params.get('view')==='board-decision' && anchor.startsWith('board-');
   const receipt=params.get('view')==='payment-checks' && /^(?:quality|retest|inspection-use|payment-approval|payment-clock|contract-approver|approver-change|installment-count)-/.test(anchor);
   const party=anchor.startsWith('party-reading-');
+  const limits=params.get('view')==='acceptance-limits' && anchor.startsWith('limits-H02-');
   url.searchParams.delete('walkat');
   history.replaceState(history.state,'',url);
   function locate() {
@@ -73,6 +74,11 @@ function returnToControl() {
         comparison.dataset.rev!==params.get('rev') || comparison.dataset.prior!==params.get('prior') ||
         (params.has('entry') && comparison.dataset.entry!==params.get('entry')))) return false;
     const el = document.getElementById(anchor);
+    if (limits) {
+      const card=el?.closest('[data-limit-finding]');
+      if (!card || url.hash!==location.hash || card.dataset.caseId!==path.split('/').at(-1) ||
+          card.dataset.rev!==params.get('rev') || (anchor!==card.id && !anchor.startsWith(card.id+'-'))) return false;
+    }
     if (party && (!el?.matches('#page-dialog[open] .located [data-party-reading]') || url.hash!==location.hash ||
         el.dataset.caseId!==path.split('/').at(-1) || el.dataset.rev!==params.get('rev') ||
         el.closest('.evidence-row')?.dataset.fact!==params.get('fact'))) return false;
@@ -87,7 +93,7 @@ function returnToControl() {
           (params.has('filing') && card.dataset.boardFiling!==params.get('filing')) ||
           (params.has('part') && card.dataset.boardPart!==params.get('part'))) return false;
     }
-    if (el?.closest('#revision-comparison:not([hidden]),#board-decision,[data-quality-finding],[data-retest-finding],[data-use-finding],[data-count-finding]')) {
+    if (el?.closest('#revision-comparison:not([hidden]),#board-decision,[data-limit-finding],[data-quality-finding],[data-retest-finding],[data-use-finding],[data-count-finding]')) {
       for (let parent=el.parentElement;parent && parent.id!=='revision-comparison';parent=parent.parentElement)
         if (parent.tagName==='DETAILS') parent.open=true;
     }
@@ -101,7 +107,7 @@ function returnToControl() {
   if (!locate()) {
     jumpObserver = new MutationObserver(locate);
     jumpObserver.observe(comparison || document.body, {subtree:true, childList:true, attributes:true, attributeFilter:['hidden','open']});
-    if (!comparison && !board && !receipt && !party) jumpTimer = setTimeout(() => jumpObserver.disconnect(), 6000);
+    if (!comparison && !board && !receipt && !party && !limits) jumpTimer = setTimeout(() => jumpObserver.disconnect(), 6000);
   }
 }
 addEventListener('hashchange', returnToControl);

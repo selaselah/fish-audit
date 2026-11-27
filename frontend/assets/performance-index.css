@@ -283,6 +283,10 @@
 .quality-payment button small { color:var(--secondary); font-size:.75rem; font-weight:500; }
 .quality-payment .quality-metric strong { min-width:0; overflow-wrap:anywhere; font-size:clamp(1.12rem,2vw,1.45rem); font-variant-numeric:tabular-nums; font-weight:610; }
 .quality-payment .measured strong { color:var(--issue); }
+.quality-limits .measured strong { color:var(--ink); }
+.quality-limits .quality-metric { align-content:start; padding-right:21px; }
+.quality-evaluation { margin-top:4px; font-size:.78rem; font-weight:550; color:var(--secondary); }
+.quality-evaluation.outside { color:var(--issue); }
 .quality-payment button .ui-glyph { position:absolute; top:7px; right:7px; font-size:.72rem; color:var(--accent-hover); }
 .quality-payment .quality-day { background:var(--surface); }
 .quality-day strong { font-size:.88rem; font-weight:600; font-variant-numeric:tabular-nums; }

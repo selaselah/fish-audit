@@ -81,7 +81,7 @@ TRANSIENT_WRITER_CODES = {getattr(sqlite3,k) for k in ("SQLITE_BUSY","SQLITE_BUS
 
 
 FULL_PAGE_EVIDENCE = (
-    "quality_change", "acceptance_authority", "acceptance_execution", "signer_timing", "date_checks", "batch_acceptance",
+    "quality_change", "quality_comparison", "acceptance_authority", "acceptance_execution", "signer_timing", "date_checks", "batch_acceptance",
     "effect_review", "warranty_check", "warranty_difference", "payment_window", "acceptance_reservations", "acceptance_comments",
     "contract_comments", "stage_payments", "invoice_receipt", "payment_change", "payment_opinion",
     "equipment_models", "inspection_coverage", "payment_acceptance", "execution_basis", "contract_folios",
@@ -827,7 +827,7 @@ class Store:
             except (KeyError, TypeError, ValueError) as error:
                 raise CaseError(f"签收前核对回单所据验收原件失败。{error}", 409) from error
             try:
-                payment_quality.verify(paper,read_text,read_original=read_original)
+                payment_quality.verify(paper,read_text,read_original=read_original,signing=True)
             except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
                 raise CaseError(f"签收前核对验收款质量凭证失败。{error}",409) from error
             try:
@@ -970,6 +970,12 @@ class Store:
             return row[0] if row else None
         def page_layout(doc, page):
             return stored_page_layout(db,case_id,doc,page)
+        if (any(f.get("quality_comparison") for f in paper["findings"]) or
+                paper["policy"].get("payment_quality")==payment_quality.FIRST_FORMAT and any(f["rule"]=="H02" for f in paper["findings"])):
+            try:
+                payment_quality.verify(paper,page_text,read_layout=page_layout,signing=True)
+            except (ValueError,KeyError,TypeError) as error:
+                raise CaseError(f"签收前核对合同与验收单限值失败。{error}",409) from error
         checks_conclusions = "conclusions.py" in paper["policy"].get("code_sha256", {})
         if checks_conclusions or paper["policy"].get("payment_execution") or any(f["rule"] in ("B04","B05","H04","H05","H06") for f in paper["findings"]):
             try:

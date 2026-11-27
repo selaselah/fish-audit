@@ -216,7 +216,7 @@ def edges(findings):
             for f in findings if (r:=f.get("retest_reference")) and r["state"] in ("original","final")]
 
 
-def verify_positions(graph, checks, read_layout):
+def verify_positions(graph, checks, read_layout, label="回单所据初验与复验"):
     cited = {ref for check in checks for ref in check["evidence"]}
     if not cited:
         return
@@ -233,7 +233,7 @@ def verify_positions(graph, checks, read_layout):
                 or (current.get("clause_text_only") is True) != (issued.get("clause_text_only") is True)
                 or not isinstance(current.get("lines"), dict)
                 or any(current["lines"].get(str(line["number"])) != line["rects"] for line in lines)):
-            raise ValueError(f"回单所据初验与复验的引文位置与底稿不符（{doc} 第 {page} 页）")
+            raise ValueError(f"{label}的引文位置与底稿不符（{doc} 第 {page} 页）")
 
 
 def guard_prior_signoff(report, read_text):

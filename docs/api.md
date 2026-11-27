@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## 合同与验收单的实测对照
+
+规则 `2026.11.28.9` 使用 `policy.payment_quality = acceptance-quality-payment-v2`。不同限值的 H02 在 `quality_comparison` 保存实测的 `observed`、两侧的 `limits.contract` 与 `limits.inspection`，以及所据原件、字段、证据编号。每侧的 `result` 为 `within`、`outside` 或 `incomparable`。仅超限侧保存正的十进制字符串 `outside_by`。图关系 `measured_against_inspection_limits` 连接实测原行与验收发现。归属明确的终验款 H04/H05 在 `payment_quality.comparison` 反映同一对照。同标同单位的既有超限记录沿用 `payment_quality.measure`。
+
+固定版次的 `/workpaper/<case_id>?rev=<rev>&view=acceptance-limits` 打开验收对照。走查意见使用 `params.view = acceptance-limits` 和 `limits-H02-序号-字段`，保存时核验该版 H02 所引的字段。期款侧沿用已有的 `quality-H05-序号-字段`。签收和独立复核重验引用的原件、页文和位置。含有可从原件重现的双限值差异时，旧版 v1 会要求重审。[接口样例底稿](http://127.0.0.1:8000/workpaper/420d42bf7d1240de9045e24def29a20a?rev=8&view=acceptance-limits)
+
 ## 两人会签的具名差异
 
 规则 `2026.11.28.8` 使用 `policy.inspection_use = cited-inspection-payment-use-v9`。在第二期等可归属的验收款 H05 中，`inspection_use.approval.names.state = joint_difference` 表示两份各列两人的明确名单只有一人相符。`missing_names` 保留约定中未在审批栏出现的人，`other_names` 保留审批栏另列的人。`compares_approval_names` 从合同签批条款指向该审批单的具名原行。

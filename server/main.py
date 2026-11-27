@@ -290,7 +290,7 @@ def create_app(store, worker):
             args["finding"] = ref
         if "view" in request.args:
             view = request.args["view"]
-            if view not in ("replay", "execution", "revision-comparison", "board-decision", "warranty-register", "warranty-certificate", "addendum-signing", "reinspection", "inspection", "entities", "trial", "contract-pages", "signatures", "calendar", "suppliers", "acceptance-comments", "contract-comments", "payment-acceptance", "signer-timing", "payment-proof", "payment-release", "contract-checks", "acceptance-checks", "payment-checks") or set(args)!={"rev"}:
+            if view not in ("replay", "execution", "revision-comparison", "board-decision", "warranty-register", "warranty-certificate", "addendum-signing", "reinspection", "inspection", "entities", "trial", "contract-pages", "signatures", "calendar", "suppliers", "acceptance-comments", "contract-comments", "acceptance-limits", "payment-acceptance", "signer-timing", "payment-proof", "payment-release", "contract-checks", "acceptance-checks", "payment-checks") or set(args)!={"rev"}:
                 raise CaseError("请选择有效的底稿视图及版本。",400)
             args["view"] = view
         if args.get("view") == "board-decision" or "filing" in request.args or "part" in request.args:

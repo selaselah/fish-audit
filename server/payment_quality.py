@@ -12,10 +12,14 @@ from warranty_dates import RECEIPT, read_date
 from warranty_terms import bank_identity
 
 
-FORMAT = "acceptance-quality-payment-v1"
+FIRST_FORMAT = "acceptance-quality-payment-v1"
+FORMAT = "acceptance-quality-payment-v2"
 KEY = "payment_quality_sources"
 EDGE = "acceptance_reading_for_payment"
+BASIS_EDGE = "measured_against_inspection_limits"
 SINCE = (2026, 11, 27, 17)
+BASIS_SINCE = (2026, 11, 28, 9)
+UPPER = {"不高于","不超过","至多","≤"}
 CONTRACT = (*LINK_KEYS, "acceptance_criteria", "payment_stage", "payment_term")
 RECEIPT_FIELDS = (*LINK_KEYS, "inspection_basis", "measured_result", "acceptance_scope", "acceptance_result", "accepted_on")
 BANK = ("contract_id", "payer", "payee", "payment_designation", "transfer_status", "paid_on")
@@ -34,11 +38,11 @@ def column(text):
     return (label.strip(" "), value.strip(" ")) if sep else ("",label)
 
 
-def sources(graph, read_text):
+def sources(graph, read_text, method=FORMAT):
     kinds = graph["documents_by_kind"]
     if not kinds.get("contract") or not kinds.get("acceptance") or not any(f["field"]=="measured_result" for f in graph["facts"]):
-        return {"format":FORMAT, "rows":[]}
-    return {"format":FORMAT,"rows":printed_rows(graph,read_text,ROLES)}
+        return {"format":method, "rows":[]}
+    return {"format":method,"rows":printed_rows(graph,read_text,ROLES)}
 
 
 def printed_rows(graph, read_text, roles, *, extra_labels=None):
@@ -115,42 +119,122 @@ def readings(rows, material, fields):
     return values if all(values.values()) else None
 
 
-def records(graph, findings):
-    from performance import CONDITIONS, FINAL_SCOPES, Material, inspect_quality, matches_stage, number, ORD, stage_terms
+def native_text(graph, unit):
+    owned = [p for p in graph["payment_window_sources"]["pages"] if p["unit"]==unit]
+    return bool(owned) and all(p["native"] and p["text_only"] for p in owned)
 
+
+def acceptance_readings(graph, h02):
+    from performance import FINAL_SCOPES, Material
     rows = graph.get(KEY,{}).get("rows",[])
     kinds = graph["documents_by_kind"]
     if not rows or len(kinds.get("contract",()))!=1 or len(kinds.get("acceptance",()))!=1:
         return
-    h02 = next((f for f in findings if f["rule"]=="H02"),{})
-    signing = next((f for f in findings if f["rule"]=="H01"),{})
-    plan = next((f for f in findings if f["rule"]=="H03"),{})
-    if (h02.get("status")!="issue" or plan.get("status")!="ok" or h02.get("quality_change") or h02.get("batch_acceptance")
+    if (h02.get("quality_change") or h02.get("batch_acceptance")
             or any(kinds.get(k) for k in ("remediation","reinspection","contract_addendum"))):
         return
     contract, receipt = (Material(graph,kinds[k][0]) for k in ("contract","acceptance"))
-    if not same_original(contract,receipt):
-        return
-    pages = graph["payment_window_sources"]["pages"]
-    def clean(unit):
-        owned = [p for p in pages if p["unit"]==unit]
-        return bool(owned) and all(p["native"] and p["text_only"] for p in owned)
-    if not clean(contract.unit) or not clean(receipt.unit):
+    if not same_original(contract,receipt) or not all(native_text(graph,u) for u in (contract.unit,receipt.unit)):
         return
     c = readings(rows,contract,(*LINK_KEYS,"acceptance_criteria"))
     a = readings(rows,receipt,(*LINK_KEYS,"acceptance_scope","acceptance_result","inspection_basis","measured_result"))
     if not c or not a or any(c[k][1]!=a[k][1] for k in LINK_KEYS) or a["acceptance_scope"][1] not in FINAL_SCOPES:
         return
-    criterion, basis, measured = c["acceptance_criteria"][1],a["inspection_basis"][1],a["measured_result"][1]
-    if inspect_quality(criterion,basis,measured)[0]!="issue":
+    if not all(v[0] in h02.get("evidence",()) for v in (*c.values(),*a.values())):
         return
-    spec, value = LIMIT.fullmatch(criterion), METRIC.fullmatch(measured)
-    if not spec or not value or value[2] or not all(v[0] in h02["evidence"] for v in (*c.values(),*a.values())):
+    return contract, receipt, c, a
+
+
+def judge_limit(limit, measured):
+    metric, operator, bound, unit = limit.groups()
+    result = {"name":metric,"operator":operator,"limit":bound,"unit":unit,"result":"incomparable"}
+    if (metric,unit)==(measured[1],measured[4]):
+        difference = Decimal(measured[3])-Decimal(bound) if operator in UPPER else Decimal(bound)-Decimal(measured[3])
+        result["result"] = "outside" if difference>0 else "within"
+        if difference>0:
+            result["outside_by"] = format(difference,"f")
+    return result
+
+
+def comparison(graph, h02):
+    from performance import PASS
+    if graph.get(KEY,{}).get("format")!=FORMAT or h02.get("reinspection"):
         return
-    margin = abs(Decimal(value[3])-Decimal(spec[3]))
-    measure = {"name":spec[1],"operator":spec[2],"limit":spec[3],"observed":value[3],"unit":spec[4],"outside_by":format(margin,"f")}
+    readings = acceptance_readings(graph,h02)
+    if not readings:
+        return
+    contract, receipt, c, a = readings
+    if a["acceptance_result"][1] not in PASS:
+        return
+    limits = [LIMIT.fullmatch(text) for text in (c["acceptance_criteria"][1],a["inspection_basis"][1])]
+    measured = METRIC.fullmatch(a["measured_result"][1])
+    if not all(limits) or not measured or measured[2]:
+        return
+    def meaning(lim):
+        return lim[1],lim[2] in UPPER,Decimal(lim[3]),lim[4]
+    if meaning(limits[0])==meaning(limits[1]):
+        return
+    judged = {key:judge_limit(lim,measured) for key,lim in zip(("contract","inspection"),limits)}
+    if all(v["result"]=="incomparable" for v in judged.values()):
+        return
+    return {"contract":contract.unit,"receipt":receipt.unit,"limits":judged,
+            "observed":{"name":measured[1],"value":measured[3],"unit":measured[4]},
+            "fields":{"acceptance_criteria":c["acceptance_criteria"][0],
+                      **{k:a[k][0] for k in ("inspection_basis","measured_result","acceptance_result","acceptance_scope")}},
+            "evidence":list(dict.fromkeys(v[0] for v in (*c.values(),*a.values())))}
+
+
+def explain_limits(proof):
+    observed = proof["observed"]
+    parts = [f"终验实测{observed['name']}{observed['value']}{observed['unit']}。"]
+    for key,label in (("contract","合同约定"),("inspection","验收单所引标准")):
+        entry = proof["limits"][key]
+        result = {"within":"实测符合该限值","incomparable":"与实测的指标或单位无法对应"}.get(entry["result"])
+        if result is None:
+            result = f"实测超出限值{entry['outside_by']}{entry['unit']}"
+        parts.append(f"{label}{entry['name']}{entry['operator']}{entry['limit']}{entry['unit']}，{result}。")
+    return "".join(parts)
+
+
+def review_acceptance(graph, h02):
+    proof = comparison(graph,h02)
+    if not proof:
+        return
+    receipt_result = next(f for f in graph["facts"] if f["id"]==proof["fields"]["acceptance_result"])
+    detail = explain_limits(proof)+"验收结论栏记载“"+column(receipt_result["quote"])[1]+"”，请核对采用该标准的依据。"
+    generic = "合同验收标准与实际检验依据需逐项对应。"
+    h02["detail"] = (detail+" "+h02["detail"].removeprefix(generic)).strip()
+    if any(lim["result"]=="outside" for lim in proof["limits"].values()):
+        h02["status"]="issue"
+    elif h02["status"]=="ok":
+        h02["status"]="risk"
+    h02["quality_comparison"]=proof
+
+
+def records(graph, findings):
+    from performance import CONDITIONS, Material, inspect_quality, matches_stage, number, ORD, stage_terms
+    h02 = next((f for f in findings if f["rule"]=="H02"),{})
+    signing = next((f for f in findings if f["rule"]=="H01"),{})
+    plan = next((f for f in findings if f["rule"]=="H03"),{})
+    paired = h02.get("quality_comparison")
+    if plan.get("status")!="ok" or not paired and h02.get("status")!="issue":
+        return
+    readings_for_case = acceptance_readings(graph,h02)
+    if not readings_for_case:
+        return
+    contract, receipt, c, a = readings_for_case
+    if paired:
+        observation = {"comparison":{"limits":paired["limits"],"observed":paired["observed"]}}
+    else:
+        criterion, basis, measured = c["acceptance_criteria"][1],a["inspection_basis"][1],a["measured_result"][1]
+        spec, value = LIMIT.fullmatch(criterion), METRIC.fullmatch(measured)
+        if inspect_quality(criterion,basis,measured)[0]!="issue" or not spec or not value or value[2]:
+            return
+        margin = abs(Decimal(value[3])-Decimal(spec[3]))
+        observation = {"measure":{"name":spec[1],"operator":spec[2],"limit":spec[3],"observed":value[3],"unit":spec[4],"outside_by":format(margin,"f")}}
+    rows = graph[KEY]["rows"]
     accepted = witness(rows,receipt,"accepted_on")
-    banks = set(kinds.get("bank_receipt",()))
+    banks = set(graph["documents_by_kind"].get("bank_receipt",()))
     for f in findings:
         stage = f.get("stage")
         if f["rule"] not in ("H04","H05") or not stage or f.get("execution_basis") or f.get("payment_change"):
@@ -165,7 +249,7 @@ def records(graph, findings):
         refs = [term[0],*[v[0] for v in c.values()],*[v[0] for v in a.values()]]
         shown = {"clause":term[0],"acceptance_criteria":c["acceptance_criteria"][0],
                  **{k:a[k][0] for k in ("inspection_basis","measured_result","acceptance_scope","acceptance_result")}}
-        result = {"contract":contract.unit,"receipt":receipt.unit,"fields":shown,"measure":measure,
+        result = {"contract":contract.unit,"receipt":receipt.unit,"fields":shown,**observation,
                   "accepted_on":accepted[1] if accepted else None}
         if contract.unit in signing.get("scope",()) and signing["status"] in ("risk","missing","issue"):
             result["contract_check"] = signing["status"]
@@ -178,7 +262,7 @@ def records(graph, findings):
                 continue
             unit, = matched
             bank = Material(graph,unit)
-            b = readings(rows,bank,BANK) if clean(unit) and bank_identity(contract,bank) else None
+            b = readings(rows,bank,BANK) if native_text(graph,unit) and bank_identity(contract,bank) else None
             label = stage["name"]
             ordinal = re.fullmatch("第("+ORD+")期",label)
             if (not b or not matches_stage(b["payment_designation"][1],{"label":label,"index":number(ordinal[1]) if ordinal else None})
@@ -196,9 +280,12 @@ def records(graph, findings):
 
 def apply(graph, findings):
     for f, record in records(graph,findings):
-        m = record["measure"]
-        detail = (f"本期约定{f['stage']['clause']}。终验单载{m['name']}{m['observed']}{m['unit']}，"
-                  f"合同要求{m['operator']}{m['limit']}{m['unit']}。")
+        detail = f"本期约定{f['stage']['clause']}。"
+        if "comparison" in record:
+            detail += explain_limits(record["comparison"])
+        else:
+            m = record["measure"]
+            detail += f"终验单载{m['name']}{m['observed']}{m['unit']}，合同要求{m['operator']}{m['limit']}{m['unit']}。"
         if transfer := record.get("payment"):
             days = transfer["days"]
             if days:
@@ -220,27 +307,41 @@ def apply(graph, findings):
 
 
 def edges(findings):
-    return [{"from":r["fields"]["measured_result"],"to":"finding/"+f["id"],"type":EDGE,"evidence":r["evidence"]}
-            for f in findings if (r:=f.get("payment_quality"))]
+    return [{"from":r["fields"]["measured_result"],"to":"finding/"+f["id"],"type":edge,"evidence":r["evidence"]}
+            for f in findings for key,edge in (("quality_comparison",BASIS_EDGE),("payment_quality",EDGE)) if (r:=f.get(key))]
 
 
-def verify(report, read_text, *, read_original=None):
+def verify(report, read_text, *, read_original=None, read_layout=None, signing=False):
     p, g, findings = report["policy"], report["graph"], report["findings"]
     method = p.get("payment_quality")
-    current = tuple(map(int,p.get("version","0").split(".")))>=SINCE
-    actual = [e for e in g["edges"] if e["type"]==EDGE]
-    if not current:
-        if method or KEY in g or "payment_quality.py" in p.get("code_sha256",{}) or actual or any("payment_quality" in f for f in findings):
+    revision = tuple(map(int,p.get("version","0").split(".")))
+    actual = [e for e in g["edges"] if e["type"] in (EDGE,BASIS_EDGE)]
+    if revision<SINCE:
+        if method or KEY in g or "payment_quality.py" in p.get("code_sha256",{}) or actual or any("payment_quality" in f or "quality_comparison" in f for f in findings):
             raise ValueError("历史底稿含未出具的验收款质量程序")
         return
-    if (method!=FORMAT or "code_sha256" in p and "payment_quality.py" not in p["code_sha256"]
-            or g.get(KEY)!=sources(g,read_text) or actual!=edges(findings)):
+    if (method!=(FORMAT if revision>=BASIS_SINCE else FIRST_FORMAT) or "code_sha256" in p and "payment_quality.py" not in p["code_sha256"]
+            or g.get(KEY)!=sources(g,read_text,method) or actual!=edges(findings)):
         raise ValueError("验收款所引合同限值、实测原行或图关系不符")
+    comparisons = []
+    for f in findings:
+        proof = comparison(g,f) if f["rule"]=="H02" else None
+        breach = proof and any(v["result"]=="outside" for v in proof["limits"].values())
+        if f.get("quality_comparison")!=proof or breach and f["status"]!="issue" or proof and f["status"]=="ok":
+            raise ValueError("合同和验收单各自的限值、实测对照或所引原行不符")
+        if proof:
+            comparisons.append(proof)
+        if signing and method==FIRST_FORMAT and f["rule"]=="H02" and comparison({**g,KEY:{**g[KEY],"format":FORMAT}},f):
+            raise ValueError("合同与验收单所列限值不同，旧版未分别核对实测结果。请按现行程序重审后签收。")
     expected = {f["id"]:v for f,v in records(g,findings)}
     if any(f.get("payment_quality")!=expected.get(f["id"]) or f["id"] in expected and f["status"] not in ("risk","issue") for f in findings):
         raise ValueError("验收款质量发现、所据期次或付款日期不符")
-    if expected and read_original:
-        units = {u for r in expected.values() for u in (r["contract"],r["receipt"],r.get("payment",{}).get("bank")) if u}
+    proofs = [*comparisons,*expected.values()]
+    if read_layout and comparisons:
+        from retest_reference import verify_positions
+        verify_positions(g,proofs,read_layout,"合同与验收单限值对照")
+    if proofs and read_original:
+        units = {u for r in proofs for u in (r["contract"],r["receipt"],r.get("payment",{}).get("bank")) if u}
         verify_units(g,units,read_original,"验收款质量凭证")
 
 

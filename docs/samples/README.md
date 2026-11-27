@@ -1,5 +1,13 @@
 # 合成财会审计演练
 
+## 重建合同和验收单的限值差异
+
+生成器校验 R7 母本和五份水印原件的 SHA-256，每组只改合同或验收报告里的一行。三组分别覆盖终验放宽限值、终验收紧限值及检验单位错列。以下命令只生成文件。增加 `--run --check-fields` 会提交本机 API，逐页对照母本，演练字段核读并保留待人工验收的底稿。[下载采购母本](http://127.0.0.1:8000/api/cases/64cd9e64345841bab358728a6730f3d8/reports/7/bundle) · [已出具的三份底稿](../acceptance.md#合同与验收单使用不同限值)
+
+```sh
+PYTHONPATH=server server/.venv/bin/python docs/samples/inspection_limits.py /tmp/master-R7.zip /tmp/inspection-limits
+```
+
 ## 会签名单有一人不同
 
 用已核摘要的 R7 水印证据包作母本，生成三组合同、验收、整改、复验、质保、审批及银行回单，其中两组另附补充协议。以下命令在仓库根目录运行。末尾加 `--run --check-fields` 可提交本机服务，并对照水印原行演练核字。重复提交相同原件会返回同一案件。[下载水印母本](http://127.0.0.1:8000/api/cases/c05a306e53bc40eb8d6ef46233a8e731/reports/7/bundle) · [实测结果](../acceptance.md#两人会签的审批单只对上一人)

@@ -1067,6 +1067,10 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
                 original = evaluate(contract, receipts)
                 if original["status"] == "issue":
                     accepted.update(status="issue", detail=original["detail"] + " " + accepted["detail"])
+    if version==FORMAT:
+        payment_quality.review_acceptance(graph,accepted)
+        if accepted.get("quality_comparison"):
+            accepted_on = None
     if payment_change and not scoped_change:
         payment_amendments.attach(plan,payment_change)
     if version == FORMAT and (batch or scoped_change):
@@ -1364,6 +1368,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("warranty_check") != entry.get("warranty_check")
                 or saved.get("warranty_payment") != entry.get("warranty_payment")
                 or saved.get("payment_quality") != entry.get("payment_quality")
+                or saved.get("quality_comparison") != entry.get("quality_comparison")
                 or saved.get("retest_reference") != entry.get("retest_reference")
                 or saved.get("inspection_use") != entry.get("inspection_use")
                 or saved.get("party_readings") != entry.get("party_readings")

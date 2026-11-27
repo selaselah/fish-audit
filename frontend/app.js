@@ -923,6 +923,13 @@ function finding(item) {
   const heading = item.stage ? item.stage.name + (item.stage.share ? ' · ' + item.stage.share + '%' : '') +
     (item.execution_basis ? ' 扣款凭证' : item.rule === 'H05' ? ' 实付时点' : item.rule==='H06'?' 回单合计':' 付款条件') : item.execution_basis?'扣款凭证':item.title;
   const node = box('finding-body',el('p', item.detail, 'finding-detail'),el('p', '执行依据 · ' + item.basis, 'muted'));
+  if (item.quality_comparison) {
+    const limits=PaymentQuality.panel(item,state.bundle.report,state.bundle.rev);
+    if (limits) {
+      const explanation=[...node.children];
+      node.replaceChildren(limits,lazyFold('查看验收核对说明',()=>explanation));
+    }
+  }
   if (item.stage) {
     const change=item.payment_change;
     const revised=change?.applies==='amended' && PhaseEvidence.amendmentFact(state.bundle.report.graph,item,change.revised_ref);
@@ -1605,6 +1612,8 @@ async function refresh() {
         state.tab=traced?'graph':'report'; focusFinding=traced?'#trace-select':'[data-finding="'+requestedFinding+'"]';
       } else if (requestedScope && state.openedCitation!==location.hash) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='[data-audit-scope="'+requestedScope.id+'"]';
+      } else if (requestedView==='acceptance-limits' && state.openedCitation!==location.hash && state.bundle) {
+        state.openedCitation=location.hash; state.tab='report'; focusFinding='[data-limit-finding]';
       } else if (requestedView==='revision-comparison' && state.openedCitation!==location.hash && state.bundle) {
         state.openedCitation=location.hash;state.tab='report';focusFinding='#revision-comparison';
       } else if (requestedView==='board-decision' && state.openedCitation!==location.hash && state.bundle) {
@@ -1655,7 +1664,10 @@ async function refresh() {
       renderCase(Boolean(focusFinding));
       if (focusFinding) {
         const target = $(focusFinding);
-        if (requestedView==='board-decision' && !target) {
+        if (requestedView==='acceptance-limits') {
+          if (target) revealPaperTarget(target);
+          else $('#case-panel').prepend(el('p','本版未出具合同与验收单的双限值对照。','note'));
+        } else if (requestedView==='board-decision' && !target) {
           const message=el('p','本版没有可定位的董事会审批原件。','note');
           message.id='board-unavailable';message.dataset.caseId=state.bundle.report.case_id;message.dataset.rev=String(state.bundle.rev);
           message.setAttribute('role','status');$('#case-panel').prepend(message);

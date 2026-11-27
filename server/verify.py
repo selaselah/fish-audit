@@ -308,7 +308,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
     release_execution.verify(report, read_original, page_text)
     warranty_execution.verify(report, read_original, page_text)
     warranty_dates.verify(report, page_text)
-    payment_quality.verify(report, page_text)
+    payment_quality.verify(report, page_text, read_original=read_original if any(f.get("quality_comparison") for f in report["findings"]) else None)
     retest_reference.verify(report,page_text)
     inspection_use.verify(report,page_text)
     party_readings.verify(report,page_text)
