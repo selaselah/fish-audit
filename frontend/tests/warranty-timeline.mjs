@@ -1,6 +1,87 @@
 import assert from 'node:assert/strict';
 import {writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
+import {inspect,size} from './review-screen.mjs';
+
+async function checkCertificate(ctx,report,rev,phase,bank) {
+  const {root,call,evaluate,wait}=ctx, graph=report.graph, cert=phase.warranty_check.certificate;
+  const records=[...graph.warranty_pdf_sources.records,...graph.warranty_original_sources.records].filter(r=>cert.records.includes(r.id));
+  assert.equal(records.length,1);
+  const [record]=records, source=graph.documents.find(d=>d.id===record.doc);
+  const url=root+'/workpaper/'+report.case_id+'?rev='+rev+'&view=warranty-certificate&stage=';
+  const card='[data-certificate="'+record.id+'"]', query=s=>'document.querySelector('+JSON.stringify(s)+')';
+  const click=s=>evaluate(query(s)+'.click()'), visible=s=>query(s)+'?.getClientRects().length';
+  const original=card+' .warranty-file', note=graph.warranty_original_sources.documents.find(d=>d.doc===record.doc)?.notes[0];
+  for (const f of [phase,bank].filter(Boolean)) {
+    await call('Page.navigate',{url:url+f.id});
+    await wait(visible(card),'signed warranty certificate from '+f.id);
+    assert.equal(await evaluate(query(card)+'.dataset.state'),record.state);
+    assert.equal(await evaluate(query(card)+'.closest("[data-phase-finding]").dataset.phaseFinding'),phase.id);
+  }
+  const row='[data-phase-finding="'+phase.id+'"] .warranty-event[data-event=confirmation]';
+  assert.equal(await evaluate(query(row)+'.querySelector("time")?.dateTime || null'),phase.warranty_check.stated_on);
+  assert.equal(phase.warranty_check.confirmed_on,null);
+  assert.equal(await evaluate(query(card+' a[download]')+'.download'),source.name);
+  assert.equal(await evaluate('fetch('+query(card+' a[download]')+'.href).then(r=>r.arrayBuffer()).then(b=>crypto.subtle.digest("SHA-256",b)).then(b=>Array.from(new Uint8Array(b),n=>n.toString(16).padStart(2,"0")).join(""))'),source.sha256);
+  await click(card+' .agreement-check button');
+  await wait(query(card+' .agreement-check')+'?.dataset.state==="match"','file hash');
+  if (record.signatures?.length) assert.equal(await evaluate(query(card+' .pdf-timeline')+'.dataset.state'),record.state);
+  if (note) assert.equal(await evaluate(query(card+' blockquote')+'.textContent'),note.text);
+  await click(note?.location?card+' .warranty-original-note button':original);
+  await wait(query('#page-dialog')+'.open && '+query('#page-dialog img')+'?.naturalWidth>0','physical page');
+  assert.equal(await evaluate(query('#page-content .page-view')+'.dataset.doc'),record.doc);
+  if (note?.location) assert.equal(await evaluate(query('#page-content .page-view')+'.dataset.line'),String(note.location.line));
+  await click('#page-dialog [data-close]');
+  for (const width of [320,390,768,820,1024,1440]) {
+    await size(ctx,width);
+    assert.ok(await evaluate(query(card)+'.getBoundingClientRect().right<=innerWidth+1'));
+    await inspect(ctx,width,card,'warranty-certificate-'+record.state);
+  }
+  const target=note?.location?card+' .warranty-original-note button':original;
+  const feedback=await evaluate('import("/assets/walkthrough-context.js").then(m=>{const c=m.captureContext(null,'+query(target)+');return {c,url:m.returnUrl(c)}})');
+  assert.deepEqual(feedback.c.params,{view:'warranty-certificate',stage:phase.id});
+  assert.equal(feedback.c.rev,rev);
+  await call('Page.navigate',{url:root+feedback.url});
+  await wait(visible(card)+' && '+query(target)+'?.classList.contains("walk-mark")','walkthrough returned to original control');
+  if (process.env.AUDIT_ISOLATED_WARRANTY_ORIGIN && note?.location) {
+    assert.deepEqual((await (await fetch(root+'/api/walkthrough')).json()).notes,[]);
+    await click('#walk-launch');
+    await wait(query('#walk-dialog')+'?.open && !'+query('#walk-save')+'.disabled','write in the active workpaper');
+    const opinion='请在这条批注旁保留维修工单入口。';
+    await evaluate(query('#walk-text')+'.value='+JSON.stringify(opinion)+';'+query('#walk-text')+'.dispatchEvent(new Event("input"))');
+    await click('#walk-pick');
+    await click(card+' blockquote');
+    await wait(query('#walk-dialog')+'.open && '+query('#walk-location')+'.textContent.includes("第 9 行")','comment location selected');
+    await click('#walk-save');
+    await wait('!'+query('#walk-dialog')+'.open','opinion saved');
+    await call('Page.navigate',{url:root+'/app#desk'});
+    await wait(visible('#case-list')+' && '+visible('#walk-launch'),'queue feedback');
+    await click('#walk-launch'); await wait(query('#walk-dialog')+'?.open && !'+query('#walk-saved')+'.disabled','feedback history');
+    await click('#walk-saved'); await wait(visible('#walk-history li a'),'saved comment');
+    assert.equal(await evaluate(query('#walk-history li p')+'.textContent'),opinion);
+    await click('#walk-history li a');
+    await wait(visible(card)+' && '+query(card+' [data-warranty-note]')+'?.classList.contains("walk-mark")','reopen saved comment');
+    const [saved]=(await (await fetch(root+'/api/walkthrough')).json()).notes;
+    assert.deepEqual(saved.context.params,{view:'warranty-certificate',stage:phase.id});
+    assert.equal(saved.context.rev,rev);
+    const detail=await (await fetch(root+'/api/cases/'+report.case_id)).json();
+    assert.deepEqual([detail.rev,detail.status,detail.decisions.length],[rev,'ready',0]);
+  }
+  const altered=await evaluate(`(()=>{const p=structuredClone(state.bundle.report), f=p.findings.find(v=>v.id===${JSON.stringify(phase.id)});
+    p.graph.edges=p.graph.edges.filter(e=>!(e.type==='supports_result' && e.to==='finding/'+f.id && e.from===${JSON.stringify(record.id)}));
+    return PerformanceIndex.warrantyProofs(f,p).length;})()`);
+  assert.equal(altered,0);
+  const unrelated=report.findings.find(f=>f.rule==='H04' && !f.warranty_check);
+  await call('Page.navigate',{url:url+unrelated.id});
+  await wait(query('#case-panel > [role=status]')+'?.textContent.includes("未附")','other installments cannot reopen this proof');
+  const difference=report.findings.find(f=>f.rule==='H07')?.warranty_difference;
+  if (difference) {
+    await call('Page.navigate',{url:root+'/workpaper/'+report.case_id+'?rev='+rev+'&view=warranty-register&ticket='+difference.ticket_unit});
+    await wait(query('.wr-row[aria-selected=true]')+'?.dataset.ticket==='+JSON.stringify(difference.ticket_unit),'printed certificate and open warranty ticket');
+    assert.ok(await evaluate(query('.warranty-register')+'.textContent.includes("'+difference.printed_state+'")'));
+  }
+  console.log('PASS · R'+rev+' · '+record.state+' · file, signature or original page, six widths and pinned feedback');
+}
 
 export async function checkWarrantyTimeline({root,call,evaluate,wait},cid,revision) {
   const api=root+'/api/cases/'+cid, task=await (await fetch(api)).json();
@@ -8,6 +89,7 @@ export async function checkWarrantyTimeline({root,call,evaluate,wait},cid,revisi
   const rev=Number(revision || task.rev), {report}=await (await fetch(api+'/reports/'+rev)).json();
   const phase=report.findings.find(f=>f.rule==='H04' && f.warranty_check), entry=phase.warranty_check;
   const bank=report.findings.find(f=>f.rule==='H05' && f.warranty_payment), node=s=>'document.querySelector('+JSON.stringify(s)+')';
+  if (entry.certificate) return checkCertificate({root,call,evaluate,wait},report,rev,phase,bank);
   const section='[data-phase-finding="'+phase.id+'"] .phase-evidence';
   const area=node(section), inside=s=>node(section+' '+s), part=s=>inside('.warranty-timeline '+s);
   const stage=node('[data-phase-choice="'+phase.id+'"]'), url=root+'/workpaper/'+cid+'?rev='+rev;
@@ -38,7 +120,7 @@ export async function checkWarrantyTimeline({root,call,evaluate,wait},cid,revisi
   const expected=new Map([
     ['提交时质保期未满但确认单及回单均记载已履行','距质保末日还有 3 天'],
     ['质保已到期但成功回单落款在提交日之后','回单晚于提交 3 天'],
-    ['质保金回单日期等于资料提交日','已取得期满确认'],
+    ['质保金回单日期等于资料提交日',entry.status==='ok'?'已取得期满确认':'质保依据待核'],
     ['确认单记载温控故障未修复仍有质保金回单','确认单仍列有未结缺陷'],
     ['合同要求清结缺陷但确认单缺少记录','质保依据待核']
   ]);

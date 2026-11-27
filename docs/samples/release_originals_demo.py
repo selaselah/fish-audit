@@ -76,20 +76,20 @@ def materials(archive, target):
     return report["policy"]["profile"], groups
 
 
-def check_fields(archive, key, case, folder):
+def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MASTER[2], kind="payment_release", reviewer="水印放行单演练"):
     """Reconcile visible sample fields against the fixed, previously reviewed originals."""
     from config import PERFORMANCE
     from documents import prepare
     api = "/api/cases/" + case
     detail = get(api)
     files = {p.name:p for p in folder.iterdir() if p.is_file()}
-    require(detail["title"] == "合成演练 · " + CASES[key] and detail["profile"] == PERFORMANCE
+    require(detail["title"] == "合成演练 · " + (case_title or CASES[key]) and detail["profile"] == PERFORMANCE
             and not detail["decisions"] and not detail["referrals"]
             and {d["name"]:d["sha256"] for d in detail["documents"]} == {n:digest(p.read_bytes()) for n,p in files.items()},
             "本次水印资料及原件摘要")
     with ZipFile(archive) as bundle:
         content = bundle.read("report.json")
-        require(digest(content) == MASTER[2], "已核对的虚构母本")
+        require(digest(content) == master_hash, "已核对的虚构母本")
         master = json.loads(content)["graph"]
         report = wait(case)
         confirm = []
@@ -114,19 +114,19 @@ def check_fields(archive, key, case, folder):
                             and f["page"] == 1 and normalize(f["quote"]) == normalize(quote)]
                 same = [f for f in observed if f["field"] == source["field"]
                         and normalize(f["value"]) == normalize(source["value"])]
-                if not same and (len(observed) == 1 or not observed and source["field"] == "payment_release"):
-                    post(api+"/amend", {"rev":get(api)["rev"], "reviewer":"水印放行单演练", "doc":doc["id"], "page":1,
+                if not same and (len(observed) == 1 or not observed and source["field"] == kind):
+                    post(api+"/amend", {"rev":get(api)["rev"], "reviewer":reviewer, "doc":doc["id"], "page":1,
                          "target":observed[0]["id"] if observed else None, "field":source["field"], "value":source["value"],
                          "quote":quote, "region":source["region"], "note":"对照水印原件的同一可见行，补正字段类别或抄录。"})
                     report = wait(case)
                     same = [f for f in report["graph"]["facts"] if f["doc"] == doc["id"] and f["field"] == source["field"]
                             and normalize(f["quote"]) == normalize(quote) and normalize(f["value"]) == normalize(source["value"])]
                 if len(same) == 1 and same[0]["status"] in ("anchored","visual") and (source["status"] == "confirmed"
-                        or path.suffix == ".jpg" and source["field"] == "payment_release"):
+                        or path.suffix == ".jpg" and source["field"] == kind):
                     confirm.append(same[0]["id"])
         if confirm:
-            post(api+"/attest", {"rev":get(api)["rev"], "reviewer":"水印放行单演练", "decision":"confirm", "facts":confirm,
-                 "note":"已对照同一份水印原件逐行核字。签署行为、人员身份及放行权限仍交人工复核。"})
+            post(api+"/attest", {"rev":get(api)["rev"], "reviewer":reviewer, "decision":"confirm", "facts":confirm,
+                 "note":"已对照同一份水印原件逐行核字。签署行为、人员身份及权限仍交人工复核。"})
             wait(case)
 
 

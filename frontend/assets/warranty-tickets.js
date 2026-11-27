@@ -3,7 +3,7 @@ const WarrantyTickets = (() => {
   const plain=value=>String(value ?? '').normalize('NFKC').trim();
   const days=(later,earlier)=>(Date.parse(later)-Date.parse(earlier))/86400000;
   const titles={scope:'工单范围待核',identity:'工单归属待核',number:'工单编号待核',period:'工单适用期间待核',
-    future:'工单列有提交后的日期',pending:'工单关闭依据待核'};
+    future:'工单列有提交后的日期',pending:'工单关闭依据待核',stated_closed:'工单列有关闭记录，签发待核'};
   const value=f=>f?plain(f.source_line.text).split(':').slice(1).join(':').trim():'';
   const supports=(index,finding,ref)=>Boolean(ref && finding.evidence.includes(ref) && index.supports.get('finding/'+finding.id)?.has(ref));
   function printedFact(index,finding,ref,field) {
@@ -48,7 +48,7 @@ const WarrantyTickets = (() => {
       add('state','工单与期满记录',other(w.defect_ref,'warranty_defects'),state);
       const closed=item('warranty_closed_on'), cert=other(w.confirmation_ref,'warranty_release');
       if (closed && PhaseEvidence.dateOn(closed)===t.closed_on) {
-        if (cert && PhaseEvidence.dateOn(cert)===w.confirmed_on) add('dates','关闭与期满确认日期',cert,closed);
+        if (cert && PhaseEvidence.dateOn(cert)===WarrantyTimeline.statedDate(w)) add('dates',w.certificate?'两单所列日期':'关闭与期满确认日期',cert,closed);
         const bank=finding.warranty_payment;
         if (bank?.date_refs.length===1) {
           const paid=fact(bank.date_refs[0],'paid_on',graph.documents_by_kind.bank_receipt);
@@ -69,7 +69,8 @@ const WarrantyTickets = (() => {
     }
     const defects=paper(entry.defect_ref,'warranty_defects','warranty_defects');
     const cert=paper(entry.confirmation_ref,'warranty_release','warranty_release');
-    const confirmDay=cert && PhaseEvidence.dateOn(cert)===entry.confirmed_on?entry.confirmed_on:null;
+    const stated=WarrantyTimeline.statedDate(entry);
+    const confirmDay=cert && PhaseEvidence.dateOn(cert)===stated?stated:null;
     const bankDates=payments.flatMap(p=>{
       const bank=p.warranty_payment;
       if (!bank || p.warranty_check?.at_submission?.as_of!==entry.at_submission?.as_of) return [];
@@ -148,7 +149,9 @@ const WarrantyTickets = (() => {
       const proven=compare && state && value(state)===r.printed_state && opening && confirmDay &&
         ((r.state==='open' && ['待维修','未关闭','维修中','待复修','处理中'].includes(value(state))) ||
         (['closed','late','same_day'].includes(r.state) && witness && closed && ['已关闭','已修复并关闭'].includes(value(state))));
-      const decision=proven?r.state:(titles[r.state]?r.state:'pending');
+      const recordedClose=r.state==='stated_closed' && entry.certificate && r.linked && witness && closed && confirmDay &&
+        closed<confirmDay && state && ['已关闭','已修复并关闭'].includes(value(state));
+      const decision=proven || recordedClose?r.state:(titles[r.state] && r.state!=='stated_closed'?r.state:'pending');
       const conflicts=(r.identity_conflicts || []).flatMap(p=>{
         const left=printedFact(index,phase,p.contract_ref,p.field), right=line(r,p.field);
         return left && graph.documents_by_kind.contract?.includes(left.unit || left.doc) && right?.id===p.ticket_ref &&
@@ -156,10 +159,10 @@ const WarrantyTickets = (() => {
       });
       const before=closed && bankDates.filter(b=>b.date<closed).sort((a,b)=>a.date.localeCompare(b.date))[0];
       let caption=titles[decision];
-      if (decision==='open') caption=value(defects)==='无未关闭缺陷'?'期满确认与「'+value(state)+'」工单冲突':'工单状态为「'+value(state)+'」';
+      if (decision==='open') caption=value(defects)==='无未关闭缺陷'?(entry.certificate?'期满单记载与「':'期满确认与「')+value(state)+'」工单冲突':'工单状态为「'+value(state)+'」';
       if (decision==='closed') caption='工单关闭早于期满确认 '+days(confirmDay,closed)+' 天';
-      if (decision==='same_day') caption='关闭与期满确认同日，先后待核';
-      if (decision==='late') caption=before?'回单早于工单关闭 '+days(closed,before.date)+' 天':'工单关闭晚于期满确认 '+days(closed,confirmDay)+' 天';
+      if (decision==='same_day') caption=entry.certificate?'两单列同日，关闭与签发先后待核':'关闭与期满确认同日，先后待核';
+      if (decision==='late') caption=before?'回单早于工单关闭 '+days(closed,before.date)+' 天':(entry.certificate?'工单关闭日晚于单上期满日 ':'工单关闭晚于期满确认 ')+days(closed,confirmDay)+' 天';
       if (decision==='identity' && conflicts.length) caption='工单与合同的'+conflicts.map(p=>p.label).join('、')+'不同';
       root.dataset.ticketState=decision; root.dataset.unit=r.unit;
       heading.textContent=caption; pick.value=String(i); body.replaceChildren(); delete root.dataset.details;
@@ -168,7 +171,7 @@ const WarrantyTickets = (() => {
       const pairing=decision==='late' && before && payments.map(f=>({f,p:pairs(f,graph).find(p=>p.unit===r.unit &&
         p.role==='payment' && p.left.id===before.fact.id)})).find(x=>x.p);
       const role=conflicts.length?'identity-'+conflicts[0].field:
-        ['late','same_day','closed'].includes(decision)?'dates':'state';
+        ['late','same_day','closed','stated_closed'].includes(decision)?'dates':'state';
       const chosen=pairing?.p || alternatives.find(p=>p.role===role);
       const primary=box('ticket-pair');
       const scan=decision==='scope' && WarrantyImages.panel(phase,r,ledger,index);
@@ -205,7 +208,7 @@ const WarrantyTickets = (() => {
       field('报修日',reported,opening);
       field('关闭日',date,closed);
       field(witness?'采购方签认':'签认栏待核',signer,witness || value(signer));
-      field('期满确认',cert,confirmDay);
+      field(entry.certificate?'单上期满日':'期满确认',cert,confirmDay);
       for (const b of bankDates) field(bankDates.length>1?b.fact.name:'回单落款',b.fact,b.date);
       if (facts.children.length || scan) {
         const disclosure=action('工单详情',()=>{

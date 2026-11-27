@@ -192,7 +192,8 @@ def findings(graph, phases):
     cert=terms.CONFIRM.fullmatch(body(w["confirmation_ref"]))
     confirmation=service.printed_date(cert[1]) if cert else None
     cutoff=w.get("at_submission",{}).get("as_of")
-    if (not confirmation or confirmation!=w["confirmed_on"] or not cutoff or confirmation>cutoff or
+    if (w.get("certificate") and w["certificate"]["state"] not in ("typeset","word_text","current")
+            or not confirmation or confirmation!=w.get("stated_on",w["confirmed_on"]) or not cutoff or confirmation>cutoff or
             body(w["defect_ref"]).rstrip("。") not in CLEAR or w["at_submission"]["defects"]!="stated_clear" or
             not confirmed_signature(signed)):
         return []

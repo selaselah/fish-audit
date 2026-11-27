@@ -7,6 +7,44 @@ const WarrantyTimeline = (() => {
     const n=Date.parse(value+'T00:00:00Z');
     return Number.isFinite(n) && new Date(n).toISOString().slice(0,10)===value ? n/dayMs : null;
   }
+  function certificateCard(proof,phase) {
+    const {record,doc,page}=proof, url=workpaperSource(doc.id,'original');
+    const card=el('section','','warranty-certificate');
+    card.id='warranty-certificate-'+phase.id+'-'+record.unit.replaceAll('/','-');
+    card.tabIndex=-1; card.dataset.certificate=record.id; card.dataset.state=record.state;
+    card.setAttribute('aria-label','期满确认单签署原件');
+    const file=action(doc.name,()=>openPage(doc.id,page),'warranty-file');
+    file.prepend(glyph('file-earmark-text')); file.append(glyph('arrows-angle-expand')); file.id=card.id+'-page';
+    file.setAttribute('aria-label','查看'+doc.name+'第 '+page+' 页整页');
+    card.append(box('warranty-file-head',file,el('strong',proof.label,'warranty-file-state')));
+    if (proof.signature?.signatures.length) card.append(PdfSignatureCard.digital(proof.signature));
+    if (proof.notes?.length) {
+      for (const [i,note] of proof.notes.entries()) {
+        const view=box('warranty-original-note',el('small',note.author?'批注 · '+note.author:'原件批注'),el('blockquote',note.text));
+        view.id=card.id+'-note-'+(i+1);
+        view.dataset.warrantyNote=note.id;
+        const loc=note.location;
+        if (loc) {
+          const anchor=action('第 '+loc.page+' 页 · 第 '+loc.line+' 行',()=>openPage(doc.id,loc.page,loc.facts[0],loc.line),'text-button');
+          anchor.id=view.id+'-line'; anchor.append(glyph('arrows-angle-expand')); view.append(anchor);
+        }
+        card.append(view);
+      }
+    }
+    const status=!phase.warranty_check.certificate.linked?'业务归属及签认待核':
+      {current:'签署人身份与确认权限待核',earlier:'最终签发稿待核',mismatch:'需核对签署平台原件',
+       word_review:'最终签发稿与缺陷关闭凭证待核'}[record.state] || '实际签发依据待核';
+    const download=link('下载原件',url,'release-download'); download.download=doc.name; download.id=card.id+'-download';
+    const bundle=state.bundle, params=new URLSearchParams({rev:bundle.rev,view:'warranty-certificate',stage:phase.id});
+    const permalink=Team.paperLink('R'+bundle.rev+' 固定链接',bundle.report.case_id,'release-download',params);
+    const verify=originalFileCheck(url,doc.sha256);
+    verify.querySelector('button').id=card.id+'-verify';
+    card.append(el('p',status,'warranty-file-status'),box('release-foot',box('release-file-actions',download,permalink),verify));
+    return card;
+  }
+  function statedDate(entry) {
+    return entry.certificate?entry.stated_on:entry.confirmed_on;
+  }
   function panel(phase,payments,graph) {
     const entry=phase.warranty_check, snapshot=entry?.at_submission;
     if (!['contract-warranty-release-v2','contract-warranty-release-v3','contract-warranty-release-v4','contract-warranty-release-v5'].includes(graph.warranty_sources?.format) || !snapshot ||
@@ -33,12 +71,14 @@ const WarrantyTimeline = (() => {
     const condition=source(phase,entry.condition_ref,inline?'payment_stage':'warranty_condition',['contract'],inline?'inline_condition':'warranty_condition');
     const startDate=starts.length ? entry.accepted_on : null;
     const endDate=term && (entry.period?.fixed || startDate) ? entry.calendar_end : null;
-    const certificateDate=confirmation && PhaseEvidence.dateOn(confirmation)===entry.confirmed_on ? entry.confirmed_on : null;
+    const physical=entry.certificate && state.bundle?.report.graph===graph?PerformanceIndex.warrantyProofs(phase,state.bundle.report):[];
+    const stated=statedDate(entry);
+    const certificateDate=confirmation && PhaseEvidence.dateOn(confirmation)===stated ? stated : null;
     const selectedSources=(items,label)=>items.map(f=>[label,f]);
     const rows=[
       {key:'start',label:'终验 / 复验',value:startDate,refs:selectedSources(starts,'起算原件')},
       {key:'end',label:'推算末日',value:endDate,refs:[...selectedSources(entry.period?.fixed?[]:starts,'起算原件'),['期限条款',term]]},
-      {key:'confirmation',label:'期满确认',value:certificateDate,refs:[['确认原件',confirmation]]}
+      {key:'confirmation',label:entry.certificate?'单上期满日':'期满确认',value:certificateDate,refs:[['确认单原文',confirmation]]}
     ];
     for (const payment of payments) {
       const record=payment.warranty_payment;
@@ -58,13 +98,14 @@ const WarrantyTimeline = (() => {
     let focus=end, title='质保依据待核';
     if (start.when!==null && start.when>cutoff) { focus=start; title='终验日期晚于提交 '+(start.when-cutoff)+' 天'; }
     else if (end.when!==null && end.when>cutoff) title='距质保末日还有 '+(end.when-cutoff)+' 天';
-    else if (cert.when!==null && cert.when>cutoff) { focus=cert; title='期满确认晚于提交 '+(cert.when-cutoff)+' 天'; }
+    else if (cert.when!==null && cert.when>cutoff) { focus=cert; title=(entry.certificate?'单上日期晚于提交 ':'期满确认晚于提交 ')+(cert.when-cutoff)+' 天'; }
     else if (futureBank) { focus=futureBank; title='回单晚于提交 '+(focus.when-cutoff)+' 天'; }
     else if (defect && snapshot.defects==='listed_open') { focus=cert; title='确认单仍列有未结缺陷'; }
-    else if (early) { focus=early; title='回单早于期满确认 '+(cert.when-early.when)+' 天'; }
-    else if (shared) { focus=shared; title='确认与付款同日'; }
-    else if (cert.when!==null && end.when!==null && cert.when<end.when) { focus=cert; title='确认早于质保末日 '+(end.when-cert.when)+' 天'; }
-    else if (cert.when!==null && cert.when===end.when) { focus=cert; title='确认与质保末日同日'; }
+    else if (early) { focus=early; title=(entry.certificate?'回单早于单上期满日 ':'回单早于期满确认 ')+(cert.when-early.when)+' 天'; }
+    else if (shared) { focus=shared; title=entry.certificate?'两单所列日期相同':'确认与付款同日'; }
+    else if (cert.when!==null && end.when!==null && cert.when<end.when) { focus=cert; title=(entry.certificate?'单上日期早于质保末日 ':'确认早于质保末日 ')+(end.when-cert.when)+' 天'; }
+    else if (cert.when!==null && cert.when===end.when) { focus=cert; title=entry.certificate?'单上日期与推算末日相同':'确认与质保末日同日'; }
+    else if (physical.length) { focus=cert; title='期满确认单签认待核'; }
     else if (entry.status==='ok' && cert.when!==null) { focus=cert; title='已取得期满确认'; }
 
     const root=el('section','','warranty-timeline');
@@ -141,6 +182,9 @@ const WarrantyTimeline = (() => {
         detail.append(box('warranty-formula',glyph('layers'),el('span','终验 / 复验 + '+p.count+' '+unit),
           el('strong','= '+item.value.replaceAll('-','.'))));
       }
+      if (item.key==='confirmation') {
+        for (const proof of physical) detail.append(certificateCard(proof,phase));
+      }
       for (const [label,f] of item.refs) {
         const btn=action('',()=>openPage(f.doc,f.page,f.id),'warranty-cite');
         btn.dataset.source=f.id;
@@ -180,5 +224,29 @@ const WarrantyTimeline = (() => {
     scale(near); select(focus);
     return root;
   }
-  return {panel};
+  function reveal(overview,finding,report) {
+    const proofs=finding && PerformanceIndex.warrantyProofs(finding,report);
+    if (!overview || !proofs?.length) return false;
+    const phases=report.findings.filter(f=>f.rule==='H04' && f.stage?.clause_ref===finding.stage?.clause_ref &&
+      proofs.every(p=>f.warranty_check?.certificate?.records.includes(p.record.id)));
+    if (phases.length!==1) return false;
+    const id=CSS.escape(phases[0].id), choice=overview.querySelector('[data-phase-choice="'+id+'"]');
+    if (!choice) return false;
+    choice.click();
+    const phase=overview.querySelector('[data-phase-finding="'+id+'"]');
+    phase?.querySelector('.proof-mode[data-mode=warranty]')?.click();
+    phase?.querySelector('.warranty-event[data-event=confirmation]')?.click();
+    const card=phase?.querySelector('.warranty-certificate');
+    if (!card) return false;
+    revealPaperTarget(card);
+    return true;
+  }
+  function locate(overview,params) {
+    const {report,rev}=state.bundle;
+    if (['stage','view','rev'].every(k=>params.getAll(k).length===1) && String(rev)===params.get('rev') &&
+        reveal(overview,report.findings.find(f=>f.id===params.get('stage')),report)) return;
+    const notice=el('p','本版所选期次未附可定位的期满确认单签署凭证。','note');
+    notice.setAttribute('role','status');notice.tabIndex=-1;overview.prepend(notice);revealPaperTarget(notice);
+  }
+  return {panel,reveal,locate,statedDate};
 })();

@@ -9,6 +9,9 @@ const MandateOriginals = (() => {
     review:'委托书原件的签发依据待核'
   };
   const families={
+    warranty:{kinds:['warranty'],labels:{
+      word_text:'Word 排印件',word_visual:'Word 含图形',word_review:'Word 审阅版',photo:'扫描或拍照原件',review:'期满单签署凭证待核'
+    }},
     release:{kinds:['payment_release'],labels:{
       word_text:'Word 排印件',word_visual:'Word 含图形',word_review:'Word 审阅版',photo:'扫描或拍照原件',review:'签署凭证待核'
     }},

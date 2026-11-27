@@ -81,7 +81,7 @@ const WarrantyRegisterEvidence = (() => {
           part.closed || part.signer || t.refs.warranty_closed_on || t.refs.warranty_closed_by) return false;
       const reported=PhaseEvidence.dateOn(part.reported.fact), confirmedDay=PhaseEvidence.dateOn(confirmed.fact);
       if (!reported || !confirmedDay || d.reported_on!==reported || t.reported_on!==reported ||
-          d.confirmed_on!==confirmedDay || check.confirmed_on!==confirmedDay || reported>=confirmedDay ||
+          d.confirmed_on!==confirmedDay || WarrantyTimeline.statedDate(check)!==confirmedDay || reported>=confirmedDay ||
           !check.at_submission?.as_of || confirmedDay>check.at_submission.as_of) return false;
       for (const name of ['contract_id','buyer','seller','subject']) {
         const identities=[contract,release,sheet].map(p=>sheetField(f,p,name,unique(p.refs?.[name])));

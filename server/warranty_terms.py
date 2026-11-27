@@ -14,6 +14,7 @@ from delivery_batches import one, ordinal, raw_body
 from performance_versions import WARRANTY_FORMAT, WARRANTY_FORMATS
 from reinspection import LINK_KEYS, linked
 import warranty_service
+import warranty_execution
 import warranty_register
 
 
@@ -266,6 +267,10 @@ def assess(graph,contract,releases,receipts,accepted,accepted_on,stage_refs):
     if conditions and not needs_clear:
         finding("missing","需核对合同所列质保金释放前提及履行证据。")
     release=releases[0] if len(releases)==1 else None
+    filed=warranty_execution.certificate(graph,contract,releases)
+    if filed:
+        refs.extend(filed["evidence"])
+        finding("risk" if filed["state"]=="mismatch" else "missing", warranty_execution.DETAIL[filed["state"]])
     pairs=[]
     if release:
         for key in LINK_KEYS:
@@ -289,9 +294,14 @@ def assess(graph,contract,releases,receipts,accepted,accepted_on,stage_refs):
                 signature.get("source_check") and signed_name(signer["source_line"]["text"])):
             confirmed=day(cert[1])
         confirmations=[s for s in lines if s["kind"]=="warranty_release"]
+        if filed:
+            line=(confirmation or {}).get("source_line") or {}
+            confirmed=day(cert[1]) if (filed["linked"] and cert and len(confirmations)==1 and confirmations[0]["line"]
+                and line.get("rects") and line["number"]==confirmations[0]["line"] and
+                line["text"]==confirmation["quote"]==confirmations[0]["quote"]) else None
         if not confirmed or len(confirmations)!=1 or confirmation["id"] not in confirmations[0]["facts"]:
             confirmed=None
-            finding("missing","期满确认日期或确认单签字栏仍缺少可定位的原件和核图记录。")
+            finding("missing","期满日期尚待定位到同一业务的确认单原行。" if filed else "期满确认日期或确认单签字栏仍缺少可定位的原件和核图记录。")
         defects=[s for s in lines if s["kind"]=="warranty_defects"]
         defect=one(release,"warranty_defects")
         qualified=bool(defect and len(defects)==1 and defect["id"] in defects[0]["facts"])
@@ -318,7 +328,7 @@ def assess(graph,contract,releases,receipts,accepted,accepted_on,stage_refs):
         cutoff=day(graph.get("warranty_as_of") or "")
         future=[]
         if cutoff:
-            for field,label,when in (("accepted_on","终验或复验",start),("calendar_end","合同推算末日",end),("confirmed_on","期满确认",confirmed)):
+            for field,label,when in (("accepted_on","终验或复验",start),("calendar_end","合同推算末日",end),("stated_on" if filed else "confirmed_on","期满确认",confirmed)):
                 if when and when>cutoff:
                     future.append(field)
                     if field=="calendar_end":
@@ -335,7 +345,9 @@ def assess(graph,contract,releases,receipts,accepted,accepted_on,stage_refs):
     if ledger.get("format") in TICKET_FORMATS:
         iso=lambda d:d.isoformat() if d else None
         covered_end=end if term and term["unadjusted"] else None
-        tickets=warranty_service.assess(graph,contract,iso(start),iso(covered_end),iso(confirmed),iso(cutoff),needs_clear)
+        comparable = not filed or filed["state"] in ("typeset","word_text","current")
+        tickets=warranty_service.assess(graph,contract,iso(start),iso(covered_end),iso(confirmed) if comparable else None,iso(cutoff),
+                                        needs_clear,written_confirmation=bool(filed))
         if tickets:
             snapshot["tickets"]=tickets
         for record in tickets:
@@ -348,8 +360,10 @@ def assess(graph,contract,releases,receipts,accepted,accepted_on,stage_refs):
         detail=(f"按原条款复算，质保期间最后一日为 {end}，" if end else "按经核图的期满记录，")+f"确认日为 {confirmed}。"
         if needs_clear:
             detail+=" 确认单载明无未关闭缺陷。"
+    if filed:
+        snapshot.update(certificate=filed,stated_on=confirmed.isoformat() if confirmed else None)
     return {"status":status,"detail":detail,"accepted_on":start.isoformat() if start else None,
-            "calendar_end":end.isoformat() if end else None,"confirmed_on":confirmed.isoformat() if confirmed else None,
+            "calendar_end":end.isoformat() if end else None,"confirmed_on":confirmed.isoformat() if confirmed and not filed else None,
             "period":term,"requires_defect_clearance":needs_clear,"defect_open":defect_open,"term_ref":term_fact["id"] if term_fact else None,
             "condition_ref":condition["id"] if condition else None,"confirmation_ref":confirmation["id"] if confirmation else None,
             "defect_ref":defect["id"] if defect else None,"identity_conflicts":pairs,"problems":problems,**snapshot,

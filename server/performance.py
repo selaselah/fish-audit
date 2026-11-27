@@ -31,6 +31,7 @@ import inspection_coverage
 import contract_folios
 import prior_installment
 import warranty_terms
+import warranty_execution
 import warranty_service
 import warranty_register
 import payment_windows
@@ -1127,6 +1128,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         check = result("H04",status,detail,refs,scope,stage)
         if kind=="warranty" and release_check:
             check["warranty_check"]=release_check
+            warranty_execution.attach(check,release_check)
         if version in PAYMENT_WINDOW_FORMATS:
             window=payment_windows.stage_window(graph,contract,rows,idx-1,[*receipts,*retests],signed,accepted,accepted_on,check,
                                                 separate_opinions=opinion_lines)
@@ -1222,6 +1224,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         payment = result("H05",status,detail,refs,scope,check["stage"])
         if row["kind"]=="warranty" and release_check:
             payment["warranty_check"]=release_check
+            warranty_execution.attach(payment,release_check,paid=paid.isoformat())
             timing.extend(warranty_service.payment_checks(release_check.get("tickets",[]),bank,paid.isoformat()))
             snapshot=release_check.get("at_submission")
             if snapshot:

@@ -139,6 +139,10 @@ const PerformanceIndex = (() => {
   }
   function specialist(item) {
     const target=id=>document.getElementById(id);
+    if (item.warranty_check?.certificate && warrantyProofs(item,state.bundle.report).length) {
+      const bundle=state.bundle;
+      return action('核对期满确认单',()=>{if (state.bundle===bundle) WarrantyTimeline.reveal(target('case-panel'),item,bundle.report);},'text-button');
+    }
     if (item.payment_opinion?.release?.signature_records?.length &&
         releaseProofs(item,state.bundle.report).length===(item.payment_opinion.release.instruments?.length || 1)) {
       const bundle=state.bundle;
@@ -161,6 +165,7 @@ const PerformanceIndex = (() => {
     return selected?evidenceJump(selected[2],selected[1]):null;
   }
   const pdfSources={
+    warranty:{kinds:['warranty'],field:'acceptance_signer',format:'warranty-certificate-execution-v1',labels:ReleaseCard.states},
     release:{kinds:['payment_release'],field:'approval_signer',format:'payment-release-execution-v1',labels:ReleaseCard.states},
     addendum:{kinds:['contract_addendum'],field:['buyer_signature','seller_signature'],labels:{
       typeset:'仅见排印文字',visual:'签章影像待核',current:'签名覆盖本版',earlier:'签名覆盖较早版',
@@ -403,6 +408,36 @@ const PerformanceIndex = (() => {
           !graph.payment_release_sources.pages.some(p=>p.role==='release' && p.unit===source.record.unit && p.doc===source.doc.id)) return [];
       const fields=graph.facts.filter(f=>f.doc===source.doc.id && (f.unit || f.doc)===source.record.unit && f.field==='approval_signer');
       if (fields.length!==source.record.fields.length || fields.some((f,i)=>source.record.fields[i]!==f.id)) return [];
+      proofs.push(source);
+    }
+    return proofs;
+  }
+  function warrantyProofs(item,report) {
+    const {graph,policy}=report, cert=item.warranty_check?.certificate, format=pdfSources.warranty.format;
+    if (!['H04','H05'].includes(item.rule) || !cert?.records?.length || !Array.isArray(cert.evidence) ||
+        typeof cert.linked!=='boolean' || policy?.warranty_execution!==format ||
+        !['warranty_execution.py','original_records.py','pdf_execution.py','acceptance_comments.py'].every(f=>/^[a-f0-9]{64}$/.test(policy.code_sha256?.[f])) ||
+        ![graph.warranty_original_sources,graph.warranty_pdf_sources].every(l=>l?.format===format && Array.isArray(l.records))) return [];
+    const records=[...graph.warranty_pdf_sources.records,...graph.warranty_original_sources.records].filter(r=>item.scope.includes(r.unit));
+    if (records.length!==cert.records.length || new Set(cert.records).size!==records.length ||
+        records.some((r,i)=>r.id!==cert.records[i]) || (cert.linked ? records.length!==1 || cert.state!==records[0].state : cert.state!=='scope_pending')) return [];
+    const rows=new Map(originals(item,graph).map(r=>[r.fact.id,r]));
+    for (const line of graph.warranty_sources.lines) {
+      if (!line.line || !records.some(r=>r.unit===line.unit && r.doc===line.doc)) continue;
+      for (const id of line.facts) {
+        const row=rows.get(id), f=row?.fact, loc=f?.source_line;
+        if (f?.status==='visual' && f.page===line.page && f.doc===line.doc && loc?.number===line.line &&
+            loc.rects?.length && loc.text===line.quote && f.quote===line.quote) rows.set(id,{...row,line:line.line});
+      }
+    }
+    const cited=issuedReferences(item,graph), proofs=[];
+    for (const record of records) {
+      const source=record.id.startsWith('warranty-pdf/')?unitPdfOriginal(graph,record.id,'warranty'):
+        MandateOriginals.bind(graph,unitSource(graph,record.id,'warranty_original',['warranty'],'acceptance_signer'),rows,'warranty');
+      if (!issuedSource(source,cited,report.calls?.pages) || ![record.id,...source.refs].every(ref=>cert.evidence.includes(ref)) ||
+          !graph.warranty_sources.pages.some(p=>p.unit===record.unit && p.doc===record.doc)) return [];
+      const fields=graph.facts.filter(f=>f.doc===record.doc && (f.unit || f.doc)===record.unit && f.field==='acceptance_signer');
+      if (fields.length!==record.fields.length || fields.some((f,i)=>f.id!==record.fields[i])) return [];
       proofs.push(source);
     }
     return proofs;
@@ -837,5 +872,5 @@ const PerformanceIndex = (() => {
     summary.append(dialog);
     return summary;
   }
-  return {includes,groups,count,originals,fieldLinks,issuedLimitBreach,receiptCitation,receiptEvidence,nativeReceiptCitation,mandateCitation,mandateEvidence,addendumEvidence,releaseProofs,overview};
+  return {includes,groups,count,originals,fieldLinks,issuedLimitBreach,receiptCitation,receiptEvidence,nativeReceiptCitation,mandateCitation,mandateEvidence,addendumEvidence,releaseProofs,warrantyProofs,overview};
 })();

@@ -86,11 +86,4 @@ def verify(report, read_original, read_text, *, signing=False):
         raise ValueError("付款放行单原件、签署版本、批注或凭证关系不符")
     if signing:
         cited = {ref for r in checks for ref in r.get("signature_records", ())}
-        records = [r for r in expected[NATIVE]["records"] if r["id"] in cited]
-        pages = {n["id"]: n for n in graph["nodes"] if n["type"] == "page"}
-        for r in expected[PDF]["records"]:
-            if r["id"] in cited:
-                records.append({**r, "pages": [{**p, "layer": pages[p["ref"]]["layer"],
-                                "text_only": pages[p["ref"]].get("clause_text_only") is True} for p in r["pages"]]})
-        if records:
-            original_records.verify_rendered(graph, records, read_original, FAMILY.label)
+        original_records.verify_filed(graph, expected[PDF], expected[NATIVE], cited, read_original, FAMILY.label)

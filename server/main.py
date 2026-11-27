@@ -289,7 +289,7 @@ def create_app(store, worker):
             args["finding"] = ref
         if "view" in request.args:
             view = request.args["view"]
-            if view not in ("replay", "execution", "warranty-register", "addendum-signing", "reinspection", "inspection", "entities", "trial", "contract-pages", "signatures", "calendar", "suppliers", "acceptance-comments", "contract-comments", "payment-acceptance", "signer-timing", "payment-proof", "payment-release", "contract-checks", "acceptance-checks", "payment-checks") or set(args)!={"rev"}:
+            if view not in ("replay", "execution", "warranty-register", "warranty-certificate", "addendum-signing", "reinspection", "inspection", "entities", "trial", "contract-pages", "signatures", "calendar", "suppliers", "acceptance-comments", "contract-comments", "payment-acceptance", "signer-timing", "payment-proof", "payment-release", "contract-checks", "acceptance-checks", "payment-checks") or set(args)!={"rev"}:
                 raise CaseError("请选择有效的底稿视图及版本。",400)
             args["view"] = view
         if args.get("view") == "addendum-signing" and any(len(request.args.getlist(k)) != 1 for k in ("rev","view")):
@@ -320,11 +320,13 @@ def create_app(store, worker):
             args["ticket"] = tickets[0]
         if "stage" in request.args:
             stages = request.args.getlist("stage")
-            if args.get("view") not in ("payment-checks","payment-release") or len(stages) != 1 or not re.fullmatch(r"H0[45]-[1-9][0-9]{0,7}", stages[0]):
+            if args.get("view") not in ("payment-checks","payment-release","warranty-certificate") or len(stages) != 1 or not re.fullmatch(r"H0[45]-[1-9][0-9]{0,7}", stages[0]):
                 raise CaseError("请选择本版的付款条件或实付时点检查。", 400)
             args["stage"] = stages[0]
         if args.get("view")=="payment-release" and any(len(request.args.getlist(k))!=1 for k in ("rev","view","stage")):
             raise CaseError("请选择固定底稿中的放行单和期次。",400)
+        if args.get("view")=="warranty-certificate" and any(len(request.args.getlist(k))!=1 for k in ("rev","view","stage")):
+            raise CaseError("请选择固定底稿中的质保金期次。",400)
         if "instrument" in request.args:
             unit = request.args["instrument"]
             if (args.get("view") != "payment-release" or len(request.args.getlist("instrument")) != 1

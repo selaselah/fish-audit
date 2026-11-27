@@ -131,7 +131,7 @@ const PhaseEvidence = (() => {
     if (phase.warranty_check) {
       const w=phase.warranty_check, fact=unique(phase,'warranty_release');
       point('warranty','质保期满','shield-check',w.status,warranty?null:fact,warranty?()=>select('warranty'):inspect(phase));
-      event('warranty','期满确认',w.confirmed_on,fact,w.status);
+      event('warranty',w.certificate?'单上期满日':'期满确认',WarrantyTimeline.statedDate(w),fact,w.status);
     }
     if (change) {
       const seal=change.effective_on===change.seller_on?change.seller_date_ref:change.buyer_date_ref;

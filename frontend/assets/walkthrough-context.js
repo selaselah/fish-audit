@@ -56,6 +56,8 @@ export function captureContext(owner, element) {
         if (stage && /^H04-[1-9]\d*$/.test(stage)) context.params = {view:'payment-release',stage};
         const instrument=element?.closest('[data-release-set] [data-instrument]');
         if (instrument) context.params={view:'payment-release',stage:instrument.parentElement.dataset.releaseSet,instrument:instrument.dataset.instrument};
+        const certificate=element?.closest('.warranty-certificate')?.closest('[data-phase-finding]')?.dataset.phaseFinding;
+        if (certificate) context.params={view:'warranty-certificate',stage:certificate};
       }
       if (owner?.id === 'page-dialog') {
         const page = document.querySelector('#page-content .page-view');
@@ -75,7 +77,9 @@ export function captureContext(owner, element) {
     fieldLabel?.querySelectorAll('input,select,textarea').forEach(control=>control.remove());
     const item=element.closest('.release-instrument'), file=item?.querySelector('.release-instrument-name')?.textContent;
     const control=element.closest('.release-decision-line') ? '放行决定' : element.closest('.release-compare-field')?.querySelector('small')?.textContent;
-    const sourceLabel = file && control ? file+' · '+control : element.closest('.source-plane,#sample-review canvas') ? '原件页图' :
+    const note=element.closest('[data-warranty-note]');
+    const sourceLabel = note?'期满确认单批注'+(note.querySelector('button')?' · '+note.querySelector('button').textContent:''):
+      file && control ? file+' · '+control : element.closest('.source-plane,#sample-review canvas') ? '原件页图' :
       element.closest('.evidence-row,.sample-records [data-ref]') ? '证据引文' :
       element.closest('.release-entry')?.querySelector('small')?.textContent;
     const text = sourceLabel || element.getAttribute('aria-label') || fieldLabel?.textContent ||

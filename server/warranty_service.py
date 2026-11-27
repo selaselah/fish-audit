@@ -125,7 +125,7 @@ def printed_date(body):
     return parsed.isoformat() if parsed else None
 
 
-def assess(graph,contract,start,end,confirmed,cutoff,needs_clear):
+def assess(graph,contract,start,end,confirmed,cutoff,needs_clear,*,written_confirmation=False):
     from performance import Material
     from warranty_terms import identity
     ledger=graph["warranty_sources"]
@@ -183,6 +183,8 @@ def assess(graph,contract,start,end,confirmed,cutoff,needs_clear):
             decision="late","risk",f"工单所列关闭日 {closing} 晚于期满确认日 {confirmed}，需重新核对期满时的缺陷状态。"
         elif closing==confirmed:
             decision="same_day","missing","工单关闭与期满确认同日，需核实当日先后。"
+        elif written_confirmation:
+            decision="stated_closed","missing","工单列有关闭日期及采购方签认栏，仍需核实实际关闭签批与期满确认单的最终签发记录。"
         else:
             decision="closed","ok","工单载有期满确认前的关闭日期及经核图的采购方具名签认。"
         r["state"],r["status"],r["detail"]=decision
@@ -196,7 +198,7 @@ def payment_checks(tickets,bank,paid):
         detail=r["detail"]
         status=r["status"]
         closed=r["closed_on"]
-        if r["state"] in ("closed","late","same_day") and closed>=paid:
+        if r["state"] in ("closed","late","same_day","stated_closed") and closed>=paid:
             if closed>paid:
                 status,detail="risk",f"回单所列付款日 {paid} 早于工单关闭日 {closed}，需核实付款时的清结依据。"
             else:

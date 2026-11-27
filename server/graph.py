@@ -48,6 +48,7 @@ import acceptance_reservations
 import payment_releases
 import release_execution
 import release_comparison
+import warranty_execution
 import repair_completion
 import reinspection_wait
 from acceptance_authority import CLAUSE as AUTHORITY_CLAUSE, SIGNER as ACCEPTANCE_SIGNATURE, attach as record_signatories, witness_edges
@@ -430,6 +431,11 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     graph["nodes"].extend(nodes)
     graph["edges"].extend(edges)
     graph["warranty_sources"]=warranty_terms.sources(graph,lambda doc,number:texts[doc,number])
+    ledgers = warranty_execution.sources(graph, read_original, lambda doc, number:texts[doc, number])
+    graph.update(ledgers)
+    nodes, edges = warranty_execution.source_graph(ledgers)
+    graph["nodes"].extend(nodes)
+    graph["edges"].extend(edges)
     record_mandate_pages(graph, lambda doc, number: texts[doc, number])
     record_addenda(graph, lambda doc, number: texts[doc, number])
     graph["equipment_model_sources"] = equipment_models.sources(graph,lambda doc,number:texts[doc,number])

@@ -141,6 +141,17 @@ def review_refs(records, ledger):
             yield from note_page_refs(record["doc"], notes[ident])
 
 
+def verify_filed(graph, pdf, native, cited, read_original, label):
+    records = [r for r in native["records"] if r["id"] in cited]
+    pages = {n["id"]:n for n in graph["nodes"] if n["type"] == "page"}
+    for r in pdf["records"]:
+        if r["id"] in cited:
+            records.append({**r, "pages":[{**p, "layer":pages[p["ref"]]["layer"],
+                            "text_only":pages[p["ref"]].get("clause_text_only") is True} for p in r["pages"]]})
+    if records:
+        verify_rendered(graph, records, read_original, label)
+
+
 def verify_rendered(graph, records, read_original, label):
     # Called outside the signoff write transaction. Reproduce each relevant physical original once.
     from documents import prepare
