@@ -100,3 +100,15 @@ def event_lines(graph, bank):
     return {(r["doc"],r["page"],r["line"],r["quote"]):r for p in graph.get("inspection_use_sources",{}).get("bank_clocks",())
             if p["complete"] and p["unit"]==bank for r in p["rows"] if r["field"] in {"debit_time","bank_event"}
             and r["rects"] and printed_clock(column(r["quote"])[1].translate(DISPLAY))[1]}
+
+
+def split_receipt_notes(graph,bank,rows):
+    events=event_lines(graph,bank)
+    citations,timing=[],[]
+    for raw in rows:
+        event=events.get((raw["doc"],raw["page"],raw["line"],raw["quote"]))
+        if raw["kind"]=="note" and not raw["disputed"] and event and set(raw["facts"])<=set(event["facts"]):
+            timing.append({"note":raw["id"],"event":event["id"]})
+        else:
+            citations.append(raw)
+    return citations,timing

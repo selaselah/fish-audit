@@ -13,7 +13,7 @@ from test_installment_approval import paper,sheet
 from test_retest_reference import payments
 
 
-def sample(day="27",signer="顾明远",revisions=None,extra=(),signature="typeset",sheet_fields=None):
+def sample(day="27",signer="顾明远",revisions=None,extra=(),signature="typeset",sheet_fields=None,bank_notes=()):
     fields={"补充协议编号":"BC-122","原合同编号":"YL-121","采购方":"演练甲","供应方":"演练乙","采购标的":"冷藏柜",
             "变更范围":"仅变更第二期验收款签批人，其余条款不变","原签批约定":"第二期验收款须由林知行签批。",
             "变更后签批约定":"第二期验收款须由顾明远签批。","变更适用时点":change.TIMING,"协议生效条款":"本协议自双方盖章之日起生效",
@@ -28,10 +28,39 @@ def sample(day="27",signer="顾明远",revisions=None,extra=(),signature="typese
         return g
     with patch("test_installment_approval.build_graph",build):
         s={"审批日期":"2026-09-27","签批人姓名":signer,"审批签发时间":"09:15（北京时间）",**(sheet_fields or {})}
-        return paper(sheet(**s),agreement,extra=[(1,SINGLE),(6,"实际扣款时间：10:30（北京时间）")])
+        return paper(sheet(**s),agreement,extra=[(1,SINGLE),(6,"实际扣款时间：10:30（北京时间）"),*((6,text) for text in bank_notes)])
 
 
 class ApprovalChangeTests(unittest.TestCase):
+    def test_approver_change_preserves_the_quality_record_shares_and_bank_reference(self):
+        p,read,layout=sample("28")
+        scope=[f for f in p["findings"] if f.get("approval_change_scope")]
+        self.assertEqual([s["rule"] for s in scope],["H02","H03"])
+        self.assertEqual(scope[1]["status"],"ok")
+        for finding in scope:
+            self.assertIn(finding["approval_change_scope"]["scope_ref"],finding["evidence"])
+            self.assertNotIn("quality_change",finding)
+        self.assertFalse(p["graph"]["acceptance_authority_sources"]["clauses"])
+        payment,=payments(p)
+        ref=payment["retest_reference"]
+        self.assertEqual((ref["state"],ref["number"]),("final","FY-02"))
+        self.assertEqual((len(ref["citations"]),len(ref["timing_notes"])),(1,1))
+        self.assertEqual(payment["approval_change"]["status"],"risk")
+        scope[0]["approval_change_scope"]={**scope[0]["approval_change_scope"],"scope_ref":ref["fields"]["citation"]}
+        with self.assertRaisesRegex(ValueError,"协议范围"):use.verify(p,read,read_layout=layout)
+
+    def test_qualified_agreement_and_second_bank_reference_stay_open(self):
+        rider=[("other","特别约定","最终验收标准与第二期付款比例另行确定")]
+        p,_,_=sample(extra=rider);payment,=payments(p)
+        self.assertFalse(any(f.get("approval_change_scope") for f in p["findings"]))
+        check=payment["payment_acceptance"]
+        self.assertEqual((check["number"],len(check["citations"]),len(check["timing_notes"])),("FY-02",1,1))
+        self.assertEqual(check["state"],"scope")
+        p,_,_=sample(extra=rider,bank_notes=["付款依据验收单号：YS-01"])
+        check=payments(p)[0]["payment_acceptance"]
+        self.assertEqual(check["state"],"reference")
+        self.assertGreaterEqual(len(check["citations"]),2)
+
     def test_prospective_change_uses_approval_day_and_keeps_authenticity_open(self):
         for day,signer,state,status,difference in (("26","顾明远","after","missing",False),("28","顾明远","before","risk",True),
                 ("27","顾明远","same_day","missing",False),("26","林知行","after","risk",True),("28","林知行","before","missing",False),

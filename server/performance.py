@@ -812,9 +812,10 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
     amendments = [Material(graph,u) for u in changes]
     other_events = bool(repairs or retests or any(r.fields[k] or k in r.uncertain
                         for r in receipts for k in ("original_acceptance","repair_number","defect_closure")))
-    payment_change = payment_amendments.resolve(graph,contract,amendments,base_decision=signed,unassigned=extra_units) if version==FORMAT else None
+    approval_scope=approval_changes.scope(graph,contract,changes) if version==FORMAT and not extra_units else None
+    payment_change = payment_amendments.resolve(graph,contract,amendments,base_decision=signed,unassigned=extra_units) if version==FORMAT and not approval_scope else None
     scoped_change = payment_change if payment_change and payment_change["scope_clear"] else None
-    if changes and not scoped_change:
+    if changes and not scoped_change and not approval_scope:
         change = resolve_change(graph,contract,amendments,receipts,multiple_events=other_events or len(receipts)!=1,
                                 contract_supported=signed["status"]=="ok",unclassified=extra_units)
         change["evidence"] = list(dict.fromkeys(change["evidence"]+signed["evidence"]))
@@ -1070,6 +1071,14 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
             contract_folios.attach(signed, {**folios, "status": "missing",
                 "detail": "合同原页载有整份协议待确认或草拟的说明，请取得最终签署版本。"})
     output = [signed, accepted, plan]
+    if approval_scope:
+        for finding in (accepted,plan):
+            finding["approval_change_scope"]=approval_scope
+            finding["evidence"]=list(dict.fromkeys([*finding["evidence"],*approval_scope["evidence"]]))
+            finding["scope"]=list(dict.fromkeys([*finding["scope"],approval_scope["unit"]]))
+        if not contract.fields["adjustment"] and "adjustment" not in contract.uncertain:
+            plan["detail"]=plan["detail"].replace("付款条款存在变更或原页覆盖缺口","原合同付款条款尚有未对应到完整原行的读数")
+        plan["detail"]+=" 补充协议的范围栏仅列"+approval_scope["stage"]+"的签批人变更。"
     if not rows:
         output.append(result("H04","missing","缺少可逐期核对的付款约定。",plan["evidence"],plan["scope"]))
         if version == FORMAT and include_unassigned_receipts:
@@ -1352,6 +1361,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("payment_acceptance") != entry.get("payment_acceptance")
                 or saved.get("stage_approvers") != entry.get("stage_approvers")
                 or saved.get("approval_change") != entry.get("approval_change")
+                or saved.get("approval_change_scope") != entry.get("approval_change_scope")
                 or saved.get("signer_timing") != entry.get("signer_timing")
                 or saved.get("execution_basis") != entry.get("execution_basis")
                 or saved.get("inspection_coverage") != entry.get("inspection_coverage")

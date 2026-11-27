@@ -84,7 +84,7 @@ FULL_PAGE_EVIDENCE = (
     "effect_review", "warranty_check", "warranty_difference", "payment_window", "acceptance_reservations", "acceptance_comments",
     "contract_comments", "stage_payments", "invoice_receipt", "payment_change", "payment_opinion",
     "equipment_models", "inspection_coverage", "payment_acceptance", "execution_basis", "contract_folios",
-    "prior_installment", "advance_guarantee", "payment_quality", "retest_reference", "inspection_use", "party_readings","approval_change",
+    "prior_installment", "advance_guarantee", "payment_quality", "retest_reference", "inspection_use", "party_readings","approval_change","approval_change_scope",
 )
 
 

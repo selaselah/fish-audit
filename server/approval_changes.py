@@ -1,19 +1,22 @@
 """Trace a prospective change of installment approvers to the filed agreement and approval."""
 from datetime import date
 from hashlib import sha256
+import re
 
 import approval_clock
 import approval_names
 import installment_approval
 from contract_changes import SEALS, TITLES
 from delegation import is_page_marker
+from delivery_batches import NUM, ordinal
 from payment_acceptance import FIELD, LEVEL, column, number
 from payment_quality import BANK, readings, witness
 from reinspection import LINK_KEYS
 from stage_payments import SUCCESS
 
 
-FORMAT = "cited-inspection-payment-use-v7"
+FIRST_FORMAT = "cited-inspection-payment-use-v7"
+FORMAT = "cited-inspection-payment-use-v8"
 HEADINGS = {"补充协议编号":"number","原合同编号":"base_number","采购方":"buyer","供应方":"seller","采购标的":"subject",
             "变更范围":"scope","原签批约定":"previous","变更后签批约定":"revised","变更适用时点":"timing",
             "协议生效条款":"effect","甲方签章":"buyer_seal","乙方签章":"seller_seal","甲方盖章日期":"buyer_date","乙方盖章日期":"seller_date"}
@@ -56,6 +59,30 @@ def pages(graph,read_text,read_layout):
 def cite(check,rows):
     for r in rows:
         check["evidence"].extend((r["id"],f"{r['doc']}/p{r['page']}",*r["facts"]))
+
+
+def scope(graph,contract,changes):
+    """Both candidate versions preserve the other terms when the sole change expressly says so."""
+    from performance import stage_terms
+
+    ledger=graph.get("inspection_use_sources",{})
+    if ledger.get("format")!=FORMAT or not ledger.get("approver_changes") or len(changes)!=1:
+        return None
+    terms=approval_names.stage_terms(graph,contract.unit)
+    if len(terms)!=1:
+        return None
+    clause,index,kind=terms[0]
+    for fact in contract.fields["payment_stage"]:
+        label,body=column((fact.get("source_line") or {}).get("text",""))
+        match=re.fullmatch("第("+NUM+")期",label)
+        if not match or ordinal(match[1])!=index or stage_terms(body)[1]!=kind:
+            continue
+        stage={"name":label,"clause_ref":fact["id"],"clause":body}
+        check=inspect(graph,{"rule":"H04","stage":stage,"stage_approvers":[clause["id"]]})
+        if check and check["state"]=="terms" and check["documents"]==changes:
+            return {"unit":changes[0],"stage":label,"clause_ref":fact["id"],"scope_ref":check["fields"]["scope"],
+                    "execution":check["execution"],"evidence":list(dict.fromkeys(check["evidence"]))}
+    return None
 
 
 def inspect(graph,finding):

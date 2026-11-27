@@ -87,7 +87,9 @@ def records(graph,findings):
     if not rows or not h02.get("reinspection") or h02.get("batch_acceptance"):
         return
     kinds=graph["documents_by_kind"]
-    if len(kinds.get("contract",()))!=1 or kinds.get("contract_addendum"):
+    scope=h02.get("approval_change_scope",{})
+    if len(kinds.get("contract",()))!=1 or kinds.get("contract_addendum") and (
+            graph.get("inspection_use_sources",{}).get("format")!="cited-inspection-payment-use-v8" or kinds["contract_addendum"]!=[scope.get("unit")]):
         return
     contract=Material(graph,kinds["contract"][0])
     bank_units=set(kinds.get("bank_receipt",()))
@@ -105,14 +107,7 @@ def records(graph,findings):
         unit,=matched
         originals=[r for r in ledger["rows"] if r["unit"]==unit and r["role"]=="bank_receipt"]
         if not originals:continue
-        events=approval_clock.event_lines(graph,unit)
-        citations,timing=[],[]
-        for raw in originals:
-            event=events.get((raw["doc"],raw["page"],raw["line"],raw["quote"]))
-            if raw["kind"]=="note" and not raw["disputed"] and event and set(raw["facts"])<=set(event["facts"]):
-                timing.append({"note":raw["id"],"event":event["id"]})
-            else:
-                citations.append(raw)
+        citations,timing=approval_clock.split_receipt_notes(graph,unit,originals)
         if not citations:continue
         bank=Material(graph,unit)
         fields={"clause":stage["clause_ref"]}

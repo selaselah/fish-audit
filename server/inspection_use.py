@@ -29,6 +29,7 @@ CLOCK_SINCE = (2026, 11, 27, 24)
 NAMES_SINCE = (2026, 11, 28, 1)
 UNNAMED_SINCE = (2026, 11, 28, 2)
 CHANGES_SINCE = (2026, 11, 28, 3)
+SCOPE_SINCE = (2026, 11, 28, 4)
 PURPOSE_HEADINGS = {"用途说明", "付款用途说明", "付款依据说明", "审批说明", "凭证用途", "用途限制"}
 HEADINGS = PURPOSE_HEADINGS | {"付款说明", "付款意见", "验收备注", "复验备注"}
 SHEET = r"本(?:单|报告|复验单|复验报告|验收单|验收报告)"
@@ -60,13 +61,13 @@ def classify(quote):
 def sources(graph, read_text, read_layout, version=FORMAT):
     from graph import LABELS, PRINTED_TITLES
     ledger = {"format":version, "rows":[]}
-    with_names=version in (NAMES_FORMAT,UNNAMED_FORMAT,FORMAT)
+    with_names=version in (NAMES_FORMAT,UNNAMED_FORMAT,approval_changes.FIRST_FORMAT,FORMAT)
     with_time=with_names or version==CLOCK_FORMAT
     if with_names:
         terms=approval_names.pages(graph,read_text,read_layout)
         if terms:
             ledger["approver_terms"]=terms
-    if version==FORMAT and ledger.get("approver_terms"):
+    if version in (approval_changes.FIRST_FORMAT,FORMAT) and ledger.get("approver_terms"):
         changes=approval_changes.pages(graph,read_text,read_layout)
         if changes:ledger["approver_changes"]=changes
     if not any(r["role"]=="bank_receipt" and r["kind"]=="citation" for r in graph.get(GRAPH_KEY,{}).get("rows",())):
@@ -247,7 +248,9 @@ def verify_originals(report, read_original):
     checks = [f["inspection_use"] for f in report["findings"] if f.get("inspection_use")]
     ledger = graph.get(KEY,{"rows":[]})
     requires_approval = any(row["kind"]=="approval" for row in ledger["rows"])
-    if not checks and not requires_approval and not ledger.get("approver_terms"):
+    timing = [pair["event"] for f in report["findings"] for kind in ("retest_reference","payment_acceptance")
+              for pair in f.get(kind,{}).get("timing_notes",())]
+    if not checks and not requires_approval and not ledger.get("approver_terms") and not timing:
         return
     ids = {note["row"] for c in checks for note in c["notes"]}
     ids.update(r for c in checks for r in c.get("approval",{}).get("rows",()))
@@ -258,7 +261,7 @@ def verify_originals(report, read_original):
     for f in report["findings"]:
         if change:=f.get("approval_change"):
             ids.update(ref for ref in change["evidence"] if ref.startswith(("inspection-use/","payment-approval/","payment-clock/","contract-approver/","approval-change/")))
-    ids.update(pair["event"] for f in report["findings"] for pair in f.get("retest_reference",{}).get("timing_notes",()))
+    ids.update(timing)
     rows = [r for r in all_rows(ledger) if r["id"] in ids]
     if {r["id"] for r in rows} != ids:
         raise ValueError("已引用的验收单付款用途原行缺失")
@@ -295,8 +298,16 @@ def guard_legacy_approval(graph, ledger, read_text, layout, policy, findings):
                         yield (use["bank"],use["citation"],approval["request"],ground)
         if set(risks(revised))-set(risks(findings)):
             raise ValueError("旧底稿所附付款审批单的决定、日期、签发时刻或具名签批依据存在新的风险，请重审后签收")
-        if any(f.get("approval_change",{}).get("status")=="risk" for f in revised):
+        def change_risks(items):
+            return {(c["fields"]["revised"],c["approval_fields"]["date"],c["issued_on"],c["last_seal_on"],reason)
+                    for f in items if (c:=f.get("approval_change")) and c["status"]=="risk"
+                    for reason in ("printed_difference","refused","early_debit") if c.get(reason)}
+        if change_risks(revised)-change_risks(findings):
             raise ValueError("旧底稿尚未核对签批人变更与实际付款所附审批的在先依据，请重审后签收")
+        if ledger.get("format")==approval_changes.FIRST_FORMAT and any(f.get("approval_change_scope") for f in revised):
+            if any(f.get("payment_acceptance",{}).get("state")=="reference" for f in findings) and any(
+                    f.get("retest_reference",{}).get("state")=="final" for f in revised):
+                raise ValueError("旧版将扣款时刻列入验收单号候选，现已定位回单所引复验原件，请重审后签收")
         if ledger.get("format")==NAMES_FORMAT:
             for f in findings:
                 names=f.get("inspection_use",{}).get("approval",{}).get("names",{})
@@ -331,7 +342,7 @@ def verify(report, read_text, *, read_layout=None, signing=False):
             if any(c["status"]=="risk" or f["status"]=="ok" and c["status"]=="missing" for f,c in checks(current,fs)):
                 raise ValueError("旧底稿所引验收单另有付款用途限制，请重审后签收")
         return
-    version=next((fmt for since,fmt in ((CHANGES_SINCE,FORMAT),(UNNAMED_SINCE,UNNAMED_FORMAT),(NAMES_SINCE,NAMES_FORMAT),(CLOCK_SINCE,CLOCK_FORMAT),
+    version=next((fmt for since,fmt in ((SCOPE_SINCE,FORMAT),(CHANGES_SINCE,approval_changes.FIRST_FORMAT),(UNNAMED_SINCE,UNNAMED_FORMAT),(NAMES_SINCE,NAMES_FORMAT),(CLOCK_SINCE,CLOCK_FORMAT),
                  (APPROVAL_SINCE,APPROVAL_FORMAT),(CROSS_DOCUMENT_SINCE,CROSS_FORMAT)) if revision>=since),FIRST_FORMAT)
     ledger=sources(g,read_text,layout,version)
     if (p.get("inspection_use")!=version or "code_sha256" in p and "inspection_use.py" not in p["code_sha256"] or
@@ -349,6 +360,14 @@ def verify(report, read_text, *, read_layout=None, signing=False):
         if f.get("approval_change")!=change or change and (LEVEL[f["status"]]<LEVEL[change["status"]]
                 or not set(change["evidence"])<=set(f["evidence"]) or not set(change["documents"])<=set(f["scope"])):
             raise ValueError("本期签批变更、审批日期或两张名单与原行不符")
+        if scope:=f.get("approval_change_scope"):
+            terms=[s["approval_change"] for s in fs if s["rule"]=="H04" and s.get("approval_change",{}).get("state")=="terms"
+                   and s["stage"]["clause_ref"]==scope.get("clause_ref") and s["stage"]["name"]==scope.get("stage")]
+            if (version!=FORMAT or f["rule"] not in ("H02","H03") or len(terms)!=1 or terms[0]["fields"]["scope"]!=scope.get("scope_ref")
+                    or terms[0]["execution"]!=scope.get("execution") or terms[0]["documents"]!=[scope.get("unit")]
+                    or scope["unit"] not in f["scope"] or terms[0]["evidence"]!=scope.get("evidence")
+                    or not set(scope["evidence"])<=set(f["evidence"])):
+                raise ValueError("履约或分期检查所据补充协议范围与合同原行不符")
     if "calls" in report:
         supported = {(e["from"], e["to"]) for e in g["edges"] if e["type"] == "supports_result" and e["evidence"] == [e["from"]]}
         if any((ref, "finding/" + fid) not in supported for fid,c in expected.items() for ref in c["evidence"]):

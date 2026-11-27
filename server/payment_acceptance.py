@@ -142,6 +142,8 @@ def apply(graph,findings):
     from stage_payments import printed
     from performance import Material
     from reinspection import LINK_KEYS
+    from approval_clock import split_receipt_notes
+    from approval_changes import FORMAT as CHANGE_SCOPE_FORMAT
 
     bank_units = {p["unit"] for p in pages if p["role"]=="bank_receipt"}
     contracts = graph["documents_by_kind"].get("contract",[])
@@ -188,6 +190,9 @@ def apply(graph,findings):
         unit = next(iter(units))
         bank = Material(graph,unit)
         selected = originals(unit)
+        timing = []
+        if graph.get("inspection_use_sources",{}).get("format")==CHANGE_SCOPE_FORMAT:
+            selected,timing=split_receipt_notes(graph,unit,selected)
         stage = payment.get("stage",{})
         index = stage.get("batch_index")
         allocations = [b for b in batch.get("batches",[]) if b["index"]==index]
@@ -207,6 +212,7 @@ def apply(graph,findings):
         for r in ledger["rows"]:
             if r["role"]=="acceptance" or r["unit"]==unit:
                 evidence.extend([r["id"],*r["facts"]])
+        evidence.extend(pair["event"] for pair in timing)
         for r in register:
             evidence.extend(r["identity_refs"])
             if r["scope_ref"]:
@@ -235,6 +241,8 @@ def apply(graph,findings):
             "designation_ref":(designation or {}).get("id"),
             "citations":[r["id"] for r in selected],"number":raw or None,"register":register,
             "expected":[r["unit"] for r in own],"cited":[r["unit"] for r in matches],"evidence":list(dict.fromkeys(evidence))}
+        if timing:
+            payment["payment_acceptance"]["timing_notes"]=timing
         if status!="ok" and payment["status"]=="ok":
             payment["detail"]=detail
         else:

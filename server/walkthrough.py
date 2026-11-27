@@ -158,7 +158,7 @@ def save_note(store, workspace, author, role, data):
             if not use_pin and (change_pin or raw and raw not in cited):
                 permitted=db.execute("""SELECT json_extract(f.value,'$.approval_change.evidence') FROM reports,json_each(content,'$.findings') f
                     WHERE case_id=? AND rev=? AND json_type(f.value,'$.approval_change')='object' AND (? IS NULL OR json_extract(f.value,'$.id')=?)
-                    AND json_extract(content,'$.policy.inspection_use')='cited-inspection-payment-use-v7'""",
+                    AND json_extract(content,'$.policy.inspection_use') IN ('cited-inspection-payment-use-v7','cited-inspection-payment-use-v8')""",
                     (context["case_id"],context["rev"],change_pin[1] if change_pin else None,change_pin[1] if change_pin else None)).fetchall()
                 change_refs={ref for item in permitted for ref in json.loads(item[0])}
                 if change_pin and (not permitted or raw and raw not in change_refs):
@@ -168,7 +168,7 @@ def save_note(store, workspace, author, role, data):
                 stage=db.execute("""SELECT 1 FROM reports,json_each(content,'$.findings') f,
                     json_each(f.value,'$.evidence') e WHERE case_id=? AND rev=? AND e.value=?
                     AND json_extract(f.value,'$.rule') IN ('H03','H04','H05')
-                    AND json_extract(content,'$.policy.inspection_use') IN ('cited-inspection-payment-use-v5','cited-inspection-payment-use-v6','cited-inspection-payment-use-v7')""",
+                    AND json_extract(content,'$.policy.inspection_use') IN ('cited-inspection-payment-use-v5','cited-inspection-payment-use-v6','cited-inspection-payment-use-v7','cited-inspection-payment-use-v8')""",
                     (context["case_id"],context["rev"],raw)).fetchone()
                 if stage:
                     cited.add(raw)
