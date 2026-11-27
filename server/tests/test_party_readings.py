@@ -39,7 +39,9 @@ def example(corrected=True, *, extra="", heading="验收报告"):
     graph={"documents":[file],"facts":facts,"nodes":[{"id":pid,"type":"page","sha256":image,"text_sha256":sha256(text.encode()).hexdigest()}],
            "edges":edges,"gaps":[],"documents_by_kind":{"acceptance":[doc]},
            "payment_window_sources":{"pages":[{"doc":doc,"page":1,"unit":doc,"document_kind":"acceptance","native":True,"text_only":True}]}}
-    call={"doc":doc,"page":1,"page_sha256":image,"response_id":"model","check":{"response_id":"reader"},"output":{"facts":[candidate]}}
+    reread={"response_id":"reader","input":[{"index":"1","field":"供应方","quote":old,"value":name}],
+            "output":{"checks":[{"index":"1","support":"clear"}]}}
+    call={"doc":doc,"page":1,"page_sha256":image,"response_id":"model","check":reread,"output":{"facts":[candidate]}}
     finding={"id":"H02-3","rule":"H02","scope":[doc],"evidence":[added],"status":"missing"}
     report={"case_id":cid,"graph":graph,"findings":[finding],"calls":{"pages":[call]},"policy":{"version":"2026.11.27.22"}}
     return report,lambda d,n:text,lambda d,n:{"lines":{"2":region["rects"]}}
@@ -68,6 +70,7 @@ class PartyReadingsTests(unittest.TestCase):
 
         for corrected,date,state in ((False,"2026-09-28",None),(True,"2026-09-28","later"),(True,"2026-09-27","same_day")):
             with self.subTest(corrected=corrected,date=date):
+                calls=[]
                 def build(docs,pages,decisions):
                     example_report,_,_=example(corrected)
                     extra=example_report["graph"]["facts"]
@@ -78,6 +81,12 @@ class PartyReadingsTests(unittest.TestCase):
                     docs[1].update(ext=".pdf",pages=1,sha256="2"*64)
                     source["sha256"]="3"*64
                     fact["quote"]="供 方 ："+fact["value"]
+                    index=model_id.rsplit("/f",1)[1]
+                    extraction=source["extraction"]
+                    extraction.update(response_id="first",check={"response_id":"second",
+                        "input":[{"index":index,"field":"供应方","quote":fact["quote"],"value":fact["value"]}],
+                        "output":{"checks":[{"index":index,"support":"clear"}]}})
+                    calls.append({**extraction,"doc":"d02","page":1,"page_sha256":source["sha256"]})
                     edits=[]
                     for entry in extra:
                         if not entry.get("amendment"):continue
@@ -88,6 +97,7 @@ class PartyReadingsTests(unittest.TestCase):
                     return build_graph(docs,pages,decisions,edits)
                 with patch("test_installment_approval.build_graph",build):
                     p,read,layout=paper(sheet(审批日期=date))
+                p["calls"]={"pages":calls}
                 g=p["graph"]
                 f,=[f for f in p["findings"] if f["rule"]=="H05"]
                 self.assertEqual(f.get("inspection_use",{}).get("approval",{}).get("state"),state)
@@ -142,6 +152,21 @@ class PartyReadingsTests(unittest.TestCase):
                 if mode=="different_case":extra["amendment"]["source_check"]["case_id"]="9"*32
                 if mode=="disputed":model["status"]="disputed"
                 self.assertEqual(parties.sources(g,read,layout),[])
+
+    def test_without_a_separate_reread_of_this_exact_candidate_the_pair_is_withheld(self):
+        for mode in ("disabled","same_call","wrong_index","other_quote","other_role","no_vote","two_votes"):
+            with self.subTest(mode=mode):
+                p,read,layout=example()
+                call,=p["calls"]["pages"]
+                check=call["check"]
+                if mode=="disabled":call.pop("check")
+                if mode=="same_call":check["response_id"]=call["response_id"]
+                if mode=="wrong_index":check["input"][0]["index"]="2"
+                if mode=="other_quote":check["input"][0]["quote"]="供货方：云桥演练中心"
+                if mode=="other_role":check["input"][0]["field"]="采购方"
+                if mode=="no_vote":check["output"]["checks"]=[]
+                if mode=="two_votes":check["output"]["checks"]*=2
+                self.assertEqual(parties.sources(p["graph"],read,layout,calls={("d02",1):call}),[])
 
     def test_archive_rejects_mismatched_reading_geometry_links_case_and_method(self):
         base,read,layout=example();issue(base,read,layout)

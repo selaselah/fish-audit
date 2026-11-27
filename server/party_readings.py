@@ -70,7 +70,26 @@ def record(model, added, names, doc, page, rows, role_labels):
             "original_sha256":doc["sha256"], "page_sha256":page["sha256"]}
 
 
-def sources(graph, read_text, read_layout=None):
+def matches_model_reads(model, row, call):
+    if not call or not call.get("response_id") or call["response_id"]!=model.get("response_id"):
+        return False
+    check = call.get("check") or {}
+    index = model["id"].rsplit("/f",1)[1]
+    facts = call["output"]["facts"]
+    offset = int(index)-1
+    if not 0<=offset<len(facts):
+        return False
+    candidate = facts[offset]
+    expected = {"index":index,"field":model["label"],"quote":row["model_quote"],"value":row["value"]}
+    inputs = [item for item in check.get("input",()) if item.get("index")==index]
+    votes = [item.get("support") for item in check.get("output",{}).get("checks",()) if item.get("index")==index]
+    return (candidate.get("field")==row["field"] and candidate.get("quote")==expected["quote"] and candidate.get("value")==expected["value"]
+            and check.get("response_id")==model.get("check_response_id") and bool(model.get("check_response_id"))
+            and call["response_id"]!=check["response_id"] and inputs==[expected] and len(votes)==1
+            and votes[0] in {"clear","conflict","unreadable"})
+
+
+def sources(graph, read_text, read_layout=None, *, calls=None):
     from graph import LABELS, PRINTED_TITLES, entity_id
 
     pages = graph.get("payment_window_sources",{}).get("pages",[])
@@ -109,6 +128,8 @@ def sources(graph, read_text, read_layout=None):
             if headings!=[place["document_kind"]] or PRINTED_TITLES.get(first)!=place["document_kind"]:
                 continue
             pair = record(model,added,names,doc,page,lines,LABELS[role])
+            if pair and calls is not None and not matches_model_reads(model,pair,calls.get((unit,1))):
+                continue
             if pair:
                 target = entity_id("party",pair["value"])
                 for fact in facts:
@@ -171,24 +192,18 @@ def verify(report, read_text, *, read_layout=None, signing=False):
         if signing:
             guard_legacy(report,read_text,read_layout)
         return
-    rows = sources(g,read_text,read_layout)
+    calls = {(c["doc"],c["page"]):c for c in report.get("calls",{}).get("pages",())}
+    rows = sources(g,read_text,read_layout,calls=calls)
     ledger = {"format":FORMAT,"rows":rows} if rows else None
     if (g.get(KEY)!=ledger or p.get("party_readings")!=(FORMAT if rows else None) or (nodes,edges)!=source_graph(rows)):
         raise ValueError("主体核字的原件、字段或同一原行的图关系不符")
     if not rows and not claims:
         return
-    calls = {(c["doc"],c["page"]):c for c in report["calls"]["pages"]}
     facts = {f["id"]:f for f in g["facts"]}
     for row in rows:
-        model, added = facts[row["model_ref"]],facts[row["added_ref"]]
+        added = facts[row["added_ref"]]
         call = calls[row["doc"],1]
-        entries = call["output"]["facts"]
-        index = int(model["id"].rsplit("/f",1)[1])-1
-        candidate = entries[index] if 0<=index<len(entries) else {}
-        if (not call.get("response_id") or call["response_id"]!=model["response_id"] or call["page_sha256"]!=row["page_sha256"]
-                or not call.get("check",{}).get("response_id") or call["check"]["response_id"]!=model.get("check_response_id")
-                or candidate.get("field")!=row["field"] or candidate.get("quote")!=row["model_quote"] or candidate.get("value")!=row["value"]
-                or added["amendment"]["source_check"]["case_id"]!=report["case_id"]):
+        if call["page_sha256"]!=row["page_sha256"] or added["amendment"]["source_check"]["case_id"]!=report["case_id"]:
             raise ValueError("主体核字与原模型读数、独立复读或本案核图记录不符")
     support = {(e["from"],e["to"]) for e in g["edges"] if e["type"]=="supports_result" and e["evidence"]==[e["from"]]}
     for f in fs:
@@ -207,7 +222,8 @@ def guard_legacy(report, read_text, read_layout):
     g,p = report["graph"],report["policy"]
     if p.get("performance_checks")!=PERFORMANCE_FORMAT or not any(f.get("amendment") and f["field"] in ROLES for f in g["facts"]):
         return
-    rows = sources(g,read_text,read_layout)
+    calls = {(c["doc"],c["page"]):c for c in report.get("calls",{}).get("pages",())}
+    rows = sources(g,read_text,read_layout,calls=calls)
     if not any(r["state"]=="same_line" for r in rows):
         return
     current = {**g,KEY:{"format":FORMAT,"rows":rows}}

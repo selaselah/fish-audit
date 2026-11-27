@@ -395,7 +395,8 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     graph["edges"].extend(edges)
     graph["payment_window_sources"]=payment_windows.sources(graph,lambda doc,number:texts[doc,number])
     layouts = {(p["doc"], p["number"]):p.get("layer") or {} for p in pages}
-    pairs = party_readings.sources(graph,lambda d,n:texts[d,n],lambda d,n:layouts[d,n])
+    calls = {(p["doc"],p["number"]):p["extraction"] for p in pages}
+    pairs = party_readings.sources(graph,lambda d,n:texts[d,n],lambda d,n:layouts[d,n],calls=calls)
     if pairs:
         graph[party_readings.KEY] = {"format":party_readings.FORMAT,"rows":pairs}
         nodes,edges = party_readings.source_graph(pairs)
