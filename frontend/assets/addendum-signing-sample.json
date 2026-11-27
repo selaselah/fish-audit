@@ -1,0 +1,272 @@
+{
+  "rule_version": "2026.11.27.08",
+  "editions": [
+    {
+      "key": "typeset",
+      "case_id": "7e3e44b82d394ed4a9324a0d3be0f8b7",
+      "rev": 16,
+      "report_sha256": "1478033ccc20027f2b4c05824fa774a32a78fadd0556b5c25eac6e39a8e66b5d",
+      "finding": "H02-3",
+      "state": "typeset",
+      "size": 57834,
+      "record_id": "addendum-pdf/d05",
+      "signatures": [],
+      "doc": {
+        "id": "d05",
+        "title": "采购合同补充协议",
+        "version": "合成案例 · R16",
+        "page": 1,
+        "pdf": "/showcase/batch-version-addendum.pdf",
+        "image": "/assets/batch-version-addendum.jpg",
+        "source_sha256": "5a525725b8beab76b16352b99172d90d219cdcbb24dca17c64bef1f3e6cd5151",
+        "page_sha256": "480084dc0719ba3ebcba9a18b79be094d942117b242aafdb4267c03da7837edd",
+        "lines": [
+          {
+            "ref": "d05/p1/f8",
+            "field": "previous_criterion",
+            "label": "原验收标准",
+            "value": "柜温不高于4℃",
+            "quote": "原验收标准：柜温不高于4℃",
+            "line": 9,
+            "rect": [
+              0.08209,
+              0.4137,
+              0.3969,
+              0.43014
+            ],
+            "rects": [
+              [
+                0.08209,
+                0.4137,
+                0.3969,
+                0.43014
+              ]
+            ]
+          },
+          {
+            "ref": "d05/p1/f9",
+            "field": "revised_criterion",
+            "label": "变更后验收标准",
+            "value": "柜温不高于2℃",
+            "quote": "变更后验收标准：柜温不高于2℃",
+            "line": 10,
+            "rect": [
+              0.08145,
+              0.44703,
+              0.44732,
+              0.46347
+            ],
+            "rects": [
+              [
+                0.08145,
+                0.44703,
+                0.44732,
+                0.46347
+              ]
+            ]
+          },
+          {
+            "ref": "d05/p1/f14",
+            "field": "buyer_signature",
+            "label": "甲方签章",
+            "value": "青禾演练采购中心（已盖章）",
+            "quote": "甲方签章：青禾演练采购中心（已盖章）",
+            "line": 15,
+            "rect": [
+              0.08403,
+              0.61324,
+              0.52489,
+              0.63196
+            ],
+            "rects": [
+              [
+                0.08403,
+                0.61324,
+                0.52489,
+                0.63196
+              ]
+            ]
+          },
+          {
+            "ref": "d05/p1/f15",
+            "field": "seller_signature",
+            "label": "乙方签章",
+            "value": "云桥演练设备中心（已盖章）",
+            "quote": "乙方签章：云桥演练设备中心（已盖章）",
+            "line": 16,
+            "rect": [
+              0.08468,
+              0.64658,
+              0.52489,
+              0.6653
+            ],
+            "rects": [
+              [
+                0.08468,
+                0.64658,
+                0.52489,
+                0.6653
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "key": "current",
+      "case_id": "9808cf31ac4e4b7d92f0ce016d0a589f",
+      "rev": 1,
+      "report_sha256": "a27c0ab81752e9cca6d150201d4a709d469ace2229adc4d97aa8fa1c4f294f54",
+      "finding": "H02-3",
+      "state": "current",
+      "size": 63569,
+      "record_id": "addendum-pdf/d05",
+      "signatures": [
+        {
+          "field": "SyntheticApproval",
+          "state": "current",
+          "subfilter": "/adbe.pkcs7.detached",
+          "revision": 2,
+          "ends_at": 63569,
+          "digest": "sha256",
+          "coverage": "ENTIRE_FILE",
+          "certificate_sha256": "05513165a82c7e9075816cfc9faa4988400122205776394e28e438a161b014ab"
+        }
+      ],
+      "doc": {
+        "id": "d05",
+        "title": "采购合同补充协议",
+        "version": "合成案例 · R1",
+        "page": 1,
+        "pdf": "/showcase/addendum-signing-current.pdf",
+        "image": "/assets/batch-version-addendum.jpg",
+        "source_sha256": "021cbbb874d88582fc1ef30b36008af166586e27018f851ae19ddb346e194a0a",
+        "page_sha256": "480084dc0719ba3ebcba9a18b79be094d942117b242aafdb4267c03da7837edd",
+        "lines": [
+          {
+            "ref": "d05/p1/f8",
+            "field": "previous_criterion",
+            "label": "原验收标准",
+            "value": "柜温不高于4℃",
+            "quote": "原验收标准：柜温不高于4℃",
+            "line": 9,
+            "rect": [
+              0.08209,
+              0.4137,
+              0.3969,
+              0.43014
+            ],
+            "rects": [
+              [
+                0.08209,
+                0.4137,
+                0.3969,
+                0.43014
+              ]
+            ]
+          },
+          {
+            "ref": "d05/p1/f9",
+            "field": "revised_criterion",
+            "label": "变更后验收标准",
+            "value": "柜温不高于2℃",
+            "quote": "变更后验收标准：柜温不高于2℃",
+            "line": 10,
+            "rect": [
+              0.08145,
+              0.44703,
+              0.44732,
+              0.46347
+            ],
+            "rects": [
+              [
+                0.08145,
+                0.44703,
+                0.44732,
+                0.46347
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "key": "earlier",
+      "case_id": "f9b120301d58400ba532238637ec511f",
+      "rev": 1,
+      "report_sha256": "ef356e31d956a7039be65f061526aa857c290ca6aea0c897e5ddb8419b5a3e7f",
+      "finding": "H02-3",
+      "state": "earlier",
+      "size": 63918,
+      "record_id": "addendum-pdf/d05",
+      "signatures": [
+        {
+          "field": "SyntheticApproval",
+          "state": "earlier",
+          "subfilter": "/adbe.pkcs7.detached",
+          "revision": 2,
+          "ends_at": 63569,
+          "digest": "sha256",
+          "coverage": "ENTIRE_REVISION",
+          "certificate_sha256": "05513165a82c7e9075816cfc9faa4988400122205776394e28e438a161b014ab"
+        }
+      ],
+      "doc": {
+        "id": "d05",
+        "title": "采购合同补充协议",
+        "version": "合成案例 · R1",
+        "page": 1,
+        "pdf": "/showcase/addendum-signing-earlier.pdf",
+        "image": "/assets/batch-version-addendum.jpg",
+        "source_sha256": "5a580fcfed13d0c11ef5eb460d86904cc6ced70de22446108c75c8bd93c6eabc",
+        "page_sha256": "480084dc0719ba3ebcba9a18b79be094d942117b242aafdb4267c03da7837edd",
+        "lines": [
+          {
+            "ref": "d05/p1/f8",
+            "field": "previous_criterion",
+            "label": "原验收标准",
+            "value": "柜温不高于4℃",
+            "quote": "原验收标准：柜温不高于4℃",
+            "line": 9,
+            "rect": [
+              0.08209,
+              0.4137,
+              0.3969,
+              0.43014
+            ],
+            "rects": [
+              [
+                0.08209,
+                0.4137,
+                0.3969,
+                0.43014
+              ]
+            ]
+          },
+          {
+            "ref": "d05/p1/f9",
+            "field": "revised_criterion",
+            "label": "变更后验收标准",
+            "value": "柜温不高于2℃",
+            "quote": "变更后验收标准：柜温不高于2℃",
+            "line": 10,
+            "rect": [
+              0.08145,
+              0.44703,
+              0.44732,
+              0.46347
+            ],
+            "rects": [
+              [
+                0.08145,
+                0.44703,
+                0.44732,
+                0.46347
+              ]
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

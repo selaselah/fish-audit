@@ -93,9 +93,9 @@ const PdfSignatureCard = (() => {
         const content=node('div','','pdf-original-lines');
         if (rows.length) {
           for (const row of rows) {
-            const source=row.open ? node('button') : node('a');
-            if (row.open) {source.type='button';source.addEventListener('click',row.open);}
-            else {source.href=original+'#page='+row.page;source.target='_blank';source.rel='noopener';}
+            const source=row.control ? row.control() : row.open ? node('button') : node('a');
+            if (!row.control && row.open) {source.type='button';source.addEventListener('click',row.open);}
+            else if (!row.control) {source.href=original+'#page='+row.page;source.target='_blank';source.rel='noopener';}
             const place=row.side+' · 第 '+row.page+' 页'+(row.line?' 第 '+row.line+' 行':'');
             source.setAttribute('aria-label',place+'，'+row.quote);
             const preview=node('span','','pdf-line-quote');

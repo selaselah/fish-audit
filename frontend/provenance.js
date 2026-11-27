@@ -95,14 +95,16 @@ function performanceOverview(findings, graph) {
   const bankReferences=PaymentAcceptance.panel(state.bundle?.report);
   const signerTiming=SignerEvidence.panel(state.bundle?.report);
   const paymentProof=PaymentProof.panel(state.bundle?.report);
+  const supplement=AddendumSigning.panel(state.bundle.report);
   const sections=[
+    {key:'addendum-signing',label:'补充协议',icon:'file-earmark-text',content:supplement},
     {key:'payment-proof',label:'扣款凭证',icon:'receipt',content:paymentProof,priority:Boolean(paymentProof)},
     {key:'signer-timing',label:'签认时序',icon:'clock-history',content:signerTiming,priority:signerTiming?.dataset.state==='before' || signerTiming?.dataset.state==='same_day'},
     {key:'payment-acceptance',label:'回单所据',icon:'receipt',content:bankReferences,priority:bankReferences?.dataset.referenceState==='other_batch'},
     {key:'contract-comments',label:'期款批注',icon:'journal-text',content:contractNotes,priority:contractNotes && contractNotes.dataset.state!=='ok'},
     {key:'acceptance-comments',label:'验收批注',icon:'journal-text',content:comments,priority:comments && comments.dataset.state!=='ok'},
     {key:'suppliers',label:'供货主体',icon:'layers',content:supplier,priority:supplier && supplier.dataset.state!=='ok'},
-    {key:'signatures',label:'签署凭证',icon:'journal-text',content:signatures,priority:!dateQuestion && Boolean(signatures)},
+    {key:'signatures',label:supplement?'主合同签署':'签署凭证',icon:'journal-text',content:signatures,priority:!dateQuestion && Boolean(signatures)},
     {key:'contract-dates',label:'合同日期',icon:'clock-history',content:dates,priority:dateQuestion},
     {key:'contract-pages',label:'分期条款',icon:'layers',content:folios,priority:plan?.status!=='ok'},
     {key:'parties',label:'签章主体',icon:'shield-check',content:parties,priority:effect?.status==='risk'},

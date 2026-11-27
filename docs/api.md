@@ -6,6 +6,8 @@
 
 受影响的 `quality_change.execution` 和 `payment_change.execution` 列出检查节点 ID。`evidence` 保留原件、页和两方签章字段，可通过所选版的支持关系检查由哪份协议引起待核。验收标准和数量变更使用 `state=pending`，付款前提使用 `applies=pending`，已核清的收票变更范围可独立保留。数字签名与已签内容校验不符时，直接依赖该协议的检查列出风险。仅有文字或图像时保留补证。签收及离线验包从归档原件重做文件签署检查。
 
+底稿入口为 `/workpaper/<case_id>?rev=<rev>&view=addendum-signing`。可附 `agreement=d05` 指定整份资料，或附 `agreement=unit%2Fd02%2Fp3` 指定合册内第 3 页。企业入口在路径前加 `/w/<workspace_id>`。来源必须能从本版检查程序、发现、签署记录及实页回执连回同一份归档原件。有效的单元编号在本版没有凭证时，界面显示缺项。[固定底稿示例](http://127.0.0.1:8000/workpaper/8c2a157237cf4712856f64225466ee2c?rev=10&view=addendum-signing&agreement=d04)
+
 ## Word 与影像委托书
 
 从规则 `2026.11.27.04` 起，`policy.mandate_originals` 和 `graph.mandate_original_sources.format` 为 `mandate-original-execution-v1`。每条 `records[]` 绑定委托单元 `unit`、物理文件 `doc`、原件 SHA-256、相关页 `pages` 和签章观察 `fields`。状态 `word_text` 指打印页仅见排印文字，`word_visual` 指含图形等版面元素，`word_review` 指批注、修订或审阅范围待核，`photo` 指影像原件，`review` 指其他待核情况。

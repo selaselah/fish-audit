@@ -94,15 +94,17 @@ if (!restoreWorkspaceLink()) {
   for (const [i,select] of [contractExample,inspectionExample,paymentExample].entries()) {
     sceneTabs[i].querySelector('small').textContent=select.options.length+' 个场景';
   }
-  const examples={company:{scene:'signing',revision:9},word:{scene:'word-signing',revision:6},calendar:{scene:'contract-dates',revision:6},pdf:{scene:'pdf-signing'}};
+  const examples={company:{scene:'signing',revision:9},word:{scene:'word-signing',revision:6},calendar:{scene:'contract-dates',revision:6},pdf:{scene:'pdf-signing'},addendum:{scene:'addendum-signing'}};
   const inspectionRoutes={readings:'acceptance',standards:'batch-standards',signers:'acceptance-signers',equipment:'inspection',named:'named-inspection',supplier:'suppliers',comments:'word-comments'};
-  const paymentRoutes={comments:'contract-comments',guarantee:'guarantee-period',warranty:'warranty-register',reference:'payment-acceptance',timing:'signer-timing',clock:'signer-clock',proof:'payment-proof',folios:'folios'};
+  const paymentRoutes={comments:'contract-comments',guarantee:'guarantee-period',warranty:'warranty-register',invoice:'addendum-invoice',reference:'payment-acceptance',timing:'signer-timing',clock:'signer-clock',proof:'payment-proof',folios:'folios'};
   function sceneAddress(name) {
     const url=new URL(location.href);
     const scene=name==='inspection'?inspectionRoutes[inspectionExample.value]:name==='folios'?paymentRoutes[paymentExample.value]:name;
     url.searchParams.set('scene',name==='signing' ? examples[contractExample.value].scene : scene);
     if (url.searchParams.get('scene')==='pdf-signing') url.searchParams.set('pdf',PublicPdfSigning.selected());
     else url.searchParams.delete('pdf');
+    if (url.searchParams.get('scene')==='addendum-signing') PublicAddendumSigning.address(url);
+    else url.searchParams.delete('copy');
     if (scene==='batch-standards') PublicBatchStandards.address(url);
     else { url.searchParams.delete('edition'); url.searchParams.delete('batch'); }
     url.hash='workflow';
@@ -125,6 +127,8 @@ if (!restoreWorkspaceLink()) {
     const proof=document.getElementById('payment-execution');
     const period=document.getElementById('payment-guarantee-period');
     const warranty=document.getElementById('payment-warranty-register');
+    const invoice=document.getElementById('payment-addendum-invoice');
+    invoice.hidden=paymentExample.value!=='invoice';
     warranty.hidden=paymentExample.value!=='warranty';
     period.hidden=paymentExample.value!=='guarantee';
     proof.hidden=paymentExample.value!=='proof';
@@ -135,6 +139,7 @@ if (!restoreWorkspaceLink()) {
     slot.hidden=!comments;
     const edition=document.getElementById('payment-version');
     edition.textContent=comments?(slot.dataset.revision?'合成案例 · R'+slot.dataset.revision:'合成合同'):'合成案例 · R10';
+    if (!invoice.hidden && !paymentsScene.hidden) PublicAddendumSigning.openInvoice();
     if (!warranty.hidden) {
       edition.textContent=warranty.dataset.revision?'合成案例 · R'+warranty.dataset.revision:'合成案例';
       if (!paymentsScene.hidden) PublicWarrantyRegister.open();
@@ -167,6 +172,8 @@ if (!restoreWorkspaceLink()) {
     const edition=document.getElementById('signing-example-version');
     if (contractExample.value==='pdf') {
       edition.textContent='合成合同'; PublicPdfSigning.open();
+    } else if (contractExample.value==='addendum') {
+      edition.textContent='合成补充协议'; PublicAddendumSigning.open();
     } else edition.textContent='合成案例 · R'+examples[contractExample.value].revision;
   }
   const requestedExample=Object.keys(examples).find(key=>examples[key].scene===requested);

@@ -661,6 +661,7 @@ function citation(ref,finding) {
     return Team.paperLink(label,prior.case_id,'button ref',new URLSearchParams({rev:String(prior.rev),fact:prior.fact}));
   }
   const source = index?.nodes.get(ref);
+  if (ref.startsWith('addendum-pdf/') && state.bundle) return AddendumSigning.citation(ref,finding);
   if (ref.startsWith('advance-guarantee/')) {
     return AdvanceGuarantee.citation(ref,finding,state.bundle?.report) || el('span','保函引文待核','small');
   }
@@ -1548,7 +1549,7 @@ async function refresh() {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='[data-audit-scope="'+requestedScope.id+'"]';
       } else if (requestedView==='execution' && state.openedCitation!==location.hash && state.bundle) {
         state.openedCitation=location.hash; state.tab='activity'; focusFinding='#execution-trace-page';
-      } else if (requestedView==='warranty-register' && state.openedCitation!==location.hash && state.bundle) {
+      } else if (['warranty-register','addendum-signing'].includes(requestedView) && state.openedCitation!==location.hash && state.bundle) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='#case-panel';
       } else if (route.params.get('view')==='replay' && state.openedCitation!==location.hash && state.bundle) {
         state.openedCitation=location.hash; state.tab='activity'; focusFinding='.rule-replay button';
@@ -1592,7 +1593,9 @@ async function refresh() {
       renderCase(Boolean(focusFinding));
       if (focusFinding) {
         const target = $(focusFinding);
-        if (requestedView==='warranty-register' && target) {
+        if (requestedView==='addendum-signing' && target) {
+          AddendumSigning.locate(target,route.params);
+        } else if (requestedView==='warranty-register' && target) {
           WarrantyRegisterEvidence.locate(target,route.params);
         } else if (target?.dataset.auditScope) {
           target.focus();

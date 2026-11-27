@@ -489,6 +489,17 @@ class EnterpriseFlow(unittest.TestCase):
         source_link = "/w/"+a+"/workpaper/"+emp_case+"?rev=1&fact=d01%2Fp1%2Ff1"
         self.assertEqual(admin.get(source_link).headers["Location"],"/app#w/"+a+"/case/"+emp_case+"?rev=1&fact=d01%2Fp1%2Ff1")
         entity_link = "/w/"+a+"/workpaper/"+emp_case
+        agreement_query = "?rev=1&view=addendum-signing"
+        self.assertEqual(admin.get(entity_link+agreement_query).headers["Location"],"/app#w/"+a+"/case/"+emp_case+agreement_query)
+        self.assertEqual(admin.get(entity_link+"?view=addendum-signing").status_code,400)
+        for unit in ("d05","unit%2Fd02%2Fp3"):
+            query = agreement_query+"&agreement="+unit
+            self.assertEqual(admin.get(entity_link+query).headers["Location"],"/app#w/"+a+"/case/"+emp_case+query)
+        for query in ("?view=addendum-signing&agreement=d05", "?rev=1&view=execution&agreement=d05", agreement_query+"&rev=2",
+                      agreement_query+"&view=addendum-signing",
+                      agreement_query+"&agreement=d05&agreement=d06", agreement_query+"&agreement=unit/d02/p0",
+                      agreement_query+"&rev=2&agreement=d05"):
+            self.assertEqual(admin.get(entity_link+query).status_code,400)
         register_query = "?rev=1&view=warranty-register&ticket=d03"
         self.assertEqual(admin.get(entity_link+register_query).headers["Location"],"/app#w/"+a+"/case/"+emp_case+register_query)
         for query in ("?view=warranty-register&ticket=d01", "?rev=1&view=execution&ticket=d03",

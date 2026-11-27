@@ -1,5 +1,13 @@
 # 合同付款批注与财务复核交互
 
+## 补充协议的签署版本与原文对照
+
+Adobe Acrobat 允许在签名面板中打开签名属性和证书，另有比较已签修订的入口。Docusign 将签署参与者、动作和时间留在交易历史与完成证书中。本项目据此把文件覆盖范围、身份与授权、归档原行做成独立的检查入口。演练里的 349 字节是从两份水印 PDF 长度和签名范围得到的实际差值。[Adobe 签名属性与证书](https://helpx.adobe.com/acrobat/desktop/e-sign-documents/manage-digital-signatures/validate-digital-sign.html) · [Acrobat 比较已签版本](https://helpx.adobe.com/acrobat/desktop/e-sign-documents/manage-digital-signatures/compare-versions.html) · [Docusign 交易记录与完成证书](https://www.docusign.com/trust/security/transaction-data-use)
+
+Adobe Spectrum 的标签控件用横线或竖线指示当前项。首页把同一采购的合同、验收、回单放在同一组选项下，手机使用蓝色底线和选中状态。橙色只用于待核提示，合同数字或文字的变化在原文中标出。[Spectrum Web Components 标签控件](https://opensource.adobe.com/spectrum-web-components/components/tabs/)
+
+民法典第五百四十三、五百四十四条涉及合同变更的协商一致及内容约定不明确的情形。电子签名法第十三、十四条涉及可靠电子签名及其法律效力。项目据此提示核对双方是否同意及电子签署依据。具体条款、日期与付款前提取自提交的合同、补充协议和回单。[最高法公布的《民法典》](https://www.court.gov.cn/zixun/xiangqing/233181.html) · [工信部公布的《电子签名法》](https://shca.miit.gov.cn/xxgk/flfg/gjfl/art/2020/art_6c628dbd51254637b385f3d7f46aa58d.html) · [水印资料与签发底稿](../docs/acceptance.md#补充协议签署柜温标准与验收款收票前提)
+
 ## 付款日与银行保函期间
 
 洛阳市政府采购中心的预付款担保格式将生效与预付款实际支付相联系，将终止与进度付款证书载明扣清预付款相联系。这类文本需要事件凭证。本项目只有在提交的具体合同要求按日期比较、保函也清楚载明日期时，才将首笔实际付款放入该期间核对。[采购文件「附件9 预付款担保」](https://gongyi.zfcg.henan.gov.cn/cmsweb81e27e/luoyang/rootfiles/2025/08/27/f64130d012bc478386fb54fc8efe9332.pdf)

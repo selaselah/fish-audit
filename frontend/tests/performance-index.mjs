@@ -193,9 +193,9 @@ async function caseFinder(ctx,width,count) {
 export async function checkPublicTopics(ctx) {
   const {root,call,evaluate,wait}=ctx;
   const routes=[
-    ['signing',['signing','word-signing','contract-dates','pdf-signing'],'signing-example',['company','word','calendar','pdf']],
+    ['signing',['signing','word-signing','contract-dates','pdf-signing','addendum-signing'],'signing-example',['company','word','calendar','pdf','addendum']],
     ['inspection',['acceptance','batch-standards','acceptance-signers','inspection','named-inspection','suppliers','word-comments'],'inspection-example',['readings','standards','signers','equipment','named','supplier','comments']],
-    ['folios',['guarantee-period','warranty-register','contract-comments','payment-proof','signer-clock','signer-timing','payment-acceptance','folios'],'payment-example',['guarantee','warranty','comments','proof','clock','timing','reference','folios']],
+    ['folios',['guarantee-period','warranty-register','addendum-invoice','contract-comments','payment-proof','signer-clock','signer-timing','payment-acceptance','folios'],'payment-example',['guarantee','warranty','invoice','comments','proof','clock','timing','reference','folios']],
   ];
   await call('Page.navigate',{url:root+'/#workflow'});
   await wait(q('.scene-tabs')+'?.hidden===false','product workflow ready');

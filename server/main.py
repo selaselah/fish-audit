@@ -280,9 +280,17 @@ def create_app(store, worker):
             args["finding"] = ref
         if "view" in request.args:
             view = request.args["view"]
-            if view not in ("replay", "execution", "warranty-register", "reinspection", "inspection", "entities", "trial", "contract-pages", "signatures", "calendar", "suppliers", "acceptance-comments", "contract-comments", "payment-acceptance", "signer-timing", "payment-proof", "contract-checks", "acceptance-checks", "payment-checks") or set(args)!={"rev"}:
+            if view not in ("replay", "execution", "warranty-register", "addendum-signing", "reinspection", "inspection", "entities", "trial", "contract-pages", "signatures", "calendar", "suppliers", "acceptance-comments", "contract-comments", "payment-acceptance", "signer-timing", "payment-proof", "contract-checks", "acceptance-checks", "payment-checks") or set(args)!={"rev"}:
                 raise CaseError("请选择有效的底稿视图及版本。",400)
             args["view"] = view
+        if args.get("view") == "addendum-signing" and any(len(request.args.getlist(k)) != 1 for k in ("rev","view")):
+            raise CaseError("请选择一版底稿的补充协议签署凭证。",400)
+        if "agreement" in request.args:
+            unit = request.args["agreement"]
+            if (args.get("view") != "addendum-signing" or len(request.args.getlist("agreement")) != 1
+                    or not re.fullmatch(r"(?:d[0-9]{2}|unit/d[0-9]{2}/p[1-9][0-9]{0,7})",unit)):
+                raise CaseError("请选择本版补充协议原件或合册页。",400)
+            args["agreement"] = unit
         if "call" in request.args:
             calls = request.args.getlist("call")
             if (args.get("view") != "execution" or any(len(request.args.getlist(k)) != 1 for k in ("rev","view","call"))
@@ -329,6 +337,8 @@ def create_app(store, worker):
                             "guarantee-period-contract.pdf","guarantee-period-guarantee.pdf","guarantee-period-receipt.pdf","guarantee-period-bank.pdf",
                             "warranty-register-contract.pdf","warranty-register-certificate.pdf","warranty-register-open.pdf",
                             "warranty-register-closed.pdf","warranty-register-bank.pdf",
+                            "addendum-signing-current.pdf","addendum-signing-earlier.pdf",
+                            "addendum-invoice-agreement.pdf","addendum-invoice-bank.pdf",
                             "joint-signing-contract.pdf","joint-signing-acceptance.pdf","joint-signing-transfer.pdf",
                             "acceptance-roster-contract.pdf","acceptance-roster-receipt.pdf",
                             "signer-clock-contract.pdf","signer-clock-acceptance.pdf","signer-clock-transfer.pdf","payment-execution-notice.pdf"}:

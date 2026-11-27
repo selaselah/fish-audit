@@ -156,6 +156,9 @@ const PerformanceIndex = (() => {
     return selected?evidenceJump(selected[2],selected[1]):null;
   }
   const pdfSources={
+    addendum:{kinds:['contract_addendum'],field:['buyer_signature','seller_signature'],labels:{
+      typeset:'仅见排印文字',visual:'签章影像待核',current:'签名覆盖本版',earlier:'签名覆盖较早版',
+      mismatch:'签名校验不符',review:'签署凭证待核'}},
     acceptance:{kinds:['acceptance','reinspection'],field:'acceptance_signer',labels:{
       typeset:'仅见排印文字',visual:'签认图像待核',current:'本版有电子签名，身份待核',
       earlier:'签名覆盖较早版',mismatch:'签名校验不符',review:'签署凭证待核'}},
@@ -187,7 +190,8 @@ const PerformanceIndex = (() => {
     if (record.pages.some(p=>index.nodes.get(p.ref)?.type!=='page' || !p.ref.startsWith(doc.id+'/p') ||
         !/^[a-f0-9]{64}$/.test(p.sha256) || index.nodes.get(p.ref).sha256!==p.sha256)) return null;
     const fields=record.fields.map(ref=>index.facts.get(ref));
-    if (fields.some(f=>!f || f.doc!==doc.id || (f.unit || f.doc)!==record.unit || f.field!==field || !Number.isSafeInteger(f.page) ||
+    const allowed=Array.isArray(field)?field:[field];
+    if (fields.some(f=>!f || f.doc!==doc.id || (f.unit || f.doc)!==record.unit || !allowed.includes(f.field) || !Number.isSafeInteger(f.page) ||
         f.source_sha256!==doc.sha256 || !record.pages.some(p=>p.ref===f.doc+'/p'+f.page && p.sha256===f.page_sha256))) return null;
     const first=fields[0], page=first?.page || Number(record.pages[0].ref.split('/p').pop());
     return {record,doc,page,field:first?.id,refs};
@@ -235,6 +239,48 @@ const PerformanceIndex = (() => {
   function issuedSource(proof,cited,calls) {
     return proof && cited.has(proof.record.id) && proof.refs.every(ref=>cited.has(ref)) && Array.isArray(calls) &&
       proof.record.pages.every(p=>calls.some(c=>c.doc===proof.doc.id && proof.doc.id+'/p'+c.page===p.ref && c.page_sha256===p.sha256));
+  }
+  function addendumEvidence(report) {
+    const {graph,policy}=report;
+    if (policy?.addendum_pdf!=='pdf-addendum-execution-v1' || !graph.addendum_pdf_sources?.records?.length ||
+        !/^[a-f0-9]{64}$/.test(policy.code_sha256?.['addendum_execution.py'])) return [];
+    const index=graphIndex(graph);
+    if (index.addendumEvidence) return index.addendumEvidence;
+    const proofs=new Map(), procedures=new Map(), calls=report.calls?.pages || [];
+    for (const edge of graph.edges) {
+      if (edge.type!=='procedure_result') continue;
+      // A second procedure for the same finding makes that binding ambiguous.
+      procedures.set(edge.to,procedures.has(edge.to)?null:edge);
+    }
+    const issued=report.findings.filter(f=>{
+      const control=index.nodes.get('control/'+f.rule), edge=procedures.get('finding/'+f.id);
+      return f.rule.startsWith('H') && control?.type==='control' && control.version===f.version && Array.isArray(f.evidence) &&
+        edge?.from===control.id && edge.evidence?.length===f.evidence.length && edge.evidence.every((ref,i)=>ref===f.evidence[i]);
+    });
+    for (const owner of issued) for (const change of [owner.quality_change,owner.payment_change]) {
+      if (!['H02','H03','H04','H05'].includes(owner.rule) || !Array.isArray(change?.execution) ||
+          new Set(change.execution).size!==change.execution.length || (change.state || change.applies)!=='pending' || change.effective_on!==null) continue;
+      const cited=issuedReferences(owner,graph);
+      for (const id of change.execution) {
+        const proof=unitPdfOriginal(graph,id,'addendum');
+        if (!issuedSource(proof,cited,calls) || !owner.scope?.includes(proof.record.unit) || !change.units?.includes(proof.record.unit) ||
+            ![id,...proof.refs].every(ref=>change.evidence?.includes(ref)) ||
+            !proof.record.pages.every(p=>{
+              const pageCalls=calls.filter(c=>c.doc===proof.doc.id && c.doc+'/p'+c.page===p.ref);
+              return pageCalls.length===1 && pageCalls[0].response_id && pageCalls[0].check?.response_id && issuedPageDocument(graph,pageCalls[0]);
+            })) continue;
+        if (!proofs.has(id)) {
+          const related=issued.filter(f=>f.scope?.includes(proof.record.unit) && issuedSource(proof,issuedReferences(f,graph),calls));
+          proofs.set(id,{...proof,related,bindings:[],lines:[]});
+        }
+        const record=proofs.get(id);
+        const lines=originals(owner,graph).filter(r=>r.line && r.fact.doc===proof.doc.id &&
+          (r.fact.unit || r.fact.doc)===proof.record.unit && change.evidence.includes(r.fact.id));
+        record.bindings.push({owner,change,lines});
+        for (const row of lines) if (!record.lines.some(r=>r.fact.id===row.fact.id)) record.lines.push(row);
+      }
+    }
+    index.addendumEvidence=[...proofs.values()]; return index.addendumEvidence;
   }
   function receiptEvidence(item,report) {
     const {graph,policy}=report;
@@ -524,6 +570,11 @@ const PerformanceIndex = (() => {
       detail.dataset.batch=String(Boolean(batch));
       detail.dataset.guarantee=String(Boolean(guarantee));
       detail.replaceChildren(box('scope-check-state',el('span',item.id,'mono'),tag(item.status)),heading);
+      for (const proof of addendumEvidence(state.bundle.report).filter(p=>p.related.includes(item))) {
+        const control=AddendumSigning.jump(proof);
+        control.addEventListener('click',()=>dialog.close(),{capture:true});
+        detail.append(control);
+      }
       for (const mandate of mandates) detail.append(mandatePanel(mandate));
       let detailText=item.detail || '';
       if (guarantee) detail.append(guarantee);
@@ -625,5 +676,5 @@ const PerformanceIndex = (() => {
     summary.append(dialog);
     return summary;
   }
-  return {includes,groups,count,originals,fieldLinks,issuedLimitBreach,receiptCitation,receiptEvidence,mandateCitation,mandateEvidence,overview};
+  return {includes,groups,count,originals,fieldLinks,issuedLimitBreach,receiptCitation,receiptEvidence,mandateCitation,mandateEvidence,addendumEvidence,overview};
 })();

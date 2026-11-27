@@ -1,0 +1,249 @@
+{
+  "case_id": "8c2a157237cf4712856f64225466ee2c",
+  "rev": 10,
+  "report_sha256": "bace35e61b2a955791e5c6bcbc5f9d2a38570c8730dffb81dab8e02abe633ecb",
+  "rule_version": "2026.11.27.08",
+  "record_id": "addendum-pdf/d04",
+  "size": 61820,
+  "stage": "第二期",
+  "share": "60",
+  "phase": {
+    "id": "H04-6",
+    "status": "missing",
+    "applies": "pending",
+    "effective_on": null
+  },
+  "payment": {
+    "id": "H05-8",
+    "status": "missing",
+    "applies": "pending",
+    "effective_on": null
+  },
+  "buyer_on": "2026-09-16",
+  "seller_on": "2026-09-22",
+  "paid_on": "2026-09-21",
+  "documents": {
+    "agreement": {
+      "id": "d04",
+      "title": "采购合同补充协议",
+      "version": "合成案例 · R10",
+      "page": 1,
+      "pdf": "/showcase/addendum-invoice-agreement.pdf",
+      "image": "/assets/addendum-invoice-agreement.jpg",
+      "source_sha256": "f0c32a466a9a555475febc1133d4e0772b3ca3bd05a51373065a50fa39d80dd6",
+      "page_sha256": "b5bbab80ee346dfb71b823c2ee152b25e9d69ed5954953fa28de1ad88c88b983",
+      "lines": [
+        {
+          "ref": "d04/p1/f8",
+          "field": "previous_payment_stage",
+          "label": "原付款条款",
+          "value": "第二期：最终验收合格后支付60%",
+          "quote": "原付款条款：第二期：最终验收合格后支付60%",
+          "line": 9,
+          "rect": [
+            0.08209,
+            0.45616,
+            0.60827,
+            0.47306
+          ],
+          "rects": [
+            [
+              0.08209,
+              0.45616,
+              0.60827,
+              0.47306
+            ]
+          ]
+        },
+        {
+          "ref": "d04/p1/f9",
+          "field": "revised_payment_stage",
+          "label": "变更后付款条款",
+          "value": "第二期：最终验收合格且买方收到本合同对应的发票后支付60%",
+          "quote": "变更后付款条款：第二期：最终验收合格且买方收到本合同对应的发票后支付60%",
+          "line": 10,
+          "rect": [
+            0.08145,
+            0.49635,
+            0.98643,
+            0.51324
+          ],
+          "rects": [
+            [
+              0.08145,
+              0.49635,
+              0.98643,
+              0.51324
+            ]
+          ]
+        },
+        {
+          "ref": "d04/p1/f13",
+          "field": "buyer_sealed_on",
+          "label": "甲方盖章日期",
+          "value": "2026年9月16日",
+          "quote": "甲方盖章日期：2026年9月16日",
+          "line": 14,
+          "rect": [
+            0.08403,
+            0.65845,
+            0.42534,
+            0.67489
+          ],
+          "rects": [
+            [
+              0.08403,
+              0.65845,
+              0.42534,
+              0.67489
+            ]
+          ]
+        },
+        {
+          "ref": "d04/p1/f15",
+          "field": "seller_sealed_on",
+          "label": "乙方盖章日期",
+          "value": "2026年9月22日",
+          "quote": "乙方盖章日期：2026年9月22日",
+          "line": 16,
+          "rect": [
+            0.08468,
+            0.73927,
+            0.42534,
+            0.75571
+          ],
+          "rects": [
+            [
+              0.08468,
+              0.73927,
+              0.42534,
+              0.75571
+            ]
+          ]
+        },
+        {
+          "ref": "d04/p1/f12",
+          "field": "buyer_signature",
+          "label": "甲方签章",
+          "value": "青禾演练采购中心（已盖章）",
+          "quote": "甲方签章：青禾演练采购中心（已盖章）",
+          "line": 13,
+          "rect": [
+            0.08403,
+            0.61781,
+            0.52489,
+            0.63653
+          ],
+          "rects": [
+            [
+              0.08403,
+              0.61781,
+              0.52489,
+              0.63653
+            ]
+          ]
+        },
+        {
+          "ref": "d04/p1/f14",
+          "field": "seller_signature",
+          "label": "乙方签章",
+          "value": "云桥演练设备中心（已盖章）",
+          "quote": "乙方签章：云桥演练设备中心（已盖章）",
+          "line": 15,
+          "rect": [
+            0.08468,
+            0.69863,
+            0.52489,
+            0.71735
+          ],
+          "rects": [
+            [
+              0.08468,
+              0.69863,
+              0.52489,
+              0.71735
+            ]
+          ]
+        }
+      ]
+    },
+    "bank": {
+      "id": "d05",
+      "title": "银行付款回单",
+      "version": "合成案例 · R10",
+      "page": 1,
+      "pdf": "/showcase/addendum-invoice-bank.pdf",
+      "image": "/assets/addendum-invoice-bank.jpg",
+      "source_sha256": "ad5101be6f7ce88e78577f94bb97b1d4b03ef60ba6a2f9488ae398baa081f968",
+      "page_sha256": "066bbe417ada76f3f4e2e8ca899d0c63cec2a94b75833985122d64f1fbb9e0cf",
+      "lines": [
+        {
+          "ref": "d05/p1/f6",
+          "field": "payment_designation",
+          "label": "款项用途",
+          "value": "第二期",
+          "quote": "款项用途：第二期",
+          "line": 7,
+          "rect": [
+            0.08209,
+            0.3758,
+            0.2799,
+            0.39224
+          ],
+          "rects": [
+            [
+              0.08209,
+              0.3758,
+              0.2799,
+              0.39224
+            ]
+          ]
+        },
+        {
+          "ref": "d05/p1/f7",
+          "field": "transfer_status",
+          "label": "交易状态",
+          "value": "交易成功",
+          "quote": "交易状态：交易成功",
+          "line": 8,
+          "rect": [
+            0.08274,
+            0.41644,
+            0.30511,
+            0.43242
+          ],
+          "rects": [
+            [
+              0.08274,
+              0.41644,
+              0.30511,
+              0.43242
+            ]
+          ]
+        },
+        {
+          "ref": "d05/p1/f8",
+          "field": "paid_on",
+          "label": "付款日期",
+          "value": "2026年9月21日",
+          "quote": "付款日期：2026年9月21日",
+          "line": 9,
+          "rect": [
+            0.08209,
+            0.45662,
+            0.37492,
+            0.47306
+          ],
+          "rects": [
+            [
+              0.08209,
+              0.45662,
+              0.37492,
+              0.47306
+            ]
+          ]
+        }
+      ]
+    }
+  }
+}

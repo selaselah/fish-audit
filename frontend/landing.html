@@ -10,6 +10,7 @@
   <meta name="description" content="从合同、验收单和付款回单核对每一期付款条件。查看原件、处理疑点，由审计人员签收底稿。">
   <meta property="og:title" content="Fish Audit · 中小企业 AI 财务审计">
   <meta property="og:description" content="用一笔采购演练查看合同生效、交付验收与三期付款的原件依据。">
+  <meta name="twitter:card" content="summary_large_image">
   <meta property="og:type" content="website">
   <meta property="og:image" content="/assets/review-sample.webp">
   <link rel="icon" href="/assets/fish-mark.png" type="image/png">
@@ -23,6 +24,9 @@
   <script src="/assets/public-folios.js" defer></script>
   <link rel="stylesheet" href="/assets/pdf-signatures.css">
   <script src="/assets/pdf-signature-card.js" defer></script>
+  <link rel="stylesheet" href="/assets/addendum-card.css">
+  <script src="/assets/addendum-card.js" defer></script>
+  <script src="/assets/public-addendum-signing.js" defer></script>
   <script src="/assets/public-pdf-signing.js" defer></script>
   <link rel="stylesheet" href="/assets/supplier-pages.css">
   <script src="/assets/supplier-card.js" defer></script>
@@ -184,7 +188,7 @@
         <div class="workflow-demo">
           <div id="scene-signing" class="signing-sample" role="tabpanel" aria-labelledby="scene-tab-signing" hidden>
             <div class="signing-sample-header"><span><i class="ui-glyph ic-journal-text" aria-hidden="true"></i> 采购合同</span>
-              <label id="signing-example-choice" hidden><span class="sr-only">合同生效案例</span><select id="signing-example"><option value="company">用印单位</option><option value="word">文字签章</option><option value="calendar">生效日冲突</option><option value="pdf">PDF 电子签名</option></select></label>
+              <label id="signing-example-choice" hidden><span class="sr-only">合同生效案例</span><select id="signing-example"><option value="company">用印单位</option><option value="word">文字签章</option><option value="calendar">生效日冲突</option><option value="pdf">PDF 电子签名</option><option value="addendum">补充协议签署</option></select></label>
               <small id="signing-example-version">合成案例 · R9</small></div>
             <div id="signing-company">
             <h3>印章单位多出「杭州分公司」</h3>
@@ -233,6 +237,11 @@
               </div>
               <div class="pdf-demo-view"><a href="/showcase/signature-earlier.pdf">打开签后修订的水印合同</a></div>
             </div>
+            <div id="signing-addendum" data-integrity="sha256-wPEy2JUZ3n7FsJrQlw1FAMTe78qEngrlz0wyCup7jhE=" hidden>
+              <div class="period-fallback"><a href="/showcase/batch-version-addendum.pdf" target="_blank" rel="noopener">打开排印协议 ↗</a>
+                <a href="/showcase/addendum-signing-current.pdf" target="_blank" rel="noopener">打开电子签名版 ↗</a>
+                <a href="/showcase/addendum-signing-earlier.pdf" target="_blank" rel="noopener">打开签后修订版 ↗</a></div>
+            </div>
           </div>
           <div id="scene-inspection" class="inspection-sample" role="tabpanel" aria-labelledby="scene-tab-inspection">
             <div class="signing-sample-header"><span><i class="ui-glyph ic-clipboard-check" aria-hidden="true"></i> 采购验收</span>
@@ -273,13 +282,17 @@
           <div id="scene-folios" class="signing-sample public-folios" role="tabpanel" aria-labelledby="scene-tab-folios" hidden>
             <div class="signing-sample-header"><span><i class="ui-glyph ic-journal-text" aria-hidden="true"></i> 付款核对</span>
               <label id="payment-example-choice" hidden><span class="sr-only">选择付款条款案例</span><select id="payment-example">
-                <option value="guarantee">保函期间与付款日</option><option value="warranty">质保金与维修工单</option><option value="comments">分期付款批注</option><option value="proof">付款是否已执行</option><option value="clock">同日签认与扣款</option><option value="timing">跨日签认与付款</option><option value="reference">回单验收单号</option><option value="folios">合同续页</option></select></label><small id="payment-version">合成案例 · R10</small></div>
+                <option value="guarantee">保函期间与付款日</option><option value="warranty">质保金与维修工单</option><option value="invoice">验收款收票前提</option><option value="comments">分期付款批注</option><option value="proof">付款是否已执行</option><option value="clock">同日签认与扣款</option><option value="timing">跨日签认与付款</option><option value="reference">回单验收单号</option><option value="folios">合同续页</option></select></label><small id="payment-version">合成案例 · R10</small></div>
             <div id="payment-guarantee-period" data-integrity="sha256-eu1APu+E4wYs036zdvQwmKNGqc0ySAUsX0CNINGLv7w=" hidden>
               <div class="period-fallback"><h3>首期预付款保函</h3>
                 <a href="/showcase/guarantee-period-guarantee.pdf" target="_blank" rel="noopener">查看水印保函 ↗</a>
                 <a href="/showcase/guarantee-period-bank.pdf" target="_blank" rel="noopener">查看水印付款回单 ↗</a></div>
             </div>
             <div id="payment-execution" hidden><a href="/showcase/payment-execution-notice.pdf" target="_blank" rel="noopener">查看演练付款回单</a></div>
+            <div id="payment-addendum-invoice" data-integrity="sha256-mqSg2921XNORClx1k3ylAWkkyv4qj0zRll+YE0nPwTs=" hidden>
+              <div class="period-fallback"><a href="/showcase/addendum-invoice-agreement.pdf" target="_blank" rel="noopener">打开水印补充协议 ↗</a>
+                <a href="/showcase/addendum-invoice-bank.pdf" target="_blank" rel="noopener">打开水印付款回单 ↗</a></div>
+            </div>
             <div id="payment-warranty-register" data-integrity="sha256-85o7tN7Z/zQU4d5Zhdx9JDw/rsbCA8eJ6HYQ5l93wXU=" hidden>
               <div class="period-fallback"><h3>质保工单</h3>
                 <a href="/showcase/warranty-register-certificate.pdf" target="_blank" rel="noopener">查看水印期满确认单 ↗</a>

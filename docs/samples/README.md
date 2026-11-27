@@ -1,5 +1,21 @@
 # 合成财会审计演练
 
+## 补充协议的签名覆盖与收票前提
+
+三份柜温协议保留相同水印版面。电子签名使用演练时生成的自签名证书，签后修订版在同一已签文件末尾追加元数据。收票案的补充协议和银行回单来自另一组采购原件。打开现有演练或重建静态资料均无需新调用模型。[演练与固定底稿](../acceptance.md#补充协议签署柜温标准与验收款收票前提)
+
+```sh
+server/.venv/bin/python docs/samples/publish_addendum_signing.py --check
+```
+
+离线重建时添加 `--archives /path/to/bundles`，目录内依次准备柜温案 R16 的 `typeset.zip`、两个 R1 的 `current.zip` 和 `earlier.zip`、收票案 R10 的 `payment-R10.zip`。导出器核验归档摘要、重绘六份原件、按固定 Git 源码复算，再逐字节比较十项公开资产。
+
+单独准备一批新的签名演练件，可运行下列命令。重复指定同一输出目录会复用已生成的签名文件。在命令末尾加 `--submit` 才会向本机实际上传两组资料并调用模型。
+
+```sh
+server/.venv/bin/python docs/samples/addendum_pdf_editions.py /path/to/R15.zip --output /path/to/editions
+```
+
 ## 四份首期预付款保函
 
 每案有四份带「合成演练」水印的 PDF。采购方于 9 月 3 日签收，银行于 9 月 5 日付款。四份保函分别写明 9 月 4 日届满、9 月 5 日届满且包含当日、9 月 5 日届满但端点含义待核，以及展期申请尚待确认。每案有独立的合同号、保函号和流水号。
