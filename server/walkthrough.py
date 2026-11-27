@@ -15,7 +15,7 @@ QUALITY_PIN = re.compile(r"quality-(H0[45]-[1-9][0-9]{0,7})(?:-(clause|acceptanc
 RETEST_PIN = re.compile(r"retest-(H05-[1-9][0-9]{0,7})(?:-(clause|citation|payment_designation|transfer_status|paid_on|terms|order|"
                         r"(?:original|final)_(?:acceptance_number|accepted_on|acceptance_result|acceptance_scope|defect_number)|"
                         r"(?:repair|final)_(?:original_acceptance|repair_number)|repair_(?:repaired_on|defect_number)|final_defect_closure))?")
-USE_PIN = re.compile(r"inspection-use-(H05-[1-9][0-9]{0,7})(?:-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7}))?")
+USE_PIN = re.compile(r"(?:inspection-use|payment-approval)-(H05-[1-9][0-9]{0,7})(?:-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7}))?")
 
 
 def check_context(value):
@@ -29,7 +29,7 @@ def check_context(value):
         patterns["intake"] = r"contract|purchase|travel|payment"
     if screen == "case":
         patterns.update(case_id=r"[a-f0-9]{32}", tab=r"report|evidence|graph|activity", doc=r"d[0-9]{2,8}",
-                        raw_ref=r"inspection-use/d[0-9]{2,8}/p[1-9][0-9]{0,7}/l[1-9][0-9]{0,7}")
+                        raw_ref=r"(?:inspection-use|payment-approval)/d[0-9]{2,8}/p[1-9][0-9]{0,7}/l[1-9][0-9]{0,7}")
         if "case_id" not in value:
             raise CaseError("走查底稿编号缺失。", 400)
     result = {"screen": screen}
@@ -54,9 +54,9 @@ def check_context(value):
     params = result.get("params", {})
     anchor = result.get("anchor", "")
     if raw := result.get("raw_ref"):
-        if not result.get("rev") or raw != f"inspection-use/{result.get('doc')}/p{result.get('page')}/l{result.get('line')}" or params:
+        if not result.get("rev") or raw.partition("/")[2] != f"{result.get('doc')}/p{result.get('page')}/l{result.get('line')}" or params:
             raise CaseError("请选择该版底稿中对应的付款用途原行。",400)
-    if screen == "case" and anchor.startswith(("quality-H","retest-H","inspection-use-")):
+    if screen == "case" and anchor.startswith(("quality-H","retest-H","inspection-use-","payment-approval-")):
         pin = QUALITY_PIN.fullmatch(anchor) or RETEST_PIN.fullmatch(anchor) or USE_PIN.fullmatch(anchor)
         if not pin or not result.get("rev") or params != {"view":"payment-checks", "stage":pin[1]}:
             raise CaseError("请选择底稿版本及相应验收款检查项。", 400)
@@ -110,21 +110,34 @@ def save_note(store, workspace, author, role, data):
         anchor = context.get("anchor","")
         use_pin = USE_PIN.fullmatch(anchor)
         if context["screen"] == "case" and (use_pin or context.get("raw_ref")):
-            rows = db.execute("""SELECT json_extract(f.value,'$.id'),json_extract(f.value,'$.inspection_use.notes')
+            rows = db.execute("""SELECT json_extract(f.value,'$.id'),json_extract(f.value,'$.inspection_use.notes'),
+                              json_extract(f.value,'$.inspection_use.approval.rows')
                               FROM reports, json_each(content,'$.findings') AS f WHERE case_id=? AND rev=?
                               AND json_type(f.value,'$.inspection_use.notes')='array'""",(context["case_id"],context["rev"]))
-            proof = {fid: {n["row"] for n in json.loads(notes)} for fid,notes in rows}
+            proof = {}
+            sections = set()
+            for fid,notes,approval in rows:
+                proof[fid] = {n["row"] for n in json.loads(notes)}
+                sections.add(("inspection-use",fid))
+                if approval is not None:
+                    proof[fid].update(json.loads(approval))
+                    sections.add(("payment-approval",fid))
             raw = context.get("raw_ref")
+            prefix = "payment-approval" if anchor.startswith("payment-approval-") else "inspection-use"
             if use_pin and use_pin[2]:
-                raw = f"inspection-use/{use_pin[2]}/p{use_pin[3]}/l{use_pin[4]}"
+                raw = f"{prefix}/{use_pin[2]}/p{use_pin[3]}/l{use_pin[4]}"
             cited = proof.get(use_pin[1],set()) if use_pin else set().union(*proof.values())
-            if not cited or raw and raw not in cited:
+            if use_pin and (prefix,use_pin[1]) not in sections or raw and raw not in cited:
                 raise CaseError("所选版本的付款发现没有引用该用途原行。",404)
-            if context.get("raw_ref") and not db.execute("""SELECT 1 FROM reports,
-                        json_each(content,'$.graph.inspection_use_sources.rows') AS r
-                        WHERE case_id=? AND rev=? AND json_extract(r.value,'$.id')=?
-                        AND json_array_length(r.value,'$.rects')>0""",(context["case_id"],context["rev"],raw)).fetchone():
-                raise CaseError("所选版本没有可定位的付款用途行框。",404)
+            if context.get("raw_ref"):
+                location = db.execute("""WITH paper AS (SELECT content FROM reports WHERE case_id=? AND rev=?),
+                    lines AS (SELECT r.value AS line FROM paper,json_each(content,'$.graph.inspection_use_sources.rows') r
+                        UNION ALL SELECT r.value FROM paper,json_each(content,'$.graph.inspection_use_sources.approvals') p,
+                        json_each(p.value,'$.rows') r)
+                    SELECT 1 FROM lines WHERE json_extract(line,'$.id')=? AND json_array_length(line,'$.rects')>0""",
+                    (context["case_id"],context["rev"],raw)).fetchone()
+                if not location:
+                    raise CaseError("所选版本没有可定位的付款用途或审批行框。",404)
         if context["screen"] == "case" and (pin := QUALITY_PIN.fullmatch(anchor) or RETEST_PIN.fullmatch(anchor)):
             retest = pin.re == RETEST_PIN
             row = db.execute("""SELECT json_extract(f.value,?) FROM reports, json_each(content,'$.findings') AS f

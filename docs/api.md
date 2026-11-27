@@ -14,6 +14,8 @@ H05 还列有对应的成功回单、款项用途、交易状态及日期字段�
 
 ## 产品走查意见
 
+独立付款审批单上的控件可用 `payment-approval-H05-8-d07-p1-l10` 定位。原件意见的 `raw_ref` 如 `payment-approval/d07/p1/l10`。保存时核对指定版次的付款发现、引用原行和归档行框。浏览器可以据此重开同版的审批单第 10 行。[水印案例 R7](http://127.0.0.1:8000/workpaper/7fd2600efdb14666834148f59684cf51?rev=7&view=payment-checks&stage=H05-8)
+
 对付款用途附注点选意见时，控件 `anchor` 形如 `inspection-use-H05-8-d01-p1-l21`。在 PDF 原页上填写时，`context.raw_ref` 形如 `inspection-use/d01/p1/l21`，须与同一底稿版本的文档、页、行及付款发现相符，并具有该版归档的行框。旧版没有这行用途依据时，写入会返回 404。[试用复验单第 21 行](http://127.0.0.1:8000/workpaper/66fa88c60aed4799a64ab73c0eb92495?rev=11&view=payment-checks&stage=H05-8)
 
 在验收款质量对照里提意见时，固定链接沿用 `view=payment-checks&stage=H05-8`。走查上下文保留 `case_id`、`rev`、检查项及控件 `anchor`，如 `quality-H05-8-measured_result`。服务器按工作区、账号和所选版本检查该发现及字段。复制的清单含现场链接、文件名和页行。[点选验收款原行](interaction-design/README.md#在页面上记录走查意见)
@@ -25,6 +27,8 @@ H05 还列有对应的成功回单、款项用途、交易状态及日期字段�
 企业工作区使用 `/api/w/<wid>/walkthrough`，沿用成员身份和写入时的 CSRF 校验，清单仅列出当前账号在该企业内的记录。企业实例的公开页使用浏览器存储。[服务端实现](../server/walkthrough.py)
 
 ## 实付发现中的验收单用途
+
+规则 `2026.11.27.21` 使用 `cited-inspection-payment-use-v3`。独立审批材料的原行保存在 `graph.inspection_use_sources.approvals[].rows`。已对应到本期和回单时，`finding.inspection_use.approval` 提供原审批要求 `request`、所需岗位 `required`、候选文件 `documents` 及原行 `rows`。能逐项对应的单据另有 `fields`、`bank_fields`、`listed_on` 和 `paid_on`。图关系 `compares_payment_approval` 保存复验附注、回单引用及审批单打印行的编号，表示实际作过的比较。[核对范围及人工复核条件](audit-method.md#复验附注要求另行审批)
 
 现行方法 `policy.inspection_use` 标记为 `cited-inspection-payment-use-v2`，早期底稿保留各自的 v1 判断。H05 的 `inspection_use` 给出回单、所引完整单号、单号来源、用途附注及逐项证据。状态 `ban` 表示原文明示禁止该用途，`approval` 和 `conditional` 分别表示另行审批及签批条件待核。`other_document`、`other_stage` 标出另一份原件或另一期款的说明。`unclear` 提示核对存在歧义的原文。整笔实付沿用该发现里最高的风险等级。
 

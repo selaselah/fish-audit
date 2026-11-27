@@ -136,6 +136,14 @@ def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MAS
                         and normalize(f["value"]) == normalize(source["value"])]
                 added = addition and name==addition[0] and quote==last
                 printed_missing = source["field"] in missing_fields and archived_lines.count(quote)==1 and page["text"].splitlines().count(quote)==1
+                if printed_missing and not observed:
+                    existing = [f for f in report["graph"]["facts"] if f["doc"]==doc["id"] and f["page"]==1 and f["field"]==source["field"]]
+                    if existing:
+                        if (len(existing)!=1 or existing[0]["status"]!="visual" or existing[0].get("source_line") or
+                                existing[0]["value"]!=source["value"]):
+                            continue
+                        # Correct the unlocated reading in place so it cannot coexist with a second copy of this field.
+                        observed = existing
                 if not same and (len(observed) == 1 or not observed and (source["field"] == kind or added or printed_missing)):
                     post(api+"/amend", {"rev":get(api)["rev"], "reviewer":reviewer, "doc":doc["id"], "page":1,
                          "target":observed[0]["id"] if observed else None, "field":source["field"], "value":source["value"],

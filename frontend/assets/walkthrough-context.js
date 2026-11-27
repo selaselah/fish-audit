@@ -8,6 +8,10 @@ const homeKeys = ['scene','slip','copy','edition','batch','record','pdf','carrie
 const caseKeys = ['view','stage','instrument','receipt','ticket','call','agreement','acceptance','finding','fact','prior','entry','filing','part'];
 const identifier = /^[a-zA-Z][a-zA-Z0-9_-]{0,95}$/;
 const factID = /^d\d{2}\/p[1-9]\d*\/(?:[ft][1-9]\d*|h[a-f0-9]{12})$/;
+function printedRef(context, ref) {
+  const address=context.doc+'/p'+context.page+'/l'+context.line;
+  return context.rev && ['inspection-use/','payment-approval/'].some(prefix=>ref===prefix+address);
+}
 function knownParams(search, keys) {
   const out = {};
   for (const key of keys) {
@@ -93,8 +97,7 @@ export function captureContext(owner, element) {
             if (fact.source_line?.number>0) context.line=fact.source_line.number;
           } else if (+row?.dataset.gapLine>0) {
             context.line=+row.dataset.gapLine;
-            const source='inspection-use/'+context.doc+'/p'+context.page+'/l'+context.line;
-            if (context.rev && row.dataset.sourceRef===source) context.raw_ref=source;
+            if (printedRef(context,row.dataset.sourceRef)) context.raw_ref=row.dataset.sourceRef;
           }
         }
       }
@@ -136,7 +139,8 @@ export function describeContext(c) {
   const screen = c.screen==='case' ? screens.case+' '+c.case_id.slice(0,8) : screens[c.screen];
   const edition=c.params?.view==='revision-comparison' ? '履约对照 R'+c.params.prior+' / R'+c.rev : c.rev && 'R'+c.rev;
   const board=c.params?.view==='board-decision' && ({decision:'董事会决议原文',signing:'董事会签发版本',payments:'董事会决议关联期款'}[c.params.part] || '董事会审批原件');
-  const receipt=c.params?.view==='payment-checks' && (c.anchor?.startsWith('inspection-use-')?'验收单付款用途 '+c.params.stage:
+  const receipt=c.params?.view==='payment-checks' && (c.anchor?.startsWith('payment-approval-')?'付款审批单 '+c.params.stage:
+    c.anchor?.startsWith('inspection-use-')?'验收单付款用途 '+c.params.stage:
     c.anchor?.startsWith('retest-')?'复验回单核对 '+c.params.stage:
     c.anchor?.startsWith('quality-') && '验收款核对 '+c.params.stage);
   return [screen, c.example || sections[c.section], edition, caseTabs[c.tab], board, receipt, dialogs[c.dialog],
@@ -159,7 +163,7 @@ export function returnUrl(c, workspace) {
   if (c.doc && !query.has('fact')) {
     query.set('walkdoc', c.doc); query.set('walkpage', c.page);
     if (c.line) query.set('walkline', c.line);
-    if (c.rev && c.raw_ref==='inspection-use/'+c.doc+'/p'+c.page+'/l'+c.line) query.set('walkraw',c.raw_ref);
+    if (printedRef(c,c.raw_ref)) query.set('walkraw',c.raw_ref);
   }
   return base+'case/'+c.case_id+(query.size?'?'+query:'');
 }

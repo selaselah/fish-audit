@@ -13,6 +13,14 @@ const BatchPhase = (() => {
     const ordinal = tens ? (tens === 1 ? '' : digits[tens]) + '十' + (ones ? digits[ones] : '') : digits[ones];
     return [String(index),ordinal,ordinal?.replace(/二/g,'两')].includes(text);
   }
+  function ordinal(text) {
+    if (typeof text!=='string') return null;
+    if (/^[1-9][0-9]?$/u.test(text)) return Number(text);
+    const digits='零一二三四五六七八九', normalized=text.replaceAll('两','二');
+    if (/^[一二三四五六七八九]$/u.test(normalized)) return digits.indexOf(normalized);
+    const tens=/^([一二三四五六七八九]?)十([一二三四五六七八九]?)$/u.exec(normalized);
+    return tens ? (tens[1]?digits.indexOf(tens[1]):1)*10+(tens[2]?digits.indexOf(tens[2]):0) : null;
+  }
   function batchPrefix(text, index) {
     const refs = [...clean(text).matchAll(/第([\d零一二两三四五六七八九十]+)批/gu)];
     return refs.length === 1 && refs[0].index === 0 && sameOrdinal(refs[0][1],index);
@@ -175,5 +183,5 @@ const BatchPhase = (() => {
     select(proof.standard?'standard':proof.quality?'quality':'receipt');
     return root;
   }
-  return {resolve, panel, label, batchPrefix, sameOrdinal};
+  return {resolve, panel, label, batchPrefix, sameOrdinal, ordinal};
 })();

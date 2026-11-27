@@ -9,6 +9,15 @@ const WarrantyDates = (() => {
     paid_on:dateOnly,accepted_on:dateOnly};
   const fold=s=>s.replace(/[０-９：／－．]/gu,c=>String.fromCharCode(c.charCodeAt(0)-0xfee0)).replace(/[\u00a0\u2002\u2003\u2009\u202f\u3000]/gu,' ');
   const same=(a,b)=>Array.isArray(a) && Array.isArray(b) && a.length===b.length && a.every((v,i)=>v===b[i]);
+  function calendarDay(groups) {
+    if (!groups) return null;
+    const iso=groups.year+'-'+(groups.month || groups.nmonth).padStart(2,'0')+'-'+(groups.day || groups.nday).padStart(2,'0');
+    const ms=Date.parse(iso+'T00:00:00Z');
+    return groups.year!=='0000' && Number.isFinite(ms) && new Date(ms).toISOString().slice(0,10)===iso ? {iso,days:ms/86400000} : null;
+  }
+  function printedDay(value) {
+    return typeof value==='string' ? calendarDay(dateOnly.exec(fold(value))?.groups)?.iso || null : null;
+  }
   function parse(f) {
     const raw=f?.source_line?.text, field=f?.field, pattern=patterns[field];
     if (typeof raw!=='string' || !pattern || !['anchored','confirmed'].includes(f.status) || !f.source_line.rects?.length) return null;
@@ -22,10 +31,8 @@ const WarrantyDates = (() => {
       if (needsLabel && j<0 || j>=0 && value.slice(0,j).replace(/^ +| +$/gu,'')!==label ||
           !pattern.test(part) || part.replaceAll(' ','')!==body.replaceAll(' ','')) return null;
     }
-    const iso=m.year+'-'+(m.month || m.nmonth).padStart(2,'0')+'-'+(m.day || m.nday).padStart(2,'0');
-    const ms=Date.parse(iso+'T00:00:00Z'), start=i+1+body.indexOf(m.literal);
-    if (m.year==='0000' || !Number.isFinite(ms) || new Date(ms).toISOString().slice(0,10)!==iso) return null;
-    return {iso,literal:raw.slice(start,start+m.literal.length),days:ms/86400000};
+    const day=calendarDay(m), start=i+1+body.indexOf(m.literal);
+    return day && {...day,literal:raw.slice(start,start+m.literal.length)};
   }
   function printed(item,report,unit,field) {
     const {graph,policy}=report;
@@ -159,5 +166,5 @@ const WarrantyDates = (() => {
     root.append(head,body);choose(pairs[0].id);
     return root;
   }
-  return {parse,confirmation,comparison,unreadRow,issued,pageReference,panel};
+  return {parse,printedDay,confirmation,comparison,unreadRow,issued,pageReference,panel};
 })();

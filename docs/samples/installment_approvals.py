@@ -21,9 +21,9 @@ MASTER = "63d43ad3faf766111aef557d6f619aaefbc163fb1153c743fb1fe7f69ee87593"
 
 
 def check_originals(archive, key, case, folder):
-    fields=("repaired_on","defect_number","repair_number")
+    fields=("repaired_on","defect_number","repair_number","seller")
     check_fields(archive,key,case,folder,case_title=CASES[key][0],master_hash=MASTER,kind="bank_receipt",
-                 reviewer="付款审批水印核字",visual_fields=fields,missing_fields=fields)
+                 reviewer="付款审批水印核字",visual_fields=(*fields,"acceptance_scope"),missing_fields=fields)
 
 
 def materials(folder, key):

@@ -312,3 +312,11 @@
 .inspection-use-row .ui-glyph { position:absolute; right:9px; top:9px; color:var(--accent-hover); font-size:.72rem; }
 .inspection-use button.inspection-use-row:is(:hover,:focus-visible) { background:var(--accent-soft); }
 .inspection-use-row:focus-visible { outline:2px solid var(--focus); outline-offset:-2px; }
+.installment-approval { border-top:1px solid var(--line); padding-bottom:4px; }
+.inspection-use[data-approval] > .inspection-use-heading span { color:var(--secondary); }
+.installment-approval h5 { margin:0; font-size:.86rem; }
+.installment-approval .approval-days { margin:0; padding:3px 10px 8px; color:var(--secondary); font-size:.78rem; font-variant-numeric:tabular-nums; }
+.approval-rows { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,210px),1fr)); }
+.installment-approval summary { display:flex; align-items:center; gap:6px; min-height:44px; padding:0 10px; color:var(--accent-hover); cursor:pointer; font-size:.8rem; }
+.installment-approval summary::before { content:'▸'; }
+.installment-approval details[open] > summary::before { content:'▾'; }

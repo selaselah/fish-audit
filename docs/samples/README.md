@@ -1,5 +1,13 @@
 # 合成财会审计演练
 
+## 分期付款审批单
+
+生成六组带水印的采购材料，每组七份 PDF。六种写法覆盖提前、延后、同日、拒付、其他期款以及引用另一验收单。末尾加 `--run` 可向本机服务提交。已逐行核对母本时可以同时传入 `--check-against` 和母本归档路径，生成器会校验母本及本案原件摘要，再按实际打印行演练补录、核字。[生成器](installment_approvals.py) · [本机运行结果](../acceptance.md#复验要求另批时核对付款审批单)
+
+```sh
+PYTHONPATH=server server/.venv/bin/python docs/samples/installment_approvals.py /tmp/installment-approvals
+```
+
 ## 复验单付款用途
 
 以下命令生成六组水印材料，每组六份 PDF。它们沿用同一合同、初验、整改、复验及扣款，只改一条用途附注。36 份生成件已逐一与实际上传版本比对摘要。[样本生成器](retest_use_notes.py) · [每种写法对应的实付判断](../acceptance.md#复验合格后第二期付款所据的用途附注)
