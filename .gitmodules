@@ -1,0 +1,8 @@
+[submodule "3rd/ClaudeCode"]
+	path = 3rd/ClaudeCode
+	url = https://github.com/Rito-w/ClaudeCode.git
+	shallow = true
+[submodule "3rd/deepseek-harness"]
+	path = 3rd/deepseek-harness
+	url = https://github.com/deepseek-ai/deepseek-harness.git
+	shallow = true

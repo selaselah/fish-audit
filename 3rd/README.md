@@ -1,4 +1,17 @@
-# Fish Audit 界面重做资料索引
+# Fish Audit 外部资料与源码索引
+
+## Agent 工作流源码
+
+两个源码目录都用 Git 子模块固定到具体提交。在新的工作副本中，从项目根目录运行 `git submodule update --init -- 3rd/ClaudeCode 3rd/deepseek-harness` 即可取回对应版本。
+
+| 本地目录 | 固定版本 | 对照审计工作流时先看什么 |
+| --- | --- | --- |
+| [ClaudeCode](ClaudeCode/) | [Rito-w/ClaudeCode · 895221e](https://github.com/Rito-w/ClaudeCode/tree/895221e6964cf288c5fa1d2bb86edb568c491061) | 多份原件可并行读取，有先后依赖的步骤需依序执行。可对照一次模型调用如何接收工具结果，以及调度器如何决定并行或串行。[主循环](https://github.com/Rito-w/ClaudeCode/blob/895221e6964cf288c5fa1d2bb86edb568c491061/src/query.ts) · [工具调度](https://github.com/Rito-w/ClaudeCode/blob/895221e6964cf288c5fa1d2bb86edb568c491061/src/services/tools/toolOrchestration.ts) |
+| [DeepSeek Harness](deepseek-harness/) | [deepseek-ai/deepseek-harness · 4b399c3](https://github.com/deepseek-ai/deepseek-harness/tree/4b399c39a6d1479cd84ca591b4d7c88e24d38a96) | 追踪解析、构图和审计各阶段时，可对照运行开始、阶段变化、取消与结束如何传到进度界面。[工作流引擎](https://github.com/deepseek-ai/deepseek-harness/blob/4b399c39a6d1479cd84ca591b4d7c88e24d38a96/packages/workflow/workflow-ptc/src/index.ts) · [进度面板](https://github.com/deepseek-ai/deepseek-harness/blob/4b399c39a6d1479cd84ca591b4d7c88e24d38a96/packages/client/ui-workflow-run/src/client/WorkflowRunPanel.tsx) |
+
+Rito-w 将其仓库标注为从公开发行包还原的非官方研究学习版本，版权归 Anthropic。DeepSeek 官方仓库的根许可证为 MIT，随附组件另有第三方声明。[ClaudeCode 来源说明](https://github.com/Rito-w/ClaudeCode/blob/895221e6964cf288c5fa1d2bb86edb568c491061/README.md) · [DeepSeek 官方入口](https://www.deepseek.com/harness/zh/) · [MIT 许可](https://github.com/deepseek-ai/deepseek-harness/blob/4b399c39a6d1479cd84ca591b4d7c88e24d38a96/LICENSE) · [第三方声明](https://github.com/deepseek-ai/deepseek-harness/blob/4b399c39a6d1479cd84ca591b4d7c88e24d38a96/THIRD_PARTY_NOTICES.md)
+
+## 界面与审计资料
 
 界面调研始于 2026-11-25，首付款保函与案例搜索资料更新于 2026-11-27（北京时间）。归档保留审计与会计软件的官方帮助配图、演示动图和说明书链接，记录具体画面及本工作台采用的做法。
 
