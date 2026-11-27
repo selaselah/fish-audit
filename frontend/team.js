@@ -28,6 +28,11 @@ const Team = {
   },
   cases() { return (this.current ? '/api/w/' + this.current.id : '/api') + '/cases'; },
   async load() { this.session = await api('/api/session'); return this.session; },
+  announceAccountChange() {
+    dispatchEvent(new Event('audit-account-change'));
+    // Other tabs need to close their previous account's recorder. Only signal that a change occurred.
+    try { localStorage.setItem('fish-audit-account-change',crypto.randomUUID()); } catch { /* Storage can be disabled. */ }
+  },
   syncNav() {
     const signed = this.session.user;
     const guest = !signed && this.session.mode === 'saas';
@@ -67,6 +72,7 @@ const Team = {
     await post('/api/auth/logout',{});
     Desk.reset(); resetIntake(); this.authMode = 'login'; this.freshInvite = null; this.returnTo = null;
     this.session = null; this.current = null; state.bundle = null; state.detail = null; state.cases = [];
+    this.announceAccountChange();
     for (const id of ['case-panel','case-list','team-panel']) $('#'+id).replaceChildren();
     location.hash = 'account'; await refresh();
   },
@@ -115,6 +121,7 @@ const Team = {
       if (invite && registering) data.invite = invite;
       const info = await post('/api/auth/'+(registering?'register':'login'),data);
       this.session = info;
+      this.announceAccountChange();
       if (invite && !registering) {
         const result = await post('/api/workspaces/join',{invite}); await this.load(); this.go(result.selected); return;
       }

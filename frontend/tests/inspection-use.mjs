@@ -30,9 +30,10 @@ export async function checkInspectionUse(ctx,cid) {
   assert.equal(await evaluate(q(control+' strong')+'.textContent'),row.quote);
   const label=await evaluate(q(control)+'.dataset.originalLabel');
   assert.ok(label.includes(doc.name) && label.includes('第 '+row.line+' 行'));
-  async function located() {
+  async function located(fromHistory=false) {
     const sel='#page-content .evidence-row.located';
-    await wait(q('#page-dialog')+'?.open && '+q(sel)+'?.dataset.sourceRef==='+JSON.stringify(row.id)+' && '+q('#page-content img')+'?.naturalWidth>0','original payment-use row and page image');
+    const route=fromHistory?'state.openedCitation===location.hash && Team.route().params.get("walkraw")==='+JSON.stringify(row.id)+' && ':'';
+    await wait(route+q('#page-dialog')+'?.open && '+q(sel)+'?.dataset.sourceRef==='+JSON.stringify(row.id)+' && '+q('#page-content img')+'?.naturalWidth>0','original payment-use row and page image');
     assert.equal(await evaluate(q(sel+' blockquote')+'.textContent'),row.quote);
     assert.equal(await evaluate(q('#page-content .page-view')+'.dataset.doc'),row.doc);
     assert.equal(await evaluate(q('#reader-revision')+'.textContent'),'R'+rev);
@@ -95,7 +96,38 @@ export async function checkInspectionUse(ctx,cid) {
     for (const text of [cardNote,pageNote,label,'walkline','walkraw']) assert.ok(copy.includes(text));
     await click('#walk-history a[href*="walkat=inspection-use-"]');
     await wait(visible(control)+' && '+q(control)+'.classList.contains("walk-mark")','same archived control');
-    await notebook();await click('#walk-history a[href*="walkraw="]');await located();
+    await notebook();await click('#walk-history a[href*="walkraw="]');await located(true);
+    await size(ctx,1440);await go(fixed+'&view=payment-checks&stage='+id);
+    await wait(visible(control)+' && '+visible('#performance-index #walk-launch'),'filed clause');
+    const mouse=s=>browserInput(ctx).click(q(s));
+    const fill=msg=>evaluate(q('#walk-text')+'.focus();'+q('#walk-text')+'.value='+JSON.stringify(msg)+';'+q('#walk-text')+'.dispatchEvent(new Event("input"))');
+    const docked=owner=>q(owner+' #walk-rail')+'?.matches(":popover-open")';
+    await mouse('#walk-launch');await wait(q('#walk-dialog')+'?.open && !'+q('#walk-dock')+'.disabled','compose on the installment');
+    await mouse('#walk-dock');await wait(docked('#performance-index'),'side-by-side installment');
+    await mouse('#walk-pick');await mouse(control);
+    await wait(q(control)+'.classList.contains("walk-selected") && '+q('#walk-location')+'.textContent.includes('+JSON.stringify(label)+')','pin the filed clause');
+    const alongside='希望在这个付款条件旁直接对照审批单上的期次。';
+    await fill(alongside);await mouse(control);await located();
+    await wait(docked('#page-dialog'),'continue writing beside the open original');
+    assert.ok(await evaluate(q('#page-dialog')+'.getBoundingClientRect().right<='+q('#walk-rail')+'.getBoundingClientRect().left'),'original page fits to the left of the recorder');
+    assert.equal(await evaluate(q('#walk-text')+'.value'),alongside);
+    assert.ok((await evaluate(q('#walk-location')+'.textContent')).includes(label));
+    await inspect(ctx,1440,'#walk-rail','walkthrough-approval-side-by-side');
+    await mouse('#walk-save');await wait(q('#walk-status')+'.textContent.includes("已保存")','first opinion filed, next one points to the open page');
+    assert.match(await evaluate(q('#walk-location')+'.textContent'),new RegExp('第 '+row.line+' 行'));
+    const sourceNote='这行审批说明需要对照银行回单。';
+    await fill(sourceNote);await mouse('#walk-save');await wait(q('#walk-saved span')+'.textContent==="4"','second opinion filed without closing the side panel');
+    const sideNotes=(await json('/api/walkthrough')).notes;
+    assert.deepEqual(sideNotes.find(n=>n.text===alongside).context,a);
+    assert.deepEqual(sideNotes.find(n=>n.text===sourceNote).context,b);
+    const draft='回到审批说明再确认一次。';
+    await fill(draft);await mouse('#page-dialog [data-close]');await wait(docked('#performance-index'),'close only the PDF');
+    assert.equal(await evaluate(q('#walk-text')+'.value'),draft);
+    await mouse(control);await located();await wait(docked('#page-dialog'),'open the same original again');
+    await size(ctx,820);await wait(q('#walk-dialog')+'.matches(":modal")','resize the draft on the original');
+    await browserInput(ctx).key('Escape');await wait('!'+q('#walk-dialog')+'.open && '+q('#page-dialog')+'.open','dismiss feedback alone');
+    await mouse('#walk-launch');await wait(q('#walk-dialog')+'.open && '+q('#walk-text')+'.value==='+JSON.stringify(draft),'draft remains bound to this PDF line');
+    await mouse('#walk-saved');await mouse('#walk-history a[href*="walkraw="]');await located(true);
     const after=await json(api);assert.deepEqual([after.status,after.rev,after.decisions,after.referrals],[task.status,task.rev,task.decisions,task.referrals]);
   }
   await go(fixed+'&finding='+id);

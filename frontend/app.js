@@ -1708,7 +1708,7 @@ async function refresh() {
       clearCaseView(); Desk.reset(); state.cases=[];
       for (const id of ['case-panel','case-list','team-panel']) $('#'+id).replaceChildren();
       if (error.status === 401 || error.status === 403) {
-        Team.session=null; resetIntake();
+        Team.session=null; dispatchEvent(new Event('audit-account-change')); resetIntake();
         for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close();
       }
     }

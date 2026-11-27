@@ -18,7 +18,13 @@ export function browserInput({call,evaluate}) {
     await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[point]});
     await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
   }
-  return {key,pointAt,tap};
+  async function click(control) {
+    const point=await pointAt(control);
+    const hit=await evaluate('(()=>{const el=document.elementFromPoint('+point.x+','+point.y+');return '+control+'.contains(el)?null:el?.tagName+"#"+el?.id})()');
+    assert.equal(hit,null,'pointer at '+JSON.stringify(point)+' reaches '+control);
+    for (const type of ['mousePressed','mouseReleased']) await call('Input.dispatchMouseEvent',{type,button:'left',clickCount:1,...point});
+  }
+  return {key,pointAt,tap,click};
 }
 export async function size(ctx,width) {
   await ctx.call('Emulation.setDeviceMetricsOverride',{width,height:width<600?844:950,deviceScaleFactor:1,mobile:width<600});

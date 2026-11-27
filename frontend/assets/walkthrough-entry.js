@@ -16,10 +16,13 @@ function placeLauncher() {
   const top = openModals.at(-1);
   if (top === owner && launcher.isConnected && (top ? top.contains(launcher) : launcher.parentElement === document.body)) return;
   owner = top;
-  if (!top) { document.body.append(launcher); return; }
-  const close = top.querySelector('[data-close], button[aria-label^="关闭"], button[value="close"]');
-  if (close) (close.closest('form[method="dialog"]') || close).before(launcher);
-  else top.prepend(launcher);
+  if (!top) document.body.append(launcher);
+  else {
+    const close = top.querySelector('[data-close], button[aria-label^="关闭"], button[value="close"]');
+    if (close) (close.closest('form[method="dialog"]') || close).before(launcher);
+    else top.prepend(launcher);
+  }
+  launcher.dispatchEvent(new Event('walkthrough-owner-change'));
 }
 document.addEventListener('toggle', event => {
   const panel = event.target;

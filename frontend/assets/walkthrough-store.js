@@ -9,7 +9,7 @@ async function json(url, options) {
 function browserNotebook(author) {
   const prefix = 'fish-walk-public:'+author+':';
   return {
-    key:prefix, workspace:null, label:'本浏览器 · 公开页',
+    key:prefix, workspace:null, author, label:'本浏览器 · 公开页',
     async list() {
       const items = Object.keys(localStorage).filter(k=>k.startsWith(prefix)).map(k=>JSON.parse(localStorage.getItem(k)));
       return items.sort((a,b)=>b.created.localeCompare(a.created) || b.id.localeCompare(a.id));
@@ -38,7 +38,7 @@ export async function notebook() {
   if (!wid && session.mode==='saas') return browserNotebook(session.user?.id || 'guest');
   const url = (wid ? '/api/w/'+wid : '/api') + '/walkthrough';
   return {
-    workspace:wid, key:wid ? wid+'/'+session.user.id : 'local', label:wid ? '本企业 · 仅自己可见' : '本机走查清单',
+    workspace:wid, author:session.user?.id, key:wid ? wid+'/'+session.user.id : 'local', label:wid ? '本企业 · 仅自己可见' : '本机走查清单',
     async list() { return (await json(url)).notes; },
     async save(note) {
       const headers = {'Content-Type':'application/json'};

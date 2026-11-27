@@ -19,6 +19,11 @@ export async function checkWalkthrough(ctx,caseId,scratch) {
     await wait(q('#walk-saved span')+'.textContent==='+JSON.stringify(String(count)),'saved note count');
   }
   async function save() {await press('#walk-save');await wait('!'+q('#walk-dialog')+'.open','saved and returned to the site');}
+  const mouse=selector=>browserInput(ctx).click(q(selector));
+  async function dock() {
+    await mouse('#walk-dock');
+    await wait(q('#walk-rail')+'?.matches(":popover-open") && !'+q('#walk-dialog')+'.open','non-modal recorder');
+  }
   const url='/?scene=payment-release&slip=late&token=discard-this-token#workflow';
   await navigate(url); await wait(q('#payment-release .release-pane')+'?.dataset.releaseView==="dates"','public example');
   const width=caseId?390:1440;
@@ -102,11 +107,74 @@ export async function checkWalkthrough(ctx,caseId,scratch) {
     await navigate('/app#desk');await open();await history(3);
     assert.equal(new URL(await evaluate(q(historyLink)+'.href')).searchParams.get('new'),'payment');
     await press(historyLink);await wait(q('#upload-dialog')+'?.open && '+q('#upload-profile')+'.value==="cn-bank-contract-payment/v1"','return to the chosen intake');
+    await mouse('#upload-dialog [data-close]');await wait('!'+q('#upload-dialog')+'.open && '+q('body > #walk-launch'),'back at the workbench');
+    await size(ctx,1440);await open();await dock();
+    await type('请在台账里显示原件数量。');
+    await evaluate(q('#walk-text')+'.dispatchEvent(new KeyboardEvent("keydown",{key:"Escape",isComposing:true,bubbles:true,cancelable:true}));true');
+    assert.ok(await evaluate(q('#walk-rail')+'.matches(":popover-open")'),'dismissing a Chinese input candidate leaves the side panel open');
+    const position=await evaluate(q('#walk-location')+'.textContent');
+    await mouse('#nav-rules');await wait('!'+q('#rules')+'.hidden','navigate the site beside the recorder');
+    assert.equal(await evaluate(q('#walk-text')+'.value'),'请在台账里显示原件数量。');
+    assert.equal(await evaluate(q('#walk-location')+'.textContent'),position);
+    await mouse('#walk-save');await wait(q('#walk-status')+'.textContent.includes("已保存")','stay open after saving');
+    assert.match(await evaluate(q('#walk-location')+'.textContent'),/规则依据/);
+    const filed=(await (await fetch(root+'/api/walkthrough')).json()).notes;
+    assert.equal(filed.length,4);assert.equal(filed[0].context.screen,'desk');
+    await type('规则目录草稿');await size(ctx,1024);
+    await wait(q('#walk-dialog')+'.matches(":modal") && !'+q('#walk-rail'),'narrow view keeps the editor');
+    for (const w of [1024,820,768,390,320,1280]) {
+      await size(ctx,w);
+      await wait(q('#walk-dock')+'.hidden==='+String(w<1280),'recorder mode at '+w);
+      assert.equal(await evaluate(q('#walk-text')+'.value'),'规则目录草稿');
+    }
+    await dock();await browserInput(ctx).key('Escape');
+    await wait('!document.body.classList.contains("walk-docked")','Escape closes the focused recorder');
+    await open();assert.equal(await evaluate(q('#walk-text')+'.value'),'规则目录草稿');
+    await dock();await mouse('#nav-desk');await wait('!'+q('#desk')+'.hidden','change the intended location');
+    await mouse('#walk-pick');await mouse('#new-case');
+    assert.ok(!(await evaluate(q('#upload-dialog')+'.open')),'picking an intake button only records its location');
+    await mouse('#walk-close');await open();
+    assert.equal(await evaluate(q('#walk-text')+'.value'),'规则目录草稿');
+    assert.match(await evaluate(q('#walk-location')+'.textContent'),/审计工作台.*新建审计/);
+    await press('#walk-close');await mouse('#nav-rules');await wait('!'+q('#rules')+'.hidden','return to rules');await open();
+    assert.equal(await evaluate(q('#walk-text')+'.value'),'','repinned draft follows the intended desk control');
+    await type('规则依据还有一条意见');await dock();await mouse('#nav-desk');
+    await wait('!'+q('#desk')+'.hidden','desk has its own unsaved draft');await mouse('#walk-pick');await mouse('#new-case');
+    await mouse('#walk-save');await wait(q('#walk-status')+'.textContent.includes("已保存")','save the repinned note');
+    assert.equal(await evaluate(q('#walk-text')+'.value'),'规则目录草稿','destination draft survives the other note');
   } else {
+    await open();await dock();await size(ctx,1280);
+    assert.ok(await evaluate(q('.site-header')+'.getBoundingClientRect().right<='+q('#walk-rail')+'.getBoundingClientRect().left'));
+    await type('对照放行权限时保留这一条。');await mouse(target);
+    await wait(q('#payment-release .release-pane')+'.dataset.releaseView==="authority"','public example still responds');
+    assert.equal(await evaluate(q('#walk-text')+'.value'),'对照放行权限时保留这一条。');
+    await size(ctx,1440);await inspect(ctx,1440,'#walk-rail','walkthrough-public-sidebar');
+    await type('');await mouse('#walk-close');
     const wid=await evaluate(`fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({login:'weekend-walker',name:'演练员',password:'synthetic-password-17',workspace:'演练企业'})}).then(r=>r.json()).then(r=>r.selected)`);
     assert.match(wid,/^[0-9a-f]{32}$/);await navigate('/app#w/'+wid+'/desk');await wait('typeof Team!=="undefined" && Team.current?.id==='+JSON.stringify(wid),'private workspace');
     await open();await history(0);await press('#walk-compose');await type('这条意见属于企业走查。');await save();
     await open();await history(1);assert.equal(await evaluate(q('#walk-history li p')+'.textContent'),'这条意见属于企业走查。');
+    await press('#walk-compose');await dock();await type('企业范围内的未提交意见');
+    await evaluate('location.hash="account"');
+    await wait('!document.body.classList.contains("walk-docked") && !'+q('#walk-text')+'.value','leaving the workspace clears the panel');
+    await open();await history(0);
+    assert.ok(!(await evaluate(q('#walk-history')+'.textContent')).includes('企业走查'));
+    await press('#walk-close');await evaluate('location.hash='+JSON.stringify('w/'+wid+'/desk'));
+    await wait('Team.current?.id==='+JSON.stringify(wid),'return to private workspace');
+    await open();assert.equal(await evaluate(q('#walk-text')+'.value'),'企业范围内的未提交意见');
+    await press('#walk-close');await evaluate('location.hash="account"');
+    await wait(q('#account-panel .plain')+'?.textContent==="退出登录"','signed-in account page');
+    await open();await dock();await type('账号页中的个人意见');
+    await evaluate(q('#walk-compose')+'.addEventListener("click",()=>{window.walkPeer=window.open("/app#account","weekend-walkthrough-peer")},{once:true});true');
+    await mouse('#walk-compose');
+    await wait('window.walkPeer?.document.querySelector("#account-panel .plain")?.textContent==="退出登录"','second tab uses the same sign-in');
+    await evaluate('walkPeer.document.querySelector("#walk-launch").click()');
+    await wait('walkPeer.document.querySelector("#walk-dialog")?.open && !walkPeer.document.querySelector("#walk-save").disabled','recorder in second tab');
+    await mouse('#account-panel .plain');
+    await wait('location.hash==="#account" && !document.body.classList.contains("walk-docked") && !'+q('#walk-text')+'.value','same-route logout clears the previous account');
+    await wait('!walkPeer.document.querySelector("#walk-dialog").open','other tab clears the previous account');
+    await evaluate('walkPeer.close()');await open();await history(1);
+    assert.equal(await evaluate(q('#walk-history li p')+'.textContent'),opinion);
   }
   console.log('PASS · '+(caseId?'local workpaper and original revision':'public browser and private enterprise')+' · point, draft, save, reload, export and return');
 }
