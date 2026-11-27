@@ -78,7 +78,7 @@ def materials(archive, target, *, master=MASTER, title=TITLE, decision=("放行�
     return report["policy"]["profile"], groups
 
 
-def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MASTER[2], kind="payment_release", reviewer="水印放行单演练", replacement=None, addition=None, visual_fields=()):
+def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MASTER[2], kind="payment_release", reviewer="水印放行单演练", replacement=None, addition=None, visual_fields=(), missing_fields=()):
     """Reconcile visible sample fields against the fixed, previously reviewed originals."""
     from config import PERFORMANCE
     from documents import prepare
@@ -135,7 +135,8 @@ def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MAS
                 same = [f for f in observed if f["field"] == source["field"]
                         and normalize(f["value"]) == normalize(source["value"])]
                 added = addition and name==addition[0] and quote==last
-                if not same and (len(observed) == 1 or not observed and (source["field"] == kind or added)):
+                printed_missing = source["field"] in missing_fields and archived_lines.count(quote)==1 and page["text"].splitlines().count(quote)==1
+                if not same and (len(observed) == 1 or not observed and (source["field"] == kind or added or printed_missing)):
                     post(api+"/amend", {"rev":get(api)["rev"], "reviewer":reviewer, "doc":doc["id"], "page":1,
                          "target":observed[0]["id"] if observed else None, "field":source["field"], "value":source["value"],
                          "quote":quote, "region":source["region"], "note":"对照水印原件的同一可见行，补正字段类别或抄录。"})

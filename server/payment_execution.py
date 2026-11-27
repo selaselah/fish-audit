@@ -166,6 +166,7 @@ def refs(graph, unit):
 
 
 def apply(graph, findings):
+    from installment_approval import recognized
     from performance import result
     seen = set()
     for finding in findings:
@@ -181,7 +182,10 @@ def apply(graph, findings):
             # Time, amount and maturity comparisons for an executed transfer need independent execution evidence.
             finding.clear()
             finding.update(replacement, execution_basis=item)
+    approvals = recognized(graph) if graph["documents_by_kind"].get("bank_receipt") else set()
     for item in graph.get(KEY, {}).get("units", []):
+        if not item["bank"] and item["state"]=="application" and item["unit"] in approvals:
+            continue
         if item["unit"] not in seen:
             state, unit = item["state"], item["unit"]
             finding = result("H05", "risk" if state == "conflict" else "missing", DETAIL[state], refs(graph, unit), [unit])

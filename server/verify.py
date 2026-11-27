@@ -483,6 +483,7 @@ def render_addendum_sources(bundle, report, nodes):
     selected.update(p["doc"] for p in graph.get("payment_acceptance_sources",{}).get("pages",[]))
     selected.update(r["doc"] for r in graph.get(retest_reference.KEY,{}).get("rows",[]))
     selected.update(r["doc"] for r in graph.get(inspection_use.KEY,{}).get("rows",[]))
+    selected.update(p["doc"] for p in graph.get(inspection_use.KEY,{}).get("approvals",[]))
     for key in ("acceptance_pdf_sources", "acceptance_original_sources", "addendum_pdf_sources", "addendum_original_sources", "mandate_pdf_sources", "mandate_original_sources", release_execution.PDF, release_execution.NATIVE, warranty_execution.PDF, warranty_execution.NATIVE, board_execution.PDF, board_execution.NATIVE):
         selected.update(r["doc"] for r in graph.get(key,{}).get("records",[]))
     selected.update(p["doc"] for p in graph.get("inspection_coverage_sources",{}).get("pages",[]))

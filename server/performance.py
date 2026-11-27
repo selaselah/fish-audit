@@ -37,6 +37,7 @@ import warranty_dates
 import payment_quality
 import retest_reference
 import inspection_use
+import installment_approval
 import warranty_service
 import warranty_register
 import payment_windows
@@ -782,6 +783,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
     classified.difference_update(ticket_units)
     classified.update(bounded_tickets)
     classified.update(advance_guarantee.bounded_units(graph))
+    classified.update(installment_approval.recognized(graph))
     exchange_ledger = graph.get("equipment_model_sources",{}).get("exchange",{})
     classified.difference_update(equipment_exchanges.unscoped(exchange_ledger))
     extra_units = {d["id"] for d in graph.get("audit_documents",graph["documents"])} - classified
