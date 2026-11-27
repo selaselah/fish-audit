@@ -4,6 +4,7 @@ from datetime import date
 from hashlib import sha256
 from pathlib import Path
 import re
+import approval_clock
 
 from delegation import is_page_marker
 from delivery_batches import NUM, ordinal
@@ -34,7 +35,7 @@ WORDING = {
 }
 
 
-def sources(graph, read_text, read_layout):
+def sources(graph, read_text, read_layout, *, with_time=False):
     files = {d["id"]:d for d in graph["documents"]}
     nodes = {n["id"]:n for n in graph["nodes"] if n["type"]=="page"}
     observed = defaultdict(list)
@@ -69,6 +70,8 @@ def sources(graph, read_text, read_layout):
         for i,raw in lines:
             label,_ = column(raw)
             field = "title" if raw.strip() in TITLES else COLUMNS.get(label,"other")
+            if with_time and label in approval_clock.SIGNED:
+                field="signed_at"
             seen = [f["id"] for f in facts if (f.get("source_line") or {}).get("number")==i and f["source_line"]["text"]==raw]
             rows.append({"id":f"payment-approval/{doc}/p{page}/l{i}", "doc":doc,"page":page,"unit":unit,"line":i,
                          "field":field,"quote":raw,"rects":rects.get(str(i),[]),"facts":seen,"page_sha256":node["sha256"]})
@@ -88,10 +91,10 @@ def printed_date(value):
 
 def contents(page):
     rows=page["rows"]
-    if (not page["complete"] or len(rows)!=len(FIELDS) or {r["field"] for r in rows}!=FIELDS
+    fields={r["field"]:r for r in rows}
+    if (not page["complete"] or set(fields) not in (FIELDS,FIELDS | {"signed_at"}) or len(rows)!=len(fields)
             or not all(r["rects"] for r in rows)):
         return None
-    fields={r["field"]:r for r in rows}
     values={k:column(r["quote"])[1] for k,r in fields.items() if k!="title"}
     phase=STAGE.fullmatch(values["stage"])
     decision=DECISIONS.get(values["decision"])
@@ -165,4 +168,17 @@ def compare(graph, finding, use, required, pages):
     else:
         state = "earlier"
     check.update(state=state,status="risk" if state in {"refused","later"} else "missing")
+    clock_pages=graph["inspection_use_sources"].get("bank_clocks")
+    if state=="same_day" and clock_pages is not None:
+        clock=approval_clock.assess(fields.get("signed_at"),bank.unit,clock_pages,when)
+        if clock:
+            check["clock"]=clock
+            if clock["state"]=="debit_first":
+                check["status"]="risk"
+            for p in clock_pages:
+                if p["unit"]==bank.unit:
+                    check["evidence"].append(f"{p['doc']}/p{p['page']}")
+                    for row in p["rows"]:
+                        check["evidence"].extend([row["id"],*row["facts"]])
+            check["evidence"]=list(dict.fromkeys(check["evidence"]))
     return check

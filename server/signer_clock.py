@@ -19,13 +19,7 @@ VALUE = re.compile(
 )
 
 
-def source(unit, doc, page, line, quote, facts, *, bank):
-    label, separator, value = normalize("NFKC", quote).strip().partition(":")
-    label = label.strip()
-    person = SIGNER.fullmatch(label) if not bank else None
-    if not separator or not (person or bank and label in DEBIT | OTHER):
-        return None
-    kind = "signer" if person else "debit" if label in DEBIT else "other"
+def printed_clock(value):
     match = VALUE.fullmatch(value.strip())
     printed_day, at, zone = None, None, None
     if match and (match[1] or match[4]):
@@ -37,6 +31,17 @@ def source(unit, doc, page, line, quote, facts, *, bank):
     if match:
         at = ":".join(p for p in match.groups()[6:9] if p is not None)
         zone = "+08:00" if match[10] or match[11] else None
+    return printed_day, at, zone
+
+
+def source(unit, doc, page, line, quote, facts, *, bank):
+    label, separator, value = normalize("NFKC", quote).strip().partition(":")
+    label = label.strip()
+    person = SIGNER.fullmatch(label) if not bank else None
+    if not separator or not (person or bank and label in DEBIT | OTHER):
+        return None
+    kind = "signer" if person else "debit" if label in DEBIT else "other"
+    printed_day, at, zone = printed_clock(value)
     ref = f"{doc}/p{page}/l{line}" if line else facts[0]["id"]
     return {"id": "joint-clock/" + ref, "unit": unit, "doc": doc, "page": page, "line": line,
             "quote": quote, "kind": kind, "name": person[1] if person else None, "day": printed_day, "at": at, "zone": zone,

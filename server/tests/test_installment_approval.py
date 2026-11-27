@@ -21,6 +21,8 @@ def paper(*sheets, extra=(), banks=1, ext=".pdf"):
     bank = [*BANK_DOC, (FIELD,"付款依据验收单号","FY-02")]
     groups = [CONTRACT,OLD,FIX,FINAL,WARRANTY,*([bank]*banks),*sheets]
     def build(docs,pages,*args):
+        for doc in docs[5:5+banks]:
+            doc.update(ext=".pdf",pages=1)
         for doc in docs[5+banks:]:
             doc.update(ext=ext,pages=1)
         return build_graph(docs,pages,*args)

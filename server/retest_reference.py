@@ -1,6 +1,7 @@
 """Identify the inspection actually named on an acceptance installment's bank receipt."""
 from datetime import date
 import re
+import approval_clock
 
 from acceptance_payments import same_original
 from payment_acceptance import FIELD, GRAPH_KEY, LEVEL, column, number
@@ -102,15 +103,27 @@ def records(graph,findings):
         matched=bank_units.intersection(f["scope"])
         if len(matched)!=1:continue
         unit,=matched
-        citations=[r for r in ledger["rows"] if r["unit"]==unit and r["role"]=="bank_receipt"]
+        originals=[r for r in ledger["rows"] if r["unit"]==unit and r["role"]=="bank_receipt"]
+        if not originals:continue
+        events=approval_clock.event_lines(graph,unit)
+        citations,timing=[],[]
+        for raw in originals:
+            event=events.get((raw["doc"],raw["page"],raw["line"],raw["quote"]))
+            if raw["kind"]=="note" and not raw["disputed"] and event and set(raw["facts"])<=set(event["facts"]):
+                timing.append({"note":raw["id"],"event":event["id"]})
+            else:
+                citations.append(raw)
         if not citations:continue
         bank=Material(graph,unit)
         fields={"clause":stage["clause_ref"]}
         refs=[stage["clause_ref"]]
-        for row in citations:
+        for row in originals:
             refs.extend([row["id"],f"{row['doc']}/p{row['page']}",*row["facts"]])
         check={"format":FORMAT,"bank":unit,"state":"unresolved","status":"missing","fields":fields,
                "citations":[r["id"] for r in citations],"evidence":refs}
+        if timing:
+            check["timing_notes"]=timing
+            refs.extend(pair["event"] for pair in timing)
         clause=None
         for k in ("payment_stage","payment_term"):
             if any(fact["id"]==stage["clause_ref"] for fact in contract.fields[k]):
