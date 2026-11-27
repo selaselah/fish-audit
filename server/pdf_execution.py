@@ -129,6 +129,7 @@ def page_content(raw, expected):
 def unit_records(graph, read_original, assigned, *, field, prefix, label):
     from config import MAX_PAGES
 
+    accepted_fields = {field} if isinstance(field, str) else set(field)
     units = defaultdict(list)
     for unit in graph.get("audit_documents", graph["documents"]):
         if unit["id"] in assigned:
@@ -158,7 +159,7 @@ def unit_records(graph, read_original, assigned, *, field, prefix, label):
                     raise ValueError(label+"所据物理页缺失")
                 pages[number] = {"ref":key,"sha256":page["sha256"],**contents.get(number, {"layer":"unknown","has_text":False,"typeset":False})}
             fields = [f for f in graph["facts"] if (f.get("unit") or f["doc"])==unit["id"]
-                      and f["doc"]==doc["id"] and f["page"] in pages and f["field"]==field]
+                      and f["doc"]==doc["id"] and f["page"] in pages and f["field"] in accepted_fields]
             state = integrity if contents else "review"
             if state=="unsigned":
                 if all(p["typeset"] for p in pages.values()):

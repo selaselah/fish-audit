@@ -26,6 +26,7 @@ import advance_guarantee
 import contract_effect
 import pdf_execution
 import acceptance_execution
+import addendum_execution
 import mandate_execution
 import mandate_originals
 import supplier_pages
@@ -381,6 +382,10 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     graph["contract_effect_sources"]=contract_effect.sources(graph,lambda doc,number:texts[doc,number],calls=calls)
     graph["acceptance_pdf_sources"] = acceptance_execution.sources(graph, read_original)
     nodes, edges = acceptance_execution.source_graph(graph["acceptance_pdf_sources"])
+    graph["nodes"].extend(nodes)
+    graph["edges"].extend(edges)
+    graph[addendum_execution.KEY] = addendum_execution.sources(graph, read_original)
+    nodes, edges = addendum_execution.source_graph(graph[addendum_execution.KEY])
     graph["nodes"].extend(nodes)
     graph["edges"].extend(edges)
     graph["mandate_pdf_sources"] = mandate_execution.sources(graph, read_original)

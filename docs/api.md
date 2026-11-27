@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## 补充协议 PDF 的签署凭证
+
+`policy.addendum_pdf` 使用 `pdf-addendum-execution-v1`。`graph.addendum_pdf_sources.records` 按补充协议单元记录物理文件、原件摘要、所属页、签章字段及嵌入式签名记录。可以从 `addendum_pdf_source` 找到该单元的签署检查节点。签署状态沿用 PDF 检查的六个值，即 `typeset`、`visual`、`current`、`earlier`、`mismatch`、`review`。
+
+受影响的 `quality_change.execution` 和 `payment_change.execution` 列出检查节点 ID。`evidence` 保留原件、页和两方签章字段，可通过所选版的支持关系检查由哪份协议引起待核。验收标准和数量变更使用 `state=pending`，付款前提使用 `applies=pending`，已核清的收票变更范围可独立保留。数字签名与已签内容校验不符时，直接依赖该协议的检查列出风险。仅有文字或图像时保留补证。签收及离线验包从归档原件重做文件签署检查。
+
 ## Word 与影像委托书
 
 从规则 `2026.11.27.04` 起，`policy.mandate_originals` 和 `graph.mandate_original_sources.format` 为 `mandate-original-execution-v1`。每条 `records[]` 绑定委托单元 `unit`、物理文件 `doc`、原件 SHA-256、相关页 `pages` 和签章观察 `fields`。状态 `word_text` 指打印页仅见排印文字，`word_visual` 指含图形等版面元素，`word_review` 指批注、修订或审阅范围待核，`photo` 指影像原件，`review` 指其他待核情况。

@@ -23,6 +23,7 @@ import pdf_execution
 import mandate_execution
 import mandate_originals
 import acceptance_execution
+import addendum_execution
 import contract_calendar
 import signing_parties
 import inspection_coverage
@@ -719,6 +720,7 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True, recheck_
                 contract_comments.attach(plan, plan_review)
         results.extend(grouped)
         results.extend(warranty_register.findings(graph,results))
+        addendum_execution.flag_mismatches(graph,results)
     return results
 
 

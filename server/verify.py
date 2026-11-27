@@ -34,6 +34,7 @@ from delivery_batches import verify_sources as verify_delivery_batches
 from contract_effect import verify as verify_contract_effect
 from pdf_execution import verify as verify_pdf_execution
 from acceptance_execution import verify as verify_acceptance_pdf
+from addendum_execution import verify as verify_addendum_pdf
 from mandate_execution import verify as verify_mandate_pdf
 from mandate_originals import verify as verify_mandate_originals
 from supplier_pages import verify as verify_supplier_pages
@@ -274,6 +275,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
     try:
         verify_pdf_execution(report, read_original)
         verify_acceptance_pdf(report, read_original)
+        verify_addendum_pdf(report, read_original)
         verify_mandate_pdf(report, read_original)
         verify_supplier_pages(report, read_original)
     except ModuleNotFoundError as error:
@@ -461,7 +463,7 @@ def render_addendum_sources(bundle, report, nodes):
     selected.update(p["doc"] for p in graph.get("contract_folio_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("reinspection_wait_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("payment_acceptance_sources",{}).get("pages",[]))
-    for key in ("acceptance_pdf_sources", "mandate_pdf_sources", "mandate_original_sources"):
+    for key in ("acceptance_pdf_sources", "addendum_pdf_sources", "mandate_pdf_sources", "mandate_original_sources"):
         selected.update(r["doc"] for r in graph.get(key,{}).get("records",[]))
     selected.update(p["doc"] for p in graph.get("inspection_coverage_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("equipment_model_sources",{}).get("pages",[]))
