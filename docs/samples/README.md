@@ -1,5 +1,21 @@
 # 合成财会审计演练
 
+## 质保回单与期满单所列日期
+
+用固定底稿 R11 的六份水印原件生成三组演练。回单均列 11 月 24 日，Word 期满单分别列 26 日、24 日和数字断开的「2 2 日」。三组都保留同一条 Word 原批注。生成器检查母本摘要、水印、原行与数字分组。使用 `--run --check-fields` 可向本机提交材料、调用模型并按水印件核字。[逐案验收](../acceptance.md#从质保金回单核对期满单原行)
+
+```sh
+curl --fail http://127.0.0.1:8000/api/cases/920ea04963ef4f68905ff87533133fd4/reports/11/bundle -o /tmp/warranty-R11.zip
+server/.venv/bin/python docs/samples/warranty_originals_demo.py /tmp/warranty-R11.zip /tmp/warranty-date-inputs --dates
+```
+
+要独立复算「回单早 2 天」的底稿，可从本机下载其证据包。以下命令从六份原件重现页图，并使用发布提交中的 Python 程序逐项比较发现和整案建议。
+
+```sh
+curl --fail http://127.0.0.1:8000/api/cases/fd51542fc29c401196842a0a207f1e8b/reports/6/bundle -o /tmp/warranty-before-R6.zip
+server/.venv/bin/python server/verify.py /tmp/warranty-before-R6.zip --render-performance --rules-from-git 4815867
+```
+
 ## 同一张期满确认单的签署版本
 
 生成器校验固定底稿 R11 的水印、六份原件和页图摘要，生成测试签名覆盖本版、签后修订、带批注的 Word 以及整页 JPEG 四组资料。加 `--run --check-fields` 会实际提交到本机工作台，按水印原行核字并留存每次复核。每次生成使用新的演练签名，可用独立输出目录保存各批文件。[新版演练结果](../acceptance.md#质保金第三期的期满确认单与原件批注)

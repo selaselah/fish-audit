@@ -8,6 +8,14 @@
 
 企业工作区使用 `/api/w/<wid>/walkthrough`，沿用成员身份和写入时的 CSRF 校验，清单仅列出当前账号在该企业内的记录。企业实例的公开页使用浏览器存储。[服务端实现](../server/walkthrough.py)
 
+## 质保金两单所列日期
+
+规则 `2026.11.27.14` 在 `policy.warranty_dates` 声明 `warranty-written-dates-v1`。`graph.warranty_date_sources.pages` 列出银行回单单元的物理页与原生文字层状态，`lines` 保存相关日期原行，包括模型漏录的候选行。期满单的原行取自 `graph.warranty_sources.lines`。
+
+有原件签署凭证时，`warranty_check.certificate.date` 为可核对的读数或 `null`。读数给出字段 `ref`、原件 `doc`、业务单元 `unit`、页行 `page/line`、保留排版的 `literal`、日历日期 `iso`、文件和页图摘要 `original_sha256/page_sha256`。题名重复归类时另含 `heading_refs`。书面日期记入 `stated_on`，实际签发仍待认定时 `confirmed_on` 为 `null`。
+
+归属于同一期的 H05 可含 `warranty_payment.comparison`。有效时包含确认单字段 `stated_ref`、回单读数 `bank`、有符号日差 `days` 和所据节点 `evidence`。图边 `warranty_payment_dates` 从确认单字段指向该回单日期字段，以相同的依据关联合同期次、确认单原件、回单双方、用途和状态。两侧不能同时定位时该值为 `null`。走查此处的意见沿用 `view=warranty-certificate`，`stage` 记所选回单的 H05 编号。[R6 两张单据原行](http://127.0.0.1:8000/workpaper/fd51542fc29c401196842a0a207f1e8b?rev=6&view=warranty-certificate&stage=H05-8)
+
 ## 质保期满确认单的签署凭证
 
 规则 `2026.11.27.13` 在 `policy.warranty_execution` 声明 `warranty-certificate-execution-v1`。图谱在 `warranty_pdf_sources.records` 保存 PDF 签署版本、签名范围、文件和页图摘要，在 `warranty_original_sources` 保存 Word 或影像原件。Word 的 `documents[].notes` 保留批注及可定位的原页选区。归档验证重新读取所据文件并核对图关系。

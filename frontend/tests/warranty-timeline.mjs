@@ -18,6 +18,11 @@ async function checkWrittenDates(ctx,report,rev,phase,bank,card) {
     assert.ok(await evaluate(q('#page-dialog .source-plane svg rect')+'!==null'));
     const location=()=>evaluate('import("/assets/walkthrough-context.js").then(m=>m.captureContext('+q('#page-dialog')+',null))');
     assert.equal((await location()).line,source.line);
+    if (source.quote) {
+      const href=await evaluate('import("/assets/walkthrough-context.js").then(m=>m.returnUrl(m.captureContext('+q('#page-dialog')+',null)))');
+      await call('Page.navigate',{url:root+href});
+      await wait(q('#page-dialog .located blockquote')+'?.textContent==='+JSON.stringify(literal)+' && '+q('#page-dialog img')+'?.naturalWidth>0','opinion returns to unparsed original line');
+    }
     const other=report.graph.facts.find(f=>f.doc===source.doc && f.page===source.page && f.source_line?.number && f.source_line.number!==source.line);
     const pick=async value=>evaluate('(()=>{const e='+q('#reader-citation-picker')+';e.value='+JSON.stringify(value)+';e.dispatchEvent(new Event("change"))})()');
     await pick(other.id);
@@ -26,6 +31,10 @@ async function checkWrittenDates(ctx,report,rev,phase,bank,card) {
     await pick('');
     assert.equal((await location()).line,undefined);
     await evaluate(q('#page-dialog [data-close]')+'.click()');
+    if (source.quote) {
+      await call('Page.navigate',{url:root+'/workpaper/'+report.case_id+'?rev='+rev+'&view=warranty-certificate&stage='+bank.id});
+      await wait(q(card)+'?.getClientRects().length','back on the selected installment');
+    }
   }
   if (!c) {
     assert.equal(await evaluate(q(panel)),null);

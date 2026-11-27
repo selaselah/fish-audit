@@ -2,7 +2,9 @@
 
 ## 在页面上记录走查意见
 
-周末走查从右下角「提意见」进入。选「点选控件」，点质保期满确认单上的 Word 批注，写意见并保存。「已记录」会显示当时的版次和页行。从工作台点这条链接，可回到原来的批注，再点「第 1 页 · 第 9 行」打开选中的正文。本机意见也可由开发人员直接读取。[打开水印底稿 R5](http://127.0.0.1:8000/workpaper/bd4e587110604a81b0a0cb4a028323ab?rev=5&view=warranty-certificate&stage=H04-7) · [手机上的走查记录器](warranty-walkthrough-mobile.webp)
+周末走查可以直接从这份质保金底稿开始。右下角选「提意见 → 点选控件」，点「银行回单」的日期并写下修改意见。编辑时蓝框标出选中的位置。「已记录」中的链接会恢复 R6、第三期的这笔回单和相应日期按钮。点按钮可看原页第 9 行。在阅读器切到另一条引文后再提意见，记录随当前引文定位。整轮走查的清单可以一次复制给 Codex。[打开水印底稿 R6](http://127.0.0.1:8000/workpaper/fd51542fc29c401196842a0a207f1e8b?rev=6&view=warranty-certificate&stage=H05-8) · [手机宽度点选截图](warranty-dates-mobile.webp)
+
+点选质保期满确认单上的 Word 批注也会保存当时的版次和页行。从工作台点这条意见的位置链接可回到批注，再点「第 1 页 · 第 9 行」打开选中的正文。本机意见也可由开发人员直接读取。[打开水印底稿 R5](http://127.0.0.1:8000/workpaper/bd4e587110604a81b0a0cb4a028323ab?rev=5&view=warranty-certificate&stage=H04-7) · [手机上的走查记录器](warranty-walkthrough-mobile.webp)
 
 在「放行单对照」中点「提意见 → 点选控件」，再点甲单或乙单的决定行。清单会带上原件文件名，位置链接会恢复当时的底稿版次、第二期和所选单据，并标出该行。点决定文字本身可查看物理原页。[打开两份水印审批单](http://127.0.0.1:8000/workpaper/42a2fd1a46f34d88af80e8c9634a244e?rev=8&view=payment-release&stage=H04-6&instrument=d06) · [手机实拍](release-comparison-mobile.webp)
 
