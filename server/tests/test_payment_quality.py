@@ -29,6 +29,113 @@ def example(*, date="2026-09-21", standard="柜温不高于4℃", measure="柜�
 
 
 class PaymentQualityEvidence(unittest.TestCase):
+    def test_exact_excluded_boundary_on_either_original_has_no_invented_excess(self):
+        cases=(
+            ("柜温低于8℃","柜温不高于8℃","柜温8℃",("excluded_boundary","within")),
+            ("柜温不低于-2.50℃","柜温＞-2.50℃","柜温-2.500℃",("within","excluded_boundary")),
+            ("柜温＜8℃","柜温小于8.0℃","柜温8℃",("excluded_boundary","excluded_boundary")),
+            ("柜温大于-2.5℃","柜温高于-2.50℃","柜温-2.51℃",("outside","outside")),
+        )
+        for contract,basis,value,states in cases:
+            with self.subTest(contract=contract,basis=basis):
+                p,text=example(standard=contract,measure=value,changes={(2,"inspection_basis"):basis})
+                accepted=next(f for f in p["findings"] if f["rule"]=="H02")
+                limits=accepted["quality_comparison"]["limits"]
+                self.assertEqual(accepted["status"],"issue")
+                self.assertEqual(tuple(limits[k]["result"] for k in ("contract","inspection")),states)
+                for entry in limits.values():
+                    if entry["result"]=="outside":self.assertEqual(entry["outside_by"],"0.01")
+                    else:self.assertNotIn("outside_by",entry)
+                self.assertNotIn("超出限值0°C",accepted["detail"])
+                self.assertEqual([(f["rule"],f["stage"]["name"]) for f in p["findings"] if f.get("payment_quality")],
+                                 [("H04","第二期"),("H05","第二期")])
+                quality.verify(p,text)
+                verify_findings(p)
+
+    def test_matching_strict_bounds_only_resolve_the_measurement(self):
+        for change,expected in (({},"ok"),({(2,"acceptance_signer"):None},"missing"),
+                                ({(2,"quantity_accepted"):"1台"},"risk"),({(2,"acceptance_exception"):"未复验"},"risk")):
+            p,text=example(standard="柜温大于7.99℃",changes={(2,"inspection_basis"):"柜温＞7.990℃",**change})
+            accepted=next(f for f in p["findings"] if f["rule"]=="H02")
+            self.assertEqual([v["result"] for v in accepted["quality_comparison"]["limits"].values()],["within","within"])
+            self.assertEqual(accepted["status"],expected)
+            self.assertFalse(any(f.get("payment_quality") for f in p["findings"]))
+            quality.verify(p,text)
+            verify_findings(p)
+        for wording in ("柜温不得高于8℃","柜温不小于8℃","柜温不宜低于8℃","柜温约低于8℃","柜温低于8℃±1℃","按附件执行"):
+            with self.subTest(wording=wording):
+                p,_=example(standard=wording,changes={(2,"inspection_basis"):"柜温低于8℃"})
+                self.assertFalse(any(f.get("quality_comparison") for f in p["findings"]))
+        p,_=example(standard="柜温低于8℃",omissions=[(2,"实测结果：柜温7.9℃")])
+        self.assertFalse(any(f.get("quality_comparison") for f in p["findings"]))
+
+    def test_printed_rounding_note_needs_original_measurement_before_comparing(self):
+        note="检测备注：柜温读数已取整，须查未取整的原始读数"
+        for unit in (1,2):
+            p,text=example(standard="柜温低于8℃",changes={(2,"inspection_basis"):"柜温不高于8℃"},omissions=[(unit,note)])
+            accepted=next(f for f in p["findings"] if f["rule"]=="H02")
+            proof=accepted["quality_comparison"]
+            self.assertNotEqual(accepted["status"],"issue")
+            row,=proof["reading_notes"]
+            self.assertEqual(row["quote"],note)
+            self.assertEqual(text(row["doc"],row["page"]).splitlines()[row["line"]-1],note)
+            self.assertTrue(all(v["result"]=="reading_required" and "outside_by" not in v for v in proof["limits"].values()))
+            stage=next(f for f in p["findings"] if f["rule"]=="H05")
+            self.assertEqual(stage["status"],"missing")
+            self.assertEqual(stage["payment_quality"]["comparison"]["reading_notes"],[row])
+            self.assertIn(f"{row['doc']}/p{row['page']}",stage["evidence"])
+            quality.verify(p,text)
+            verify_findings(p)
+            altered=deepcopy(p)
+            ledger=altered["graph"][quality.KEY]
+            ledger["rows"]=[r for r in ledger["rows"] if r["field"]!="measurement_note"]
+            with self.assertRaises(ValueError):quality.verify(altered,text)
+        p,_=example(standard="柜温低于8℃",omissions=[(1,"金额说明：付款金额四舍五入到分"),(3,note)])
+        accepted=next(f for f in p["findings"] if f["rule"]=="H02")
+        self.assertEqual(accepted["status"],"issue")
+        self.assertNotIn("reading_notes",accepted["quality_comparison"])
+
+    def test_previous_program_replays_but_cannot_sign_an_omitted_strict_boundary(self):
+        for value,blocked in (("柜温8℃",True),("柜温7.99℃",False)):
+            p,text=example(standard="柜温低于8℃",measure=value)
+            g=p["graph"];g[quality.KEY]=quality.sources(g,text,quality.BASIS_FORMAT)
+            g["edges"]=[e for e in g["edges"] if e["type"] not in (quality.EDGE,quality.BASIS_EDGE)]
+            p["findings"]=execute(g,PERFORMANCE)
+            p["policy"].update(version="2026.11.28.9",payment_quality=quality.BASIS_FORMAT)
+            self.assertFalse(any(f.get("quality_comparison") for f in p["findings"]))
+            quality.verify(p,text)
+            if blocked:
+                with self.assertRaisesRegex(ValueError,"重审"):quality.verify(p,text,signing=True)
+            else:quality.verify(p,text,signing=True)
+
+    def test_issued_precision_note_needs_its_own_page_trace_and_original_coordinates(self):
+        p,text=example(standard="柜温低于8℃",omissions=[(2,"测量说明：柜温读数取整，原始记录另附")])
+        note,=quality.reading_notes(p["findings"]);rects=[[0,.1,.9,.2]]
+        from_fact={}
+        for f in p["graph"]["facts"]:
+            if line:=f.get("source_line"):
+                from_fact.setdefault((f["doc"],f["page"]),{})[str(line["number"])]=line["rects"]
+        from_fact[note["doc"],note["page"]][str(note["line"])]=rects
+        pages={n["id"]:n for n in p["graph"]["nodes"] if n["type"]=="page"}
+        def layout(doc,page):
+            n=pages[f"{doc}/p{page}"]
+            return {"type":n["layer"],"clause_text_only":n.get("clause_text_only",False),"lines":from_fact[doc,page]}
+        p["calls"]={"pages":[{"doc":note["doc"],"page":note["page"],"page_sha256":pages[f"{note['doc']}/p{note['page']}"]["sha256"],
+                              "response_id":"fixture-primary","check":{"response_id":"fixture-check"},
+                              quality.RECTS:{str(note["line"]):rects}}]}
+        quality.verify(p,text,read_layout=layout)
+        for fault in ("position","missing","page","second_reader","conclusion"):
+            with self.subTest(fault=fault),self.assertRaises(ValueError):
+                other=deepcopy(p);call,=other["calls"]["pages"]
+                if fault=="position":call[quality.RECTS][str(note["line"])]=[[.1,.2,.9,.3]]
+                if fault=="missing":call.pop(quality.RECTS)
+                if fault=="page":call["page_sha256"]="other"
+                if fault=="second_reader":call["check"].clear()
+                if fault=="conclusion":
+                    h=next(f for f in other["findings"] if f["rule"]=="H02")
+                    h["quality_comparison"]["limits"]["contract"]["result"]="excluded_boundary"
+                quality.verify(other,text,read_layout=layout)
+
     def test_distinct_limits_have_independent_results_even_on_the_exact_boundary(self):
         for contract,basis,observed,expected in (
             ("柜温不高于4℃","柜温不高于8℃","柜温8℃",("outside","within")),

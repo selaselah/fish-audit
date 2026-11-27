@@ -26,6 +26,14 @@ def materials(archive, folder, key):
 
 
 def replace_printed_field(archive, folder, name, field, value):
+    return replace_printed_fields(archive,folder,[(name,field,value)])
+
+
+def replace_printed_fields(archive, folder, replacements, *, extra_row=None):
+    edits = {name:(field,value) for name,field,value in replacements}
+    require(len(edits)==len(replacements), "每份水印原件只替换一行")
+    if extra_row:
+        require(extra_row[0] in edits,"附加说明应印在本组改写的水印原件上")
     folder.mkdir(parents=True, exist_ok=True)
     with ZipFile(archive) as pack:
         content = pack.read("report.json")
@@ -38,14 +46,21 @@ def replace_printed_field(archive, folder, name, field, value):
             lines = pack.read(f"pages/{unit}/1.txt").decode().splitlines()
             require(lines[0] == WATERMARK and digest(raw) == doc["sha256"] and doc["pages"] == 1, "原件摘要及水印")
             dest = folder/doc["name"]
-            if doc["name"] == name:
+            if doc["name"] in edits:
+                name = doc["name"]
+                field,value = edits[name]
                 rows = [line.split("：",1) for line in lines[2:]]
                 require(lines[1] == Path(name).stem and sum(k == field for k,_ in rows) == 1, "水印原件唯一的目标行")
-                pdf(dest, lines[1], [(k,value if k == field else v) for k,v in rows], font=embedded_font("QualityTransfer"), spacing=28)
+                edited = [(k,value if k == field else v) for k,v in rows]
+                if extra_row and name==extra_row[0]:
+                    _,label,content=extra_row
+                    require(not any(k==label for k,_ in rows),"新增说明在母本中未出现")
+                    edited.append((label,content))
+                pdf(dest, lines[1], edited, font=embedded_font("QualityTransfer"), spacing=28)
             else:
                 dest.write_bytes(raw)
             paths.append(dest)
-    require(sum(path.name == name for path in paths)==1, "水印母本中待替换的原件")
+    require(all(sum(path.name==name for path in paths)==1 for name in edits), "水印母本中待替换的原件")
     return paths, paper["policy"]["profile"]
 
 

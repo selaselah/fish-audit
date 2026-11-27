@@ -3,6 +3,10 @@ import {browserInput,inspect,size} from './review-screen.mjs';
 
 export async function checkPaymentQuality(ctx,cid) {
   const {root,call,evaluate,wait}=ctx, isolated=process.env.AUDIT_ISOLATED_QUALITY_ORIGIN;
+  if (isolated) {
+    assert.equal(root,isolated);
+    assert.ok(!['8000','8010'].includes(new URL(root).port));
+  }
   const json=async path=>{const r=await fetch(root+path);assert.equal(r.status,200);return r.json();};
   const base='/api/cases/'+cid, task=await json(base);assert.match(task.title,/^合成演练 · /u);
   const {report,rev}=await json(base+'/reports/'+(process.env.AUDIT_QUALITY_REV || task.rev));
@@ -28,6 +32,89 @@ export async function checkPaymentQuality(ctx,cid) {
     await evaluate(q('#page-dialog')+'.close()');
     assert.ok(await evaluate(limits?visible(button):q('#performance-index')+'.open'));
   }
+  const noteKey=n=>'reading-'+n.doc+'-p'+n.page+'-l'+n.line;
+  async function precisionPage(card,n,close=true) {
+    const control=card+'-'+noteKey(n), ref='measurement-note/'+n.doc+'/p'+n.page+'/l'+n.line;
+    await click(control);
+    await wait(q('#page-dialog')+'?.open && '+q('#page-content .located')+'?.dataset.sourceRef==='+JSON.stringify(ref)+' && '+q('#page-content img')+'?.naturalWidth>0','printed precision note '+ref);
+    assert.equal(await evaluate(q('#page-content .located blockquote')+'.textContent'),n.quote);
+    const page=report.calls.pages.find(p=>p.doc===n.doc && p.page===n.page);
+    const rects=page.measurement_note_rects[String(n.line)];
+    const marks=await evaluate('[...document.querySelectorAll("#page-content .source-plane svg rect")].map(r=>["x","y","width","height"].map(k=>Number(r.getAttribute(k))))');
+    assert.ok(rects.length);
+    assert.deepEqual(marks,rects.map(([l,t,r,b])=>[l,t,r-l,b-t].map(v=>1000*v)));
+    if (close) await evaluate(q('#page-dialog')+'.close()');
+  }
+  async function verifyLimits(card,comparison) {
+    for (const [role,key] of [['contract','acceptance_criteria'],['inspection','inspection_basis']]) {
+      const limit=comparison.limits[role], marker=card+'-'+key+' .quality-evaluation.'+limit.result;
+      assert.ok(await evaluate(visible(marker)),key+' '+limit.result);
+      const sign=['低于','小于','<'].includes(limit.operator)?'<':['高于','大于','>'].includes(limit.operator)?'>':
+        ['不高于','不超过','至多','≤'].includes(limit.operator)?'≤':'≥';
+      const label=(limit.name===comparison.observed.name?'':limit.name+' ')+sign+' '+limit.limit+' '+limit.unit;
+      assert.equal(await evaluate(q(card+'-'+key+' strong')+'.textContent'),label);
+      if (limit.result==='excluded_boundary') assert.match(await evaluate(q(marker)+'.textContent'),/等于[上下]限.*未满足/u);
+      if (limit.result==='reading_required') assert.equal(await evaluate(q(marker)+'.textContent'),'原始读数待核');
+    }
+    for (const n of comparison.reading_notes || []) await precisionPage(card,n);
+  }
+  async function recordAcceptanceFeedback() {
+    await go(fixed+'&view=acceptance-limits');
+    const button='#limits-'+h02.id+'-inspection_basis';
+    await wait(visible(button),'acceptance control');
+    await click('#walk-launch');await wait(q('#walk-dialog')+'?.open && !'+q('#walk-save')+'.disabled','record a note on the acceptance finding');
+    await evaluate(q('#walk-text')+'.value="想在这项验收核对上加一个补件入口。";'+q('#walk-text')+'.dispatchEvent(new Event("input"))');
+    await click('#walk-save');await wait('!'+q('#walk-dialog')+'.open','store a note on the visible acceptance comparison');
+    const [generalLimit]=(await json('/api/walkthrough')).notes;
+    assert.equal(generalLimit.context.anchor,'limits-'+h02.id);
+    assert.deepEqual(generalLimit.context.params,{view:'acceptance-limits'});
+    await click('#walk-launch');await wait(q('#walk-dialog')+'?.open && !'+q('#walk-save')+'.disabled','record a note on an individual limit');
+    const opinion='请核对这份验收单采用的限值。';
+    await evaluate(q('#walk-text')+'.value='+JSON.stringify(opinion)+';'+q('#walk-text')+'.dispatchEvent(new Event("input"))');
+    await click('#walk-pick');await browserInput(ctx).tap(q(button));
+    await wait(q('#walk-dialog')+'.open && '+q(button)+'.classList.contains("walk-selected")','selected inspection limit');
+    await inspect(ctx,390,'#walk-dialog','limits-feedback');
+    await click('#walk-save');await wait('!'+q('#walk-dialog')+'.open','store a limit-specific walkthrough opinion');
+    const [entry]=(await json('/api/walkthrough')).notes;
+    assert.deepEqual(entry.context.params,{view:'acceptance-limits'});assert.equal(entry.context.anchor,button.slice(1));
+    assert.match(entry.context.target,/检验依据.*第 1 页.*行/u);assert.equal(entry.context.rev,rev);
+    for (const [context,status] of [[{...entry.context,rev:rev-1},404],[{...entry.context,params:{finding:h02.id}},400]]) {
+      const res=await fetch(root+'/api/walkthrough',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({id:'c'.repeat(32),text:opinion,context})});assert.equal(res.status,status);
+    }
+    await go(root+'/app#desk');await wait(visible('#desk'),'desk before opening the limits note');
+    await click('#walk-launch');await wait(q('#walk-dialog')+'?.open && !'+q('#walk-saved')+'.disabled','notebook');
+    await click('#walk-saved');await wait(visible('#walk-history li a'),'recorded limit note');
+    await click('#walk-history li a');await wait(q(button)+'?.classList.contains("walk-mark") && '+visible(button),'return to the recorded inspection limit');
+    await original(h02.id,'inspection_basis');
+    if (h02.quality_comparison.reading_notes?.length) {
+      const [n]=h02.quality_comparison.reading_notes, card='#limits-'+h02.id, target=card+'-'+noteKey(n);
+      await click('#walk-launch');await wait(q('#walk-dialog')+'?.open && !'+q('#walk-save')+'.disabled','note on the precision control');
+      await evaluate(q('#walk-text')+'.value="请补未取整的检测记录。";'+q('#walk-text')+'.dispatchEvent(new Event("input"))');
+      await click('#walk-pick');await browserInput(ctx).tap(q(target));
+      await wait(q('#walk-dialog')+'.open && '+q(target)+'.classList.contains("walk-selected")','precision note selected');
+      await inspect(ctx,390,'#walk-dialog','precision-feedback');
+      await click('#walk-save');await wait('!'+q('#walk-dialog')+'.open','precision control saved');
+      const [stored]=(await json('/api/walkthrough')).notes;assert.equal(stored.context.anchor,target.slice(1));
+      assert.deepEqual(stored.context.params,{view:'acceptance-limits'});
+      const path=await evaluate('import("/assets/walkthrough-context.js").then(m=>m.returnUrl('+JSON.stringify(stored.context)+'))');
+      await go(root+path);await wait(q(target)+'?.classList.contains("walk-mark") && '+visible(target),'precision control pin restored');
+      await precisionPage(card,n,false);
+      await inspect(ctx,390,'#page-dialog','precision-original');
+      await click('#walk-launch');await wait(q('#walk-dialog')+'?.open && !'+q('#walk-save')+'.disabled','note on original precision line');
+      await evaluate(q('#walk-text')+'.value="核对这一行的舍入说明。";'+q('#walk-text')+'.dispatchEvent(new Event("input"))');
+      await click('#walk-save');await wait('!'+q('#walk-dialog')+'.open','save original precision source');
+      const [entry]=(await json('/api/walkthrough')).notes;
+      const raw='measurement-note/'+n.doc+'/p'+n.page+'/l'+n.line;
+      assert.equal(entry.context.raw_ref,raw);assert.equal(entry.context.rev,rev);
+      const dest=await evaluate('import("/assets/walkthrough-context.js").then(m=>m.returnUrl('+JSON.stringify(entry.context)+'))');
+      await go(root+dest);await wait(q('#page-dialog')+'?.open && '+q('#page-content .located')+'?.dataset.sourceRef==='+JSON.stringify(raw),'exact precision line after reopening');
+      for (const context of [{...stored.context,anchor:target.slice(1)+'0'},{...entry.context,rev:rev-1}]) {
+        const res=await fetch(root+'/api/walkthrough',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({id:'d'.repeat(32),text:'定位核验',context})});assert.equal(res.status,404);
+      }
+    }
+  }
   // The real report and its installment picker expose the same control, including unknown-designation receipts.
   await open((current || findings.at(-1)).id);
   for (const f of findings) {
@@ -42,10 +129,7 @@ export async function checkPaymentQuality(ctx,cid) {
     const observed=data.comparison?.observed || {value:data.measure.observed,unit:data.measure.unit};
     assert.equal(await evaluate(q(card+' .measured strong')+'.textContent'),observed.value+' '+observed.unit);
     if (data.comparison) {
-      for (const [role,key] of [['contract','acceptance_criteria'],['inspection','inspection_basis']]) {
-        const result=data.comparison.limits[role].result;
-        assert.ok(await evaluate(visible(card+'-'+key+' .quality-evaluation.'+result)));
-      }
+      await verifyLimits(card,data.comparison);
       await original(f.id,'inspection_basis');
     }
     if (data.payment) {
@@ -62,6 +146,32 @@ export async function checkPaymentQuality(ctx,cid) {
     assert.deepEqual(picked.params,{view:'acceptance-limits'});assert.equal(picked.anchor,card.slice(1)+'-inspection_basis');
     await go(fixed+'&view=acceptance-limits');
     await wait(visible(card),'issued acceptance limits');
+    await verifyLimits(card,h02.quality_comparison);
+    const {contract,inspection}=h02.quality_comparison.limits;
+    const strictSigns={'低于':'<','小于':'<','<':'<','高于':'>','大于':'>','>':'>'};
+    const millionths=value=>{
+      const [whole,fraction='']=value.split('.');
+      return BigInt(whole+fraction.padEnd(6,'0'));
+    };
+    const mayAgree=Boolean(strictSigns[contract.operator]) && strictSigns[contract.operator]===strictSigns[inspection.operator] &&
+      contract.result==='within' && inspection.result==='within' && contract.unit===inspection.unit &&
+      contract.name===inspection.name && millionths(contract.limit)===millionths(inspection.limit);
+    const withMatchingFinding=await evaluate(`(()=>{
+      const paper=structuredClone(state.bundle.report);
+      const finding=paper.findings.find(f=>f.quality_comparison);
+      const node=paper.graph.nodes.find(n=>n.id==='finding/'+finding.id);
+      finding.status='ok';
+      node.status='ok';
+      return Boolean(PaymentQuality.bind(finding,paper));
+    })()`);
+    assert.equal(withMatchingFinding,mayAgree);
+    if (h02.quality_comparison.reading_notes?.length) {
+      for (const fault of ['claim','line','coordinates','method']) {
+        const mutation={claim:'v.limits.contract.result="excluded_boundary";',line:'v.reading_notes[0].quote="另一行";',
+          coordinates:'delete p.calls.pages.find(c=>c.measurement_note_rects).measurement_note_rects;',method:'p.policy.version="2026.11.28.9";'}[fault];
+        assert.equal(await evaluate('(()=>{const p=structuredClone(state.bundle.report),h=p.findings.find(f=>f.quality_comparison),v=h.quality_comparison;'+mutation+'return PaymentQuality.bind(h,p)===null})()'),true,fault);
+      }
+    }
     for (const key of ['measured_result','acceptance_criteria','inspection_basis','acceptance_result']) await original(h02.id,key);
     for (const width of [320,390,768,820,1024,1440]) {
       await size(ctx,width);
@@ -73,7 +183,15 @@ export async function checkPaymentQuality(ctx,cid) {
     await wait(q('#case-panel')+'?.textContent.includes("本版未出具合同与验收单的双限值对照")','no dual comparison on this edition');
     assert.equal(await evaluate(q('[data-limit-finding]')+'===null'),true);
   }
-  if (!current) {console.log('PASS · R'+rev+' · scoped findings retain their ordinary sources');return;}
+  if (!current) {
+    if (h02 && isolated) {
+      await size(ctx,390);
+      await recordAcceptanceFeedback();
+      const end=await json(base);
+      assert.deepEqual([end.status,end.rev,end.decisions],[task.status,task.rev,task.decisions]);
+    }
+    console.log('PASS · R'+rev+(h02?' · confirmed measurement, independent signoff conditions and fixed-version feedback':' · scoped findings retain their ordinary sources'));return;
+  }
   const id=current.id, card='#quality-'+id, data=current.payment_quality;
   await go(fixed);
   const summary='[data-finding="'+id+'"] .finding-disclosure > summary';
@@ -105,7 +223,6 @@ export async function checkPaymentQuality(ctx,cid) {
     }
   }
   if (isolated) {
-    assert.equal(root,isolated);assert.ok(!['8000','8010'].includes(new URL(root).port));
     assert.deepEqual((await json('/api/walkthrough')).notes,[]);
     // Pick a recorded field while the payment modal is open. Its own stage can differ from the route's initial selection.
     const last=quality.at(-1), fid=last.id, target='#quality-'+fid+'-measured_result';
@@ -127,7 +244,7 @@ export async function checkPaymentQuality(ctx,cid) {
     await click('#walk-save');await wait('!'+q('#walk-dialog')+'.open','save the walkthrough note');
     const [note]= (await json('/api/walkthrough')).notes;
     assert.deepEqual(note.context.params,{view:'payment-checks',stage:fid});
-    assert.equal(note.context.anchor,target.slice(1));assert.match(note.context.target,/终验实测.*第 1 页.*行/u);
+    assert.equal(note.context.anchor,target.slice(1));assert.match(note.context.target,/(?:终验实测|验收单读数).*第 1 页.*行/u);
     assert.equal(note.context.case_id,cid);assert.equal(note.context.rev,rev);
     const stage=quality.find(f=>f.rule==='H04').id;
     for (const [context,status] of [[{...note.context,rev:rev-1},404],
@@ -158,36 +275,7 @@ export async function checkPaymentQuality(ctx,cid) {
     await wait(q(deferred)+'?.classList.contains("walk-mark") && '+visible(deferred),'late report expands and pins the same source field',30000);
     await call('Page.removeScriptToEvaluateOnNewDocument',{identifier:delay.identifier});
     await original(fid,folded);
-    if (h02) {
-      await go(fixed+'&view=acceptance-limits');
-      const button='#limits-'+h02.id+'-inspection_basis';
-      await wait(visible(button),'acceptance control');
-      await click('#walk-launch');await wait(q('#walk-dialog')+'?.open && !'+q('#walk-save')+'.disabled','record a note on the acceptance finding');
-      await evaluate(q('#walk-text')+'.value="想在这项验收核对上加一个补件入口。";'+q('#walk-text')+'.dispatchEvent(new Event("input"))');
-      await click('#walk-save');await wait('!'+q('#walk-dialog')+'.open','store a note on the visible acceptance comparison');
-      const [generalLimit]=(await json('/api/walkthrough')).notes;
-      assert.equal(generalLimit.context.anchor,'limits-'+h02.id);
-      assert.deepEqual(generalLimit.context.params,{view:'acceptance-limits'});
-      await click('#walk-launch');await wait(q('#walk-dialog')+'?.open && !'+q('#walk-save')+'.disabled','record a note on an individual limit');
-      const opinion='请核对这份验收单采用的限值。';
-      await evaluate(q('#walk-text')+'.value='+JSON.stringify(opinion)+';'+q('#walk-text')+'.dispatchEvent(new Event("input"))');
-      await click('#walk-pick');await browserInput(ctx).tap(q(button));
-      await wait(q('#walk-dialog')+'.open && '+q(button)+'.classList.contains("walk-selected")','selected inspection limit');
-      await inspect(ctx,390,'#walk-dialog','limits-feedback');
-      await click('#walk-save');await wait('!'+q('#walk-dialog')+'.open','store a limit-specific walkthrough opinion');
-      const [entry]=(await json('/api/walkthrough')).notes;
-      assert.deepEqual(entry.context.params,{view:'acceptance-limits'});assert.equal(entry.context.anchor,button.slice(1));
-      assert.match(entry.context.target,/检验依据.*第 1 页.*行/u);assert.equal(entry.context.rev,rev);
-      for (const [context,status] of [[{...entry.context,rev:rev-1},404],[{...entry.context,params:{finding:h02.id}},400]]) {
-        const res=await fetch(root+'/api/walkthrough',{method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({id:'c'.repeat(32),text:opinion,context})});assert.equal(res.status,status);
-      }
-      await go(root+'/app#desk');await wait(visible('#desk'),'desk before opening the limits note');
-      await click('#walk-launch');await wait(q('#walk-dialog')+'?.open && !'+q('#walk-saved')+'.disabled','notebook');
-      await click('#walk-saved');await wait(visible('#walk-history li a'),'recorded limit note');
-      await click('#walk-history li a');await wait(q(button)+'?.classList.contains("walk-mark") && '+visible(button),'return to the recorded inspection limit');
-      await original(h02.id,'inspection_basis');
-    }
+    if (h02) await recordAcceptanceFeedback();
     const end=await json(base);assert.deepEqual([end.status,end.rev,end.decisions],[task.status,task.rev,task.decisions]);
   }
   console.log('PASS · R'+rev+' · '+quality.length+' installment and receipt comparisons, original lines, six widths'+(isolated?', note and Codex handoff':''));

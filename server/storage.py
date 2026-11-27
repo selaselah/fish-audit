@@ -971,7 +971,8 @@ class Store:
         def page_layout(doc, page):
             return stored_page_layout(db,case_id,doc,page)
         if (any(f.get("quality_comparison") for f in paper["findings"]) or
-                paper["policy"].get("payment_quality")==payment_quality.FIRST_FORMAT and any(f["rule"]=="H02" for f in paper["findings"])):
+                paper["policy"].get("payment_quality") in (payment_quality.FIRST_FORMAT,payment_quality.BASIS_FORMAT) and
+                any(f["rule"]=="H02" for f in paper["findings"])):
             try:
                 payment_quality.verify(paper,page_text,read_layout=page_layout,signing=True)
             except (ValueError,KeyError,TypeError) as error:

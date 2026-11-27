@@ -1,5 +1,21 @@
 # 本机审计接口
 
+## 严格限值与读数精度
+
+规则 `2026.11.28.10` 出具 `policy.payment_quality = acceptance-quality-payment-v3`。H02 的 `quality_comparison.limits` 分别保留合同和验收单的比较符、数值、单位和结果。H04/H05 引用本期验收比较时使用 `payment_quality.comparison`。
+
+| 每侧的 `result` | 含义 |
+| --- | --- |
+| `within` | 实测满足该侧限值，包括恰好等于含端点的界限。 |
+| `excluded_boundary` | 实测恰好等于严格上限或下限。 |
+| `outside` | 实测确实越界，`outside_by` 给出正数十进制偏离量。 |
+| `incomparable` | 指标或单位无法对应。 |
+| `reading_required` | 原页有相关读数精度说明，需核对原始记录和判定口径。 |
+
+比较所引的 `reading_notes[]` 保存 `doc`、`unit`、`page`、`line`、`quote`。`unit` 指文件在图中的归属，物理单位在 `observed.unit` 和相应限值中。主读页记录的 `calls.pages[].measurement_note_rects` 用十进制行号字符串作键，保存原页上的归一化行框。复算核对原行、页图摘要、主读与复读调用及归档的规则源码。旧版继续用出具时的程序复算。签收发现旧版漏列适用的限值差异或精度说明时，返回 HTTP 409 并要求重审。
+
+走查接口接受固定版次下的控件锚点，例如 `limits-H02-3-reading-d05-p1-l15`。从原件写意见时使用 `raw_ref = measurement-note/d05/p1/l15`，需与该版本引用的文件、页、行一致。[R8 验收底稿](http://127.0.0.1:8000/workpaper/801a3b8b9ddb4c20ad477d377ed473b9?rev=8&view=acceptance-limits)
+
 ## 合同与验收单的实测对照
 
 规则 `2026.11.28.9` 使用 `policy.payment_quality = acceptance-quality-payment-v2`。不同限值的 H02 在 `quality_comparison` 保存实测的 `observed`、两侧的 `limits.contract` 与 `limits.inspection`，以及所据原件、字段、证据编号。每侧的 `result` 为 `within`、`outside` 或 `incomparable`。仅超限侧保存正的十进制字符串 `outside_by`。图关系 `measured_against_inspection_limits` 连接实测原行与验收发现。归属明确的终验款 H04/H05 在 `payment_quality.comparison` 反映同一对照。同标同单位的既有超限记录沿用 `payment_quality.measure`。

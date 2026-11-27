@@ -78,7 +78,7 @@ def materials(archive, target, *, master=MASTER, title=TITLE, decision=("放行�
     return report["policy"]["profile"], groups
 
 
-def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MASTER[2], kind="payment_release", reviewer="水印放行单演练", replacement=None, addition=None, additions=(), visual_fields=(), missing_fields=()):
+def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MASTER[2], kind="payment_release", reviewer="水印放行单演练", replacement=None, replacements=(), addition=None, additions=(), visual_fields=(), missing_fields=()):
     """Reconcile visible sample fields against the fixed, previously reviewed originals."""
     from config import PERFORMANCE
     from documents import prepare
@@ -96,6 +96,8 @@ def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MAS
         report = wait(case)
         confirm = []
         appended = {change[0]:change for change in (*additions,*([addition] if addition else []))}
+        edits = {name:(label,value) for name,label,value in (*replacements,*([replacement] if replacement else []))}
+        require(len(edits)==len(replacements)+bool(replacement),"每份水印原件只替换一行")
         for base in master["documents"]:
             name = base["name"]
             addition = appended.get(name)
@@ -105,8 +107,8 @@ def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MAS
             archived_lines = bundle.read(f"pages/{base['id']}/1.txt").decode().splitlines()
             old_row = new_row = None
             printed_fields = [f for f in master["facts"] if f["doc"] == base["id"]]
-            if replacement and name==replacement[0]:
-                label, value = replacement[1:]
+            if name in edits:
+                label, value = edits[name]
                 position, = [i for i,r in enumerate(archived_lines) if r.startswith(label+"：")]
                 new_row = page["text"].splitlines()[position]
                 require(normalize(new_row)==normalize(label+"："+value) and re.findall(r"[0-9]+",new_row)==re.findall(r"[0-9]+",value),

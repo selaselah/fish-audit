@@ -1,5 +1,15 @@
 # 合成财会审计演练
 
+## 重建严格限值和取整读数
+
+用已核摘要的 R7 冷藏柜采购母本生成四组水印材料。前三组分别演练合同排除边界、终验单排除边界、双方严格下限均满足。第四组在验收报告第 15 行补入「柜温读数已取整，判定须核对未取整的原始记录」。各组保留原来的第二期付款安排和银行回单。[下载 R7 母本](http://127.0.0.1:8000/api/cases/64cd9e64345841bab358728a6730f3d8/reports/7/bundle) · [四组预期结果和实际底稿](../acceptance.md#实测八度时的严格限值和取整说明)
+
+```sh
+PYTHONPATH=server server/.venv/bin/python docs/samples/inspection_limits.py /tmp/master-R7.zip /tmp/strict-limits --strict
+```
+
+加 `--case rounded` 可单独生成带取整说明的案例。加 `--run --check-fields` 会提交给本机服务，按水印母本核对实际印刷字段，底稿留待人工验收。
+
 ## 重建合同和验收单的限值差异
 
 生成器校验 R7 母本和五份水印原件的 SHA-256，每组只改合同或验收报告里的一行。三组分别覆盖终验放宽限值、终验收紧限值及检验单位错列。以下命令只生成文件。增加 `--run --check-fields` 会提交本机 API，逐页对照母本，演练字段核读并保留待人工验收的底稿。[下载采购母本](http://127.0.0.1:8000/api/cases/64cd9e64345841bab358728a6730f3d8/reports/7/bundle) · [已出具的三份底稿](../acceptance.md#合同与验收单使用不同限值)

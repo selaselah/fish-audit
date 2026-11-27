@@ -10,9 +10,10 @@ from storage import encode, stamp
 SCREENS = {"home", "desk", "case", "rules", "library", "team", "account"}
 HOME_PARAMS = {"scene", "slip", "copy", "edition", "batch", "record", "pdf", "carrier", "term", "agreement"}
 CASE_PARAMS = {"view", "stage", "instrument", "receipt", "ticket", "call", "agreement", "acceptance", "finding", "fact", "prior", "entry", "filing", "part"}
+READING_LOCATION = r"reading-d[0-9]{2,8}-p[1-9][0-9]{0,7}-l[1-9][0-9]{0,7}"
 QUALITY_PIN = re.compile(r"quality-(H0[45]-[1-9][0-9]{0,7})(?:-(clause|acceptance_criteria|inspection_basis|measured_result|"
-                         r"acceptance_scope|acceptance_result|accepted_on|payment_designation|transfer_status|paid_on|terms|order))?")
-LIMIT_PIN = re.compile(r"limits-(H02-[1-9][0-9]{0,7})(?:-(acceptance_criteria|inspection_basis|measured_result|acceptance_result))?")
+                         r"acceptance_scope|acceptance_result|accepted_on|payment_designation|transfer_status|paid_on|terms|order|"+READING_LOCATION+r"))?")
+LIMIT_PIN = re.compile(r"limits-(H02-[1-9][0-9]{0,7})(?:-(acceptance_criteria|inspection_basis|measured_result|acceptance_result|"+READING_LOCATION+r"))?")
 RETEST_PIN = re.compile(r"retest-(H05-[1-9][0-9]{0,7})(?:-(clause|citation|payment_designation|transfer_status|paid_on|terms|order|schedule|"
                         r"(?:original|final)_(?:acceptance_number|accepted_on|acceptance_result|acceptance_scope|defect_number)|"
                         r"(?:repair|final)_(?:original_acceptance|repair_number)|repair_(?:repaired_on|defect_number)|final_defect_closure))?")
@@ -33,7 +34,7 @@ def check_context(value):
         patterns["intake"] = r"contract|purchase|travel|payment"
     if screen == "case":
         patterns.update(case_id=r"[a-f0-9]{32}", tab=r"report|evidence|graph|activity", doc=r"d[0-9]{2,8}",
-                        raw_ref=r"(?:inspection-use|payment-approval|payment-clock|contract-approver|approval-change|installment-count)/d[0-9]{2,8}/p[1-9][0-9]{0,7}/l[1-9][0-9]{0,7}")
+                        raw_ref=r"(?:inspection-use|payment-approval|payment-clock|contract-approver|approval-change|installment-count|measurement-note)/d[0-9]{2,8}/p[1-9][0-9]{0,7}/l[1-9][0-9]{0,7}")
         if "case_id" not in value:
             raise CaseError("走查底稿编号缺失。", 400)
     result = {"screen": screen}
@@ -165,6 +166,17 @@ def save_note(store, workspace, author, role, data):
                 (context["case_id"],context["rev"],finding,finding,raw,raw)).fetchone()
             if not linked:
                 raise CaseError("所选底稿没有引用这条合同分期总述。",404)
+        elif context["screen"]=="case" and context.get("raw_ref","").startswith("measurement-note/"):
+            linked=db.execute("""SELECT 1 FROM reports,json_each(content,'$.findings') f,
+                json_each(f.value,'$.quality_comparison.reading_notes') n,json_each(content,'$.calls.pages') p
+                WHERE case_id=? AND rev=? AND json_extract(content,'$.policy.payment_quality')='acceptance-quality-payment-v3'
+                AND json_extract(f.value,'$.rule')='H02' AND json_extract(n.value,'$.doc')=? AND json_extract(n.value,'$.page')=?
+                AND json_extract(n.value,'$.line')=? AND json_extract(p.value,'$.doc')=json_extract(n.value,'$.doc')
+                AND json_extract(p.value,'$.page')=json_extract(n.value,'$.page') AND json_array_length(p.value,?)>0""",
+                (context["case_id"],context["rev"],context["doc"],context["page"],context["line"],
+                 f'$.measurement_note_rects."{context["line"]}"')).fetchone()
+            if not linked:
+                raise CaseError("所选版本没有可定位的测量精度说明原行。",404)
         elif context["screen"] == "case" and (use_pin or change_pin or context.get("raw_ref")):
             rows = db.execute("""SELECT json_extract(f.value,'$.id'),json_extract(f.value,'$.inspection_use.notes'),
                               json_extract(f.value,'$.inspection_use.approval.rows'),json_extract(f.value,'$.inspection_use.approval.clock.rows'),
@@ -235,6 +247,11 @@ def save_note(store, workspace, author, role, data):
             check = json.loads(row[0]) if row and row[0] else {}
             field = pin[2]
             has_order = "days_from_final" in check if retest else bool(check.get("payment"))
+            note_pin = field and field.startswith("reading-")
+            if note_pin:
+                proof = check if pin.re==LIMIT_PIN else check.get("comparison",{})
+                if not any(field==f"reading-{n['doc']}-p{n['page']}-l{n['line']}" for n in proof.get("reading_notes",())):
+                    raise CaseError("所选版本没有引用该行测量精度说明。",404)
             if field == "schedule":
                 schedule = check.get("schedule_review") or {}
                 plan = db.execute("""SELECT json_extract(f.value,'$.evidence') FROM reports, json_each(content,'$.findings') f
@@ -248,7 +265,7 @@ def save_note(store, workspace, author, role, data):
                     raise CaseError("所选版本没有对应的分期安排待核记录。",404)
             if (not check or field == "order" and not has_order or
                     check.get("state") == "unresolved" and field not in (None,"citation") or
-                    field not in (None,"terms","order","schedule") and field not in check.get("fields",{})):
+                    not note_pin and field not in (None,"terms","order","schedule") and field not in check.get("fields",{})):
                 raise CaseError("所选版本的这项验收款检查没有引用该位置。",404)
         if position.get("view") == "board-decision" and ("filing" in position or "part" in position):
             records = db.execute("""SELECT json_extract(f.value,'$.effect_review.board_decision.records')

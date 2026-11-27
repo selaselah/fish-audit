@@ -286,7 +286,9 @@
 .quality-limits .measured strong { color:var(--ink); }
 .quality-limits .quality-metric { align-content:start; padding-right:21px; }
 .quality-evaluation { margin-top:4px; font-size:.78rem; font-weight:550; color:var(--secondary); }
-.quality-evaluation.outside { color:var(--issue); }
+.quality-evaluation:is(.outside,.excluded_boundary) { color:var(--issue); }
+.quality-payment .quality-note { margin:0 10px 9px; width:calc(100% - 20px); padding-right:26px; }
+.quality-note strong { font-size:.84rem; font-weight:550; overflow-wrap:anywhere; }
 .quality-payment button .ui-glyph { position:absolute; top:7px; right:7px; font-size:.72rem; color:var(--accent-hover); }
 .quality-payment .quality-day { background:var(--surface); }
 .quality-day strong { font-size:.88rem; font-weight:600; font-variant-numeric:tabular-nums; }

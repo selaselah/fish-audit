@@ -469,7 +469,7 @@ def inspect_quality(required, basis, reading):
     return "ok",""
 
 
-def acceptance(contract, receipts, *, criterion=None, signature_ok=None, quantity_change=None):
+def acceptance(contract, receipts, *, criterion=None, signature_ok=None, quantity_change=None, quality_graph=None):
     keys = ("contract_id","buyer","subject")
     fields = (*keys,"acceptance","seller","accepted_on","acceptance_scope","acceptance_result","acceptance_signer",
               "acceptance_exception","quantity_accepted","inspection_basis","measured_result")
@@ -496,6 +496,10 @@ def acceptance(contract, receipts, *, criterion=None, signature_ok=None, quantit
         basis, reading = r.body("inspection_basis"), r.body("measured_result")
         standard = contract.body("acceptance_criteria") if criterion is None else criterion
         quality = inspect_quality(standard,basis,reading)
+        if quality[0] in ("risk","missing") and quality_graph is not None:
+            proof = payment_quality.comparison(quality_graph,{"evidence":refs})
+            if payment_quality.same_within(proof):
+                quality = ("ok","")
         if criterion and standard!=basis:
             observation = inspect_quality(standard,standard,reading)
             if observation[0]=="issue":
@@ -850,7 +854,10 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
     def evaluate(contract, selected):
         quantity = change.get("quantity") if change else None
         criterion = (change["applied_criterion"] or "") if change and not (quantity and change["scope_clear"]) else None
-        finding = acceptance(contract,selected,criterion=criterion,quantity_change=quantity,signature_ok=signatory if authority else None)
+        quality_graph = graph if (version==FORMAT and graph.get(payment_quality.KEY,{}).get("format")==payment_quality.FORMAT
+                                  and not (change or extra_units or pending_units or repairs or retests)) else None
+        finding = acceptance(contract,selected,criterion=criterion,quantity_change=quantity,signature_ok=signatory if authority else None,
+                             quality_graph=quality_graph)
         units = {doc.unit for doc in selected}
         acceptance_execution.apply(finding,[r for r in pdf_records if r["unit"] in units])
         acceptance_originals.apply(finding, graph, units)
@@ -1069,7 +1076,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
                     accepted.update(status="issue", detail=original["detail"] + " " + accepted["detail"])
     if version==FORMAT:
         payment_quality.review_acceptance(graph,accepted)
-        if accepted.get("quality_comparison"):
+        if accepted.get("quality_comparison") and accepted["status"]!="ok":
             accepted_on = None
     if payment_change and not scoped_change:
         payment_amendments.attach(plan,payment_change)

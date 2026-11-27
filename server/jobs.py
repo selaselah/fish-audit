@@ -15,6 +15,7 @@ import signer_clock
 import payment_execution
 import advance_guarantee
 import inspection_use
+import payment_quality
 import installment_counts
 from graph import PRINTED_TITLES, attach_prior_invoices, build_graph, compact, heading_candidates, invoice_number_edges, link_procedures
 from payment_releases import submission_day
@@ -192,8 +193,11 @@ class Worker:
         guarantee_lines = contract_folios.line_numbers(graph[advance_guarantee.KEY]["rows"])
         use_lines = contract_folios.line_numbers(inspection_use.all_rows(graph[inspection_use.KEY]))
         count_lines = contract_folios.line_numbers(graph.get(installment_counts.KEY, {}).get("rows", []))
+        precision_lines = contract_folios.line_numbers(payment_quality.reading_notes(findings))
         execution_lines = contract_folios.line_numbers(graph[payment_execution.KEY]["rows"])
         for page, call in zip(pages, traces):
+            if numbers := precision_lines.get((page["doc"],page["number"])):
+                call[payment_quality.RECTS] = contract_folios.geometry(numbers,page["layer"])
             if numbers := count_lines.get((page["doc"],page["number"])):
                 call[installment_counts.RECTS] = contract_folios.geometry(numbers,page["layer"])
             if use := use_lines.get((page["doc"],page["number"])):

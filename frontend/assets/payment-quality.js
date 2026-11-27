@@ -1,10 +1,30 @@
 // The workpaper binds all three documents to this installment. Recheck the filed original lines before displaying a comparison.
 const PaymentQuality = (() => {
-  const first='acceptance-quality-payment-v1', current='acceptance-quality-payment-v2';
-  const upperBound=operator=>['不高于','不超过','至多','≤'].includes(operator);
+  const first='acceptance-quality-payment-v1', dual='acceptance-quality-payment-v2', current='acceptance-quality-payment-v3';
+  const strict=operator=>['低于','小于','<','高于','大于','>'].includes(operator);
+  const upperBound=operator=>['不高于','不超过','至多','≤','低于','小于','<'].includes(operator);
+  function sign(operator) {
+    if (upperBound(operator)) return strict(operator)?'<':'≤';
+    return strict(operator)?'>':'≥';
+  }
+  function issued(version) {
+    if (!/^\d{4}\.\d{1,2}\.\d{1,2}\.\d+$/u.test(version)) return null;
+    const since=v=>version.localeCompare(v,'en',{numeric:true})>=0;
+    return since('2026.11.28.10')?current:since('2026.11.28.9')?dual:since('2026.11.27.17')?first:null;
+  }
   const same=(a,b)=>Array.isArray(a) && Array.isArray(b) && a.length===b.length && a.every((x,i)=>x===b[i]);
   const number='-?[0-9]{1,12}(?:\\.[0-9]{1,6})?';
-  const metric=new RegExp('^([\\u4e00-\\u9fff]{1,16}?) *(不高于|不超过|不低于|至少|至多|≤|≥)? *('+number+') *(°C|mm|cm|kg|MPa|kPa|%)$','u');
+  const metric=extra=>new RegExp('^([\\u4e00-\\u9fff]{1,16}?) *(不高于|不超过|不低于|至少|至多|≤|≥'+extra+')? *('+number+') *(°C|mm|cm|kg|MPa|kPa|%)$','u');
+  const closedMetric=metric(''), openMetric=metric('|低于|小于|高于|大于|<|>');
+  const qualifier=/(?:不|不得|不宜|不应|不能|不可|不必|不要求|无需|未|应|须|应当|必须|宜|最好|建议|参考|约|原则上|尽量|禁止|严禁|并非)$/u;
+  const validRect=r=>Array.isArray(r) && r.length===4 && r.every(n=>Number.isFinite(n) && n>=0 && n<=1) && r[0]<r[2] && r[1]<r[3];
+  function noteSource(report,n) {
+    const page=report.calls?.pages?.find(p=>p.doc===n.doc && p.page===n.page);
+    const rects=page?.measurement_note_rects?.[String(n.line)];
+    if (!Array.isArray(rects) || !rects.every(validRect)) return null;
+    return {ref:'measurement-note/'+n.doc+'/p'+n.page+'/l'+n.line,quote:n.quote,rawLine:n.line,rects,
+      label:'测量精度说明',option:'测量精度说明 · 第 '+n.line+' 行',quality:'measurement_precision'};
+  }
   function body(line) {
     const value=line.replace(/[０-９：．－％]/gu,c=>String.fromCharCode(c.charCodeAt(0)-0xfee0)).replaceAll('℃','°C').replaceAll('　',' ');
     const pos=value.indexOf(':');
@@ -15,21 +35,25 @@ const PaymentQuality = (() => {
     const n=BigInt(whole+fraction.padEnd(6,'0'));
     return value.startsWith('-')?-n:n;
   }
-  function matchesLimit(limit,printed,observed) {
+  function matchesLimit(limit,printed,observed,needsReading) {
     if (!limit?.operator || !same(printed,[limit.name,limit.operator,limit.limit,limit.unit])) return false;
     if (printed[0]!==observed[0] || printed[3]!==observed[3]) return limit.result==='incomparable' && !('outside_by' in limit);
+    if (needsReading) return limit.result==='reading_required' && !('outside_by' in limit);
     const margin=(scaled(observed[2])-scaled(printed[2]))*(upperBound(limit.operator)?1n:-1n);
+    if (margin===0n && strict(limit.operator)) return limit.result==='excluded_boundary' && !('outside_by' in limit);
     if (margin<=0n) return limit.result==='within' && !('outside_by' in limit);
     return limit.result==='outside' && /^[0-9]{1,13}(?:\.[0-9]{1,6})?$/.test(limit.outside_by) && scaled(limit.outside_by)===margin;
   }
   function bind(item,report) {
     const acceptance=item.rule==='H02', data=acceptance?item.quality_comparison:item.payment_quality;
-    if (!data || item.status==='ok' || (!acceptance && (!['H04','H05'].includes(item.rule) || !item.stage))) return null;
+    if (!data || (!acceptance && (!['H04','H05'].includes(item.rule) || !item.stage))) return null;
     const {graph,policy}=report, ledger=graph.payment_quality_sources, compared=acceptance?data:data.comparison;
-    if (![first,current].includes(policy.payment_quality) || ledger?.format!==policy.payment_quality ||
+    if (![first,dual,current].includes(policy.payment_quality) || issued(policy.version)!==policy.payment_quality || ledger?.format!==policy.payment_quality ||
         !/^[a-f0-9]{64}$/.test(policy.code_sha256?.['payment_quality.py']) || !Array.isArray(ledger.rows) || !data.fields ||
-        !Array.isArray(data.evidence) || (compared?ledger.format!==current || Boolean(data.measure):!data.measure)) return null;
-    if (!acceptance && !['risk','issue'].includes(item.status)) return null;
+        !Array.isArray(data.evidence) || (compared?ledger.format===first || Boolean(data.measure):!data.measure)) return null;
+    const notes=compared?.reading_notes ?? [];
+    if (!Array.isArray(notes) || notes.some(n=>!n || !Number.isInteger(n.line) || n.line<1) ||
+        (!acceptance && !['risk','issue'].includes(item.status) && !(item.status==='missing' && notes.length))) return null;
     const fields=data.fields, payment=data.payment, units={contract:data.contract,acceptance:data.receipt};
     if (Boolean(payment)!==(item.rule==='H05') || !acceptance && fields.clause!==item.stage.clause_ref) return null;
     if (payment) units.bank_receipt=payment.bank;
@@ -42,8 +66,9 @@ const PaymentQuality = (() => {
     const originals=new Map(PerformanceIndex.originals(item,graph).map(s=>[s.fact.id,s]));
     const edgeType=acceptance?'measured_against_inspection_limits':'acceptance_reading_for_payment';
     const edges=graph.edges.filter(e=>e.type===edgeType && e.to==='finding/'+item.id);
+    const notePages=new Set(notes.map(n=>n.doc+'/p'+n.page));
     if (edges.length!==1 || edges[0].from!==fields.measured_result || !same(edges[0].evidence,data.evidence) ||
-        !data.evidence.every(ref=>originals.get(ref)?.printedLine)) return null;
+        !data.evidence.every(ref=>originals.get(ref)?.printedLine || notePages.has(ref) && item.evidence.includes(ref))) return null;
     const rows={}, required=['acceptance_criteria','inspection_basis','measured_result','acceptance_scope','acceptance_result'];
     if (!acceptance) required.push('clause');
     if (data.accepted_on || payment) required.push('accepted_on');
@@ -56,17 +81,32 @@ const PaymentQuality = (() => {
       rows[key]=s;
     }
     function readMetric(key) {
-      const f=rows[key].fact, parsed=[f.source_line.text,f.quote,f.value].map(v=>metric.exec(body(v))?.slice(1));
+      const f=rows[key].fact, parsed=[f.source_line.text,f.quote,f.value].map(v=>{
+        const text=body(v), tokens=ledger.format===current?openMetric.exec(text.replaceAll('＜','<').replaceAll('＞','>')):closedMetric.exec(text);
+        return tokens && !(strict(tokens[2]) && qualifier.test(tokens[1]))?tokens.slice(1):null;
+      });
       return parsed[0] && parsed.every(m=>same(m,parsed[0]))?parsed[0]:null;
     }
     const limit=readMetric('acceptance_criteria'), basis=readMetric('inspection_basis'), value=readMetric('measured_result');
     if (compared) {
       const {observed,limits}=compared;
       if (!observed || !limits || !same(value,[observed.name,undefined,observed.value,observed.unit]) ||
-          !matchesLimit(limits.contract,limit,value) || !matchesLimit(limits.inspection,basis,value) ||
-          (limit[0]===basis[0] && limit[3]===basis[3] && upperBound(limit[1])===upperBound(basis[1]) && scaled(limit[2])===scaled(basis[2])) ||
+          !matchesLimit(limits.contract,limit,value,notes.length) || !matchesLimit(limits.inspection,basis,value,notes.length) ||
           [limits.contract,limits.inspection].every(x=>x.result==='incomparable')) return null;
-      if (acceptance && [limits.contract,limits.inspection].some(l=>l.result==='outside') && item.status!=='issue') return null;
+      const hasOpen=[limit,basis].some(v=>strict(v[1]));
+      if ([limit,basis].some(v=>strict(v[1]) && v[0]!==observed.name)) return null;
+      const equivalent=limit[0]===basis[0] && limit[3]===basis[3] && sign(limit[1])===sign(basis[1]) && scaled(limit[2])===scaled(basis[2]);
+      const met=equivalent && hasOpen && [limits.contract,limits.inspection].every(v=>v.result==='within');
+      if (equivalent && !hasOpen || item.status==='ok' && !met || !acceptance && met) return null;
+      if (acceptance && [limits.contract,limits.inspection].some(l=>['outside','excluded_boundary'].includes(l.result)) && item.status!=='issue') return null;
+      const filed=hasOpen?ledger.rows.filter(r=>r.field==='measurement_note' && [data.contract,data.receipt].includes(r.unit) &&
+        (r.quote.includes(observed.name) || /测量|读数|实测|检验|仪器|检测/u.test(r.quote))):[];
+      if (filed.length!==notes.length || notes.some((n,i)=>{
+        const pageRef=n.doc+'/p'+n.page, node=graph.nodes.find(p=>p.id===pageRef && p.type==='page');
+        return !['doc','page','unit','line','quote'].every(k=>filed[i][k]===n[k]) || !node || !data.evidence.includes(pageRef) ||
+          !pages.some(p=>p.doc===n.doc && p.page===n.page && p.unit===n.unit && p.native && p.text_only) ||
+          !report.calls?.pages?.some(p=>p.doc===n.doc && p.page===n.page && p.page_sha256===node.sha256 && p.response_id && p.check?.response_id) || !noteSource(report,n);
+      })) return null;
       if (!acceptance) {
         const h=report.findings.find(f=>f.rule==='H02' && f.quality_comparison);
         const proof=h?.quality_comparison;
@@ -106,16 +146,26 @@ const PaymentQuality = (() => {
       const {observed,limits}=compared;
       root.append(box('quality-heading',el('h4',observed.name+'验收限值对照')));
       const evidence=box('quality-readings quality-limits',
-        control('measured_result','终验实测',observed.value+' '+observed.unit,'quality-metric measured'),
+        control('measured_result',compared.reading_notes?'验收单读数':'终验实测',observed.value+' '+observed.unit,'quality-metric measured'),
         control('acceptance_result','验收单结论',body(rows.acceptance_result.fact.source_line.text),'quality-metric'));
       for (const [role,field,label] of [['contract','acceptance_criteria','合同约定'],['inspection','inspection_basis','检验依据']]) {
         const lim=limits[role], prefix=lim.name===observed.name?'':lim.name+' ';
-        const b=control(field,label,prefix+(upperBound(lim.operator)?'≤ ':'≥ ')+lim.limit+' '+lim.unit,'quality-metric');
-        const note=lim.result==='outside'?'超出 '+lim.outside_by+' '+lim.unit:lim.result==='within'?'符合限值':'指标或单位待核';
+        const b=control(field,label,prefix+sign(lim.operator)+' '+lim.limit+' '+lim.unit,'quality-metric');
+        const labels={excluded_boundary:upperBound(lim.operator)?'等于上限 · 未满足':'等于下限 · 未满足',within:'符合限值',incomparable:'指标或单位待核',reading_required:'原始读数待核'};
+        const note=lim.result==='outside'?'超出 '+lim.outside_by+' '+lim.unit:labels[lim.result];
         b.append(el('span',note,'quality-evaluation '+lim.result));
         evidence.append(b);
       }
       root.append(evidence);
+      for (const n of compared.reading_notes || []) {
+        const doc=report.graph.documents.find(d=>d.id===n.doc), where=doc.name+' · 第 '+n.page+' 页 · 第 '+n.line+' 行';
+        const source=noteSource(report,n);
+        const b=action('',()=>OriginalReader.open(doc,n.page,{lineHint:n.line,...(source.rects.length?{rawRef:source.ref,printedSource:source}:{})}),'quality-note');
+        b.id=root.id+'-reading-'+n.doc+'-p'+n.page+'-l'+n.line;
+        b.dataset.originalLabel='测量精度说明 · '+where;
+        b.setAttribute('aria-haspopup','dialog');b.setAttribute('aria-controls','page-dialog');
+        b.append(el('small',where),el('strong',n.quote),glyph('arrows-angle-expand'));root.append(b);
+      }
       if (acceptance) return root;
     } else {
       const upper=upperBound(m.operator);
@@ -142,5 +192,10 @@ const PaymentQuality = (() => {
     }
     root.append(clauses);return root;
   }
-  return {bind,panel};
+  function pageReferences(report,doc,page) {
+    const h=report?.findings.find(f=>f.quality_comparison?.reading_notes);
+    const notes=h?.quality_comparison.reading_notes.filter(n=>n.doc===doc && n.page===page);
+    return notes?.length && bind(h,report)?notes.map(n=>noteSource(report,n)).filter(s=>s.rects.length):[];
+  }
+  return {bind,panel,pageReferences};
 })();
