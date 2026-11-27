@@ -10,6 +10,10 @@
 
 ## 付款放行单的签署凭证
 
+从规则 `2026.11.27.12` 起，`policy.release_comparison` 为 `payment-release-comparison-v1`。图谱出现多份放行单时也带此标记。H04 与归属于同一期的 H05 可包含 `payment_opinion.release.instruments`，每项记录原件单元 `unit`、决定 `stance`、期次 `phase`、与本次暂缓的关系 `binding`、所引验收号 `receipt_ref` 及单上日期 `signed_on` 和 `date_ref`。原行取自同一单元的 `sources`。两份归属明确的文字决定相反时，`state` 为 `decision_conflict`，其余多件待核为 `multiple_pending`。两者在实付检查上的 `timing` 均为 `unknown`。
+
+在固定底稿的 `view=payment-release` 与 `stage` 之外，可用 `instrument` 指向本版检查引用的一张单或合册页。走查意见的位置参数也可携带同一单元编号。[直达第二张单](http://127.0.0.1:8000/workpaper/42a2fd1a46f34d88af80e8c9634a244e?rev=8&view=payment-release&stage=H04-6&instrument=d06)
+
 规则 `2026.11.27.11` 的 `policy.release_execution` 为 `payment-release-execution-v1`。PDF 凭证在 `graph.release_pdf_sources.records`，Word 和图像凭证在 `graph.release_original_sources.records`，Word 审阅记录在同一对象的 `documents`。每个凭证绑定提交文件摘要、单元、物理页和签认字段。发现经 `supports_result` 引用凭证，Word 批注另有指向原页的关系。[生成与核验](../server/release_execution.py)
 
 H04 期款和能归属该期的 H05 回单在 `payment_opinion.release.signature_records` 列出凭证编号。`signature_pending` 表示所引单号及列名已对上，实际签署待核。`scope_pending` 表示暂缓意见与授权条款都点名该期，所附放行单的归属仍待核。签认姓名和原单号冲突沿用 `signer_mismatch`、`reference_mismatch`。`signature_mismatch` 单独记录 PDF 签名与已签内容的校验冲突。[期款和回单规则](../server/payment_releases.py)

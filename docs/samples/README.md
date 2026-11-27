@@ -1,5 +1,13 @@
 # 合成财会审计演练
 
+## 同一期款的两张放行单
+
+以下命令生成三组本地水印件。同一验收单的相反意见、另一验收单上的暂缓意见、相同决定列示不同日期均各有一组。加 `--run --review` 会向本机工作台提交材料，调用模型，再按生成件逐行核对。可通过 `--run-id` 生成新的演练批次。[既有固定底稿](../acceptance.md#多份放行单的适用期次与相反意见)
+
+```sh
+server/.venv/bin/python docs/samples/competing_releases.py
+```
+
 ## 验收签认与复验原件
 
 五案各取一版已签发的水印底稿，离线重算并导出公开的验收原件、页图、字段位置和批注选区。以下命令从本机已有底稿核对发布资产。使用 `--archives /path/to/bundles` 可改从证据包核对，文件名为 `clean-R9.zip`、`limited-R9.zip`、`hot-R9.zip`、`scan-R3.zip`、`retest-R3.zip`。[案件和固定底稿](../acceptance.md#验收签认数量签收与整改复验)
