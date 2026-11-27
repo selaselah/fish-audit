@@ -52,6 +52,7 @@ from payment_releases import verify as verify_payment_releases
 import release_execution
 import warranty_execution
 import warranty_dates
+import payment_quality
 import board_execution
 from invoice_conditions import verify as verify_invoice_conditions
 from repair_completion import verify as verify_repair_completion
@@ -303,6 +304,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
     release_execution.verify(report, read_original, page_text)
     warranty_execution.verify(report, read_original, page_text)
     warranty_dates.verify(report, page_text)
+    payment_quality.verify(report, page_text)
     board_execution.verify(report, read_original, page_text)
     verify_repair_completion(report,page_text)
     verify_reinspection_wait(report,page_text)

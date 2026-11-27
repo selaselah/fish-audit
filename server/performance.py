@@ -34,6 +34,7 @@ import prior_installment
 import warranty_terms
 import warranty_execution
 import warranty_dates
+import payment_quality
 import warranty_service
 import warranty_register
 import payment_windows
@@ -734,6 +735,7 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True, recheck_
         results.extend(grouped)
         results.extend(warranty_register.findings(graph,results))
         addendum_execution.flag_mismatches(graph,results)
+        payment_quality.apply(graph,results)
     return results
 
 
@@ -1313,6 +1315,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("effect_review") != entry.get("effect_review")
                 or saved.get("warranty_check") != entry.get("warranty_check")
                 or saved.get("warranty_payment") != entry.get("warranty_payment")
+                or saved.get("payment_quality") != entry.get("payment_quality")
                 or saved.get("warranty_difference") != entry.get("warranty_difference")
                 or saved.get("contract_folios") != entry.get("contract_folios")
                 or saved.get("prior_installment") != entry.get("prior_installment")

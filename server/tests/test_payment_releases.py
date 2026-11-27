@@ -58,7 +58,9 @@ class SignedPaymentReleaseTests(unittest.TestCase):
         self.assertEqual([p["payment_opinion"]["release"]["written_timing"] for p in payments],["after","before"])
         self.assertEqual([p["status"] for p in payments],["missing","risk"])
         g,_=fixture(edit=lambda i,k,l,v:"柜温8℃" if k=="measured_result" else v)
-        self.assertEqual([f["status"] for f in compute(g)],["ok","issue","ok","ok","risk","risk","missing"])
+        checks=compute(g)
+        self.assertEqual([f["status"] for f in checks],["ok","issue","ok","ok","risk","risk","risk"])
+        self.assertEqual(checks[-1]["payment_quality"]["measure"]["limit"],"4")
 
     def test_unsigned_and_different_signer_or_receipt(self):
         cases=[("approval_signer","演练何平（已签字）","signer_mismatch"),("approval_signer","演练林岚（待签）","pending"),

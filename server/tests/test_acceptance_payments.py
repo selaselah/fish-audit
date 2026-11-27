@@ -47,7 +47,8 @@ class FinalPaymentOpinionTests(unittest.TestCase):
         note=fs[4]["payment_opinion"]
         self.assertEqual((note["state"],[s["quote"] for s in note["notes"]]),("conflict",[HOLD,ASSENT]))
         g,_=paper(ASSENT,edit=lambda i,k,l,v:"柜温8℃" if k=="measured_result" else v)
-        fs=compute(g); self.assertEqual((fs[1]["status"],fs[4]["status"],fs[-1]["status"]),("issue","risk","missing"))
+        fs=compute(g); self.assertEqual((fs[1]["status"],fs[4]["status"],fs[-1]["status"]),("issue","risk","risk"))
+        self.assertEqual(fs[-1]["payment_quality"]["measure"]["observed"],"8")
         self.assertEqual(fs[4]["payment_opinion"]["state"],"assent")
         g,_=paper(HOLD,edit=lambda i,k,l,v:"2026-09-12" if k=="paid_on" else v)
         self.assertEqual(compute(g)[-1]["status"],"risk")

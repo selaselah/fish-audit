@@ -57,6 +57,7 @@ from payment_releases import verify as verify_payment_releases
 import release_execution
 import warranty_execution
 import warranty_dates
+import payment_quality
 import board_execution
 from invoice_conditions import verify as verify_invoice_conditions
 from repair_completion import verify as verify_repair_completion
@@ -80,7 +81,7 @@ FULL_PAGE_EVIDENCE = (
     "effect_review", "warranty_check", "warranty_difference", "payment_window", "acceptance_reservations", "acceptance_comments",
     "contract_comments", "stage_payments", "invoice_receipt", "payment_change", "payment_opinion",
     "equipment_models", "inspection_coverage", "payment_acceptance", "execution_basis", "contract_folios",
-    "prior_installment", "advance_guarantee",
+    "prior_installment", "advance_guarantee", "payment_quality",
 )
 
 
@@ -815,6 +816,10 @@ class Store:
                 verify_payment_acceptance(paper, read_text, signing=True)
             except (KeyError, TypeError, ValueError) as error:
                 raise CaseError(f"签收前核对回单所据验收原件失败。{error}", 409) from error
+            try:
+                payment_quality.verify(paper,read_text,read_original=read_original)
+            except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
+                raise CaseError(f"签收前核对验收款质量凭证失败。{error}",409) from error
             if row["profile"]!=BANK:
                 signing_proofs = {r["id"] for key in ("acceptance_pdf_sources", "acceptance_original_sources", "addendum_pdf_sources", "addendum_original_sources", "mandate_pdf_sources", "mandate_original_sources", release_execution.PDF, release_execution.NATIVE, warranty_execution.PDF, warranty_execution.NATIVE, board_execution.PDF, board_execution.NATIVE)
                               for r in graph.get(key, {}).get("records", [])}
