@@ -10,6 +10,13 @@ from payment_quality import printed, readings
 HEADINGS = {"付款签批约定", "付款审批人约定"}
 SIGNERS = {"签批人姓名", "审批人姓名", "实际签批人"}
 NAME = r"[\u3400-\u9fff]{2,8}"
+FIRST_FORMAT = "cited-inspection-payment-use-v5"
+FORMAT = "cited-inspection-payment-use-v6"
+# A plain vacancy or role in the name field leaves the other printed columns usable.
+UNNAMED = {"","指定人","未指定","未确定","不确定","待指定","待审批","待签","待签批","未签","未填写","未填","未注明",
+           "未载明","未记载","未具名","未署名","无姓名","空白","空缺","空栏","无","待补","待核","待确认","未知","不详","不适用","无法辨认",
+           "董事会","指定人员","负责人","经办人","审批人","签批人","财务部","财务负责人","总经理","有权审批人","采购负责人"}
+POINTER = {"详附件","见附件","见签章","见附表","见下页","详附表","另附","见授权书"}
 CLAUSE = re.compile(r"第("+NUM+r")期(验收款|预付款|质保金)须由("+NAME+r"?)(?:签批|[与、]("+NAME+r"?)共同签批)[。]?")
 # A separate delegation or qualification may change who can act for this installment.
 QUALIFIER = re.compile(r"签批|审批人|会签|代签|代批|另行|另有|除外|豁免|授权|委托|变更|撤销|作废|补充|替代")
@@ -24,8 +31,10 @@ WORDING = {
 }
 
 
-def name(value):
+def name(value, version=FORMAT):
     from acceptance_authority import person
+    if version==FORMAT and (value in UNNAMED or value in POINTER):
+        return False
     return bool(re.fullmatch(NAME,value) and person(value) and not re.search(r"或|以及|共同|及其|授权|任选|两人|任一|另见|同上|详见|任何|其他|全体|双方|其本人|签批人|审批人|当事人|经授权|等$",value))
 
 
@@ -35,20 +44,20 @@ def payment_only(quote):
     return bool(m and not re.search(r"验收|复验|终验|签认|签字",m[3]+(m[4] or "")))
 
 
-def clause(quote):
+def clause(quote, version=FORMAT):
     label,value=column(quote)
     m=CLAUSE.fullmatch(value) if label in HEADINGS else None
     if not m or not ordinal(m[1]):
         return None
     names=[m[3],m[4]] if m[4] else [m[3]]
-    if len(set(names))!=len(names) or not all(name(n) for n in names):
+    if len(set(names))!=len(names) or not all(name(n,version) for n in names):
         return None
     return ordinal(m[1]),m[2],names
 
 
-def listed(value):
+def listed(value, version=FORMAT):
     names=value.split("、")
-    return names if len(names) in (1,2) and len(set(names))==len(names) and all(name(n) for n in names) else None
+    return names if len(names) in (1,2) and len(set(names))==len(names) and all(name(n,version) for n in names) else None
 
 
 def pages(graph, read_text, read_layout):
@@ -93,10 +102,11 @@ def pages(graph, read_text, read_layout):
 
 def stage_terms(graph,unit):
     entries=[]
-    for p in graph.get("inspection_use_sources",{}).get("approver_terms",()):
+    ledger=graph.get("inspection_use_sources",{})
+    for p in ledger.get("approver_terms",()):
         if p["unit"]==unit and p["complete"]:
             for r in p["rows"]:
-                if r["field"]=="named_clause" and r["rects"] and (term:=clause(r["quote"])):
+                if r["field"]=="named_clause" and r["rects"] and (term:=clause(r["quote"],ledger["format"])):
                     entries.append((r,term[0],{"验收款":"acceptance","质保金":"warranty","预付款":"effect"}[term[1]]))
     return entries
 
@@ -142,7 +152,8 @@ def compare(graph, finding, approval, fields, values):
     kinds=graph["documents_by_kind"]
     if len(pages)!=1 or len(rows)!=1 or not pages[0]["complete"] or not rows[0]["rects"] or rows[0]["field"]!="named_clause":
         return record
-    row=rows[0];term=clause(row["quote"])
+    version=graph["inspection_use_sources"]["format"]
+    row=rows[0];term=clause(row["quote"],version)
     units={u for role in ORDINARY for u in kinds.get(role,())} | set(approval["documents"])
     if (not term or kinds.get("contract")!=[row["unit"]] or units!={d["id"] for d in graph["documents"]}
             or any(v for k,v in kinds.items() if k not in ORDINARY and k!="other")):
@@ -158,7 +169,7 @@ def compare(graph, finding, approval, fields, values):
     stage=re.fullmatch("第("+NUM+")期",finding["stage"]["name"])
     if not stage or index!=ordinal(stage[1]) or role!="验收款":
         return {**record,"state":"other_stage"}
-    signed=listed(values["signed_by"]) if signer else []
+    signed=(listed(values["signed_by"],version) or []) if signer else []
     record.update(required=required,listed=signed)
     if not signed:
         return {**record,"state":"missing"}

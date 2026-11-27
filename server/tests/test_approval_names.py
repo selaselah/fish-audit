@@ -91,6 +91,35 @@ class ApprovalNamesTests(unittest.TestCase):
         self.assertEqual((check["status"],check["names"]["state"]),("missing","scope"))
         self.assertIn(raw["id"],check["evidence"])
 
+    def test_unnamed_signer_does_not_override_the_decision_or_debit(self):
+        for signer,extra,state,clock,status in (
+                ("指定人",{},"same_day","approval_first","missing"),("财务负责人",{},"same_day","approval_first","missing"),
+                ("待签",{"审批决定":"不同意支付"},"refused",None,"risk"),("",{"审批签发时间":"11:00（北京时间）"},"same_day","debit_first","risk")):
+            with self.subTest(signer=signer):
+                p,read,layout=sample(signer=signer,**extra)
+                f,=payments(p);a=f["inspection_use"]["approval"];n=a["names"]
+                self.assertEqual((a["state"],a.get("clock",{}).get("state"),f["status"]),(state,clock,status))
+                self.assertEqual((n["state"],n["listed"],n["signed_by"]),("missing",[],a["fields"]["signed_by"]))
+                self.assertFalse(any(e["type"]=="compares_approval_names" for e in p["graph"]["edges"]))
+                use.verify(p,read,read_layout=layout);verify_findings(p)
+        for marker in ("指定人","董事会","不确定","详附件"):
+            self.assertIsNone(names.clause(SINGLE.replace("林知行",marker)))
+        for text in ("代签，限第三期","见授权书","详附件","林知行、待签"):
+            p,_,_=sample(signer=text)
+            self.assertFalse(any(f.get("inspection_use",{}).get("approval",{}).get("fields") for f in payments(p)))
+
+    def test_historical_person_placeholder_replays_and_requires_new_review(self):
+        p,read,layout=sample(signer="指定人");g=p["graph"];old=g[use.KEY]
+        old_links=use.edges(p["findings"])
+        g[use.KEY]={**old,"format":use.NAMES_FORMAT}
+        p["policy"].update(version="2026.11.28.1",inspection_use=use.NAMES_FORMAT)
+        p["findings"]=execute(g,PERFORMANCE)
+        g["edges"]=[e for e in g["edges"] if e not in old_links]+use.edges(p["findings"])
+        f,=payments(p)
+        self.assertEqual((f["status"],f["inspection_use"]["approval"]["names"]["listed"]),("risk",["指定人"]))
+        use.verify(p,read,read_layout=layout)
+        with self.assertRaisesRegex(ValueError,"占位"):use.verify(p,read,read_layout=layout,signing=True)
+
     def test_binds_two_originals_and_rechecks_old_adverse_grounds(self):
         p,read,layout=sample(signer="顾明远")
         for what in ("quote","signer","required","listed","status","link","contract","rects","scope"):

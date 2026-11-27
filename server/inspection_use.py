@@ -16,7 +16,8 @@ FIRST_FORMAT = "cited-inspection-payment-use-v1"
 CROSS_FORMAT = "cited-inspection-payment-use-v2"
 APPROVAL_FORMAT = "cited-inspection-payment-use-v3"
 CLOCK_FORMAT = "cited-inspection-payment-use-v4"
-FORMAT = "cited-inspection-payment-use-v5"
+NAMES_FORMAT = approval_names.FIRST_FORMAT
+FORMAT = approval_names.FORMAT
 KEY = "inspection_use_sources"
 RECTS = "inspection_use_rects"
 SINCE = (2026, 11, 27, 19)
@@ -24,6 +25,7 @@ CROSS_DOCUMENT_SINCE = (2026, 11, 27, 20)
 APPROVAL_SINCE = (2026, 11, 27, 21)
 CLOCK_SINCE = (2026, 11, 27, 24)
 NAMES_SINCE = (2026, 11, 28, 1)
+UNNAMED_SINCE = (2026, 11, 28, 2)
 PURPOSE_HEADINGS = {"用途说明", "付款用途说明", "付款依据说明", "审批说明", "凭证用途", "用途限制"}
 HEADINGS = PURPOSE_HEADINGS | {"付款说明", "付款意见", "验收备注", "复验备注"}
 SHEET = r"本(?:单|报告|复验单|复验报告|验收单|验收报告)"
@@ -55,7 +57,9 @@ def classify(quote):
 def sources(graph, read_text, read_layout, version=FORMAT):
     from graph import LABELS, PRINTED_TITLES
     ledger = {"format":version, "rows":[]}
-    if version==FORMAT:
+    with_names=version in (NAMES_FORMAT,FORMAT)
+    with_time=with_names or version==CLOCK_FORMAT
+    if with_names:
         terms=approval_names.pages(graph,read_text,read_layout)
         if terms:
             ledger["approver_terms"]=terms
@@ -92,9 +96,9 @@ def sources(graph, read_text, read_layout, version=FORMAT):
             for r in rows:
                 r["rects"]=read_layout(r["doc"],r["page"]).get("lines",{}).get(str(r["line"]),[])
             ledger["rows"].extend(rows)
-    if version in {APPROVAL_FORMAT,CLOCK_FORMAT,FORMAT} and any(r["kind"]=="approval" for r in ledger["rows"]):
-        ledger["approvals"]=installment_approval.sources(graph,read_text,read_layout,with_time=version in {CLOCK_FORMAT,FORMAT},with_names=version==FORMAT)
-        if version in {CLOCK_FORMAT,FORMAT} and ledger["approvals"]:
+    if (with_time or version==APPROVAL_FORMAT) and any(r["kind"]=="approval" for r in ledger["rows"]):
+        ledger["approvals"]=installment_approval.sources(graph,read_text,read_layout,with_time=with_time,with_names=with_names)
+        if with_time and ledger["approvals"]:
             ledger["bank_clocks"]=approval_clock.bank_pages(graph,read_text,read_layout)
     return ledger
 
@@ -280,6 +284,11 @@ def guard_legacy_approval(graph, ledger, read_text, layout, policy, findings):
                         yield (use["bank"],use["citation"],approval["request"],ground)
         if set(risks(revised))-set(risks(findings)):
             raise ValueError("旧底稿所附付款审批单的决定、日期、签发时刻或具名签批依据存在新的风险，请重审后签收")
+        if ledger.get("format")==NAMES_FORMAT:
+            for f in findings:
+                names=f.get("inspection_use",{}).get("approval",{}).get("names",{})
+                if any(not approval_names.name(n) for k in ("required","listed") for n in names.get(k,())):
+                    raise ValueError("旧底稿将岗位或占位文字作为本期签批姓名，请重审后签收")
 
 
 def verify(report, read_text, *, read_layout=None, signing=False):
@@ -307,7 +316,8 @@ def verify(report, read_text, *, read_layout=None, signing=False):
             if any(c["status"]=="risk" or f["status"]=="ok" and c["status"]=="missing" for f,c in checks(current,fs)):
                 raise ValueError("旧底稿所引验收单另有付款用途限制，请重审后签收")
         return
-    version = FIRST_FORMAT if revision < CROSS_DOCUMENT_SINCE else CROSS_FORMAT if revision < APPROVAL_SINCE else APPROVAL_FORMAT if revision < CLOCK_SINCE else CLOCK_FORMAT if revision < NAMES_SINCE else FORMAT
+    version=next((fmt for since,fmt in ((UNNAMED_SINCE,FORMAT),(NAMES_SINCE,NAMES_FORMAT),(CLOCK_SINCE,CLOCK_FORMAT),
+                 (APPROVAL_SINCE,APPROVAL_FORMAT),(CROSS_DOCUMENT_SINCE,CROSS_FORMAT)) if revision>=since),FIRST_FORMAT)
     ledger=sources(g,read_text,layout,version)
     if (p.get("inspection_use")!=version or "code_sha256" in p and "inspection_use.py" not in p["code_sha256"] or
             g.get(KEY)!=ledger or (actual_nodes,source_edges)!=source_graph(ledger) or links!=edges(fs)):

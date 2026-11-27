@@ -92,20 +92,22 @@ def printed_date(value):
     return None
 
 
-def contents(page):
+def contents(page, version=approval_names.FORMAT):
     rows=page["rows"]
     fields={r["field"]:r for r in rows}
     if (not page["complete"] or not FIELDS<=set(fields)<=FIELDS | {"signed_at","signed_by"} or len(rows)!=len(fields)
             or not all(r["rects"] for r in rows)):
         return None
     values={k:column(r["quote"])[1] for k,r in fields.items() if k!="title"}
-    if "signed_by" in values and not approval_names.listed(values["signed_by"]):
+    if ("signed_by" in values and not approval_names.listed(values["signed_by"],version)
+            and not (version==approval_names.FORMAT and values["signed_by"] in approval_names.UNNAMED)):
         return None
     phase=STAGE.fullmatch(values["stage"])
     decision=DECISIONS.get(values["decision"])
     when=printed_date(values["date"])
     if (phase and ordinal(phase[1]) and decision and when and number(values["contract_id"]) and number(values["inspection"])
-            and values["authority"] in {"财务负责人","总经理","有权审批人","采购负责人"} and all(values.values())):
+            and values["authority"] in {"财务负责人","总经理","有权审批人","采购负责人"}
+            and all(v for k,v in values.items() if k!="signed_by")):
         return fields,values,phase,decision,when
     return None
 
@@ -123,7 +125,8 @@ def recognized(graph):
         return set()
     expected={k:column(contract.fields[f][0]["source_line"]["text"])[1]
               for k,f in (("contract_id","contract_id"),("payer","buyer"),("payee","seller"))}
-    return {p["unit"] for p in pages if (data:=contents(p)) and all(data[1][k]==v for k,v in expected.items())}
+    version=graph["inspection_use_sources"]["format"]
+    return {p["unit"] for p in pages if (data:=contents(p,version)) and all(data[1][k]==v for k,v in expected.items())}
 
 
 def compare(graph, finding, use, required, pages):
@@ -141,7 +144,7 @@ def compare(graph, finding, use, required, pages):
     if len(check["documents"])!=1:
         check["state"]="multiple"
         return check
-    data=contents(pages[0]) if len(pages)==1 else None
+    data=contents(pages[0],use["format"]) if len(pages)==1 else None
     if not data:
         return check
     fields,values,phase,decision,when=data
