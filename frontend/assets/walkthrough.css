@@ -31,6 +31,8 @@
 #walk-text { box-sizing:border-box; display:block; width:100%; min-height:86px; max-height:28dvh; margin:0 0 11px; padding:8px 9px; resize:vertical;
   border:1px solid var(--field-line); border-radius:6px; color:var(--ink); background:var(--surface); font:400 .94rem/1.5 var(--font-ui); }
 #walk-dialog #walk-save { background:var(--accent); border-color:var(--accent); color:white; padding-inline:16px; }
+#walk-save kbd { padding-inline-start:5px; border-inline-start:1px solid #ffffff66; font:500 .72rem/1.2 var(--font-ui); }
+@media (hover:none),(max-width:560px) { #walk-save kbd { display:none; } }
 #walk-history ol { padding:0; margin:0; list-style:none; max-height:40dvh; overflow:auto; }
 #walk-history li { padding:9px 0; border-bottom:1px solid var(--line); }
 #walk-history li:first-child { padding-top:0; }

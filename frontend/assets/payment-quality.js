@@ -38,19 +38,9 @@ const PaymentQuality = (() => {
     if (payment) required.push('payment_designation','transfer_status','paid_on');
     for (const key of required) {
       const ref=fields[key], s=originals.get(ref);
-      if (!s || !data.evidence.includes(ref)) return null;
-      const f=s.fact, isClause=key==='clause';
       const unit=['clause','acceptance_criteria'].includes(key)?data.contract:
         ['payment_designation','transfer_status','paid_on'].includes(key)?payment?.bank:data.receipt;
-      if ((f.unit || f.doc)!==unit || (isClause?!['payment_stage','payment_term'].includes(f.field):f.field!==key)) return null;
-      const candidates=ledger.rows.filter(r=>r.unit===unit && r.field===f.field &&
-        (!isClause || r.quote.split(/[:：]/u)[0]===f.source_line.text.split(/[:：]/u)[0]));
-      const [r]=candidates;
-      if (candidates.length!==1 || !same(r.facts,[ref]) || r.doc!==f.doc || r.page!==f.page ||
-          r.line!==s.printedLine || r.quote!==f.source_line.text) return null;
-      const calls=report.calls?.pages?.filter(c=>c.doc===f.doc && c.page===f.page);
-      if (calls?.length!==1 || !calls[0].response_id || !calls[0].check?.response_id || calls[0].page_sha256!==f.page_sha256 ||
-          issuedPageDocument(graph,calls[0])!==s.doc) return null;
+      if (!data.evidence.includes(ref) || !PerformanceIndex.matchesPrintedField(s,report,ledger.rows,unit,key)) return null;
       rows[key]=s;
     }
     function readMetric(key) {
@@ -79,14 +69,7 @@ const PaymentQuality = (() => {
     Object.assign(root.dataset,{qualityFinding:item.id,caseId:report.case_id,rev:String(rev)});
     root.setAttribute('aria-label','验收款质量对照');
     function control(field,label,display,cls) {
-      const {fact,doc,printedLine}=rows[field], place='第 '+fact.page+' 页 · 第 '+printedLine+' 行';
-      const button=action('',()=>openPage(fact.doc,fact.page,fact.id),cls);
-      button.id=root.id+'-'+field;button.dataset.source=fact.id;button.dataset.qualityLabel=[label,doc.name,place].join(' · ');
-      button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-controls','page-dialog');
-      button.title=doc.name+' · '+place;
-      button.append(el('small',label),el('strong',display),glyph('arrows-angle-expand'));
-      button.append(el('span',button.title,'visually-hidden'));
-      return button;
+      return PerformanceIndex.originalButton(root.id+'-'+field,rows[field],label,display,cls);
     }
     const header=box('quality-heading',el('h4',m.name+'核对'),el('span',(upper?'高于上限 ':'低于下限 ')+m.outside_by+' '+m.unit));
     const pair=box('quality-readings',control('acceptance_criteria',upper?'合同上限':'合同下限',m.limit+' '+m.unit,'quality-metric'),

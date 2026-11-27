@@ -267,7 +267,7 @@
 @media (max-width:650px) {
   .batch-phase-modes button,.batch-phase-empty .text-button,.batch-phase-proof > details summary { min-height:44px; }
   .phase-evidence .proof-switch { flex-wrap:wrap; max-width:100%; }
-  .scope-dialog[data-single=false] .scope-detail:is([data-batch=true],[data-guarantee=true],[data-quality=true]) > h3 {
+  .scope-dialog[data-single=false] .scope-detail:is([data-batch=true],[data-guarantee=true],[data-quality=true],:has(.retest-reference)) > h3 {
     position:absolute; width:1px; height:1px; margin:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap;
   }
 }
@@ -291,3 +291,10 @@
 .quality-terms summary { min-height:44px; padding:11px 12px; color:var(--accent-hover); font-size:.83rem; cursor:pointer; }
 .quality-terms .quality-term { width:calc(100% - 20px); margin:0 10px 6px; padding-right:23px; background:var(--surface); }
 .quality-term strong { font-size:.84rem; font-weight:520; overflow-wrap:anywhere; }
+.retest-reference .quality-heading > span { color:var(--secondary); }
+.retest-reference .quality-heading > .risk { color:var(--issue); }
+.retest-reference .retest-citation { margin:1px 10px 9px; width:calc(100% - 20px); background:var(--surface); }
+.retest-citation strong,.retest-reference .quality-readings strong { font-family:var(--mono,ui-monospace,monospace); font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.retest-reference .retest-match { border-color:var(--accent); background:var(--accent-soft); }
+.retest-reference .quality-readings button { padding-right:18px; }
+.retest-note { margin:0 12px 12px; color:var(--secondary); font-size:.83rem; }

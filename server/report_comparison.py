@@ -178,7 +178,10 @@ def side(item, other):
     fields = PRIORITY[f["rule"]]
     board = f.get("effect_review", {}).get("board_decision")
     quality = f.get("payment_quality", {}).get("fields", {})
-    if quality:
+    retest = f.get("retest_reference", {}).get("fields", {})
+    if retest:
+        preferred = [retest[k] for k in ("citation","original_acceptance_number","final_acceptance_number","paid_on","clause") if k in retest]
+    elif quality:
         preferred = [quality[key] for key in ("acceptance_criteria","measured_result","accepted_on","paid_on","clause") if key in quality]
     elif f["rule"] == "H01" and board:
         preferred = [board["fields"][k] for k in ("effect_clause", "approval_result", "approval_signer") if k in board["fields"]]
@@ -194,7 +197,7 @@ def side(item, other):
     sources.sort(key=lambda s: (preferred.index(s["ref"]) if s["ref"] in preferred else len(preferred),
                                 not s["different"], fields.index(s["field"]) if s["field"] in fields else len(fields),
                                 s["doc"], s["page"], s["line"]))
-    limit = 4 if quality else 3
+    limit = 4 if quality or retest else 3
     preview = sources[:limit]
     if preview and not any(s["different"] for s in preview):
         changed = next((s for s in sources[limit:] if s["different"]), None)
@@ -203,7 +206,7 @@ def side(item, other):
     return {"id": f["id"], "rule": f["rule"], "title": f["title"], "status": f["status"], "detail": f["detail"], "basis": f.get("basis"),
             "stage": stage.get("name"), "instrument": item["instrument"], "source_count": len(sources), "sources": preview,
             "certificate": bool(((f.get("warranty_check") or {}).get("certificate") or {}).get("records")),
-            "board_decision": bool(board and board["records"]), "payment_quality": bool(quality)}
+            "board_decision": bool(board and board["records"]), "payment_quality": bool(quality), "retest_reference": bool(retest)}
 
 
 def pair(older, newer):

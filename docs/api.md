@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## 实付回单所引的初验与复验
+
+从规则 `2026.11.27.18` 起，`policy.retest_reference` 标记 `reinspection-receipt-reference-v1`，`graph.retest_reference_sources.rows` 保留原件单元、页、物理行、原话和对应的字段编号。符合范围的 H05 发现内含 `retest_reference`。其中 `state` 可为 `original`、`final`、`unlocated` 或 `unresolved`，分别表示回单指向初验、指向复验、与两张已核单号均不符、证据尚待核对。
+
+成功对应复验时，`days_from_final` 表示回单付款日减去复验单所列日的自然日数。图谱边 `receipt_names_inspection` 只在回单引用号与初验或复验的本号逐字相符时出现。边的起点和终点均引用原行字段。该检查自身的 `status`、整项 H05 的状态及整案结论分开留存。走查意见用 `retest-H05-8-citation` 等控件编号固定到当时的底稿版次和检查项。[本机 R7 回单原件入口](http://127.0.0.1:8000/workpaper/e4cc7a317fe34db4a3df9acc0a165b99?rev=7&view=payment-checks&stage=H05-8)
+
 ## 验收质量与本期付款
 
 规则 `2026.11.27.17` 在底稿 `policy.payment_quality` 记录 `acceptance-quality-payment-v1`。图谱 `payment_quality_sources.rows` 留存原件单元、物理页行、标签、原话及该行对应的字段编号。匹配成功的 H04/H05 含 `payment_quality`。其 `fields` 引用本期条款、合同限值、终验范围、结论、检验依据、实测及可定位的日期。`measure` 中数值和超限差额均为十进制字符串，`operator` 与 `unit` 随合同原文。

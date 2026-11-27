@@ -83,6 +83,13 @@ export async function checkRevisionComparison(ctx,cid) {
         '?.dataset.qualityFinding==='+JSON.stringify(item.id),'quality comparison for this receipt and issued revision');
       await navigate(pinned);await wait(q('#revision-comparison')+'?.dataset.entry==='+JSON.stringify(entry),'back from quality comparison');
     } else assert.equal(await evaluate(q(quality)),null);
+    const retest=area+' .revision-links a[id$="-retest"]';
+    if (item.retest_reference) {
+      await click(retest);
+      await wait('state.bundle?.rev==='+meta.rev+' && '+q('#performance-index[open] [data-retest-finding]')+
+        '?.dataset.retestFinding==='+JSON.stringify(item.id),'receipt citation in the selected report revision');
+      await navigate(pinned);await wait(q('#revision-comparison')+'?.dataset.entry==='+JSON.stringify(entry),'back from receipt citation');
+    } else assert.equal(await evaluate(q(retest)),null);
   }
   if (process.env.AUDIT_COMPARISON_RESILIENCE && versions.length>1) {
     const alternate=versions.find(v=>v.rev!==prior).rev;

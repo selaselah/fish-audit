@@ -16,6 +16,12 @@ document.body.append(dialog);
 const q = sel => dialog.querySelector(sel);
 const launcher = document.getElementById('walk-launch');
 const text = q('#walk-text');
+const saveButton=q('#walk-save'), shortcut=document.createElement('kbd');
+const mac=/Mac/i.test(navigator.userAgentData?.platform || navigator.platform);
+shortcut.textContent=mac?'⌘ ↵':'Ctrl ↵';shortcut.setAttribute('aria-hidden','true');
+saveButton.append(shortcut);
+saveButton.title=mac?'保存意见（⌘ + Enter）':'保存意见（Ctrl + Enter）';
+saveButton.setAttribute('aria-keyshortcuts','Control+Enter Meta+Enter');
 const uuid = () => crypto.randomUUID().replaceAll('-','');
 let owner, book, context, baseline, draftKey, ident, attempted, records, pick, busy=false, generation=0, successTimer;
 const drafts = new Map();
@@ -30,7 +36,8 @@ function status(message) { q('#walk-status').textContent=message; }
 function draft() {
   if (!draftKey) return;
   const item = {text:text.value,context,id:ident,attempted};
-  if (text.value || context?.target) drafts.set(draftKey,item); else drafts.delete(draftKey);
+  if (text.value || context?.target && JSON.stringify(context)!==JSON.stringify(baseline)) drafts.set(draftKey,item);
+  else drafts.delete(draftKey);
   try {
     if (drafts.has(draftKey)) sessionStorage.setItem(draftKey,JSON.stringify(item));
     else sessionStorage.removeItem(draftKey);
@@ -129,6 +136,12 @@ q('#walk-saved').onclick=async()=>{
   catch (err) {if (token===generation) status('清单未载入，请再次点「已记录」。'+err.message);}
 };
 text.addEventListener('input',draft);
+text.addEventListener('keydown',event=>{
+  if (event.key==='Enter' && (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey &&
+      !event.isComposing && event.keyCode!==229 && !event.repeat && !saveButton.disabled) {
+    event.preventDefault();q('#walk-form').requestSubmit(saveButton);
+  }
+});
 dialog.addEventListener('close',()=>{ if (!pick && !dialog.open) {markSelection(null); draft(); launcher.focus({preventScroll:true});} });
 dialog.addEventListener('keydown',e=>{if (e.key==='Escape') e.stopPropagation();});
 q('#walk-form').addEventListener('submit',async event=>{
@@ -141,7 +154,9 @@ q('#walk-form').addEventListener('submit',async event=>{
     const saved=await book.save({id:ident,text:body,context});
     if (generation!==token) return;
     records=[saved,...records.filter(n=>n.id!==saved.id)]; renderHistory();
-    text.value=''; context=baseline; draft(); draftKey=null;
+    text.value=''; context=baseline; drafts.delete(draftKey);
+    try {sessionStorage.removeItem(draftKey);} catch { /* The in-memory draft is already cleared. */ }
+    draftKey=null;
     dialog.close(); launcher.querySelector('span').textContent='已记录'; successTimer=setTimeout(resetButton,1700);
   } catch (err) { if (generation===token) status('保存失败，意见已保留。'+err.message); }
   finally {if (generation===token) {busy=false;q('#walk-save').disabled=false;}}
@@ -191,10 +206,14 @@ async function connect() {
   try {
     const store=await notebook();
     if (token!==generation || !dialog.open) return;
-    book=store; draftKey='fish-walk-draft:'+book.key+':'+JSON.stringify(baseline);
+    book=store;
+    const position={...baseline};
+    if (position.dialog==='page-dialog' && position.doc) delete position.target;
+    draftKey='fish-walk-draft:'+book.key+':'+JSON.stringify(position);
     let last=drafts.get(draftKey);
     try {last=last || JSON.parse(sessionStorage.getItem(draftKey));} catch { /* Storage can be disabled. */ }
     if (last?.context && !text.value) {context=last.context; text.value=last.text;ident=last.id;attempted=last.attempted;showLocation();}
+    if (text.value) draft();
     q('.walk-scope').textContent=book.label;
     q('#walk-save').disabled=false;q('#walk-pick').disabled=false;q('#walk-saved').disabled=false;
     status('');

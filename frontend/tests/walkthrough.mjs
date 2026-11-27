@@ -54,7 +54,10 @@ export async function checkWalkthrough(ctx,caseId,scratch) {
     assert.equal(await evaluate(q('#walk-text')+'.value'),opinion);
     await call('Network.setBlockedURLs',{urls:[]});
   }
-  await save();
+  await evaluate(q('#walk-text')+'.focus();'+q('#walk-text')+'.dispatchEvent(new KeyboardEvent("keydown",{key:"Enter",ctrlKey:true,isComposing:true,bubbles:true,cancelable:true}));true');
+  assert.ok(await evaluate(q('#walk-dialog')+'.open && !'+q('#walk-save')+'.disabled'),'selecting a Chinese input candidate preserves the draft');
+  for (const type of ['keyDown','keyUp']) await call('Input.dispatchKeyEvent',{type,key:'Enter',code:'Enter',windowsVirtualKeyCode:13,modifiers:caseId?4:2});
+  await wait('!'+q('#walk-dialog')+'.open','keyboard shortcut saves the opinion and returns to the website');
   await call('Page.reload',{ignoreCache:true});await wait(q('#release-example')+'?.value==="late"','reload the selected example');
   await open();await history(1);
   const historyLink='#walk-history li a';
@@ -83,9 +86,10 @@ export async function checkWalkthrough(ctx,caseId,scratch) {
     await navigate('/app#case/'+caseId+'?rev=1&walktab=evidence&walkdoc=d01&walkpage=1');
     await wait(q('#page-dialog')+'?.open && '+q('#page-dialog #walk-launch')+' && '+q('#page-dialog .page-image')+'?.naturalWidth','private original-page launcher');
     await open();
-    assert.match(await evaluate(q('#walk-location')+'.textContent'),/R1.*d01.*第 1 页/);
+    assert.match(await evaluate(q('#walk-location')+'.textContent'),/R1.*d01.*第 1 页.*合成页\.jpg/);
     await type('希望这里保留原页页码。');await press('#walk-close');
     await wait('!'+q('#walk-dialog')+'.open && '+q('#page-dialog')+'.open','underlying original stays open');
+    await call('Page.reload',{ignoreCache:true});await wait(q('#page-dialog')+'?.open && '+q('#page-dialog .page-image')+'?.naturalWidth','original page and its draft after reload');
     await open();assert.match(await evaluate(q('#walk-text')+'.value'),/原页页码/);await save();
     await navigate('/app#desk');await wait(q('#case-list'),'desk');await open();await history(2);
     await press(historyLink);

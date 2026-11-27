@@ -67,6 +67,34 @@ const PerformanceIndex = (() => {
     }
     return sources;
   }
+  function matchesPrintedField(source,report,ledgerRows,unit,field) {
+    if (!source?.printedLine) return false;
+    const f=source.fact, clause=field==='clause';
+    if ((f.unit || f.doc)!==unit || (clause?!['payment_stage','payment_term'].includes(f.field):f.field!==field)) return false;
+    const heading=s=>s.split(/[:：]/u,1)[0].trim();
+    const matches=ledgerRows.filter(r=>r.unit===unit && r.field===f.field &&
+      (!clause || typeof r.quote==='string' && heading(r.quote)===heading(f.source_line.text)));
+    const [row]=matches;
+    if (matches.length!==1 || row.facts?.length!==1 || row.facts[0]!==f.id || row.doc!==f.doc ||
+        row.page!==f.page || row.line!==source.printedLine || row.quote!==f.source_line.text) return false;
+    const calls=report.calls?.pages?.filter(p=>p.doc===f.doc && p.page===f.page);
+    if (calls?.length!==1) return false;
+    const [page]=calls;
+    return Boolean(page.response_id && page.check?.response_id && page.page_sha256===f.page_sha256 &&
+      issuedPageDocument(report.graph,page)===source.doc);
+  }
+  function originalButton(id,{fact,doc,printedLine},label,display,cls) {
+    const place='第 '+fact.page+' 页 · 第 '+printedLine+' 行';
+    const button=action('',()=>openPage(fact.doc,fact.page,fact.id),cls);
+    button.id=id;
+    button.dataset.source=fact.id;
+    button.dataset.originalLabel=[label,doc.name,place].join(' · ');
+    button.setAttribute('aria-haspopup','dialog');
+    button.setAttribute('aria-controls','page-dialog');
+    button.title=doc.name+' · '+place;
+    button.append(el('small',label),el('strong',display),glyph('arrows-angle-expand'),el('span',button.title,'visually-hidden'));
+    return button;
+  }
   function sourceView(item, graph, pdfProofs=[]) {
     const rows=originals(item,graph);
     if (!rows.length) return el('p','本版没有可从此项直接打开的字段引文。','scope-empty');
@@ -780,12 +808,15 @@ const PerformanceIndex = (() => {
       const batch=BatchPhase.resolve(item,findings.find(f=>f.rule==='H02'),graph,state.bundle.report.calls?.pages);
       const guarantee=AdvanceGuarantee.panel(item,state.bundle.report);
       const quality=PaymentQuality.panel(item,state.bundle.report,rev);
+      const retest=RetestReference.panel(item,state.bundle.report,rev);
       detail.dataset.batch=String(Boolean(batch));
       detail.dataset.guarantee=String(Boolean(guarantee));
       detail.dataset.quality=String(Boolean(quality));
       detail.replaceChildren(box('scope-check-state',el('span',item.id,'mono'),tag(item.status)),heading);
       if (quality) detail.append(quality);
       else if (item.payment_quality) detail.append(el('p','验收款质量对照的原行待核。','scope-empty'));
+      if (retest) detail.append(retest);
+      else if (item.retest_reference) detail.append(el('p','请在字段引文中核对回单所引的验收原件。','scope-empty'));
       for (const proof of addendumEvidence(state.bundle.report).filter(p=>p.related.includes(item))) {
         const control=AddendumSigning.jump(proof);
         control.addEventListener('click',()=>dialog.close(),{capture:true});
@@ -796,7 +827,7 @@ const PerformanceIndex = (() => {
       if (guarantee) detail.append(guarantee);
       if (batch) detail.append(BatchPhase.panel(batch,item.stage));
       if (paired) detail.append(paired);
-      else if (!guarantee && detailText && (receipts.length && ['issue','risk'].includes(item.status) || roster && item.status==='issue')) {
+      else if (!guarantee && !retest && detailText && (receipts.length && ['issue','risk'].includes(item.status) || roster && item.status==='issue')) {
         const end=detailText.indexOf('。')+1 || detailText.length;
         detail.append(el('p',detailText.slice(0,end),'scope-reason')); detailText=detailText.slice(end).trimStart();
       }
@@ -831,11 +862,11 @@ const PerformanceIndex = (() => {
         if (detailText) detail.append(fold('本项检查结论',el('p',detailText,'scope-reason')));
       } else if (!paired && detailText) {
         const reason=el('p',detailText,'scope-reason');
-        detail.append(detailText.length<=100 && !receipts.length && !batch && !guarantee && !quality?reason:fold('阅读本项结论',reason));
+        detail.append(detailText.length<=100 && !receipts.length && !batch && !guarantee && !quality && !retest?reason:fold('阅读本项结论',reason));
       }
       if (!paired) {
         const sources=()=>sourceView(item,graph,[...receipts,...mandates.flatMap(m=>m.proofs)]);
-        detail.append(roster || batch || guarantee || quality || mandates.length || receipts.some(p=>p.record.kind)?lazyFold('其他字段引文',()=>[sources()]):sources());
+        detail.append(roster || batch || guarantee || quality || retest || mandates.length || receipts.some(p=>p.record.kind)?lazyFold('其他字段引文',()=>[sources()]):sources());
       }
       detail.append(actions);
       detail.scrollTop=0;
@@ -918,5 +949,5 @@ const PerformanceIndex = (() => {
     summary.append(dialog);
     return summary;
   }
-  return {includes,groups,count,originals,fieldLinks,issuedLimitBreach,receiptCitation,receiptEvidence,nativeReceiptCitation,mandateCitation,mandateEvidence,addendumEvidence,releaseProofs,warrantyProofs,boardProofs,overview};
+  return {includes,groups,count,originals,originalButton,matchesPrintedField,fieldLinks,issuedLimitBreach,receiptCitation,receiptEvidence,nativeReceiptCitation,mandateCitation,mandateEvidence,addendumEvidence,releaseProofs,warrantyProofs,boardProofs,overview};
 })();

@@ -12,6 +12,9 @@ HOME_PARAMS = {"scene", "slip", "copy", "edition", "batch", "record", "pdf", "ca
 CASE_PARAMS = {"view", "stage", "instrument", "receipt", "ticket", "call", "agreement", "acceptance", "finding", "fact", "prior", "entry", "filing", "part"}
 QUALITY_PIN = re.compile(r"quality-(H0[45]-[1-9][0-9]{0,7})(?:-(clause|acceptance_criteria|inspection_basis|measured_result|"
                          r"acceptance_scope|acceptance_result|accepted_on|payment_designation|transfer_status|paid_on|terms|order))?")
+RETEST_PIN = re.compile(r"retest-(H05-[1-9][0-9]{0,7})(?:-(clause|citation|payment_designation|transfer_status|paid_on|terms|order|"
+                        r"(?:original|final)_(?:acceptance_number|accepted_on|acceptance_result|acceptance_scope|defect_number)|"
+                        r"(?:repair|final)_(?:original_acceptance|repair_number)|repair_(?:repaired_on|defect_number)|final_defect_closure))?")
 
 
 def check_context(value):
@@ -48,8 +51,8 @@ def check_context(value):
         raise CaseError("走查原页位置不完整。", 400)
     params = result.get("params", {})
     anchor = result.get("anchor", "")
-    if screen == "case" and anchor.startswith("quality-H"):
-        pin = QUALITY_PIN.fullmatch(anchor)
+    if screen == "case" and anchor.startswith(("quality-H","retest-H")):
+        pin = QUALITY_PIN.fullmatch(anchor) or RETEST_PIN.fullmatch(anchor)
         if not pin or not result.get("rev") or params != {"view":"payment-checks", "stage":pin[1]}:
             raise CaseError("请选择底稿版本及相应验收款检查项。", 400)
     if screen == "case" and (params.get("view") == "board-decision" or {"filing","part"}.intersection(params)):
@@ -99,14 +102,18 @@ def save_note(store, workspace, author, role, data):
                                                (context["case_id"], context["rev"])).fetchone():
             raise CaseError("未找到记录时的底稿版本。", 404)
         position = context.get("params",{})
-        if context["screen"] == "case" and (pin := QUALITY_PIN.fullmatch(context.get("anchor",""))):
-            row = db.execute("""SELECT json_extract(f.value,'$.payment_quality') FROM reports, json_each(content,'$.findings') AS f
+        anchor = context.get("anchor","")
+        if context["screen"] == "case" and (pin := QUALITY_PIN.fullmatch(anchor) or RETEST_PIN.fullmatch(anchor)):
+            retest = pin.re == RETEST_PIN
+            row = db.execute("""SELECT json_extract(f.value,?) FROM reports, json_each(content,'$.findings') AS f
                            WHERE case_id=? AND rev=? AND json_extract(f.value,'$.id')=?""",
-                             (context["case_id"],context["rev"],pin[1])).fetchone()
-            quality = json.loads(row[0]) if row and row[0] else {}
+                             ("$.retest_reference" if retest else "$.payment_quality",context["case_id"],context["rev"],pin[1])).fetchone()
+            check = json.loads(row[0]) if row and row[0] else {}
             field = pin[2]
-            if (not quality or field == "order" and not quality.get("payment") or
-                    field not in (None,"terms","order") and field not in quality.get("fields",{})):
+            has_order = "days_from_final" in check if retest else bool(check.get("payment"))
+            if (not check or field == "order" and not has_order or
+                    check.get("state") == "unresolved" and field not in (None,"citation") or
+                    field not in (None,"terms","order") and field not in check.get("fields",{})):
                 raise CaseError("所选版本的这项验收款检查没有引用该位置。",404)
         if position.get("view") == "board-decision" and ("filing" in position or "part" in position):
             records = db.execute("""SELECT json_extract(f.value,'$.effect_review.board_decision.records')

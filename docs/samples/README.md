@@ -1,5 +1,29 @@
 # 合成财会审计演练
 
+## 回单引用初验或复验
+
+全新检出项目可以离线生成五组资料。母本是同一台冷藏柜的六份水印 PDF。生成器保留采购合同、初验、整改、复验及质保单，分别在银行回单末行写入初验号、复验号或一位差异的编号，并设置付款日期。生成后任选一组上传到网站，也可以加 `--run` 调用本机服务。[五组实测与固定版底稿](../acceptance.md#第二期回单究竟引用哪一张验收单)
+
+```sh
+server/.venv/bin/python docs/samples/retest_receipts.py /tmp/retest-receipts
+```
+
+生成 PDF 需要可嵌入的中文 TrueType 字体，可用 `AUDIT_CJK_FONT` 指定路径。在本机，两种生成方式的 30 份输出均与用于实际模型调用的文件摘要及逐页原文一致。
+
+需要用当时已核的原行演练字段复核时，使用本机存档的 R8 母本。下列命令重建材料，另加 `--run --check-fields` 可提交并逐行核字。
+
+```sh
+curl --fail http://127.0.0.1:8000/api/cases/39184eab6f9c4f7ab522c03c8f574b98/reports/8/bundle -o /tmp/retest-master-R8.zip
+server/.venv/bin/python docs/samples/retest_receipts.py /tmp/retest-master-R8.zip /tmp/retest-receipts
+```
+
+要重放已经出具的提前付款样本，可以从已提交的源码复算，并由六份原件重新生成页图和行坐标。
+
+```sh
+curl --fail http://127.0.0.1:8000/api/cases/9cdd1cf88afb490d90ec0d9d37b53fa0/reports/12/bundle -o /tmp/retest-early-R12.zip
+server/.venv/bin/python server/verify.py /tmp/retest-early-R12.zip --render-performance --rules-from-git a0656c2
+```
+
 ## 验收款回单日期与实测超限
 
 母本取自冷藏柜采购 R7 的五份水印原件。合同限值 4℃，终验单列 9 月 20 日实测 8℃，第二期成功回单列 9 月 21 日。以下命令生成三组变体，分别将回单日改为 9 月 19 日、9 月 20 日，以及将回单用途改为「设备采购款」。生成器核对母本及原件摘要、水印和待改原行。

@@ -56,8 +56,8 @@ export function captureContext(owner, element) {
         if (stage && /^H04-[1-9]\d*$/.test(stage)) context.params = {view:'payment-release',stage};
         const instrument=element?.closest('[data-release-set] [data-instrument]');
         if (instrument) context.params={view:'payment-release',stage:instrument.parentElement.dataset.releaseSet,instrument:instrument.dataset.instrument};
-        const quality=element?.closest('[data-quality-finding]') ||
-          (!element && owner?.id==='performance-index' && owner.querySelector('[data-quality-finding]'));
+        const receiptCard=element?.closest('[data-quality-finding],[data-retest-finding]') ||
+          (!element && owner?.id==='performance-index' && owner.querySelector('[data-quality-finding],[data-retest-finding]'));
         const certificate=element?.closest('.warranty-certificate')?.closest('[data-phase-finding]')?.dataset.phaseFinding;
         if (certificate) {
           const payment=element.closest('[data-warranty-payment]')?.dataset.warrantyPayment;
@@ -69,9 +69,9 @@ export function captureContext(owner, element) {
         const comparison=element?element.closest('#revision-comparison'):document.getElementById('revision-comparison');
         if (comparison && !comparison.hidden && comparison.dataset.entry)
           context.params={view:'revision-comparison',prior:comparison.dataset.prior,entry:comparison.dataset.entry};
-        if (quality) {
-          context.params={view:'payment-checks',stage:quality.dataset.qualityFinding};
-          if (!element) {context.anchor=quality.id;context.target='验收款质量对照';}
+        if (receiptCard) {
+          context.params={view:'payment-checks',stage:receiptCard.dataset.qualityFinding || receiptCard.dataset.retestFinding};
+          if (!element) {context.anchor=receiptCard.id;context.target=receiptCard.getAttribute('aria-label');}
         }
       }
       if (owner?.id === 'page-dialog') {
@@ -79,6 +79,12 @@ export function captureContext(owner, element) {
         if (page?.dataset.doc && +page.dataset.page > 0) {
           context.doc = page.dataset.doc; context.page = +page.dataset.page;
           delete context.params;
+          const files=context.rev?state.bundle.report.graph.documents:state.detail.documents;
+          const name=files?.find(file=>file.id===context.doc)?.name;
+          if (!element && name && !/[\p{C}\p{Z}]/u.test(name.replaceAll(' ',''))) {
+            const chars=[...name];
+            context.target=chars.length<=96?name:chars.slice(0,65).join('')+'…'+chars.slice(-30).join('');
+          }
           const row=element?.closest('.evidence-row') || owner.querySelector('.evidence-row.located');
           const cited=row?.dataset.fact;
           const fact=context.rev && factID.test(cited || '') && graphIndex(state.bundle.report.graph).facts.get(cited);
@@ -101,7 +107,7 @@ export function captureContext(owner, element) {
     const boardFile=boardNote?.closest('#board-decision')?.querySelector('.warranty-file')?.textContent;
     const boardRow=element.closest('[data-board-row]');
     const date=element.closest('.warranty-date-source'), order=element.closest('[data-warranty-order]');
-    const sourceLabel = element.closest('[data-quality-label]')?.dataset.qualityLabel ||
+    const sourceLabel = element.closest('[data-original-label]')?.dataset.originalLabel ||
       (element.closest('.quality-order') ? '两单日期 · '+element.closest('.quality-order').textContent : null) ||
       (element.id==='board-unavailable' ? element.textContent :
       boardRow ? [boardRow.querySelector('small').textContent,boardRow.querySelector('button').textContent].join(' · ') :
@@ -126,8 +132,9 @@ export function describeContext(c) {
   const screen = c.screen==='case' ? screens.case+' '+c.case_id.slice(0,8) : screens[c.screen];
   const edition=c.params?.view==='revision-comparison' ? '履约对照 R'+c.params.prior+' / R'+c.rev : c.rev && 'R'+c.rev;
   const board=c.params?.view==='board-decision' && ({decision:'董事会决议原文',signing:'董事会签发版本',payments:'董事会决议关联期款'}[c.params.part] || '董事会审批原件');
-  const quality=c.params?.view==='payment-checks' && c.anchor?.startsWith('quality-') && '验收款核对 '+c.params.stage;
-  return [screen, c.example || sections[c.section], edition, caseTabs[c.tab], board, quality, dialogs[c.dialog],
+  const receipt=c.params?.view==='payment-checks' && (c.anchor?.startsWith('retest-')?'复验回单核对 '+c.params.stage:
+    c.anchor?.startsWith('quality-') && '验收款核对 '+c.params.stage);
+  return [screen, c.example || sections[c.section], edition, caseTabs[c.tab], board, receipt, dialogs[c.dialog],
     c.doc && (c.doc+' · 第 '+c.page+' 页'), c.line && '第 '+c.line+' 行', c.target].filter(Boolean).join(' › ');
 }
 export function returnUrl(c, workspace) {

@@ -502,6 +502,9 @@ class EnterpriseFlow(unittest.TestCase):
         self.assertEqual(save(target).status_code,404)
         self.assertEqual(save({**target,"stage":"H05-9"}).status_code,400)
         self.assertEqual(save(target,anchor="quality-H05-8-unlisted").status_code,400)
+        self.assertEqual(save(target,anchor="retest-H05-8-final_acceptance_number").status_code,404)
+        self.assertEqual(save(target,anchor="retest-H05-8-final_arbitrary").status_code,400)
+        self.assertEqual(save(target,anchor="retest-H05-7-citation").status_code,400)
         self.assertEqual(save({"view":"contract-checks"}).status_code,400)
         self.assertEqual(owner.get(url).json["notes"],[])
 
