@@ -16,7 +16,9 @@ from stage_payments import SUCCESS
 
 
 FIRST_FORMAT = "cited-inspection-payment-use-v7"
-FORMAT = "cited-inspection-payment-use-v8"
+SCOPE_FORMAT = "cited-inspection-payment-use-v8"
+FORMAT = approval_names.JOINT_FORMAT
+SCOPED = (SCOPE_FORMAT, FORMAT)
 HEADINGS = {"补充协议编号":"number","原合同编号":"base_number","采购方":"buyer","供应方":"seller","采购标的":"subject",
             "变更范围":"scope","原签批约定":"previous","变更后签批约定":"revised","变更适用时点":"timing",
             "协议生效条款":"effect","甲方签章":"buyer_seal","乙方签章":"seller_seal","甲方盖章日期":"buyer_date","乙方盖章日期":"seller_date"}
@@ -66,7 +68,7 @@ def scope(graph,contract,changes):
     from performance import stage_terms
 
     ledger=graph.get("inspection_use_sources",{})
-    if ledger.get("format")!=FORMAT or not ledger.get("approver_changes") or len(changes)!=1:
+    if ledger.get("format") not in SCOPED or not ledger.get("approver_changes") or len(changes)!=1:
         return None
     terms=approval_names.stage_terms(graph,contract.unit)
     if len(terms)!=1:
@@ -181,6 +183,10 @@ def payment(graph,finding,entry,identity,observations,sheets,term):
     expected=entry["before"] if delta<0 else entry["after"] if delta>0 else []
     mismatch=bool(listed and expected and set(listed).isdisjoint(expected))
     missing=[n for n in expected if n not in listed] if listed and set(listed)<set(expected) else []
+    if difference := approval_names.joint_difference(expected, listed, ledger["format"]):
+        mismatch = True
+        missing = difference["missing_names"]
+        entry["other_names"] = difference["other_names"]
     paid=bank["paid_on"][1]
     clock=approval_clock.assess(fields["signed_at"],banks[0],clocks,paid) if issued==paid else None
     early=paid<issued or (clock or {}).get("state")=="debit_first"
@@ -209,8 +215,10 @@ def apply(graph,findings):
         f["scope"]=list(dict.fromkeys([*f["scope"],*record["documents"],*([record["approval"]] if "approval" in record else [])]))
         if LEVEL[f["status"]]<LEVEL[record["status"]]:f["status"]=record["status"]
         detail=WORDING[record["state"]]
-        if record.get("printed_difference"):detail+=" 审批单具名栏与按纸面日期对应的名单不同，请核对当时的完整授权。"
-        if record.get("missing_names"):detail+=" 按纸面日期对应的共同签批约定，尚缺"+"、".join(record["missing_names"])+"的签批依据。"
+        if record.get("other_names"):
+            detail+=" 按两份原件所列日期比对，"+approval_names.joint_detail(record)
+        elif record.get("printed_difference"):detail+=" 审批单具名栏与按纸面日期对应的名单不同，请核对当时的完整授权。"
+        elif record.get("missing_names"):detail+=" 按纸面日期对应的共同签批约定，尚缺"+"、".join(record["missing_names"])+"的签批依据。"
         if record.get("refused"):detail+=" 审批单列明不同意支付。"
         if record.get("early_debit"):detail+=" 原件记载的扣款在审批签发之前。"
         if "issued_on" in record:detail+=" 协议实际生效、双方签署及签批权限仍待人工核验。"
@@ -218,5 +226,15 @@ def apply(graph,findings):
 
 
 def edges(findings):
-    return [{"type":"dates_approval_change","from":c["fields"]["revised"],"to":c["approval_fields"]["date"],"evidence":c["evidence"]}
-            for f in findings if (c:=f.get("approval_change")) and "issued_on" in c]
+    links = []
+    for finding in findings:
+        check = finding.get("approval_change", {})
+        if "issued_on" not in check:
+            continue
+        links.append({"type":"dates_approval_change", "from":check["fields"]["revised"],
+                      "to":check["approval_fields"]["date"], "evidence":check["evidence"]})
+        if check.get("other_names"):
+            term = check["original"] if check["state"] == "before" else check["fields"]["revised"]
+            links.append({"type":"compares_approval_names", "from":term, "to":check["approval_fields"]["signed_by"],
+                          "evidence":check["evidence"]})
+    return links

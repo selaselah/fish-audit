@@ -15,7 +15,7 @@ const InstallmentApproval = (() => {
         !request.quote.includes(request.authority) || !Array.isArray(a.evidence) || !a.evidence.every(id=>c.evidence.includes(id)) ||
         ![a.request,c.citation,c.number_ref,item.stage.clause_ref].every(id=>a.evidence.includes(id)) ||
         !same(a.documents,[...new Set(pages.map(p=>p.doc))]) || !same(a.rows,pages.flatMap(p=>p.rows.map(r=>r.id))) ||
-        new Set(a.rows).size!==a.rows.length || a.status!==(['refused','later'].includes(a.state) || a.clock?.state==='debit_first' || a.names?.state==='different'?'risk':'missing')) return null;
+        new Set(a.rows).size!==a.rows.length || a.status!==(['refused','later'].includes(a.state) || a.clock?.state==='debit_first' || ['different','joint_difference'].includes(a.names?.state)?'risk':'missing')) return null;
     const links=g.edges.filter(e=>e.type==='compares_payment_approval' && e.from===a.request && e.evidence?.[1]===c.citation);
     if (!same(links.map(e=>e.to),a.rows) || links.some(e=>!same(e.evidence,[a.request,c.citation,e.to]))) return null;
     const entries=[];
@@ -84,12 +84,14 @@ const InstallmentApproval = (() => {
       group.setAttribute('aria-label','合同与签批人');group.dataset.nameState=a.names.state;group.id='contract-approver-'+finding;
       const missing=a.names.state==='partial'?a.names.required.filter(n=>!a.names.listed.includes(n)):[];
       const status=missing.length?missing.join('、')+'签批待补':ApprovalNames.labels[a.names.state];
-      group.append(box('inspection-use-heading',head,el('span',status,a.names.state==='different'?'risk':'missing')));
+      group.append(box('inspection-use-heading',head,el('span',status,['different','joint_difference'].includes(a.names.state)?'risk':'missing')));
       const contract=entries.filter(e=>e.scope==='contract_term');
       const signers=entries.filter(e=>e.row.id===a.names.signed_by);
       if (a.names.required && contract.length===1 && signers.length===1) rows.classList.add('approval-name-pair');
       rows.append(...[...contract,...signers].map(button));
-      group.append(rows);section.append(group);
+      group.append(rows);
+      if (a.names.state==='joint_difference') group.append(el('p',ApprovalNames.jointSummary(a.names),'approval-change-note'));
+      section.append(group);
     }
     if (clock) {
       section.dataset.clock=clock.state;

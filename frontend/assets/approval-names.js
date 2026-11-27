@@ -1,9 +1,10 @@
 // Show a comparison only after locating the actual clause, named field and contract counterparties.
 const ApprovalNames = (() => {
   const firstFormat='cited-inspection-payment-use-v5', format='cited-inspection-payment-use-v6';
-  const supports=value=>[firstFormat,format,'cited-inspection-payment-use-v7','cited-inspection-payment-use-v8'].includes(value);
+  const jointFormat='cited-inspection-payment-use-v9';
+  const supports=value=>[firstFormat,format,'cited-inspection-payment-use-v7','cited-inspection-payment-use-v8',jointFormat].includes(value);
   const signers=['签批人姓名','审批人姓名','实际签批人'];
-  const labels={listed:'两处姓名相符',different:'签批人不同',partial:'共同签批少一人',missing:'签批姓名待补',other_stage:'属于其他期款',scope:'签批范围待核'};
+  const labels={listed:'两处姓名相符',different:'签批人不同',joint_difference:'会签名单有一人不同',partial:'共同签批少一人',missing:'签批姓名待补',other_stage:'属于其他期款',scope:'签批范围待核'};
   const headings=['付款签批约定','付款审批人约定'];
   const ordinary=['contract','bank_receipt','acceptance','reinspection','remediation','warranty'];
   const same=(a,b)=>Array.isArray(a) && Array.isArray(b) && a.length===b.length && a.every((v,i)=>v===b[i]);
@@ -33,6 +34,12 @@ const ApprovalNames = (() => {
     const names=match[4]?[match[3],match[4]]:[match[3]],index=BatchPhase.ordinal(match[1]);
     return index && names.every(n=>name(n,version)) && new Set(names).size===names.length?{names,index,role:match[2]}:null;
   }
+  function jointDifference(required,listed,version) {
+    if (version!==jointFormat || required?.length!==2 || listed?.length!==2) return null;
+    const missing=required.filter(n=>!listed.includes(n)), other=listed.filter(n=>!required.includes(n));
+    return missing.length===1 && other.length===1?{missing,other}:null;
+  }
+  const jointSummary=check=>'审批单未列'+check.missing_names[0]+'，另列'+check.other_names[0]+'。';
   function bind(item,report,sheet,readRow) {
     const c=item.inspection_use,a=c.approval,check=a.names,g=report.graph;
     const links=g.edges.filter(e=>e.type==='compares_approval_names' && e.evidence?.[0]===c.citation);
@@ -83,13 +90,18 @@ const ApprovalNames = (() => {
         else if (listed.every(n=>!required.includes(n))) state='different';
       }
     } else if (check.contract_fields) return null;
+    const difference=jointDifference(required,listed,c.format);
+    if (difference) {
+      state='joint_difference';
+      if (!same(check.missing_names,difference.missing) || !same(check.other_names,difference.other)) return null;
+    } else if (Object.hasOwn(check,'missing_names') || Object.hasOwn(check,'other_names')) return null;
     if (state!==check.state || (required?!same(required,check.required):Object.hasOwn(check,'required')) ||
         (listed?!same(listed,check.listed):Object.hasOwn(check,'listed'))) return null;
-    if (['listed','different','partial'].includes(state)) {
+    if (['listed','different','partial','joint_difference'].includes(state)) {
       if (links.length!==1 || links[0].from!==raw.id || links[0].to!==signer.id ||
           !same(links[0].evidence,[c.citation,a.request,item.stage.clause_ref,fields.contract_id,fields.buyer,fields.seller,raw.id,signer.id])) return null;
     } else if (links.length) return null;
     return entries;
   }
-  return {format,firstFormat,supports,unnamed,signers,labels,archived,list,clause,bind};
+  return {format,firstFormat,jointFormat,supports,unnamed,signers,labels,archived,list,clause,bind,jointDifference,jointSummary};
 })();

@@ -1,5 +1,13 @@
 # 合成财会审计演练
 
+## 会签名单有一人不同
+
+用已核摘要的 R7 水印证据包作母本，生成三组合同、验收、整改、复验、质保、审批及银行回单，其中两组另附补充协议。以下命令在仓库根目录运行。末尾加 `--run --check-fields` 可提交本机服务，并对照水印原行演练核字。重复提交相同原件会返回同一案件。[下载水印母本](http://127.0.0.1:8000/api/cases/c05a306e53bc40eb8d6ef46233a8e731/reports/7/bundle) · [实测结果](../acceptance.md#两人会签的审批单只对上一人)
+
+```sh
+PYTHONPATH=server server/.venv/bin/python docs/samples/joint_approval_examples.py /tmp/master-R7.zip /tmp/joint-approvals
+```
+
 ## 分期付款审批单
 
 生成六组带水印的采购材料，每组七份 PDF。六种写法覆盖提前、延后、同日、拒付、其他期款以及引用另一验收单。末尾加 `--run` 可向本机服务提交。已逐行核对母本时可以同时传入 `--check-against` 和母本归档路径，生成器会校验母本及本案原件摘要，再按实际打印行演练补录、核字。[生成器](installment_approvals.py) · [本机运行结果](../acceptance.md#复验要求另批时核对付款审批单)

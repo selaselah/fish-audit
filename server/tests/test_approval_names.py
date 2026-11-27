@@ -27,7 +27,41 @@ def sample(term=SINGLE, signer="林知行", extra=(), contract_ext=".pdf", **fie
         return paper(sheet(**(data | fields)),extra=[(1,term),(6,"实际扣款时间：10:30（北京时间）"),*extra])
 
 
+def replay_v8(p):
+    graph = p["graph"]
+    previous = use.edges(p["findings"])
+    graph[use.KEY]["format"] = use.approval_changes.SCOPE_FORMAT
+    p["policy"].update(version="2026.11.28.7", inspection_use=use.approval_changes.SCOPE_FORMAT)
+    p["findings"] = execute(graph, PERFORMANCE)
+    graph["edges"] = [e for e in graph["edges"] if e not in previous] + use.edges(p["findings"])
+
+
 class ApprovalNamesTests(unittest.TestCase):
+    def test_two_named_cosigners_with_only_one_in_common(self):
+        for signer in ("顾明远、周茵","周茵、顾明远"):
+            p,read,layout=sample(JOINT,signer)
+            f,=payments(p)
+            a=f["inspection_use"]["approval"]; n=a["names"]
+            self.assertEqual((f["status"],a["status"],n["state"]),("risk","risk","joint_difference"))
+            self.assertEqual((n["missing_names"],n["other_names"]),(["林知行"],["周茵"]))
+            e,=[e for e in p["graph"]["edges"] if e["type"]=="compares_approval_names"]
+            self.assertEqual((e["from"],e["to"]),(n["rows"][0],n["signed_by"]))
+            self.assertIn("另列周茵",f["detail"])
+            use.verify(p,read,read_layout=layout); verify_findings(p)
+            for key in ("missing_names","other_names"):
+                bad=deepcopy(p); payments(bad)[0]["inspection_use"]["approval"]["names"][key]=["顾明远"]
+                with self.assertRaises(ValueError):use.verify(bad,read,read_layout=layout)
+            replay_v8(p)
+            self.assertEqual(payments(p)[0]["inspection_use"]["approval"]["names"]["state"],"scope")
+            use.verify(p,read,read_layout=layout)
+            with self.assertRaisesRegex(ValueError,"重审"):use.verify(p,read,read_layout=layout,signing=True)
+
+        refused,read,layout=sample(JOINT,"顾明远、周茵",审批决定="不同意支付")
+        self.assertEqual(payments(refused)[0]["inspection_use"]["approval"]["state"],"refused")
+        replay_v8(refused)
+        self.assertEqual(payments(refused)[0]["status"],"risk")
+        with self.assertRaisesRegex(ValueError,"重审"):use.verify(refused,read,read_layout=layout,signing=True)
+
     def test_scope_and_lists(self):
         for term,person,state in ((SINGLE,"林知行","listed"),(SINGLE,"顾明远","different"),(JOINT,"林知行","partial"),
                 (JOINT,"顾明远、林知行","listed"),(JOINT,None,"missing"),(SINGLE,"顾明远、林知行","scope"),

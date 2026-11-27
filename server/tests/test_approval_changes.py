@@ -8,14 +8,14 @@ from config import PERFORMANCE
 from controls import execute
 from graph import build_graph
 from performance import verify_findings
-from test_approval_names import SINGLE
+from test_approval_names import JOINT, SINGLE, replay_v8
 from test_installment_approval import paper,sheet
 from test_retest_reference import payments
 
 
-def sample(day="27",signer="顾明远",revisions=None,extra=(),signature="typeset",sheet_fields=None,bank_notes=()):
+def sample(day="27",signer="顾明远",revisions=None,extra=(),signature="typeset",sheet_fields=None,bank_notes=(),base_clause=SINGLE):
     fields={"补充协议编号":"BC-122","原合同编号":"YL-121","采购方":"演练甲","供应方":"演练乙","采购标的":"冷藏柜",
-            "变更范围":"仅变更第二期验收款签批人，其余条款不变","原签批约定":"第二期验收款须由林知行签批。",
+            "变更范围":"仅变更第二期验收款签批人，其余条款不变","原签批约定":base_clause.split("：",1)[1],
             "变更后签批约定":"第二期验收款须由顾明远签批。","变更适用时点":change.TIMING,"协议生效条款":"本协议自双方盖章之日起生效",
             "甲方签章":"演练甲（已盖章）","乙方签章":"演练乙（已盖章）","甲方盖章日期":"2026年9月23日","乙方盖章日期":f"2026年9月{day}日"}
     fields.update(revisions or {})
@@ -28,10 +28,36 @@ def sample(day="27",signer="顾明远",revisions=None,extra=(),signature="typese
         return g
     with patch("test_installment_approval.build_graph",build):
         s={"审批日期":"2026-09-27","签批人姓名":signer,"审批签发时间":"09:15（北京时间）",**(sheet_fields or {})}
-        return paper(sheet(**s),agreement,extra=[(1,SINGLE),(6,"实际扣款时间：10:30（北京时间）"),*((6,text) for text in bank_notes)])
+        return paper(sheet(**s),agreement,extra=[(1,base_clause),(6,"实际扣款时间：10:30（北京时间）"),*((6,text) for text in bank_notes)])
 
 
 class ApprovalChangeTests(unittest.TestCase):
+    def test_joint_discrepancy_uses_the_clause_supported_by_the_printed_dates(self):
+        term="第二期验收款须由顾明远与周茵共同签批。"
+        # The approval names one person from each pair and a third name is left out of it.
+        for day,state,missing,other in (("26","after","顾明远","林知行"),("28","before","顾明远","周茵"),("27","same_day",None,None)):
+            with self.subTest(day=day):
+                p,read,layout=sample(day,"林知行、周茵",revisions={"变更后签批约定":term},base_clause=JOINT)
+                f,=payments(p); c=f["approval_change"]
+                self.assertEqual((c["state"],c["printed_difference"],c["status"]),(state,bool(missing),"risk" if missing else "missing"))
+                links=[e for e in p["graph"]["edges"] if e["type"]=="compares_approval_names"]
+                if missing:
+                    self.assertEqual((c["missing_names"],c["other_names"]),([missing],[other]))
+                    clause=c["original"] if state=="before" else c["fields"]["revised"]
+                    self.assertEqual(links,[{"type":"compares_approval_names","from":clause,"to":c["approval_fields"]["signed_by"],"evidence":c["evidence"]}])
+                    for k in ("other_names","missing_names"):
+                        bad=deepcopy(p); payments(bad)[0]["approval_change"][k]=["顾明远","周茵"]
+                        with self.assertRaises(ValueError):use.verify(bad,read,read_layout=layout)
+                else:
+                    self.assertEqual((c["missing_names"],links),([],[])); self.assertNotIn("other_names",c)
+                use.verify(p,read,read_layout=layout); verify_findings(p)
+                replay_v8(p)
+                use.verify(p,read,read_layout=layout)
+                if missing:
+                    self.assertFalse(payments(p)[0]["approval_change"]["printed_difference"])
+                    with self.assertRaisesRegex(ValueError,"重审"):use.verify(p,read,read_layout=layout,signing=True)
+                else:use.verify(p,read,read_layout=layout,signing=True)
+
     def test_approver_change_preserves_the_quality_record_shares_and_bank_reference(self):
         p,read,layout=sample("28")
         scope=[f for f in p["findings"] if f.get("approval_change_scope")]

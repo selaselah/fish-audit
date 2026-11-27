@@ -87,6 +87,7 @@ def register(graph,h02,contract,rows):
 
 
 def records(graph,findings):
+    from approval_changes import SCOPED
     from installment_counts import pending_schedule
     from performance import CONDITIONS, Material, ORD, PASS, matches_stage, number as ordinal_number, stage_terms
 
@@ -97,7 +98,7 @@ def records(graph,findings):
     kinds=graph["documents_by_kind"]
     scope=h02.get("approval_change_scope",{})
     if len(kinds.get("contract",()))!=1 or kinds.get("contract_addendum") and (
-            graph.get("inspection_use_sources",{}).get("format")!="cited-inspection-payment-use-v8" or kinds["contract_addendum"]!=[scope.get("unit")]):
+            graph.get("inspection_use_sources",{}).get("format") not in SCOPED or kinds["contract_addendum"]!=[scope.get("unit")]):
         return
     contract=Material(graph,kinds["contract"][0])
     bank_units=set(kinds.get("bank_receipt",()))

@@ -12,6 +12,7 @@ SIGNERS = {"签批人姓名", "审批人姓名", "实际签批人"}
 NAME = r"[\u3400-\u9fff]{2,8}"
 FIRST_FORMAT = "cited-inspection-payment-use-v5"
 FORMAT = "cited-inspection-payment-use-v6"
+JOINT_FORMAT = "cited-inspection-payment-use-v9"
 # A plain vacancy or role in the name field leaves the other printed columns usable.
 UNNAMED = {"","指定人","未指定","未确定","不确定","待指定","待审批","待签","待签批","未签","未填写","未填","未注明",
            "未载明","未记载","未具名","未署名","无姓名","空白","空缺","空栏","无","待补","待核","待确认","未知","不详","不适用","无法辨认",
@@ -58,6 +59,21 @@ def clause(quote, version=FORMAT):
 def listed(value, version=FORMAT):
     names=value.split("、")
     return names if len(names) in (1,2) and len(set(names))==len(names) and all(name(n,version) for n in names) else None
+
+
+def joint_difference(required, listed, version):
+    """Compare two fully named pairs only when exactly one printed name is shared."""
+    if version != JOINT_FORMAT or len(required) != 2 or len(listed) != 2:
+        return None
+    missing = [name for name in required if name not in listed]
+    other = [name for name in listed if name not in required]
+    if len(missing) == len(other) == 1:
+        return {"missing_names": missing, "other_names": other}
+    return None
+
+
+def joint_detail(check):
+    return "审批单具名栏未见共同签批约定所列的" + check["missing_names"][0] + "，另列" + check["other_names"][0] + "。请核对签批原件及替代授权。"
 
 
 def pages(graph, read_text, read_layout):
@@ -179,12 +195,14 @@ def compare(graph, finding, approval, fields, values):
         return {**record,"state":"partial"}
     if not set(signed).intersection(required):
         return {**record,"state":"different"}
+    if difference := joint_difference(required, signed, version):
+        return {**record, "state":"joint_difference", **difference}
     return record
 
 
 def edge(approval, use, stage):
     names=approval.get("names",{})
-    if names.get("state") not in {"listed","different","partial"}:
+    if names.get("state") not in {"listed","different","partial","joint_difference"}:
         return None
     term,=names["rows"]
     signer=names["signed_by"]

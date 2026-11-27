@@ -1,6 +1,6 @@
 // Compare the filed approval with the wording and dates printed on the supplementary agreement.
 const ApprovalChange = (() => {
-  const formats=['cited-inspection-payment-use-v7','cited-inspection-payment-use-v8'];
+  const supportsScope=version=>version==='cited-inspection-payment-use-v8' || version===ApprovalNames.jointFormat;
   const stateLabels={pending:'版本及范围待核',terms:'两版条款已定位',before:'审批早于所列盖章日',after:'审批晚于所列盖章日',same_day:'同日先后待核'};
   const columns={补充协议编号:'number',原合同编号:'base_number',采购方:'buyer',供应方:'seller',采购标的:'subject',
     变更范围:'scope',原签批约定:'previous',变更后签批约定:'revised',变更适用时点:'timing',协议生效条款:'effect',
@@ -11,7 +11,7 @@ const ApprovalChange = (() => {
   function bind(item,report) {
     const c=item.approval_change,g=report.graph,ledger=g.inspection_use_sources,format=report.policy.inspection_use;
     if (!c || !['H04','H05'].includes(item.rule) || !item.stage || !item.stage_approvers?.length ||
-        !formats.includes(format) || ledger?.format!==format || !/^[a-f0-9]{64}$/u.test(report.policy.code_sha256?.['approval_changes.py']) ||
+        (format!=='cited-inspection-payment-use-v7' && !supportsScope(format)) || ledger?.format!==format || !/^[a-f0-9]{64}$/u.test(report.policy.code_sha256?.['approval_changes.py']) ||
         !Object.hasOwn(stateLabels,c.state) || !['risk','missing'].includes(c.status) || item.status==='ok' || (c.status==='risk' && item.status==='missing')) return null;
     const supported=new Set(traceReferences(g,item)),refs=new Set(c.evidence);
     if (refs.size!==c.evidence.length || c.evidence.some(r=>!supported.has(r) || !item.evidence.includes(r)) || !refs.has(item.stage.clause_ref)) return null;
@@ -80,8 +80,15 @@ const ApprovalChange = (() => {
     const days=(Date.parse(issued)-Date.parse(c.last_seal_on))/86400000;
     const listed=(af.signed_by && ApprovalNames.list(raw('signed_by'),format)) || [];
     const expected=days<0?before.names:days>0?after.names:[];
-    const different=Boolean(listed.length && expected.length && listed.every(n=>!expected.includes(n)));
-    const missing=listed.length && listed.length<expected.length && listed.every(n=>expected.includes(n))?expected.filter(n=>!listed.includes(n)):[];
+    const joint=ApprovalNames.jointDifference(expected,listed,format);
+    const different=Boolean(joint || listed.length && expected.length && listed.every(n=>!expected.includes(n)));
+    const partial=listed.length && listed.length<expected.length && listed.every(n=>expected.includes(n));
+    const missing=joint || partial ? expected.filter(n=>!listed.includes(n)) : [];
+    const nameLinks=g.edges.filter(e=>e.type==='compares_approval_names' && e.to===af.signed_by);
+    if (joint) {
+      const clause=days<0?original.id:amendment.revised.id;
+      if (!same(c.other_names,joint.other) || nameLinks.length!==1 || nameLinks[0].from!==clause || !same(nameLinks[0].evidence,c.evidence)) return null;
+    } else if (Object.hasOwn(c,'other_names') || nameLinks.length) return null;
     const refused=['不同意支付','不批准支付'].includes(raw('decision'));
     const clocks=ledger.bank_clocks;
     if (clocks?.length!==1 || !clocks[0].complete || !ApprovalClock.bankPage(report,clocks[0]) || clocks[0].unit!==kinds.bank_receipt[0] ||
@@ -97,7 +104,7 @@ const ApprovalChange = (() => {
 
   function scopeEntries(item,report) {
     const scope=item.approval_change_scope;
-    if (report.policy.inspection_use!==formats[1] || !scope || !['H02','H03'].includes(item.rule) ||
+    if (!supportsScope(report.policy.inspection_use) || !scope || !['H02','H03'].includes(item.rule) ||
         !item.scope.includes(scope.unit) || !Array.isArray(scope.evidence)) return [];
     const terms=report.findings.find(f=>f.rule==='H04' && f.stage?.clause_ref===scope.clause_ref && f.stage.name===scope.stage &&
       f.approval_change?.state==='terms' && f.approval_change.fields.scope===scope.scope_ref && f.approval_change.execution===scope.execution &&
@@ -134,7 +141,7 @@ const ApprovalChange = (() => {
         dates.append(button(c.fields[last],'最后所列盖章日',c.last_seal_on),button(c.approval_fields.date,'审批单日期',c.issued_on));root.append(dates);
         if (c.approval_fields.signed_by) root.append(button(c.approval_fields.signed_by,'审批单具名栏',c.listed.join('、')));
         const pending=c.missing_names.length?'，'+c.missing_names.join('、')+'签批待补':'';
-        root.append(el('p',c.printed_difference?'审批单具名与按纸面日期对应的名单不同。':
+        root.append(el('p',c.other_names?ApprovalNames.jointSummary(c):c.printed_difference?'审批单具名与按纸面日期对应的名单不同。':
           c.state==='same_day'?'盖章时刻待补，无法确定当天先后。':'实际签批权限待核'+pending+'。','approval-change-note'));
         if (c.refused || c.early_debit) root.append(el('p',[c.refused?'审批单列明不同意支付。':'',c.early_debit?'所记扣款早于审批签发。':''].join(''),'approval-change-note'));
       }
@@ -148,5 +155,5 @@ const ApprovalChange = (() => {
     }
     return root;
   }
-  return {bind,scopeEntries,panel};
+  return {bind,scopeEntries,panel,supportsScope};
 })();

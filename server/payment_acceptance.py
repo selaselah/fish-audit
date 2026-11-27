@@ -143,7 +143,7 @@ def apply(graph,findings):
     from performance import Material
     from reinspection import LINK_KEYS
     from approval_clock import split_receipt_notes
-    from approval_changes import FORMAT as CHANGE_SCOPE_FORMAT
+    from approval_changes import SCOPED
 
     bank_units = {p["unit"] for p in pages if p["role"]=="bank_receipt"}
     contracts = graph["documents_by_kind"].get("contract",[])
@@ -191,7 +191,7 @@ def apply(graph,findings):
         bank = Material(graph,unit)
         selected = originals(unit)
         timing = []
-        if graph.get("inspection_use_sources",{}).get("format")==CHANGE_SCOPE_FORMAT:
+        if graph.get("inspection_use_sources",{}).get("format") in SCOPED:
             selected,timing=split_receipt_notes(graph,unit,selected)
         stage = payment.get("stage",{})
         index = stage.get("batch_index")

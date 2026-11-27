@@ -99,6 +99,12 @@ export async function checkInspectionUse(ctx,cid) {
   }
   if (term) {
     assert.equal(await evaluate(q(base)+'.dataset.nameState'),names.state);
+    if (names.state==='joint_difference') {
+      assert.ok(await evaluate(q(base)+'.innerText.includes('+JSON.stringify('审批单未列'+names.missing_names[0]+'，另列'+names.other_names[0]+'。')+')'));
+      const forged=await evaluate('["missing_names","other_names"].map(k=>{const p=structuredClone(state.bundle.report),'+
+        'f=p.findings.find(v=>v.id==='+JSON.stringify(id)+');f.inspection_use.approval.names[k]=["测试姓名"];return InspectionUse.bind(f,p)===null})');
+      assert.deepEqual(forged,[true,true]);
+    }
     const signer=approvalRows.find(r=>r.id===names.signed_by);
     if (signer) {
       const button=approvalControl(signer);
@@ -123,6 +129,7 @@ export async function checkInspectionUse(ctx,cid) {
     await size(ctx,width);
     assert.ok(await evaluate('(()=>{const b='+q(control)+'.getBoundingClientRect();return b.width>=44 && b.height>=44 && b.left>=-1 && b.right<=innerWidth+1})()'));
     await inspect(ctx,width,card,'inspection-use-'+cid.slice(0,8)+'-R'+rev);
+    if (names?.state==='joint_difference') await inspect(ctx,width,base,'joint-approval-'+cid.slice(0,8));
   }
   if (process.env.AUDIT_ISOLATED_USE_ORIGIN) {
     assert.equal(root,process.env.AUDIT_ISOLATED_USE_ORIGIN);

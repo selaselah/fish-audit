@@ -192,7 +192,7 @@ def compare(graph, finding, use, required, pages):
     names=approval_names.compare(graph,finding,check,fields,values)
     if names:
         check["names"]=names
-        if names["state"]=="different":
+        if names["state"] in {"different","joint_difference"}:
             check["status"]="risk"
         check["evidence"]=list(dict.fromkeys(check["evidence"]))
     return check

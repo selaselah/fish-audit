@@ -30,6 +30,7 @@ NAMES_SINCE = (2026, 11, 28, 1)
 UNNAMED_SINCE = (2026, 11, 28, 2)
 CHANGES_SINCE = (2026, 11, 28, 3)
 SCOPE_SINCE = (2026, 11, 28, 4)
+JOINT_SINCE = (2026, 11, 28, 8)
 PURPOSE_HEADINGS = {"用途说明", "付款用途说明", "付款依据说明", "审批说明", "凭证用途", "用途限制"}
 HEADINGS = PURPOSE_HEADINGS | {"付款说明", "付款意见", "验收备注", "复验备注"}
 SHEET = r"本(?:单|报告|复验单|复验报告|验收单|验收报告)"
@@ -61,13 +62,14 @@ def classify(quote):
 def sources(graph, read_text, read_layout, version=FORMAT):
     from graph import LABELS, PRINTED_TITLES
     ledger = {"format":version, "rows":[]}
-    with_names=version in (NAMES_FORMAT,UNNAMED_FORMAT,approval_changes.FIRST_FORMAT,FORMAT)
+    with_changes=version in (approval_changes.FIRST_FORMAT,*approval_changes.SCOPED)
+    with_names=with_changes or version in (NAMES_FORMAT,UNNAMED_FORMAT)
     with_time=with_names or version==CLOCK_FORMAT
     if with_names:
         terms=approval_names.pages(graph,read_text,read_layout)
         if terms:
             ledger["approver_terms"]=terms
-    if version in (approval_changes.FIRST_FORMAT,FORMAT) and ledger.get("approver_terms"):
+    if with_changes and ledger.get("approver_terms"):
         changes=approval_changes.pages(graph,read_text,read_layout)
         if changes:ledger["approver_changes"]=changes
     if not any(r["role"]=="bank_receipt" and r["kind"]=="citation" for r in graph.get(GRAPH_KEY,{}).get("rows",())):
@@ -216,7 +218,7 @@ def apply(graph, findings):
         if clock:=c.get("approval",{}).get("clock"):
             detail=approval_clock.WORDING[clock["state"]]
         if names:=c.get("approval",{}).get("names"):
-            detail+=" "+approval_names.WORDING[names["state"]]
+            detail+=" "+(approval_names.joint_detail(names) if names["state"]=="joint_difference" else approval_names.WORDING[names["state"]])
         f["detail"]+=" "+detail
         if LEVEL[c["status"]]>LEVEL[f["status"]]:
             f["status"]=c["status"]
@@ -294,7 +296,7 @@ def guard_legacy_approval(graph, ledger, read_text, layout, policy, findings):
                 approval=use.get("approval",{})
                 grounds=(approval.get("state"),approval.get("clock",{}).get("state"),approval.get("names",{}).get("state"))
                 for ground in grounds:
-                    if ground in {"later","refused","debit_first","different"}:
+                    if ground in {"later","refused","debit_first","different","joint_difference"}:
                         yield (use["bank"],use["citation"],approval["request"],ground)
         if set(risks(revised))-set(risks(findings)):
             raise ValueError("旧底稿所附付款审批单的决定、日期、签发时刻或具名签批依据存在新的风险，请重审后签收")
@@ -342,7 +344,7 @@ def verify(report, read_text, *, read_layout=None, signing=False):
             if any(c["status"]=="risk" or f["status"]=="ok" and c["status"]=="missing" for f,c in checks(current,fs)):
                 raise ValueError("旧底稿所引验收单另有付款用途限制，请重审后签收")
         return
-    version=next((fmt for since,fmt in ((SCOPE_SINCE,FORMAT),(CHANGES_SINCE,approval_changes.FIRST_FORMAT),(UNNAMED_SINCE,UNNAMED_FORMAT),(NAMES_SINCE,NAMES_FORMAT),(CLOCK_SINCE,CLOCK_FORMAT),
+    version=next((fmt for since,fmt in ((JOINT_SINCE,FORMAT),(SCOPE_SINCE,approval_changes.SCOPE_FORMAT),(CHANGES_SINCE,approval_changes.FIRST_FORMAT),(UNNAMED_SINCE,UNNAMED_FORMAT),(NAMES_SINCE,NAMES_FORMAT),(CLOCK_SINCE,CLOCK_FORMAT),
                  (APPROVAL_SINCE,APPROVAL_FORMAT),(CROSS_DOCUMENT_SINCE,CROSS_FORMAT)) if revision>=since),FIRST_FORMAT)
     ledger=sources(g,read_text,layout,version)
     if (p.get("inspection_use")!=version or "code_sha256" in p and "inspection_use.py" not in p["code_sha256"] or
@@ -363,7 +365,7 @@ def verify(report, read_text, *, read_layout=None, signing=False):
         if scope:=f.get("approval_change_scope"):
             terms=[s["approval_change"] for s in fs if s["rule"]=="H04" and s.get("approval_change",{}).get("state")=="terms"
                    and s["stage"]["clause_ref"]==scope.get("clause_ref") and s["stage"]["name"]==scope.get("stage")]
-            if (version!=FORMAT or f["rule"] not in ("H02","H03") or len(terms)!=1 or terms[0]["fields"]["scope"]!=scope.get("scope_ref")
+            if (version not in approval_changes.SCOPED or f["rule"] not in ("H02","H03") or len(terms)!=1 or terms[0]["fields"]["scope"]!=scope.get("scope_ref")
                     or terms[0]["execution"]!=scope.get("execution") or terms[0]["documents"]!=[scope.get("unit")]
                     or scope["unit"] not in f["scope"] or terms[0]["evidence"]!=scope.get("evidence")
                     or not set(scope["evidence"])<=set(f["evidence"])):

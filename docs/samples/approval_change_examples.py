@@ -29,14 +29,19 @@ def materials(archive,folder,key):
             path=folder/doc["name"];path.write_bytes(data);files.append(path)
             if doc["name"]=="采购合同.pdf":
                 contract=dict(line.split("：",1) for line in lines[2:])
+    path=write_agreement(folder,contract,"第二期验收款须由顾明远签批。",CASES[key][1])
+    return [*files,path],report["policy"]["profile"]
+
+
+def write_agreement(folder,contract,revised,seal_day):
     rows=[("补充协议编号","BC-SP-92B34462"),("原合同编号",contract["合同编号"]),
           *((k,contract[k]) for k in ("采购方","供应方","采购标的")),
           ("变更范围","仅变更第二期验收款签批人，其余条款不变"),("原签批约定",contract["付款签批约定"]),
-          ("变更后签批约定","第二期验收款须由顾明远签批。"),("变更适用时点","仅适用于本协议生效后签发的付款审批单"),
+          ("变更后签批约定",revised),("变更适用时点","仅适用于本协议生效后签发的付款审批单"),
           ("协议生效条款","本协议自双方盖章之日起生效"),("甲方签章",contract["甲方签章"]),("乙方签章",contract["乙方签章"]),
-          ("甲方盖章日期","2026年9月18日"),("乙方盖章日期",f"2026年9月{CASES[key][1]}日")]
+          ("甲方盖章日期","2026年9月18日"),("乙方盖章日期",f"2026年9月{seal_day}日")]
     path=folder/(TITLE+".pdf");pdf(path,TITLE,rows,font=embedded_font("ApproverChangeCJK"),spacing=34)
-    return [*files,path],report["policy"]["profile"]
+    return path
 
 
 if __name__=="__main__":

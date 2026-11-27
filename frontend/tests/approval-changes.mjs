@@ -23,7 +23,7 @@ export async function checkApprovalChange(ctx,task,report,rev,item) {
   const jump=finding+' a[href*="view=payment-checks"][href*="stage='+id+'"]';await wait(visible(jump),'versioned approval change link');await click(jump);
   await wait(visible(card),'named change of installment approver');
   assert.equal(await evaluate(q(card)+'.dataset.state'),c.state);
-  if (report.policy.inspection_use==='cited-inspection-payment-use-v8') {
+  if (['cited-inspection-payment-use-v8','cited-inspection-payment-use-v9'].includes(report.policy.inspection_use)) {
     const signing='#performance-index .addendum-jump[data-proof="'+c.execution+'"]';
     await wait(visible(signing),'physical signing evidence for this change');
     for (const finding of report.findings.filter(f=>f.approval_change_scope)) {
@@ -50,8 +50,17 @@ export async function checkApprovalChange(ctx,task,report,rev,item) {
     'if(mode==="link")p.graph.edges=p.graph.edges.filter(e=>e.type!=="dates_approval_change");if(mode==="dated")c.issued_on="2026-09-06";'+
     'if(mode==="signature"){c.signature_state="current";p.graph.addendum_pdf_sources.records[0].state="current";}'+
     'if(mode==="unsigned")p.graph.edges=p.graph.edges.filter(e=>e.type!=="addendum_pdf_source");'+
-    'if(mode==="missing")c.missing_names=["周茵"];return ApprovalChange.bind(f,p)===null;})');
+    'if(mode==="missing")c.missing_names=["测试姓名"];return ApprovalChange.bind(f,p)===null;})');
   assert.deepEqual(invalid,Array(14).fill(true));
+  if (c.other_names) {
+    assert.ok(await evaluate(q(card)+'.innerText.includes('+JSON.stringify('审批单未列'+c.missing_names[0]+'，另列'+c.other_names[0]+'。')+')'));
+    const invalid=await evaluate('["name","clause","sheet","proof","omitted"].map(mode=>{const p=structuredClone(state.bundle.report),'+
+      'f=p.findings.find(v=>v.id==='+JSON.stringify(id)+'),c=f.approval_change,e=p.graph.edges.find(e=>e.type==="compares_approval_names");'+
+      'if(mode==="name")c.other_names=c.missing_names;if(mode==="clause")e.from=c.fields.scope;'+
+      'if(mode==="sheet")e.to=c.approval_fields.authority;if(mode==="proof")e.evidence=e.evidence.slice(2);'+
+      'if(mode==="omitted")p.graph.edges.splice(p.graph.edges.indexOf(e),1);return ApprovalChange.bind(f,p)===null;})');
+    assert.deepEqual(invalid,Array(5).fill(true));
+  }
   for (const width of [320,390,768,820,1024,1440]) {
     await size(ctx,width);
     assert.ok(await evaluate('(()=>{const r='+q(button(changed))+'.getBoundingClientRect();return r.width>=44&&r.height>=44&&r.left>=0&&r.right<=innerWidth+1})()'));
@@ -91,7 +100,11 @@ export async function checkApprovalChange(ctx,task,report,rev,item) {
       assert.equal(prior.status,200);
       if (!(await prior.json()).report.findings.some(f=>f.id===id && f.approval_change?.rows.includes(changed))) break;
     }
-    assert.ok(absent>0);
+    // A case first issued with this feature can have the clause in every historical version.
+    if (!absent) {
+      absent=task.rev+1;
+      assert.equal((await fetch(root+'/api/cases/'+task.id+'/reports/'+absent)).status,404);
+    }
     for (const [context,status] of [[{...field,rev:absent},404],[{...field,anchor:card.slice(1)+'-approval-change-'+row(changed).doc+'-p1-l1'},404],
             [{...field,params:{view:'payment-checks',stage:'H05-999'}},400],[{...page,rev:absent},404],[{...page,line:1},400]]) {
       const r=await fetch(root+'/api/walkthrough',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:'7'.repeat(32),text,context})});assert.equal(r.status,status);

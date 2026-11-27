@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## 两人会签的具名差异
+
+规则 `2026.11.28.8` 使用 `policy.inspection_use = cited-inspection-payment-use-v9`。在第二期等可归属的验收款 H05 中，`inspection_use.approval.names.state = joint_difference` 表示两份各列两人的明确名单只有一人相符。`missing_names` 保留约定中未在审批栏出现的人，`other_names` 保留审批栏另列的人。`compares_approval_names` 从合同签批条款指向该审批单的具名原行。
+
+涉及本期签批人变更时，`approval_change` 保存两份名单、审批单所列人员、日期和来源。按纸面日期对应的会签名单只有一人相符时，`printed_difference` 为 true，同时保存 `missing_names` 和 `other_names`。对应图边从该侧的原合同条款或补充协议条款指向审批单具名行。审批与最后所列盖章日为同日且没有先后依据时，`state` 为 `same_day`，保留待核。旧版沿用其归档方法复算，签收前会检查新增的具名差异。[R9 补充协议原行](http://127.0.0.1:8000/workpaper/aab36e9a94034a58944d22c05d0b9ed1?rev=9&view=payment-checks&stage=H05-8)
+
 ## 付款安排待核与回单引用
 
 自规则 `2026.11.28.7` 起，`policy.retest_reference` 与 `graph.retest_reference_sources.format` 为 `reinspection-receipt-reference-v2`。当可逐项清点合同原页时，`graph.retest_reference_sources.schedule_page` 标记对应的页节点。H05 核实回单引用且 H03 存在可从原件复算的分期差异时，`retest_reference.schedule_review` 保存以下字段。

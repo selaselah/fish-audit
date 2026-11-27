@@ -11,6 +11,8 @@
 <details>
 <summary>其他原件和控件的走查示例</summary>
 
+走查两人会签时，可以点开合同第 19 行和审批单第 12 行，对照「顾明远、周茵」和「顾明远、林知行」。要对这一栏提意见，选「提意见 → 点选控件」后点名单。若另有补充协议，手机也能并排看到新旧名单，并从盖章日、审批日和审批单具名栏打开各自原行。[打开合同会签](http://127.0.0.1:8000/workpaper/e0e29a17670d44dd9941e21c694efbc7?rev=7&view=payment-checks&stage=H05-8) · [桌面截图](joint-approval-names.webp) · [打开补充协议会签](http://127.0.0.1:8000/workpaper/aab36e9a94034a58944d22c05d0b9ed1?rev=9&view=payment-checks&stage=H05-8) · [手机截图](joint-approval-change-mobile.webp)
+
 可以从「回单所引验收单」开始试。水印案例的回单明列一张合格复验单，合同约定四期、只列了三期。在「提意见 → 点选控件」里选「付款安排待核」即可写下想怎么改。要查业务依据，点「查看 R6 · H03 依据」可打开这一版合同的总述和三条付款条件。手机走查也能选中同一位置。[打开这笔第二期款](http://127.0.0.1:8000/workpaper/7aa5e0f3f63340b290e64bdc84d61676?rev=6&view=payment-checks&stage=H05-8) · [桌面并排走查](incomplete-schedule-walkthrough.webp) · [在手机核对提前三天的回单](incomplete-schedule-mobile.webp)
 
 在三期条款齐全的采购底稿里，选「提意见 → 并排走查 → 点选控件」，点「合同列明 3 期」后写意见。再点一次这个按钮，合同会翻到第 1 页第 15 行，已写的意见仍指向刚选的按钮。保存后可在当前原行另记一条。手机使用「提意见」浮窗，两条意见都能从「已记录」回到各自的位置和版本。[打开 R11 分期安排](http://127.0.0.1:8000/workpaper/744d182cfd7f46a49d3e5bb8da0e2685?rev=11&view=payment-checks&stage=H03-4) · [原件旁的走查侧栏](installment-count-walkthrough.webp) · [手机上的分期检查](installment-count-mobile.webp)
