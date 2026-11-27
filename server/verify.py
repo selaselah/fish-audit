@@ -55,6 +55,7 @@ import warranty_dates
 import payment_quality
 import retest_reference
 import inspection_use
+import party_readings
 import board_execution
 from invoice_conditions import verify as verify_invoice_conditions
 from repair_completion import verify as verify_repair_completion
@@ -309,6 +310,8 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
     payment_quality.verify(report, page_text)
     retest_reference.verify(report,page_text)
     inspection_use.verify(report,page_text)
+    party_readings.verify(report,page_text)
+    party_readings.verify_originals(report,read_original)
     board_execution.verify(report, read_original, page_text)
     verify_repair_completion(report,page_text)
     verify_reinspection_wait(report,page_text)
@@ -484,6 +487,7 @@ def render_addendum_sources(bundle, report, nodes):
     selected.update(r["doc"] for r in graph.get(retest_reference.KEY,{}).get("rows",[]))
     selected.update(r["doc"] for r in graph.get(inspection_use.KEY,{}).get("rows",[]))
     selected.update(p["doc"] for p in graph.get(inspection_use.KEY,{}).get("approvals",[]))
+    selected.update(r["doc"] for r in graph.get(party_readings.KEY,{}).get("rows",[]))
     for key in ("acceptance_pdf_sources", "acceptance_original_sources", "addendum_pdf_sources", "addendum_original_sources", "mandate_pdf_sources", "mandate_original_sources", release_execution.PDF, release_execution.NATIVE, warranty_execution.PDF, warranty_execution.NATIVE, board_execution.PDF, board_execution.NATIVE):
         selected.update(r["doc"] for r in graph.get(key,{}).get("records",[]))
     selected.update(p["doc"] for p in graph.get("inspection_coverage_sources",{}).get("pages",[]))

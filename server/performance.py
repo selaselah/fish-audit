@@ -38,6 +38,7 @@ import payment_quality
 import retest_reference
 import inspection_use
 import installment_approval
+import party_readings
 import warranty_service
 import warranty_register
 import payment_windows
@@ -175,6 +176,8 @@ class Material:
         self.agent_holds = [h for h in graph.get("delegation_coverage", {}).get("agent_holds", []) if h["unit"]==unit]
         self.signer_holds = [h for h in graph.get("delegation_coverage", {}).get("signer_holds", []) if h["unit"]==unit]
         self.quality_holds = [h for h in graph.get("quality_references", {}).get("holds", []) if h["unit"] == unit]
+        self.party_rows = {r["field"]:r for r in graph.get(party_readings.KEY,{}).get("rows",())
+                          if r["unit"]==unit and r["state"]=="same_line"}
         self.fields = defaultdict(list)
         self.refs = []
         self.gaps = []
@@ -189,7 +192,9 @@ class Material:
             field = fact["field"]
             self.refs.append(fact)
             if fact["status"] in ("anchored","confirmed") and (field, fact["id"]) in owned:
-                self.fields[field].append(fact)
+                pair = self.party_rows.get(field)
+                if not pair or fact["id"]!=pair["added_ref"]:
+                    self.fields[field].append(fact)
             else:
                 self.uncertain.add(field)
         self.gaps = [g for g in graph.get("gaps", []) if g["doc"] == source and (page is None or page == g["page"])]
@@ -741,6 +746,7 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True, recheck_
         results.extend(warranty_register.findings(graph,results))
         addendum_execution.flag_mismatches(graph,results)
         payment_quality.apply(graph,results)
+        party_readings.attach(graph,results)
     return results
 
 
@@ -1324,6 +1330,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("payment_quality") != entry.get("payment_quality")
                 or saved.get("retest_reference") != entry.get("retest_reference")
                 or saved.get("inspection_use") != entry.get("inspection_use")
+                or saved.get("party_readings") != entry.get("party_readings")
                 or saved.get("warranty_difference") != entry.get("warranty_difference")
                 or saved.get("contract_folios") != entry.get("contract_folios")
                 or saved.get("prior_installment") != entry.get("prior_installment")

@@ -44,6 +44,7 @@ import payment_windows
 import payment_quality
 import retest_reference
 import inspection_use
+import party_readings
 import invoice_conditions
 import payment_amendments
 import acceptance_comments
@@ -394,6 +395,12 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     graph["edges"].extend(edges)
     graph["payment_window_sources"]=payment_windows.sources(graph,lambda doc,number:texts[doc,number])
     layouts = {(p["doc"], p["number"]):p.get("layer") or {} for p in pages}
+    pairs = party_readings.sources(graph,lambda d,n:texts[d,n],lambda d,n:layouts[d,n])
+    if pairs:
+        graph[party_readings.KEY] = {"format":party_readings.FORMAT,"rows":pairs}
+        nodes,edges = party_readings.source_graph(pairs)
+        graph["nodes"].extend(nodes)
+        graph["edges"].extend(edges)
     guarantees = advance_guarantee.sources(graph,lambda d,n:texts[d,n],lambda d,n:layouts[d,n])
     graph[advance_guarantee.KEY] = guarantees
     nodes,edges = advance_guarantee.source_graph(guarantees)

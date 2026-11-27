@@ -60,6 +60,7 @@ import warranty_dates
 import payment_quality
 import retest_reference
 import inspection_use
+import party_readings
 import board_execution
 from invoice_conditions import verify as verify_invoice_conditions
 from repair_completion import verify as verify_repair_completion
@@ -83,7 +84,7 @@ FULL_PAGE_EVIDENCE = (
     "effect_review", "warranty_check", "warranty_difference", "payment_window", "acceptance_reservations", "acceptance_comments",
     "contract_comments", "stage_payments", "invoice_receipt", "payment_change", "payment_opinion",
     "equipment_models", "inspection_coverage", "payment_acceptance", "execution_basis", "contract_folios",
-    "prior_installment", "advance_guarantee", "payment_quality", "retest_reference", "inspection_use",
+    "prior_installment", "advance_guarantee", "payment_quality", "retest_reference", "inspection_use", "party_readings",
 )
 
 
@@ -827,6 +828,10 @@ class Store:
             except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
                 raise CaseError(f"签收前核对回单所据初验与复验失败。{error}",409) from error
             try:
+                party_readings.verify_originals(paper,read_original)
+            except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
+                raise CaseError(f"签收前核对主体原行失败。{error}",409) from error
+            try:
                 inspection_use.verify_originals(paper,read_original)
             except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
                 raise CaseError(f"签收前核对验收单付款用途失败。{error}",409) from error
@@ -959,6 +964,10 @@ class Store:
                 payment_execution.verify(paper,page_text,signing=True,read_layout=page_layout)
             except (KeyError,TypeError,ValueError) as error:
                 raise CaseError(f"签收前核对扣款凭证失败。{error}",409) from error
+            try:
+                party_readings.verify(paper,page_text,signing=True,read_layout=page_layout)
+            except (KeyError,TypeError,ValueError) as error:
+                raise CaseError(f"签收前核对主体原行失败。{error}",409) from error
             try:
                 inspection_use.verify(paper,page_text,signing=True,read_layout=page_layout)
             except (KeyError,TypeError,ValueError) as error:

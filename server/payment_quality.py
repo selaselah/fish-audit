@@ -86,7 +86,9 @@ def witness(rows, material, field, *, clause=None):
         return None
     f, r = facts[0], selected[0]
     loc = f.get("source_line") or {}
-    if (r["facts"] != [f["id"]] or not loc.get("rects") or (r["doc"],r["page"],r["line"],r["quote"]) !=
+    pair = material.party_rows.get(field)
+    expected = [pair["model_ref"],pair["added_ref"]] if pair and f["id"]==pair["model_ref"] else [f["id"]]
+    if (sorted(r["facts"]) != sorted(expected) or not loc.get("rects") or (r["doc"],r["page"],r["line"],r["quote"]) !=
             (f["doc"],f["page"],loc["number"],loc["text"])):
         return None
     if field in ("accepted_on","paid_on","repaired_on"):
