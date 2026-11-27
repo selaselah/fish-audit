@@ -2,7 +2,7 @@
 
 ## 复验单付款用途
 
-以下命令生成五组水印材料，每组六份 PDF。它们沿用同一合同、初验、整改、复验及扣款，只改一条用途附注。五组生成件已逐一与实际上传版本比对摘要。[样本生成器](retest_use_notes.py) · [每种写法对应的实付判断](../acceptance.md#复验合格后第二期付款所据的用途附注)
+以下命令生成六组水印材料，每组六份 PDF。它们沿用同一合同、初验、整改、复验及扣款，只改一条用途附注。36 份生成件已逐一与实际上传版本比对摘要。[样本生成器](retest_use_notes.py) · [每种写法对应的实付判断](../acceptance.md#复验合格后第二期付款所据的用途附注)
 
 ```sh
 server/.venv/bin/python docs/samples/retest_use_notes.py /tmp/inspection-use
@@ -13,8 +13,8 @@ server/.venv/bin/python docs/samples/retest_use_notes.py /tmp/inspection-use
 ```sh
 curl --fail http://127.0.0.1:8000/api/cases/003c1f67ef1a46cead3b42fcaadeb1ba/reports/8/bundle -o /tmp/inspection-master-R8.zip
 server/.venv/bin/python docs/samples/retest_use_notes.py /tmp/inspection-use --run --check-against /tmp/inspection-master-R8.zip
-curl --fail http://127.0.0.1:8000/api/cases/66fa88c60aed4799a64ab73c0eb92495/reports/10/bundle -o /tmp/inspection-ban-R10.zip
-server/.venv/bin/python server/verify.py /tmp/inspection-ban-R10.zip --render-performance --rules-from-git dd32a53
+curl --fail http://127.0.0.1:8000/api/cases/66fa88c60aed4799a64ab73c0eb92495/reports/11/bundle -o /tmp/inspection-ban-R11.zip
+server/.venv/bin/python server/verify.py /tmp/inspection-ban-R11.zip --render-performance --rules-from-git bec9e86
 ```
 
 ## 回单引用初验或复验

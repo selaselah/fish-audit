@@ -84,10 +84,12 @@ export async function checkRevisionComparison(ctx,cid) {
       await navigate(pinned);await wait(q('#revision-comparison')+'?.dataset.entry==='+JSON.stringify(entry),'back from quality comparison');
     } else assert.equal(await evaluate(q(quality)),null);
     const retest=area+' .revision-links a[id$="-retest"]';
-    if (item.retest_reference) {
+    if (item.retest_reference || item.inspection_use) {
       await click(retest);
-      await wait('state.bundle?.rev==='+meta.rev+' && '+q('#performance-index[open] [data-retest-finding]')+
+      if (item.retest_reference) await wait('state.bundle?.rev==='+meta.rev+' && '+q('#performance-index[open] [data-retest-finding]')+
         '?.dataset.retestFinding==='+JSON.stringify(item.id),'receipt citation in the selected report revision');
+      if (item.inspection_use) await wait('state.bundle?.rev==='+meta.rev+' && '+q('#performance-index[open] [data-use-finding]')+
+        '?.dataset.useFinding==='+JSON.stringify(item.id),'payment-use statement from this side of the comparison');
       await navigate(pinned);await wait(q('#revision-comparison')+'?.dataset.entry==='+JSON.stringify(entry),'back from receipt citation');
     } else assert.equal(await evaluate(q(retest)),null);
   }

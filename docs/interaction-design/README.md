@@ -4,7 +4,7 @@
 
 点「提意见」后可以直接打字。电脑上按 ⌘ + Enter 或 Ctrl + Enter 保存，手机点「保存意见」。中文输入法选词时可以继续编辑。保存会回到刚才的页面，同一位置可以接着记下一条。在原件上直接写意见，清单会带上文件名、页码和当前选中的原文行。已输入的草稿可以在当前标签页重新打开。
 
-例如，对第二期回单旁的用途限制作修改建议，可点「提意见 → 点选控件」，再点《复验报告》第 21 行那句话。也可以先点原话，在展开的 PDF 上直接写意见。「已记录」里的两种链接分别回到当时的付款检查控件、底稿原页上高亮的那一行。「复制给 Codex」会带上这些位置和修改意见。[从水印底稿试用](http://127.0.0.1:8000/workpaper/66fa88c60aed4799a64ab73c0eb92495?rev=10&view=payment-checks&stage=H05-8) · [手机上的用途限制](inspection-use-mobile.webp) · [点选后写意见](inspection-use-feedback.webp)
+例如，对第二期回单旁的用途限制作修改建议，可点「提意见 → 点选控件」，再点《复验报告》第 21 行那句话。也可以先点原话，在展开的 PDF 上直接写意见。「已记录」里的两种链接分别回到当时的付款检查控件、底稿原页上高亮的那一行。「复制给 Codex」会带上这些位置和修改意见。[从水印底稿试用](http://127.0.0.1:8000/workpaper/66fa88c60aed4799a64ab73c0eb92495?rev=11&view=payment-checks&stage=H05-8) · [手机上的用途限制](inspection-use-mobile.webp) · [点选后写意见](inspection-use-feedback.webp)
 
 在第二期实付点「核对回单所引的验收单」，并排的两个单号分别打开初验与复验原件。展开「核对付款条件与整改原行」，对「复验所引初验单」点选提意见，清单会记录所引文件及物理页行。以后从「已记录」回到这一条，系统会恢复底稿版次、打开那笔回单、展开原来的字段并标出来。[打开水印案例](http://127.0.0.1:8000/workpaper/e4cc7a317fe34db4a3df9acc0a165b99?rev=7&view=payment-checks&stage=H05-8) · [桌面实拍](retest-reference-desktop.webp) · [手机实拍](retest-reference-mobile.webp) · [现场提意见](retest-reference-feedback.webp)
 
