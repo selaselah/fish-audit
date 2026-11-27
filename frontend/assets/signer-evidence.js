@@ -49,6 +49,12 @@ const SignerEvidence = (() => {
     const match=value.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日$/u) || value.match(/^(\d{4})-(\d{2})-(\d{2})$/u);
     return match && match.slice(1).map(v=>v.padStart(2,'0')).join('-')===row.day;
   }
+  function printedClock(value) {
+    const match=/^(?:(\d{4}年\d{1,2}月\d{1,2}日|\d{4}-\d{2}-\d{2})[ T]+)?((?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?)(?:\s*(?:\((北京时间|UTC\+08:00)\)|(北京时间|UTC\+08:00|\+08:00)))?$/u.exec(value);
+    if (!match) return null;
+    const day=match[1] && WarrantyDates.printedDay(match[1]);
+    return match[1] && !day ? null : {day:day || null,at:match[2],zone:match[3] || match[4]?'+08:00':null};
+  }
   function clockMatches(row) {
     if (!row?.at || row.disputed || !row.line) return false;
     const text=row.quote.normalize('NFKC').trim(), sep=text.indexOf(':');
@@ -56,11 +62,8 @@ const SignerEvidence = (() => {
     if (row.kind==='debit' && !['实际扣款时间','扣款成功时间','成功扣款时间','实际扣款时刻','扣款时间'].includes(label)) return false;
     if (row.kind==='signer' && (!row.name || !label.startsWith(row.name) ||
         !/^(签认|签字|签署|签名)(时间|时刻|时分)$/u.test(label.slice(row.name.length)))) return false;
-    const match=value.match(/^(?:(?:(\d{4})年(\d{1,2})月(\d{1,2})日|(\d{4})-(\d{2})-(\d{2}))[ T]+)?((?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?)(?:\s*(?:\((北京时间|UTC\+08:00)\)|(北京时间|UTC\+08:00|\+08:00)))?$/u);
-    if (!match) return false;
-    const parts=match[1]?match.slice(1,4):match.slice(4,7);
-    const day=parts[0]?parts.map(v=>v.padStart(2,'0')).join('-'):null;
-    return row.at===match[7] && row.day===day && row.zone===(match[8] || match[9]?'+08:00':null);
+    const reading=printedClock(value);
+    return reading && row.at===reading.at && row.day===reading.day && row.zone===reading.zone;
   }
   function panel(report) {
     if (!formats.includes(report?.policy.acceptance_authority) || report.policy.acceptance_authority!==report.graph.acceptance_authority_sources?.format) return null;
@@ -176,5 +179,5 @@ const SignerEvidence = (() => {
     b.setAttribute('aria-controls','signer-timing');
     return b;
   }
-  return {panel,jump,datedRows,observation,rectangles};
+  return {panel,jump,datedRows,observation,rectangles,printedClock,interval};
 })();

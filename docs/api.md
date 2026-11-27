@@ -1,5 +1,13 @@
 # 本机审计接口
 
+## 审批和实际扣款的同日时序
+
+规则 `2026.11.27.24` 出具的 `cited-inspection-payment-use-v4` 底稿在 `graph.inspection_use_sources.bank_clocks` 归档回单时刻原行。在需要比较的 H05 发现中，`inspection_use.approval.clock` 含 `signed`、`debit`、`rows` 及 `state`。原行编号可分别追到付款审批单及银行回单。能够计算区间时还包含 `signed_at`、`debited_at` 和 `zone`，并产生 `compares_debit_time` 关系。
+
+`debit_first` 为先扣款风险。`approval_first`、`overlap`、`other_event`、`zone`、`conflict` 和 `missing` 均保留人工核对。`retest_reference.timing_notes` 将回单印刷的时刻附注对应到该时刻原行，供复核所引验收单号的范围。历史证据包使用各自的规则重算。
+
+走查意见可引用付款检查控件 `payment-clock-H05-8-d05-p1-l11`，或原页上的 `raw_ref=payment-clock/d05/p1/l11`。服务端按案件及版次核对该笔实付实际引用的原行，原页定位须有归档行框。
+
 ## 同一原行的两条主体观察
 
 底稿的 `policy.party_readings` 与 `graph.reviewed_party_lines.format` 均为 `reviewed-party-line-v1` 时，`rows` 保存 `model_ref`、`added_ref`、各自引文、页行、行框及原件和页图摘要。`pending` 表示人工补录已有原行、模型读数还待核。`same_line` 表示两条观察都经过相应的核图操作并指向相同原行。`compares_party_readings` 和 `shares_party_line` 分别表示这两个状态。`findings[].party_readings` 列出该发现实际引用的原行。

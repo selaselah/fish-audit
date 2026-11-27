@@ -2,6 +2,8 @@
 
 ## 在页面上记录走查意见
 
+对签批和扣款先后有意见时，可以直接点选「实际扣款时间」。打开下面的采购底稿，点「提意见 → 并排走查 → 点选控件」，再点 09:15。继续点这个时刻，左边打开银行回单第 1 页第 11 行，右边保留正在写的意见。在原页另写一条，系统会记下这次的页行。在「已记录」里点相应位置，就能分别回到付款卡或银行原页。手机用「提意见」浮窗。[走查第二期付款](http://127.0.0.1:8000/workpaper/32461158cc804f4d8296c628dbd448aa?rev=8&view=payment-checks&stage=H05-8) · [桌面并排记录](approval-clock-walkthrough.webp) · [手机核对两个时刻](approval-clock-mobile.webp)
+
 周末可以从《验收报告》第 5 行试走一遍。打开「供应方核字」，点「看原件第 5 行」，再点「提意见」。录入时会带上底稿版本、文件、页和行。桌面可选「并排走查」，一边看原件、一边写。即使案件后来出具了新版，从「已记录」也能回到当时漏抄了“应”字的那一版。走查结束后点「复制给 Codex」即可带走意见和定位链接。[打开 R9 核字原页](http://127.0.0.1:8000/workpaper/066d632f141e4f9ab63d43c1ef2371b7?rev=9&fact=d06%2Fp1%2Ff3) · [原件旁的桌面侧栏](party-reading-walkthrough-desktop.webp) · [手机走查](party-reading-walkthrough-mobile.webp)
 
 在「分期与付款」里打开付款后才审批的水印例子，点《付款审批单》的「审批日期」，原件会定位到第 10 行。点「提意见」即可记下对这一行的建议。如果想指向底稿里展示日期的控件，先点「提意见 → 点选控件」再选日期。两种位置都可以从「已记录」重开，保留当时的底稿版本。[打开第二期审批单 R7](http://127.0.0.1:8000/workpaper/7fd2600efdb14666834148f59684cf51?rev=7&view=payment-checks&stage=H05-8) · [桌面并排记录实拍](installment-approval-walkthrough.webp) · [手机上的付款检查](installment-approval-mobile.webp)

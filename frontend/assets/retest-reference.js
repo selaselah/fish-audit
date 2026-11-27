@@ -25,7 +25,9 @@ const RetestReference = (() => {
       rows[key]=source;return true;
     }
     const edges=graph.edges.filter(e=>e.type==='receipt_names_inspection' && e.from===c.fields.citation);
-    const citations=PaymentAcceptance.sources(graph).filter(r=>c.citations.includes(r.id) && r.unit===c.bank && r.role==='bank_receipt');
+    const originalsOfPayment=PaymentAcceptance.sources(graph);
+    if (!ApprovalClock.inspectionNotes(report,item,originalsOfPayment)) return null;
+    const citations=originalsOfPayment.filter(r=>c.citations.includes(r.id) && r.unit===c.bank && r.role==='bank_receipt');
     if (!c.citations.length || citations.length!==c.citations.length || !citations.every(r=>c.evidence.includes(r.id))) return null;
     if (c.fields.citation) {
       const own=citations.filter(r=>r.kind==='citation' && PaymentAcceptance.observation(r,graph)?.id===c.fields.citation);

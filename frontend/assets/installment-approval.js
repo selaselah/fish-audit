@@ -15,7 +15,7 @@ const InstallmentApproval = (() => {
         !request.quote.includes(request.authority) || !Array.isArray(a.evidence) || !a.evidence.every(id=>c.evidence.includes(id)) ||
         ![a.request,c.citation,c.number_ref,item.stage.clause_ref].every(id=>a.evidence.includes(id)) ||
         !same(a.documents,[...new Set(pages.map(p=>p.doc))]) || !same(a.rows,pages.flatMap(p=>p.rows.map(r=>r.id))) ||
-        new Set(a.rows).size!==a.rows.length || a.status!==(['refused','later'].includes(a.state)?'risk':'missing')) return null;
+        new Set(a.rows).size!==a.rows.length || a.status!==(['refused','later'].includes(a.state) || a.clock?.state==='debit_first'?'risk':'missing')) return null;
     const links=g.edges.filter(e=>e.type==='compares_payment_approval' && e.from===a.request && e.evidence?.[1]===c.citation);
     if (!same(links.map(e=>e.to),a.rows) || links.some(e=>!same(e.evidence,[a.request,c.citation,e.to]))) return null;
     const entries=[];
@@ -23,16 +23,22 @@ const InstallmentApproval = (() => {
       if (!a.evidence.includes(page.doc+'/p'+page.page)) return null;
       for (const row of page.rows) {
         const doc=readRow(row);
-        const field=titles.includes(row.quote.trim())?'title':headings[row.quote.split(/[:：]/u,1)[0].trim()] || 'other';
-        if (!doc || page.doc!==row.doc || page.page!==row.page || page.unit!==row.unit || field!==row.field ||
+        const column=row.quote.split(/[:：]/u,1)[0].trim();
+        const field=titles.includes(row.quote.trim())?'title':c.format===ApprovalClock.format && ApprovalClock.signed.includes(column)?'signed_at':headings[column] || 'other';
+        if (!doc || !row.id.startsWith('payment-approval/') || page.doc!==row.doc || page.page!==row.page || page.unit!==row.unit || field!==row.field ||
             ![row.id,...row.facts].every(id=>a.evidence.includes(id))) return null;
         entries.push({row,doc,scope:'approval_sheet'});
       }
     }
-    if (a.documents.length!==1) return a.state==='multiple' && !a.fields && !a.bank_fields?entries:null;
-    if (!a.fields) return a.state==='unresolved' && !a.bank_fields?entries:null;
+    function withBankRows() {
+      const bankRows=ApprovalClock.bind(item,report,entries,readRow);
+      return bankRows ? [...entries,...bankRows] : null;
+    }
+    if (a.documents.length!==1) return a.state==='multiple' && !a.fields && !a.bank_fields?withBankRows():null;
+    if (!a.fields) return a.state==='unresolved' && !a.bank_fields?withBankRows():null;
     const [sheet]=pages, fields=Object.fromEntries(entries.map(e=>[e.row.field,e.row]));
     const names=['title',...Object.values(headings)];
+    if (fields.signed_at) names.push('signed_at');
     if (pages.length!==1 || !sheet.complete || sheet.unit!==sheet.doc || sheet.page!==1 || entries.length!==names.length ||
         entries[0]?.doc.ext!=='.pdf' || entries[0].doc.pages!==1 || entries[0].row.field!=='title' ||
         Object.keys(a.fields).length!==names.length || names.some(k=>!fields[k]?.rects.length || a.fields[k]!==fields[k].id)) return null;
@@ -40,7 +46,7 @@ const InstallmentApproval = (() => {
     const phase=/^第([0-9一二两三四五六七八九十]+)期(预付款|验收款|质保金)$/u.exec(v.stage);
     const listed=WarrantyDates.printedDay(v.date), index=phase && BatchPhase.ordinal(phase[1]);
     if (!index || !listed || listed!==a.listed_on || !['同意支付','批准支付','不同意支付','不批准支付'].includes(v.decision)) return null;
-    if (!a.bank_fields) return a.state==='bank_scope' && !a.paid_on ? entries : null;
+    if (!a.bank_fields) return a.state==='bank_scope' && !a.paid_on ? withBankRows() : null;
     const sources=new Map(PerformanceIndex.originals(item,g).map(source=>[source.fact.id,source]));
     const ledger=g.retest_reference_sources?.rows?.length?g.retest_reference_sources.rows:g.payment_quality_sources?.rows;
     if (!same(g.documents_by_kind.bank_receipt,[a.bank]) || !Array.isArray(ledger) || Object.keys(a.bank_fields).length!==bankFields.length) return null;
@@ -60,19 +66,27 @@ const InstallmentApproval = (() => {
     else if (['不同意支付','不批准支付'].includes(v.decision)) expected='refused';
     else if (a.listed_on>bank.paid_on) expected='later';
     else if (a.listed_on===bank.paid_on) expected='same_day';
-    return expected===a.state ? entries : null;
+    return expected===a.state ? withBankRows() : null;
   }
   function panel(a,entries,button,finding) {
     const section=el('section','','installment-approval'), heading=el('h5','所附付款审批单');
     section.id='payment-approval-'+finding;section.dataset.approvalState=a.state;
     section.setAttribute('aria-label','所附付款审批单');
     if (a.fields) heading.textContent=entries[0].doc.name+' · 第 '+entries[0].row.page+' 页';
-    section.append(box('inspection-use-heading',heading,el('span',labels[a.state])));
-    if (a.listed_on && a.paid_on) section.append(el('p','审批单 '+a.listed_on+'　/　回单付款 '+a.paid_on,'approval-days'));
+    const clock=a.clock;
+    section.append(box('inspection-use-heading',heading,el('span',clock?ApprovalClock.labels[clock.state]:labels[a.state],a.status)));
+    if (clock) {
+      section.dataset.clock=clock.state;
+      const times=el('div','','approval-rows approval-times');
+      times.id='payment-clock-'+finding;
+      times.setAttribute('role','group');times.setAttribute('aria-label',a.paid_on+' 签批与银行时刻');
+      for (const entry of entries.filter(e=>e.row.id===clock.signed || e.scope==='bank_time')) times.append(button(entry));
+      section.append(el('p',a.paid_on+' · 本期付款','approval-days'),times);
+    } else if (a.listed_on && a.paid_on) section.append(el('p','审批单 '+a.listed_on+'　/　回单付款 '+a.paid_on,'approval-days'));
     const primary=new Set(['stage','inspection','decision','date']), visible=entries.filter(e=>primary.has(e.row.field));
     const grid=el('div','','approval-rows');
     grid.append(...visible.map(button));section.append(grid);
-    const rest=entries.filter(e=>!primary.has(e.row.field));
+    const rest=entries.filter(e=>!primary.has(e.row.field) && e.scope!=='bank_time' && !(clock && e.row.id===clock.signed));
     if (rest.length) {
       const details=el('details'), more=el('div','','approval-rows');
       details.append(el('summary','核对标题、户名及审批岗位'));

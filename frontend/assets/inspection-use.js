@@ -1,6 +1,6 @@
 // A payment restriction can be present on the original even when neither reader transcribed it as a field.
 const InspectionUse = (() => {
-  const firstFormat='cited-inspection-payment-use-v1', crossFormat='cited-inspection-payment-use-v2', format='cited-inspection-payment-use-v3';
+  const firstFormat='cited-inspection-payment-use-v1', crossFormat='cited-inspection-payment-use-v2', approvalFormat='cited-inspection-payment-use-v3', format='cited-inspection-payment-use-v4';
   const labels={ban:'与回单用途冲突',approval:'另行审批待核',conditional:'签字条件待核',unclear:'适用范围待核',
     other_document:'附注来自另一份单据',other_stage:'附注属于其他期次'};
   const same=(left,right)=>Array.isArray(left) && Array.isArray(right) && left.length===right.length && left.every((v,i)=>v===right[i]);
@@ -21,9 +21,32 @@ const InspectionUse = (() => {
     return null;
   }
 
+  function original(r,report,evidence) {
+    const prefix=r.id.split('/')[0], kind={'payment-approval':'payment_approval','inspection-use':'inspection_use','payment-clock':'payment_clock'}[prefix];
+    if (!kind) return null;
+    const g=report.graph, idx=graphIndex(g);
+    const pageId=r.doc+'/p'+r.page, node=idx.nodes.get(r.id), page=idx.nodes.get(pageId);
+    const calls=report.calls?.pages?.filter(p=>p.doc===r.doc && p.page===r.page);
+    const doc=calls?.length===1 && issuedPageDocument(g,calls[0]);
+    const source=g.edges.filter(e=>e.type===kind+'_source' && e.to===r.id);
+    const owner=g.audit_documents?.find(d=>d.source===r.doc && d.page===r.page)?.id || r.doc;
+    if (!doc || owner!==r.unit || !Number.isSafeInteger(r.line) || r.line<1 ||
+        r.id!==prefix+'/'+pageId+'/l'+r.line || node?.type!==kind+'_line' || node.doc!==r.doc ||
+        node.page!==r.page || node.line!==r.line || node.label!==r.quote || !r.quote || page?.layer!=='text' ||
+        !page.text_sha256 || page.sha256!==r.page_sha256 || !Array.isArray(r.rects) || !r.rects.every(validRect) ||
+        JSON.stringify(calls[0].inspection_use_rects?.[r.line] || [])!==JSON.stringify(r.rects) || !Array.isArray(r.facts) ||
+        ![r.id,pageId,...r.facts].every(id=>evidence.includes(id)) || source.length!==1 || source[0].from!==pageId ||
+        !same(source[0].evidence,[pageId,...r.facts]) || !r.facts.every(id=>{
+          const f=idx.facts.get(id);
+          return f?.doc===doc.id && f.page===r.page && f.page_sha256===r.page_sha256 && f.source_sha256===doc.sha256 &&
+            f.source_line?.number===r.line && f.source_line.text===r.quote;
+        })) return null;
+    return doc;
+  }
+
   function bind(item,report) {
     const c=item.inspection_use;
-    if (!c || item.rule!=='H05' || item.execution_basis || !Object.hasOwn(labels,c.state) || ![firstFormat,crossFormat,format].includes(c.format) ||
+    if (!c || item.rule!=='H05' || item.execution_basis || !Object.hasOwn(labels,c.state) || ![firstFormat,crossFormat,approvalFormat,format].includes(c.format) ||
         report.policy.inspection_use!==c.format || !/^[a-f0-9]{64}$/u.test(report.policy.code_sha256?.['inspection_use.py'])) return null;
     const g=report.graph, idx=graphIndex(g), ledger=g.inspection_use_sources, link=receipt(item,report);
     const node=idx.nodes.get('finding/'+item.id), supported=new Set(traceReferences(g,item));
@@ -38,33 +61,13 @@ const InspectionUse = (() => {
     const expected=c.notes.filter(n=>n.scope==='cited').map(n=>n.row);
     if (!same(edges.map(e=>e.to),expected) || edges.some(e=>!same(e.evidence,[c.citation,c.number_ref,e.to]))) return null;
     const stage=/^第([\d零一二两三四五六七八九十]+)期$/u.exec(item.stage.name);
-    function readRow(r,approval=false) {
-      const prefix=approval?'payment-approval':'inspection-use', kind=approval?'payment_approval':'inspection_use';
-      const pageId=r.doc+'/p'+r.page, node=idx.nodes.get(r.id), page=idx.nodes.get(pageId);
-      const calls=report.calls?.pages?.filter(p=>p.doc===r.doc && p.page===r.page);
-      const doc=calls?.length===1 && issuedPageDocument(g,calls[0]);
-      const source=g.edges.filter(e=>e.type===kind+'_source' && e.to===r.id);
-      const owner=g.audit_documents?.find(d=>d.source===r.doc && d.page===r.page)?.id || r.doc;
-      if (!doc || owner!==r.unit || !approval && !item.scope.includes(r.unit) || !Number.isSafeInteger(r.line) || r.line<1 ||
-          r.id!==prefix+'/'+pageId+'/l'+r.line || node?.type!==kind+'_line' || node.doc!==r.doc ||
-          node.page!==r.page || node.line!==r.line || node.label!==r.quote || !r.quote || page?.layer!=='text' ||
-          !page.text_sha256 || page.sha256!==r.page_sha256 || !Array.isArray(r.rects) || !r.rects.every(validRect) ||
-          JSON.stringify(calls[0].inspection_use_rects?.[r.line] || [])!==JSON.stringify(r.rects) || !Array.isArray(r.facts) ||
-          ![r.id,pageId,...r.facts].every(id=>c.evidence.includes(id)) || source.length!==1 || source[0].from!==pageId ||
-          !same(source[0].evidence,[pageId,...r.facts]) || !r.facts.every(id=>{
-            const f=idx.facts.get(id);
-            return f?.doc===doc.id && f.page===r.page && f.page_sha256===r.page_sha256 && f.source_sha256===doc.sha256 &&
-              f.source_line?.number===r.line && f.source_line.text===r.quote;
-          })) return null;
-      return doc;
-    }
     const bound=[], active=[];
     for (const [i,r] of rows.entries()) {
-      const doc=readRow(r);
+      const doc=item.scope.includes(r.unit) && r.id.startsWith('inspection-use/') && original(r,report,c.evidence);
       if (!doc) return null;
       let scope='cited';
       const review=g.acceptance_word_reviews?.documents?.some(d=>d.units.includes(r.unit) && (d.notes.length || d.coverage!=='complete'));
-      const applies=stage && (r.index==null || (c.format===format ? BatchPhase.ordinal(stage[1])===r.index :
+      const applies=stage && (r.index==null || ([approvalFormat,format].includes(c.format) ? BatchPhase.ordinal(stage[1])===r.index :
         BatchPhase.sameOrdinal(stage[1],r.index) || /^\d+$/u.test(stage[1]) && Number(stage[1])===r.index));
       if (r.unit!==c.cited) {
         const foreignTitle=r.unit===item.retest_reference?.units?.original && /本复验(?:单|报告)/u.test(r.quote);
@@ -81,11 +84,11 @@ const InspectionUse = (() => {
     }
     const outcome=active.length===1?active[0]:active.length?'unclear':bound.every(b=>b.scope==='other_document')?'other_document':'other_stage';
     if (outcome!==c.state) return null;
-    const requiresComparison=c.format===format && outcome==='approval' && ledger.approvals?.length>0;
+    const requiresComparison=[approvalFormat,format].includes(c.format) && outcome==='approval' && ledger.approvals?.length>0;
     if (Boolean(c.approval)!==Boolean(requiresComparison)) return null;
     if (requiresComparison) {
       const request=bound.find(b=>b.scope==='cited' && b.row.kind==='approval')?.row;
-      const entries=InstallmentApproval.bind(item,report,request,r=>readRow(r,true));
+      const entries=InstallmentApproval.bind(item,report,request,r=>original(r,report,c.evidence));
       if (!entries || c.status!==c.approval.status) return null;
       bound.push(...entries);
     } else if (c.status!==(outcome==='ban'?'risk':active.length?'missing':'ok')) return null;
@@ -93,13 +96,13 @@ const InspectionUse = (() => {
   }
 
   function source(row) {
-    const label=row.id.startsWith('payment-approval/')?'付款审批原行':'付款用途原行';
+    const label=row.id.startsWith('payment-clock/')?'银行时刻原行':row.id.startsWith('payment-approval/')?'付款审批原行':'付款用途原行';
     return {ref:row.id,quote:row.quote,rects:row.rects,label,option:label+' · 第 '+row.line+' 行',
       rawLine:row.line,quality:'inspection_use_source'};
   }
   function pageReferences(paper,doc,page) {
     const ledger=paper?.graph.inspection_use_sources;
-    if (!ledger?.rows?.some(r=>r.doc===doc && r.page===page) && !ledger?.approvals?.some(p=>p.doc===doc && p.page===page)) return [];
+    if (!ledger?.rows?.some(r=>r.doc===doc && r.page===page) && !['approvals','bank_clocks'].some(k=>ledger?.[k]?.some(p=>p.doc===doc && p.page===page))) return [];
     const refs=new Map();
     for (const item of paper.findings) {
       for (const {row} of bind(item,paper) || []) {
@@ -116,12 +119,12 @@ const InspectionUse = (() => {
   }
   function citation(ref,finding,report) {
     if (!report || (finding?.id && !traceReferences(report.graph,finding).includes(ref))) return null;
-    const candidates=finding?.inspection_use?[finding]:report.findings.filter(f=>f.inspection_use?.notes.some(n=>n.row===ref) || f.inspection_use?.approval?.rows.includes(ref));
+    const candidates=finding?.inspection_use?[finding]:report.findings.filter(f=>f.inspection_use?.notes.some(n=>n.row===ref) || f.inspection_use?.approval?.rows.includes(ref) || f.inspection_use?.approval?.clock?.rows.includes(ref));
     for (const item of candidates) {
       const entry=bind(item,report)?.find(b=>b.row.id===ref);
       if (entry) {
         const {row,doc}=entry;
-        const button=action((row.field?'付款审批':'付款用途')+' · '+doc.name+' · 第 '+row.page+' 页'+(row.rects.length?' · 第 '+row.line+' 行':''),()=>open(entry,report),'ref');
+        const button=action((row.id.startsWith('payment-clock/')?'银行时刻':row.field?'付款审批':'付款用途')+' · '+doc.name+' · 第 '+row.page+' 页'+(row.rects.length?' · 第 '+row.line+' 行':''),()=>open(entry,report),'ref');
         button.dataset.useRef=ref;button.title=row.quote;
         return button;
       }
@@ -141,18 +144,23 @@ const InspectionUse = (() => {
       const {row,doc,scope}=entry;
       const place=doc.name+' · 第 '+row.page+' 页'+(row.rects.length?' · 第 '+row.line+' 行':'');
       const button=action('',()=>open(entry,report),'inspection-use-row');
-      button.id=(row.field?'payment-approval-'+item.id:root.id)+'-'+row.doc+'-p'+row.page+'-l'+row.line;
+      button.id=(scope==='bank_time'?'payment-clock-'+item.id:row.field?'payment-approval-'+item.id:root.id)+'-'+row.doc+'-p'+row.page+'-l'+row.line;
       const subject=row.field ? row.quote.split(/[:：]/u,1)[0].trim() : '付款用途';
       button.dataset.source=row.id;button.dataset.scope=scope;button.dataset.originalLabel=subject+' · '+place;
       button.setAttribute('aria-haspopup','dialog');button.setAttribute('aria-controls','page-dialog');
       const compact=row.field && c.approval.fields && c.approval.documents.length===1;
       button.title=place;
-      button.append(el('strong',row.quote),el('small',compact?'原件第 '+row.line+' 行':place),glyph('arrows-angle-expand'));
+      const time=c.approval?.clock && (scope==='bank_time' || row.id===c.approval.clock.signed);
+      if (time) {
+        const sep=row.quote.search(/[:：]/u);
+        button.append(el('span',subject,'time-label'),el('strong',sep<0?row.quote:row.quote.slice(sep+1).trim()),
+          el('small',place),glyph('arrows-angle-expand'));
+      } else button.append(el('strong',row.quote),el('small',compact?'原件第 '+row.line+' 行':place),glyph('arrows-angle-expand'));
       return button;
     }
     root.append(...bound.filter(b=>!b.row.field).map(originalButton));
     if (c.approval) root.append(InstallmentApproval.panel(c.approval,bound.filter(b=>b.row.field),originalButton,item.id));
     return root;
   }
-  return {bind,panel,pageReferences,citation};
+  return {bind,panel,pageReferences,citation,original};
 })();

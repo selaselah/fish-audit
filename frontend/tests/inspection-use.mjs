@@ -26,11 +26,13 @@ export async function checkInspectionUse(ctx,cid) {
   assert.equal(await evaluate(q(card)+'.dataset.status'),c.status);
   const proof=c.notes[0], a=c.approval, approvalCard='#payment-approval-'+id;
   const approvalRows=report.graph.inspection_use_sources.approvals?.flatMap(p=>p.rows) || [];
-  const row=a?.fields ? approvalRows.find(r=>r.id===a.fields.date) : report.graph.inspection_use_sources.rows.find(r=>r.id===proof.row);
-  const base=row.field?approvalCard:card, doc=report.graph.documents.find(d=>d.id===row.doc);
+  const bankRows=report.graph.inspection_use_sources.bank_clocks?.flatMap(p=>p.rows) || [];
+  const clock=a?.clock, time=bankRows.find(r=>clock?.rows.includes(r.id));
+  const row=time || (a?.fields ? approvalRows.find(r=>r.id===a.fields.date) : report.graph.inspection_use_sources.rows.find(r=>r.id===proof.row));
+  const base=time?'#payment-clock-'+id:row.field?approvalCard:card, doc=report.graph.documents.find(d=>d.id===row.doc);
   const control=base+'-'+row.doc+'-p'+row.page+'-l'+row.line;
-  assert.equal(await evaluate(q(control)+'.dataset.scope'),row.field?'approval_sheet':proof.scope);
-  assert.equal(await evaluate(q(control+' strong')+'.textContent'),row.quote);
+  assert.equal(await evaluate(q(control)+'.dataset.scope'),time?'bank_time':row.field?'approval_sheet':proof.scope);
+  assert.equal(await evaluate(q(control+' strong')+'.textContent'),time?row.quote.slice(row.quote.search(/[:：]/u)+1).trim():row.quote);
   const label=await evaluate(q(control)+'.dataset.originalLabel');
   assert.ok(label.includes(doc.name) && label.includes('第 '+row.line+' 行'));
   async function located(fromHistory=false,printed=row) {
@@ -72,6 +74,23 @@ export async function checkInspectionUse(ctx,cid) {
       'if(mode==="omitted")delete c.approval;return InspectionUse.bind(i,p)===null})');
     assert.deepEqual(failed,Array(7).fill(true));
   }
+  if (time) {
+    assert.equal(await evaluate(q(approvalCard)+'.dataset.clock'),clock.state);
+    const signature=approvalRows.find(r=>r.id===clock.signed);
+    if (signature) {await click(approvalControl(signature));await located(false,signature);await evaluate(q('#page-dialog')+'.close()');}
+    const invalid=await evaluate('["status","method","event","source","precision","timezone","omitted","notes","citation","relationship"].map(mode=>{'+
+      'const p=structuredClone(state.bundle.report),i=p.findings.find(f=>f.id==='+JSON.stringify(id)+'),a=i.inspection_use.approval,v=a.clock,'+
+      'r=p.graph.inspection_use_sources.bank_clocks.flatMap(b=>b.rows).find(r=>v.rows.includes(r.id));'+
+      'if(mode==="status")v.state=v.state==="debit_first"?"approval_first":"debit_first";'+
+      'if(mode==="method")delete p.policy.code_sha256["approval_clock.py"];if(mode==="event")r.field=r.field==="debit_time"?"bank_event":"debit_time";'+
+      'if(mode==="source")p.graph.edges=p.graph.edges.filter(e=>e.type!=="payment_clock_source");'+
+      'if(mode==="precision")v.debited_at="00:34:00";if(mode==="timezone")v.zone="+00:00";if(mode==="omitted")delete a.clock;'+
+      'if(mode==="notes")delete i.retest_reference.timing_notes;if(mode==="citation")i.retest_reference.citations.push(r.id);'+
+      'if(mode==="relationship"){const es=p.graph.edges,link=es.find(e=>e.type==="compares_debit_time");'+
+      'if(link)link.to=v.signed;else es.push({type:"compares_debit_time",from:v.signed,to:r.id,evidence:[a.request,i.inspection_use.citation,v.signed,r.id]})}'+
+      'return InspectionUse.bind(i,p)===null})');
+    assert.deepEqual(invalid,Array(10).fill(true));
+  }
   for (const width of [320,390,768,820,1024,1440]) {
     await size(ctx,width);
     assert.ok(await evaluate('(()=>{const b='+q(control)+'.getBoundingClientRect();return b.width>=44 && b.height>=44 && b.left>=-1 && b.right<=innerWidth+1})()'));
@@ -81,8 +100,8 @@ export async function checkInspectionUse(ctx,cid) {
     assert.equal(root,process.env.AUDIT_ISOLATED_USE_ORIGIN);
     assert.ok(!['8000','8010'].includes(new URL(root).port));assert.deepEqual((await json('/api/walkthrough')).notes,[]);
     await size(ctx,390);
-    const cardNote=row.field?'建议在审批日期旁显示银行扣款日。':'建议付款检查并排显示这句用途限制和实际审批依据。';
-    const pageNote='希望从原件这一行也能回看付款审批。';
+    const cardNote=time?'希望这两个时刻同时注明各自来自哪张单据。':row.field?'建议在审批日期旁显示银行扣款日。':'建议付款检查并排显示这句用途限制和实际审批依据。';
+    const pageNote=time?'建议从银行回单的这一行直接跳到签批原件。':'希望从原件这一行也能回看付款审批。';
     async function compose(text,pick) {
       await click('#walk-launch');await wait(q('#walk-dialog')+'?.open && !'+q('#walk-save')+'.disabled','compose on site');
       await evaluate(q('#walk-text')+'.value='+JSON.stringify(text)+';'+q('#walk-text')+'.dispatchEvent(new Event("input"))');
@@ -105,7 +124,8 @@ export async function checkInspectionUse(ctx,cid) {
     assert.deepEqual([b.case_id,b.rev,b.doc,b.page,b.line,b.raw_ref],[cid,rev,row.doc,row.page,row.line,row.id]);
     const prior=rev>1 && (await json(api+'/reports/'+(rev-1))).report.findings.find(f=>f.id===id);
     const filed=prior?.inspection_use;
-    const absent=prior && !filed?.notes.some(n=>n.row===row.id) && !filed?.approval?.rows.includes(row.id) ? rev-1 : task.rev+1;
+    const absent=prior && !filed?.notes.some(n=>n.row===row.id) && !filed?.approval?.rows.includes(row.id) &&
+      !filed?.approval?.clock?.rows.includes(row.id) ? rev-1 : task.rev+1;
     for (const [context,status] of [[{...a,rev:absent},404],[{...a,anchor:base.slice(1)+'-'+row.doc+'-p1-l1'},404],
       [{...a,params:{view:'payment-checks',stage:'H05-999'}},400],[{...b,line:1},400],[{...b,rev:absent},404]]) {
       const r=await fetch(root+'/api/walkthrough',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -128,7 +148,7 @@ export async function checkInspectionUse(ctx,cid) {
     await mouse('#walk-dock');await wait(docked('#performance-index'),'side-by-side installment');
     await mouse('#walk-pick');await mouse(control);
     await wait(q(control)+'.classList.contains("walk-selected") && '+q('#walk-location')+'.textContent.includes('+JSON.stringify(label)+')','pin the filed clause');
-    const alongside=row.field?'希望直接看到审批日期和付款日期相差几天。':'希望在这个付款条件旁直接对照审批单上的期次。';
+    const alongside=time?'希望一眼看出这笔钱是在签批前还是签批后扣除。':row.field?'希望直接看到审批日期和付款日期相差几天。':'希望在这个付款条件旁直接对照审批单上的期次。';
     await fill(alongside);await mouse(control);await located();
     await wait(docked('#page-dialog'),'continue writing beside the open original');
     assert.ok(await evaluate(q('#page-dialog')+'.getBoundingClientRect().right<='+q('#walk-rail')+'.getBoundingClientRect().left'),'original page fits to the left of the recorder');

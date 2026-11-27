@@ -78,7 +78,7 @@ def materials(archive, target, *, master=MASTER, title=TITLE, decision=("放行�
     return report["policy"]["profile"], groups
 
 
-def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MASTER[2], kind="payment_release", reviewer="水印放行单演练", replacement=None, addition=None, visual_fields=(), missing_fields=()):
+def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MASTER[2], kind="payment_release", reviewer="水印放行单演练", replacement=None, addition=None, additions=(), visual_fields=(), missing_fields=()):
     """Reconcile visible sample fields against the fixed, previously reviewed originals."""
     from config import PERFORMANCE
     from documents import prepare
@@ -95,8 +95,10 @@ def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MAS
         master = json.loads(content)["graph"]
         report = wait(case)
         confirm = []
+        appended = {change[0]:change for change in (*additions,*([addition] if addition else []))}
         for base in master["documents"]:
             name = base["name"]
+            addition = appended.get(name)
             doc, = [d for d in detail["documents"] if Path(d["name"]).stem == Path(name).stem]
             path = files[doc["name"]]
             page, = prepare(path,1,save_images=False)
@@ -158,7 +160,7 @@ def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MAS
                         or same[0]["status"] == "visual" and (source["field"] == kind or physical)):
                     confirm.append(same[0]["id"])
         if confirm:
-            post(api+"/attest", {"rev":get(api)["rev"], "reviewer":reviewer, "decision":"confirm", "facts":confirm,
+            post(api+"/attest", {"rev":get(api)["rev"], "reviewer":reviewer, "decision":"confirm", "facts":list(dict.fromkeys(confirm)),
                  "note":"已对照同一份水印原件逐行核字。签署行为、人员身份及权限仍交人工复核。"})
             wait(case)
 
