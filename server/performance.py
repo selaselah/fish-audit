@@ -38,6 +38,7 @@ import payment_quality
 import retest_reference
 import inspection_use
 import installment_approval
+import approval_names
 import party_readings
 import warranty_service
 import warranty_register
@@ -561,7 +562,7 @@ def stage_terms(text):
     return ratio[0] if len(ratio) == 1 else "", "", ""
 
 
-def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=(),release_terms=(),prior_terms=(),folio_sources=None, guarantees=()):
+def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=(),release_terms=(),prior_terms=(),folio_sources=None, guarantees=(), named_approvals=()):
     fields = ("payment_term","payment_stage","adjustment")
     refs = contract.evidence("contract",*fields)
     rows, counts, issues = [], set(), []
@@ -571,6 +572,8 @@ def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=
         if line in seen_lines:
             continue
         seen_lines.add(line)
+        if any(fact["id"] in r["facts"] and (fact.get("source_line") or {}).get("text")==r["quote"] for r,_,_ in named_approvals):
+            continue
         guarantee=next((s for s in guarantees if fact["id"] in s["facts"] and (fact.get("source_line") or {}).get("text")==s["quote"]),None)
         if guarantee:
             if guarantee["field"]=="period_clause" or advance_guarantee.RIDER.fullmatch(guarantee["quote"].strip()):
@@ -637,7 +640,14 @@ def schedule(contract, *, warranty_checks=False, deadlines=False, invoice_terms=
         issues.append("各期正数比例未能合计至 100%")
     if contract.fields["adjustment"] or contract.incomplete(*fields):
         issues.append("付款条款存在变更或原页覆盖缺口")
+    assigned={(r["doc"],r["page"],r["line"],r["quote"]) for r,index,kind in named_approvals
+              if sum(v["index"]==index and v["kind"]==kind for v in rows)==1}
+    for r,_,_ in named_approvals:
+        refs.extend((r["id"],f"{r['doc']}/p{r['page']}",*r["facts"]))
+        if (r["doc"],r["page"],r["line"],r["quote"]) not in assigned:
+            issues.append("具名签批约定所列期款待对应")
     uncovered = [n for n in contract.notes if re.search(r"分期|分[两二三四五六七八九十\d]+期|预付|尾款|质保金|保留款|第.+期|补充协议|另附|另行约定",n["quote"])
+                 and not (assigned and (n["doc"],int(n["page_id"].rsplit("/p",1)[1]),n["line"],n["quote"]) in assigned)
                  and norm(n["quote"]) not in seen_lines and not (warranty_checks and warranty_terms.dedicated(n["quote"]))
                  and not (sum(r["index"]==1 for r in rows)==1 and any(n["page_id"]==f"{s['doc']}/p{s['page']}" and
                           (n["line"],n["quote"])==(s["line"],s["quote"]) for s in guarantees))
@@ -747,6 +757,7 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True, recheck_
         addendum_execution.flag_mismatches(graph,results)
         payment_quality.apply(graph,results)
         party_readings.attach(graph,results)
+        approval_names.apply_conditions(graph,results)
     return results
 
 
@@ -843,6 +854,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
     invoice_terms = [s for s in ledger["lines"] if s["role"]=="clause"] if ledger else []
     guarantees = advance_guarantee.scoped_terms(graph,contract.unit) if version==FORMAT else ()
     plan, rows = schedule(contract, warranty_checks=version in WARRANTY_FORMATS, deadlines=version in PAYMENT_WINDOW_FORMATS,release_terms=cash.get("lines",[]),guarantees=guarantees,
+                          named_approvals=approval_names.stage_terms(graph,contract.unit) if version==FORMAT else (),
                           prior_terms=graph.get("prior_installment_sources",{}).get("lines",[]) if version==FORMAT else (),
                           folio_sources=graph.get("contract_folio_sources") if version==FORMAT else None,
                           invoice_terms=[s for s in invoice_terms if s["unit"]==contract.unit])
@@ -1336,6 +1348,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("prior_installment") != entry.get("prior_installment")
                 or saved.get("advance_guarantee") != entry.get("advance_guarantee")
                 or saved.get("payment_acceptance") != entry.get("payment_acceptance")
+                or saved.get("stage_approvers") != entry.get("stage_approvers")
                 or saved.get("signer_timing") != entry.get("signer_timing")
                 or saved.get("execution_basis") != entry.get("execution_basis")
                 or saved.get("inspection_coverage") != entry.get("inspection_coverage")

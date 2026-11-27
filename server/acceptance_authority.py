@@ -103,7 +103,9 @@ def covers(field, value, quote):
     return label in names and bool(value) and value in (line,normalized(body).rstrip("。"))
 
 
-def page_evidence(graph, read_text, version=FORMAT):
+def page_evidence(graph, read_text, version=FORMAT, *, separate_payments=True):
+    from approval_names import payment_only
+
     pages = {n["id"]:n for n in graph["nodes"] if n["type"]=="page"}
     sections = {(d["source"],d["page"]):d["id"] for d in graph.get("audit_documents",[]) if "source" in d}
     by_page = defaultdict(list)
@@ -145,7 +147,7 @@ def page_evidence(graph, read_text, version=FORMAT):
             if native and any(s["role"]=="authority" and (s["doc"],s["page"],s["line"],s["quote"])==(doc,number,line,raw)
                               for s in graph.get("payment_release_sources",{}).get("lines",[])):
                 clause=False
-            if native and (doc, number, line, raw) in credit_rows:
+            if native and ((doc, number, line, raw) in credit_rows or separate_payments and unit in contracts and payment_only(raw)):
                 clause=False
             if unit in releases and label in SIGN_LABELS and not re.search(r"终验|复验|验收|合同",body):
                 clause=False
@@ -193,6 +195,8 @@ def page_evidence(graph, read_text, version=FORMAT):
     for p in coverage:
         if credit_rows:
             p["uncovered"] = [r for r in p["uncovered"] if (p["doc"],p["page"],r["line"],r["quote"]) not in credit_rows]
+        if separate_payments and p["unit"] in contracts:
+            p["uncovered"]=[r for r in p["uncovered"] if not payment_only(r["quote"])]
         p["text_only"] = pages[f"{p['doc']}/p{p['page']}"].get("clause_text_only") is True
     mixed = {(p["doc"],p["page"]) for p in coverage if not p["text_only"]}
     notes = [{"unit":f.get("unit",f["doc"]),"doc":f["doc"],"page":f["page"],"fact":f["id"],"quote":f["quote"]}
@@ -342,7 +346,7 @@ def verify_sources(report,read_text,*,signing=False,read_layout=None):
             if legacy["clauses"] or legacy["signatures"]:
                 raise ValueError("旧版终验有具名签认约定或待辨签字栏，请按现行程序重审后签收。")
         return
-    source=page_evidence(graph,read_text,marker)
+    source=page_evidence(graph,read_text,marker,separate_payments=at_least("2026.11.28.1"))
     if (marker not in (LEGACY_FORMAT,*signer_timing.FORMATS) or policy.get("performance_checks") not in PERFORMANCE_FORMATS or graph.get("acceptance_authority_sources")!=source or
             coverage_gaps(source)!=[g for g in graph["gaps"] if g["quality"]=="acceptance_authority_clause"]):
         raise ValueError("验收签认条款、签字原行或版式覆盖与提交材料不符")

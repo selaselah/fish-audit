@@ -5,6 +5,7 @@ from hashlib import sha256
 from pathlib import Path
 import re
 import approval_clock
+import approval_names
 
 from delegation import is_page_marker
 from delivery_batches import NUM, ordinal
@@ -35,7 +36,7 @@ WORDING = {
 }
 
 
-def sources(graph, read_text, read_layout, *, with_time=False):
+def sources(graph, read_text, read_layout, *, with_time=False, with_names=False):
     files = {d["id"]:d for d in graph["documents"]}
     nodes = {n["id"]:n for n in graph["nodes"] if n["type"]=="page"}
     observed = defaultdict(list)
@@ -72,6 +73,8 @@ def sources(graph, read_text, read_layout, *, with_time=False):
             field = "title" if raw.strip() in TITLES else COLUMNS.get(label,"other")
             if with_time and label in approval_clock.SIGNED:
                 field="signed_at"
+            if with_names and label in approval_names.SIGNERS:
+                field="signed_by"
             seen = [f["id"] for f in facts if (f.get("source_line") or {}).get("number")==i and f["source_line"]["text"]==raw]
             rows.append({"id":f"payment-approval/{doc}/p{page}/l{i}", "doc":doc,"page":page,"unit":unit,"line":i,
                          "field":field,"quote":raw,"rects":rects.get(str(i),[]),"facts":seen,"page_sha256":node["sha256"]})
@@ -92,10 +95,12 @@ def printed_date(value):
 def contents(page):
     rows=page["rows"]
     fields={r["field"]:r for r in rows}
-    if (not page["complete"] or set(fields) not in (FIELDS,FIELDS | {"signed_at"}) or len(rows)!=len(fields)
+    if (not page["complete"] or not FIELDS<=set(fields)<=FIELDS | {"signed_at","signed_by"} or len(rows)!=len(fields)
             or not all(r["rects"] for r in rows)):
         return None
     values={k:column(r["quote"])[1] for k,r in fields.items() if k!="title"}
+    if "signed_by" in values and not approval_names.listed(values["signed_by"]):
+        return None
     phase=STAGE.fullmatch(values["stage"])
     decision=DECISIONS.get(values["decision"])
     when=printed_date(values["date"])
@@ -181,4 +186,10 @@ def compare(graph, finding, use, required, pages):
                     for row in p["rows"]:
                         check["evidence"].extend([row["id"],*row["facts"]])
             check["evidence"]=list(dict.fromkeys(check["evidence"]))
+    names=approval_names.compare(graph,finding,check,fields,values)
+    if names:
+        check["names"]=names
+        if names["state"]=="different":
+            check["status"]="risk"
+        check["evidence"]=list(dict.fromkeys(check["evidence"]))
     return check
