@@ -56,8 +56,9 @@
 .archive-hash { grid-column:1/-1; display:grid; gap:3px; padding:8px 12px; border-radius:4px; background:var(--canvas); }
 .archive-hash code { overflow-wrap:anywhere; }
 @media(min-width:761px) {
-  #page-dialog:has(#reader-navigation:not([hidden])) .reader-file-heading { max-width:calc(100% - 325px); }
-  .reader-bar { position:absolute; right:76px; top:12px; flex-direction:row-reverse; }
+  #page-dialog .reader-file-heading { flex:1 1 0; }
+  #page-dialog .dialog-head .walk-launch { margin-inline-start:0; }
+  .reader-bar { flex:none; flex-direction:row-reverse; }
 }
 @media(max-width:760px) {
   #case > a.back { display:inline-flex; align-items:center; min-height:44px; }
@@ -86,3 +87,19 @@
 .party-reading dd { margin:0; font-size:.88rem; overflow-wrap:anywhere; white-space:pre-wrap; }
 .party-reading-actions { display:flex; gap:6px; flex-wrap:wrap; }
 .party-reading-actions button,button.party-reading-jump { min-height:44px; }
+.walk-page-point {
+  position:absolute; z-index:2; box-sizing:border-box; width:24px; height:24px; transform:translate(-50%,-50%);
+  pointer-events:none; border:2px solid var(--accent); border-radius:50%; background:transparent;
+  box-shadow:0 0 0 2px white,inset 0 0 0 1px white;
+}
+.walk-page-point::after {
+  content:''; position:absolute; top:50%; left:50%; width:4px; height:4px; border-radius:50%;
+  background:var(--accent); transform:translate(-50%,-50%); box-shadow:0 0 0 1px white;
+}
+.source-plane:has(.walk-point-cursor) { cursor:crosshair; }
+.source-plane:has(.walk-point-cursor) :is(.walk-point-draft,.walk-point-saved),
+.source-plane:has(.walk-point-draft) .walk-point-saved { visibility:hidden; }
+.walk-point-instructions { display:flex; gap:6px 12px; align-items:center; justify-content:space-between; padding:2px 8px; background:var(--accent-soft); color:var(--ink); font-size:.84rem; }
+.walk-point-instructions button,.walk-point-locate { min-height:44px; padding:5px 9px; flex:none; color:var(--accent-hover); }
+.walk-point-instructions button { border:0; background:transparent; }
+.walk-point-locate { border:1px solid var(--line); border-radius:5px; background:var(--surface); }

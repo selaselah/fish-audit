@@ -1,5 +1,6 @@
 import {captureContext, describeContext, returnUrl} from './walkthrough-context.js';
 import {notebook} from './walkthrough-store.js';
+import {pickPoint,pointLabel,pointPage,samePointPage,showDraftPoint} from './walkthrough-point.js';
 
 const style = document.createElement('link');
 style.rel='stylesheet'; style.href='/assets/walkthrough.css'; document.head.append(style);
@@ -11,7 +12,7 @@ const wide=matchMedia('(min-width:1280px)');
 const content=document.createElement('div');
 content.innerHTML = `<header class="walk-head"><h2 id="walk-title">产品走查</h2><button type="button" id="walk-dock" hidden>并排走查</button><button type="button" id="walk-close" aria-label="关闭走查"><i class="ui-glyph ic-x-lg" aria-hidden="true"></i></button></header>
   <nav class="walk-views" aria-label="走查视图"><button type="button" id="walk-compose" aria-pressed="true">写意见</button><button type="button" id="walk-saved" aria-pressed="false">已记录 <span></span></button></nav>
-  <form id="walk-form"><div class="walk-location"><div><small id="walk-origin">记录位置</small><p id="walk-location"></p></div><button type="button" id="walk-pick">点选控件</button></div>
+  <form id="walk-form"><div class="walk-location"><div><small id="walk-origin">记录位置</small><p id="walk-location"></p></div><div class="walk-pick-actions"><button type="button" id="walk-pick">点选控件</button><button type="button" id="walk-point" hidden>标记原图</button></div></div>
     <label for="walk-text">修改意见</label><textarea id="walk-text" required maxlength="2000" rows="4" placeholder="你希望这里怎么改？"></textarea>
     <div class="walk-actions"><small class="walk-scope"></small><button type="submit" id="walk-save">保存意见</button></div></form>
   <section id="walk-history" aria-label="已记录的意见" hidden><ol></ol><div class="walk-export" hidden><button type="button" id="walk-copy">复制给 Codex</button><button type="button" id="walk-download">下载 Markdown</button></div></section>
@@ -40,7 +41,8 @@ function status(message) { q('#walk-status').textContent=message; }
 function draft() {
   if (!draftKey) return;
   const item = {text:text.value,context,id:ident,attempted};
-  if (text.value || context?.target && JSON.stringify(context)!==JSON.stringify(baseline)) drafts.set(draftKey,item);
+  const pinned=(context?.target || context?.page_point) && JSON.stringify(context)!==JSON.stringify(baseline);
+  if (text.value || pinned) drafts.set(draftKey,item);
   else drafts.delete(draftKey);
   try {
     if (drafts.has(draftKey)) sessionStorage.setItem(draftKey,JSON.stringify(item));
@@ -48,20 +50,35 @@ function draft() {
   } catch { /* The current tab still retains its draft. */ }
 }
 function switchView(history) {
-  if (history) markSelection(null);
+  if (history && pick?.page) endPick(null,false);
+  if (history) {markSelection(null);showDraftPoint(pointPage(owner),null);}
   q('#walk-form').hidden=history;
   q('#walk-history').hidden=!history;
   q('#walk-compose').setAttribute('aria-pressed',String(!history));
   q('#walk-saved').setAttribute('aria-pressed',String(history));
+  if (!history && (dialog.open || docked)) updatePoint();
   status('');
 }
 function showLocation() {
   const place=q('#walk-location'), full=describeContext(context);
-  const compact=(docked || context.anchor?.startsWith('party-reading-')) && context.screen==='case' && context.rev && context.target;
+  const compact=(docked || context.anchor?.startsWith('party-reading-')) && context.screen==='case' && context.rev && (context.target || context.page_point);
   q('#walk-origin').textContent=compact?'底稿 '+context.case_id.slice(0,8)+' · R'+context.rev:'记录位置';
-  place.textContent=compact?[context.target,context.doc && '第 '+context.page+' 页',context.line && '第 '+context.line+' 行'].filter(Boolean).join(' · '):full;
+  place.textContent=compact?[context.target || context.doc,context.doc && '第 '+context.page+' 页',context.line && '第 '+context.line+' 行',
+    context.page_point && pointLabel(context.page_point)].filter(Boolean).join(' · '):full;
   place.title=full;
+  updatePoint();
 }
+function updatePoint() {
+  const view=pointPage(owner), button=q('#walk-point');
+  button.hidden=!view; button.disabled=!book || busy;
+  if (pick?.page && pick.page!==view) endPick(null,Boolean(owner?.open));
+  if ((docked || dialog.open) && !q('#walk-form').hidden) showDraftPoint(view,context);
+}
+const reader=document.getElementById('page-content');
+if (reader) new MutationObserver(changes=>{
+  if (!book || !(dialog.open || docked || pick?.page)) return;
+  if (changes.some(change=>change.target===reader || change.attributeName==='data-page-sha256')) updatePoint();
+}).observe(reader,{childList:true,subtree:true,attributes:true,attributeFilter:['data-page-sha256']});
 function draftAddress(position) {
   const address={...position};
   if (address.dialog==='page-dialog' && address.doc) delete address.target;
@@ -113,6 +130,7 @@ function leaveRail() {
   document.body.classList.remove('walk-docked'); updateDockButton(); showLocation(); resetButton();
 }
 function closeRecorder() {
+  showDraftPoint(pointPage(owner),null);
   if (docked) {
     draft(); if (pick) endPick(null,false);
     leaveRail(); markSelection(null); launcher.focus({preventScroll:true});
@@ -125,7 +143,8 @@ q('#walk-dock').onclick=()=>{
   (q('#walk-form').hidden?q('#walk-saved'):text).focus({preventScroll:true});
 };
 launcher.addEventListener('walkthrough-owner-change',()=>{
-  if (docked) {mountRail(); followLocation();}
+  if (docked) {mountRail(); followLocation(); updatePoint();}
+  else if (pick?.page && !owner?.open) endPick(null,false);
 });
 wide.addEventListener('change',()=>{
   if (docked && !wide.matches) {
@@ -185,25 +204,39 @@ function markdown() {
 function resetButton() {
   clearTimeout(successTimer); launcher.querySelector('span').textContent=docked?'回到走查':'提意见';
 }
-function endPick(el, reopen=true) {
+function endPick(el, reopen=true, pagePoint=null) {
   if (!pick) return;
   const old=pick; pick=null;
   old.controller.abort(); old.mark?.classList.remove('walk-mark');
+  if (old.page) {q('#walk-point').textContent='标记原图';saveButton.disabled=!book || busy;}
   launcher.removeAttribute('data-picking'); resetButton(); q('#walk-pick').textContent='点选控件'; status('');
-  if (el) {
+  if (el || pagePoint) {
     const position=renderedPosition();
-    if (position) {
+    if (position && (!pagePoint || (old.page===pointPage(owner) && samePointPage(old.page,{...position,page_point:pagePoint})))) {
       const address=draftAddress(position);
       // When repinning across pages, preserve any independent draft already at the destination.
       if (address!==draftKey && !storedDraft(address)) {
         forgetDraft(draftKey); draftKey=address; baseline=position;
       }
-      context=captureContext(owner,el); markSelection(el); showLocation(); draft();
+      context=captureContext(owner,el,pagePoint); markSelection(el); showLocation(); draft();
     } else status('底稿正在打开，请稍后再点选。');
   }
-  if (reopen) { if (!docked) dialog.showModal(); text.focus(); }
+  if (reopen) { if (!docked) dialog.showModal(); updatePoint(); text.focus(); }
 }
+q('#walk-point').onclick=()=>{
+  if (pick) {endPick(null);return;}
+  const view=pointPage(owner);
+  if (!view || !book || busy) return;
+  markSelection(null);
+  const controller=new AbortController();
+  pick={controller,page:view};
+  q('#walk-point').textContent='取消标记'; saveButton.disabled=true;
+  if (!docked) dialog.close();
+  launcher.dataset.picking='true'; launcher.querySelector('span').textContent='取消点选';
+  pickPoint(view,samePointPage(view,context)?context.page_point:null,controller.signal,p=>endPick(null,true,p));
+};
 function choosePosition() {
+  if (pick) {endPick(null);return;}
   markSelection(null);
   document.querySelectorAll('.walk-mark').forEach(el=>el.classList.remove('walk-mark'));
   if (!docked) dialog.close();
@@ -248,7 +281,7 @@ text.addEventListener('keydown',event=>{
     event.preventDefault();q('#walk-form').requestSubmit(saveButton);
   }
 });
-dialog.addEventListener('close',()=>{ if (!docked && !pick && !dialog.open) {markSelection(null); draft(); launcher.focus({preventScroll:true});} });
+dialog.addEventListener('close',()=>{ if (!docked && !pick && !dialog.open) {markSelection(null); showDraftPoint(pointPage(owner),null); draft(); launcher.focus({preventScroll:true});} });
 content.addEventListener('keydown',e=>{
   if (e.key==='Escape') {
     e.stopPropagation();
@@ -257,10 +290,11 @@ content.addEventListener('keydown',e=>{
 });
 q('#walk-form').addEventListener('submit',async event=>{
   event.preventDefault();
+  if (pick?.page) return;
   if (busy || !book || !text.value.trim()) { if (!text.value.trim()) {status('请填写修改意见');text.focus();} return; }
   const token=generation, body=text.value.trim(), key=JSON.stringify([body,context]);
   if (attempted && attempted!==key) ident=uuid();
-  attempted=key; draft(); busy=true; saveButton.disabled=true; text.readOnly=true; q('#walk-pick').disabled=true; status('正在保存…');
+  attempted=key; draft(); busy=true; saveButton.disabled=true; text.readOnly=true; q('#walk-pick').disabled=true; updatePoint(); status('正在保存…');
   try {
     const saved=await book.save({id:ident,text:body,context});
     if (generation!==token) return;
@@ -274,7 +308,7 @@ q('#walk-form').addEventListener('submit',async event=>{
       dialog.close(); launcher.querySelector('span').textContent='已记录'; successTimer=setTimeout(resetButton,1700);
     }
   } catch (err) { if (generation===token) status('保存失败，意见已保留。'+err.message); }
-  finally {if (generation===token) {busy=false;saveButton.disabled=false;text.readOnly=false;q('#walk-pick').disabled=false;}}
+  finally {if (generation===token) {busy=false;saveButton.disabled=false;text.readOnly=false;q('#walk-pick').disabled=false;updatePoint();}}
 });
 q('#walk-copy').onclick=async()=>{
   const token=generation,content=markdown();

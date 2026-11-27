@@ -1,7 +1,18 @@
 const OriginalReader = (() => {
   const dialog = document.querySelector('#page-dialog');
   const navigation = document.querySelector('#reader-navigation');
+  const wide=matchMedia('(min-width:761px)');
   let active;
+
+  function placePager() {
+    const bar=dialog.querySelector('.reader-bar');
+    if (!bar) return;
+    const focus=bar.contains(document.activeElement) && document.activeElement;
+    if (wide.matches) dialog.querySelector('.reader-file-heading').after(bar);
+    else navigation.prepend(bar);
+    if (focus) focus.focus({preventScroll:true});
+  }
+  wide.addEventListener('change',placePager);
 
   function pageNumbers(item, graph) {
     if (!graph) return Array.from({length:item.pages}, (_, i)=>i+1);
@@ -13,6 +24,7 @@ const OriginalReader = (() => {
   function clear() {
     active?.dispose();
     active = null;
+    dialog.querySelector('.reader-bar')?.remove();
     navigation.replaceChildren();
     navigation.hidden = true;
     document.querySelector('#page-content').replaceChildren();
@@ -92,6 +104,7 @@ const OriginalReader = (() => {
       label.append(jump); overview.prepend(label);
     }
     navigation.replaceChildren(bar,overview,announced); navigation.hidden = false;
+    placePager();
     function keepVisible(button) {
       if (overview.hidden || !button) return;
       const page = button.getBoundingClientRect(), area = strip.getBoundingClientRect();

@@ -171,7 +171,7 @@ function openPage(docId, pageNumber, highlight, lineHint, registerPair, rawRef) 
   if (item) OriginalReader.open(item,pageNumber,{highlight,lineHint,registerPair,rawRef});
 }
 
-function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,rawRef,printedSource}, selected, pageUrl, signal) {
+function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,rawRef,printedSource,walkPoint}, selected, pageUrl, signal) {
   const docId = item.id;
   const image = el('img', '', 'page-image');
   image.alt = item.name + ' 第 ' + pageNumber + ' 页';
@@ -280,7 +280,8 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
   decrease.disabled=increase.disabled=fit.disabled=true;
   function revealPageMark() {
     if (!left.isConnected || !image.naturalWidth) return;
-    const rect = overlay.firstElementChild?.getBoundingClientRect();
+    const mark=plane.querySelector('.walk-point-cursor') || overlay.firstElementChild || plane.querySelector('.walk-point-draft,.walk-point-saved');
+    const rect = mark?.getBoundingClientRect();
     if (!rect) return;
     const pane = canvas.getBoundingClientRect();
     if (rect.top < pane.top + 8 || rect.bottom > pane.bottom - 8)
@@ -640,17 +641,35 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
       setZoom(zoom);
       for (const control of controls) control.disabled=false;
       submit.disabled = !selected.size;
+      if (paper) {
+        const digest=graphIndex(paper.graph).nodes.get(docId+'/p'+pageNumber)?.sha256;
+        if (/^[a-f0-9]{64}$/u.test(digest)) pageView.dataset.pageSha256=digest;
+      }
       if (returnFocus && canvas.isConnected && $('#page-dialog').open) canvas.focus({preventScroll:true});
     } catch (error) {
       if (signal.aborted) return;
+      delete pageView.dataset.pageSha256;
       sheet.hidden=true; image.hidden=true; overlay.setAttribute('hidden','');
       decrease.disabled=increase.disabled=fit.disabled=rotateLeft.disabled=rotateRight.disabled=true;
       loadStatus.textContent=error.message && error.name==='Error' ? error.message : '原页加载失败。'; notice.removeAttribute('aria-busy'); retry.disabled=false;
       if (!notice.isConnected) left.prepend(notice);
       if (returnFocus && retry.isConnected && $('#page-dialog').open) retry.focus({preventScroll:true});
+      return;
+    }
+    if (walkPoint!==undefined) {
+      try {
+        const {restorePoint}=await import('./assets/walkthrough-point.js');
+        if (!signal.aborted && pageView.isConnected) restorePoint(pageView,walkPoint,()=>{
+          if (zoom===0 && canvas.clientWidth>0 && canvas.clientWidth<600) {
+            const available=Math.min(300,100*image.naturalWidth/canvas.clientWidth);
+            setZoom(Math.max(0,levels.findLastIndex(level=>level<=available)));
+          }
+        });
+      } catch {
+        if (!signal.aborted && pageView.isConnected) tools.append(el('span','走查标记未载入，刷新可重试。','small'));
+      }
     }
   }
-  load();
   $('#page-title').replaceChildren(item.name,el('span',' · 第 '+pageNumber+' 页',item.pages>1?'visually-hidden':''));
   $('#page-title').title = item.name;
   const jumpTo = (pane, target) => {
@@ -662,9 +681,11 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
   originalButton.setAttribute('aria-controls',left.id); quotesButton.setAttribute('aria-controls',right.id);
   const pageView = box('page-view', left, right);
   pageView.dataset.doc = docId; pageView.dataset.page = String(pageNumber);
+  if (paper) { pageView.dataset.caseId=paper.case_id; pageView.dataset.rev=String(state.bundle.rev); }
   if (lineHint) pageView.dataset.line = String(lineHint);
   $('#page-content').replaceChildren(box('viewer-nav', originalButton, quotesButton), pageView);
   if (!$('#page-dialog').open) $('#page-dialog').showModal();
+  load();
   if (focusRow) {
     const fact=pageFacts.find(f=>f.id===highlight);
     if (fact || initialRaw) locate(fact, initialRaw);
@@ -1699,7 +1720,10 @@ async function refresh() {
           state.openedCitation=location.hash;
           const raw=route.params.get('walkraw');
           const ref=['inspection-use/','payment-approval/','payment-clock/','contract-approver/','approval-change/','installment-count/'].some(prefix=>raw===prefix+doc.id+'/p'+page+'/l'+line) ? raw : undefined;
-          openPage(doc.id,page,undefined,Number.isSafeInteger(line) && line>0?line:undefined,undefined,ref);
+          if (route.params.has('walkpoint') && state.bundle && route.params.get('rev')===String(state.bundle.rev) &&
+              !route.params.has('walkline') && !raw) {
+            OriginalReader.open(doc,page,{walkPoint:route.params.get('walkpoint')});
+          } else openPage(doc.id,page,undefined,Number.isSafeInteger(line) && line>0?line:undefined,undefined,ref);
         }
       }
       if (['queued','running'].includes(data.status)) interval = 1600;

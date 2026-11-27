@@ -22,6 +22,7 @@ import {checkEvidenceCompare,checkMandateCompare,checkPhaseEvidence,checkPayment
 import {checkPaymentOpinions} from './payment-opinions.mjs';
 import {checkRelease,checkPublicRelease} from './payment-release.mjs';
 import {checkWalkthrough} from './walkthrough.mjs';
+import {checkPagePoints} from './walkthrough-points.mjs';
 import {checkBatchPhase} from './batch-phase.mjs';
 import {checkBatchStandard} from './batch-standard.mjs';
 import {checkGuaranteePeriod,checkPublicGuaranteePeriod} from './guarantee-period.mjs';
@@ -129,6 +130,7 @@ const countCase = caseArgument('--installment-count');
 const useCase = countCase || caseArgument('--inspection-use');
 const partyCase = caseArgument('--party-reading');
 const retestCase = caseArgument('--retest-reference');
+const pointCase = caseArgument('--walkthrough-point-case');
 const qualityCase = caseArgument('--payment-quality');
 const boardCase = caseArgument('--board-decision');
 const ticketCase = caseArgument('--ticket-case');
@@ -177,7 +179,7 @@ const receiptPdf=caseArgument('--acceptance-pdf-case');
 const publicTest=publicRelease || publicAcceptanceOriginals || publicOriginals || publicAddendum || publicWarrantyRegister || publicPeriod || publicStandards || publicPurchase || publicRoster || publicProof || publicClock || publicTiming || publicBank || product || ruleCatalog || publicInspection || publicContractComments || publicWordComments || publicSuppliers || publicPdf || publicFolios;
 const scopeCase=caseArgument('--scope-case'), publicTopics=process.argv.includes('--public-audit-topics');
 const seeded = [partyCase,useCase,retestCase,qualityCase,boardCase,revisionCase,privateAcceptanceOriginals,privateWarrantyRegister,traceCase,periodCase,advanceGuaranteeCase,batchStandardCase,mandateOriginalCase,mandatePdfCase,batchCase,receiptPdf,acceptanceRoster,publicTopics,scopeCase,publicTest,proofCase,signerClock,signerTiming,originalCase,citedOriginal,bankAcceptance,previewQueue,contractCommentCase,commentCase,supplierCase,pdfCase,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
-                privateOriginals,privateAddendum,reviewDecisionCase,invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
+                privateOriginals,privateAddendum,reviewDecisionCase,invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase,pointCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
 const isolatedPaperOrigin=(partyCase && process.env.AUDIT_ISOLATED_PARTY_ORIGIN) || (useCase && process.env.AUDIT_ISOLATED_USE_ORIGIN) || (retestCase && process.env.AUDIT_ISOLATED_RETEST_ORIGIN) || (qualityCase && process.env.AUDIT_ISOLATED_QUALITY_ORIGIN) || (warrantyCase && process.env.AUDIT_ISOLATED_WARRANTY_ORIGIN) || (revisionCase && process.env.AUDIT_ISOLATED_COMPARISON_ORIGIN) || (boardCase && process.env.AUDIT_ISOLATED_BOARD_ORIGIN);
 if (isolatedPaperOrigin) {
@@ -185,7 +187,11 @@ if (isolatedPaperOrigin) {
   assert.ok(!['8000','8010'].includes(new URL(isolatedPaperOrigin).port));
 }
 const root = originalCase ? process.env.AUDIT_READER_ORIGIN || 'http://127.0.0.1:8000' : publicTest || publicTopics ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
-  recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : isolatedPaperOrigin || 'http://127.0.0.1:' + (seeded ? 8000 : port);
+  recoveringCase ? process.env.SYNTHETIC_RECOVERY_ORIGIN : pointCase ? process.env.AUDIT_ISOLATED_POINT_ORIGIN : isolatedPaperOrigin || 'http://127.0.0.1:' + (seeded ? 8000 : port);
+if (pointCase) {
+  assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/u);
+  assert.ok(!['8000','8010'].includes(new URL(root).port));
+}
 if (originalCase || publicTest || publicTopics || recoveringCase || waitingCase || legacyCase || brokenPayment) assert.match(root || '',/^http:\/\/127\.0\.0\.1:\d+$/);
 if (legacyCase || brokenPayment) assert.ok(!['8000','8010'].includes(new URL(root).port));
 const children = [];
@@ -207,11 +213,14 @@ async function until(read, label, timeout = 15000) {
 }
 let ws;
 try {
-  let walkthroughCase;
-  if (walkthroughLocal) {
-    walkthroughCase=execFileSync(process.env.AUDIT_PYTHON || 'server/.venv/bin/python',
-      ['frontend/tests/walkthrough-fixture.py',join(scratch,'data')],{encoding:'utf8',
-        env:{...process.env,AUDIT_ACCESS_MODE:'local',AUDIT_PUBLIC_ORIGIN:''}}).trim();
+  let walkthroughCase,pointWorkspace;
+  if (walkthroughLocal || walkthroughTeam) {
+    const args=['frontend/tests/walkthrough-fixture.py',join(scratch,'data')];
+    if (walkthroughTeam) args.push('--team');
+    const result=execFileSync(process.env.AUDIT_PYTHON || 'server/.venv/bin/python',args,{encoding:'utf8',
+      env:{...process.env,AUDIT_ACCESS_MODE:walkthroughTeam?'saas':'local',AUDIT_PUBLIC_ORIGIN:''}}).trim();
+    if (walkthroughLocal) walkthroughCase=result;
+    else pointWorkspace=JSON.parse(result);
   }
   if (!seeded) start(process.env.AUDIT_PYTHON || 'server/.venv/bin/python', ['server/main.py'], {...process.env,
     PORT:String(port), AUDIT_BIND:'127.0.0.1', AUDIT_ACCESS_MODE:walkthroughLocal?'local':'saas', AUDIT_PUBLIC_ORIGIN:walkthroughLocal?'':root,
@@ -256,6 +265,14 @@ try {
   if (walkthroughLocal || walkthroughTeam) {
     assert.ok(!seeded && !['8000','8010'].includes(new URL(root).port));
     await checkWalkthrough({root,call,evaluate,wait,entry,click},walkthroughCase,scratch);
+    if (walkthroughLocal) await checkPagePoints({root,call,evaluate,wait},walkthroughCase);
+    else {
+      const member=await evaluate(`fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({login:'point-walker',password:'synthetic-point-17'})}).then(r=>r.json())`);
+      assert.ok(member.workspaces?.some(w=>w.id===pointWorkspace.workspace));
+      await checkPagePoints({root,call,evaluate,wait},pointWorkspace.case,pointWorkspace.workspace);
+    }
+  } else if (pointCase) {
+    await checkPagePoints({root,call,evaluate,wait},pointCase);
   } else if (isolatedEntry) {
     assert.ok(!seeded && !['8000','8010'].includes(new URL(root).port));
     await checkIntakeEntry({root,call,evaluate,wait,entry,click});

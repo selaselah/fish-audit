@@ -102,6 +102,54 @@ class EnterpriseFlow(unittest.TestCase):
             self.assertEqual(restarted.get(url).json["notes"][0]["context"],note["context"])
             self.assertEqual(restarted.get("/api/cases").json["cases"],[])
 
+    def test_walkthrough_point_is_bound_to_its_issued_page(self):
+        admin,wid,headers = self.register("point-reviewer")
+        cid = self.checked_invoice(admin,wid,headers,"point-receipt")
+        url = f"/api/w/{wid}/walkthrough"
+        issued = self.store.report(cid,1)
+        checksum = next(n["sha256"] for n in issued["report"]["graph"]["nodes"] if n["id"]=="d01/p1")
+        point = {"x":0,"y":10000,"page_sha256":checksum}
+        context = {"screen":"case","case_id":cid,"rev":1,"doc":"d01","page":1,"dialog":"page-dialog","page_point":point}
+        def save(position, ident="b"*32):
+            return admin.post(url,headers=headers,json={"id":ident,"context":position,"text":"请突出这里的签认栏。"})
+        before = self.store.detail(cid)
+        self.assertEqual(before["rev"],2)
+        for invalid in ({"x":True},{"y":-1},{"x":10001},{"x":0.5},{"page_sha256":"bad"},{"url":"anything"}):
+            self.assertEqual(save({**context,"page_point":{**point,**invalid}}).status_code,400)
+        for changed in ({"line":3},{"params":{"fact":"d01/p1/f1"}},{"anchor":"viewer-original"},{"dialog":"review-dialog"}):
+            self.assertEqual(save({**context,**changed}).status_code,400)
+        for missing in ("rev","doc","page","dialog"):
+            self.assertEqual(save({k:v for k,v in context.items() if k!=missing}).status_code,400)
+        for changed in ({"rev":3},{"doc":"d02"},{"page":2}):
+            self.assertEqual(save({**context,**changed}).status_code,404)
+        self.assertEqual(save({**context,"page_point":{**point,"page_sha256":"0"*64}}).status_code,409)
+        with self.store.connect(True) as db:
+            db.execute("UPDATE pages SET sha256=? WHERE case_id=?",("1"*64,cid))
+        self.assertEqual(save(context).status_code,409)
+        with self.store.connect(True) as db:
+            db.execute("UPDATE pages SET sha256=? WHERE case_id=?",(checksum,cid))
+        self.assertEqual(admin.get(url).json["notes"],[])
+        first=save(context)
+        self.assertEqual(first.status_code,201,first.json)
+        self.assertEqual(first.json["note"]["context"],context)
+        retry=save(context)
+        self.assertEqual(retry.status_code,200)
+        self.assertEqual(retry.json,first.json)
+        self.assertEqual(save({**context,"page_point":{**point,"x":10000}}).status_code,409)
+        outsider,other,oh=self.register("other-point-reviewer")
+        body={"id":"c"*32,"context":context,"text":"查看这张照片"}
+        self.assertEqual(outsider.post(f"/api/w/{other}/walkthrough",headers=oh,json=body).status_code,404)
+        invite=admin.post(f"/api/workspaces/{wid}/invites",headers=headers,json={"role":"employee"}).json["token"]
+        employee,_,eh=self.register("point-submitter",invite=invite)
+        own=self.submit(employee,wid,eh,"point-employee-upload")
+        self.worker.run(self.store.claim())
+        self.assertEqual(employee.post(url,headers=eh,json={**body,"context":{**context,"case_id":own}}).status_code,403)
+        self.assertEqual(employee.get(url).json["notes"],[])
+        self.assertEqual(self.store.report(cid,1),issued)
+        after=self.store.detail(cid)
+        self.assertEqual([after[k] for k in ("rev","status","decisions","referrals")],
+                         [before[k] for k in ("rev","status","decisions","referrals")])
+
     def test_concurrent_approvals_recheck_invoice_history_inside_the_write_transaction(self):
         from concurrent.futures import ThreadPoolExecutor
         from threading import Barrier

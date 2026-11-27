@@ -1,3 +1,5 @@
+import {pointLabel} from './walkthrough-point.js';
+
 const screens = {home:'产品首页',desk:'审计工作台',case:'审计底稿',library:'证据检索',rules:'规则依据',team:'企业成员',account:'企业登录'};
 const sections = {main:'',sample:'采购底稿演示',payments:'分期案例',workflow:'采购审计案例',start:'新建审计'};
 const caseTabs = {report:'审计结论',evidence:'原件与引文',graph:'知识图谱',activity:'执行记录'};
@@ -20,7 +22,7 @@ function knownParams(search, keys) {
   }
   return out;
 }
-export function captureContext(owner, element) {
+export function captureContext(owner, element, pagePoint) {
   let context;
   if (location.pathname === '/') {
     const near = element || document.elementFromPoint(Math.floor(innerWidth / 2), Math.floor(innerHeight * .4));
@@ -90,7 +92,8 @@ export function captureContext(owner, element) {
             const chars=[...name];
             context.target=chars.length<=96?name:chars.slice(0,65).join('')+'…'+chars.slice(-30).join('');
           }
-          const row=element?.closest('.evidence-row') || owner.querySelector('.evidence-row.located');
+          if (pagePoint) context.page_point=pagePoint;
+          const row=pagePoint ? null : element?.closest('.evidence-row') || owner.querySelector('.evidence-row.located');
           const cited=row?.dataset.fact;
           const fact=context.rev && factID.test(cited || '') && graphIndex(state.bundle.report.graph).facts.get(cited);
           if (fact && fact.doc===context.doc && fact.page===context.page) {
@@ -153,7 +156,7 @@ export function describeContext(c) {
     c.anchor?.startsWith('retest-')?'复验回单核对 '+c.params.stage:
     c.anchor?.startsWith('quality-') && '验收款核对 '+c.params.stage);
   return [screen, c.example || sections[c.section], edition, caseTabs[c.tab], board, receipt, dialogs[c.dialog],
-    c.doc && (c.doc+' · 第 '+c.page+' 页'), c.line && '第 '+c.line+' 行', c.target].filter(Boolean).join(' › ');
+    c.doc && (c.doc+' · 第 '+c.page+' 页'), c.line && '第 '+c.line+' 行', c.target, c.page_point && pointLabel(c.page_point)].filter(Boolean).join(' › ');
 }
 export function returnUrl(c, workspace) {
   const route = new URLSearchParams();
@@ -171,6 +174,7 @@ export function returnUrl(c, workspace) {
   if (c.tab) query.set('walktab', c.tab);
   if (c.doc && !query.has('fact')) {
     query.set('walkdoc', c.doc); query.set('walkpage', c.page);
+    if (c.page_point) query.set('walkpoint',[c.page_point.x,c.page_point.y,c.page_point.page_sha256].join('.'));
     if (c.line) query.set('walkline', c.line);
     if (printedRef(c,c.raw_ref)) query.set('walkraw',c.raw_ref);
   }

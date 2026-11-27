@@ -45,6 +45,12 @@ def check_context(value):
             result[key] = item
         elif screen == "case" and key in {"rev", "page", "line"} and type(item) is int and 1 <= item <= 99999999:
             result[key] = item
+        elif screen == "case" and key == "page_point":
+            if (not isinstance(item, dict) or set(item) != {"x", "y", "page_sha256"}
+                    or any(type(item[k]) is not int or not 0 <= item[k] <= 10000 for k in ("x", "y"))
+                    or not isinstance(item["page_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", item["page_sha256"])):
+                raise CaseError("原图标记需要有效的位置及页图摘要。", 400)
+            result[key] = item
         elif key == "params" and screen in {"case", "home"} and isinstance(item, dict):
             allowed = CASE_PARAMS if screen == "case" else HOME_PARAMS
             if any(k not in allowed or not isinstance(v, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_/-]{0,79}", v) for k, v in item.items()):
@@ -56,6 +62,9 @@ def check_context(value):
         raise CaseError("走查原页位置不完整。", 400)
     params = result.get("params", {})
     anchor = result.get("anchor", "")
+    if "page_point" in result and (not result.get("rev") or not result.get("doc") or result.get("dialog") != "page-dialog"
+                                   or params or {"line", "raw_ref", "anchor"}.intersection(result)):
+        raise CaseError("请在选定版本的资料原页上标记位置。", 400)
     if anchor.startswith("party-reading-"):
         pin = PARTY_PIN.fullmatch(anchor)
         if (not pin or screen!="case" or not result.get("rev") or result.get("dialog")!="page-dialog"
@@ -115,6 +124,16 @@ def save_note(store, workspace, author, role, data):
         if "rev" in context and not db.execute("SELECT 1 FROM reports WHERE case_id=? AND rev=?",
                                                (context["case_id"], context["rev"])).fetchone():
             raise CaseError("未找到记录时的底稿版本。", 404)
+        if point := context.get("page_point"):
+            page = db.execute("""SELECT json_extract(n.value,'$.sha256'), p.sha256
+                FROM reports r JOIN pages p ON p.case_id=r.case_id, json_each(r.content,'$.graph.nodes') n
+                WHERE r.case_id=? AND r.rev=? AND p.doc=? AND p.number=?
+                AND json_extract(n.value,'$.type')='page' AND json_extract(n.value,'$.id')=p.doc||'/p'||p.number""",
+                (context["case_id"], context["rev"], context["doc"], context["page"])).fetchone()
+            if not page:
+                raise CaseError("这版底稿中没有所标记的原页。", 404)
+            if not page[0] == page[1] == point["page_sha256"]:
+                raise CaseError("原图标记与这版底稿的页图摘要不符。", 409)
         position = context.get("params",{})
         anchor = context.get("anchor","")
         if PARTY_PIN.fullmatch(anchor):
