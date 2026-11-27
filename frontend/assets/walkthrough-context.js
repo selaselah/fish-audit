@@ -95,6 +95,11 @@ export function captureContext(owner, element) {
           if (fact && fact.doc===context.doc && fact.page===context.page) {
             context.params={fact:cited};
             if (fact.source_line?.number>0) context.line=fact.source_line.number;
+            const card=element ? element.closest('[data-party-reading]') : row.querySelector('[data-party-reading]');
+            const proof=card && PartyReadings.bind(state.bundle.report,card.dataset.partyReading);
+            if (proof?.model.id===cited && card.dataset.rev===String(context.rev) && card.dataset.caseId===context.case_id) {
+              context.line=proof.row.line; context.anchor=card.id; context.target=card.dataset.originalLabel;
+            }
           } else if (+row?.dataset.gapLine>0) {
             context.line=+row.dataset.gapLine;
             if (printedRef(context,row.dataset.sourceRef)) context.raw_ref=row.dataset.sourceRef;

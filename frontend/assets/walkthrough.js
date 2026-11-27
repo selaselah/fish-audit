@@ -57,7 +57,7 @@ function switchView(history) {
 }
 function showLocation() {
   const place=q('#walk-location'), full=describeContext(context);
-  const compact=docked && context.screen==='case' && context.rev && context.target;
+  const compact=(docked || context.anchor?.startsWith('party-reading-')) && context.screen==='case' && context.rev && context.target;
   q('#walk-origin').textContent=compact?'底稿 '+context.case_id.slice(0,8)+' · R'+context.rev:'记录位置';
   place.textContent=compact?[context.target,context.doc && '第 '+context.page+' 页',context.line && '第 '+context.line+' 行'].filter(Boolean).join(' · '):full;
   place.title=full;
@@ -214,7 +214,7 @@ function choosePosition() {
   const options={capture:true,signal:controller.signal};
   const select=target=>{
     if (!(target instanceof Element) || target.closest('#walk-launch,#walk-dialog,#walk-rail')) return null;
-    return target.closest('button,a,input,select,textarea,label,summary,[role=tab],[role=switch],h1,h2,h3,h4,[data-warranty-order],[data-warranty-note],[data-board-note],[data-board-row],#board-unavailable,.quality-order,.warranty-certificate,[data-finding]') || target;
+    return target.closest('button,a,input,select,textarea,label,summary,[role=tab],[role=switch],h1,h2,h3,h4,[data-warranty-order],[data-warranty-note],[data-board-note],[data-board-row],[data-party-reading],#board-unavailable,.quality-order,.warranty-certificate,[data-finding]') || target;
   };
   document.addEventListener('pointerover',e=>{
     const el=select(e.target);

@@ -813,6 +813,7 @@ const PerformanceIndex = (() => {
       detail.dataset.guarantee=String(Boolean(guarantee));
       detail.dataset.quality=String(Boolean(quality));
       detail.replaceChildren(box('scope-check-state',el('span',item.id,'mono'),tag(item.status)),heading);
+      for (const ref of item.party_readings || []) detail.append(PartyReadings.citation(state.bundle.report,ref,item));
       if (quality) detail.append(quality);
       else if (item.payment_quality) detail.append(el('p','验收款质量对照的原行待核。','scope-empty'));
       if (retest) detail.append(retest);

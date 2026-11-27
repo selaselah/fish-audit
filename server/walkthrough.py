@@ -16,6 +16,7 @@ RETEST_PIN = re.compile(r"retest-(H05-[1-9][0-9]{0,7})(?:-(clause|citation|payme
                         r"(?:original|final)_(?:acceptance_number|accepted_on|acceptance_result|acceptance_scope|defect_number)|"
                         r"(?:repair|final)_(?:original_acceptance|repair_number)|repair_(?:repaired_on|defect_number)|final_defect_closure))?")
 USE_PIN = re.compile(r"(?:inspection-use|payment-approval)-(H05-[1-9][0-9]{0,7})(?:-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7}))?")
+PARTY_PIN = re.compile(r"party-reading-(d[0-9]{2,8})-p1-(f[1-9][0-9]{0,7})")
 
 
 def check_context(value):
@@ -53,6 +54,12 @@ def check_context(value):
         raise CaseError("走查原页位置不完整。", 400)
     params = result.get("params", {})
     anchor = result.get("anchor", "")
+    if anchor.startswith("party-reading-"):
+        pin = PARTY_PIN.fullmatch(anchor)
+        if (not pin or screen!="case" or not result.get("rev") or result.get("dialog")!="page-dialog"
+                or (result.get("doc"),result.get("page"))!=(pin[1],1) or not result.get("line")
+                or params!={"fact":f"{pin[1]}/p1/{pin[2]}"}):
+            raise CaseError("请选择该版原页中的主体核字位置。",400)
     if raw := result.get("raw_ref"):
         if not result.get("rev") or raw.partition("/")[2] != f"{result.get('doc')}/p{result.get('page')}/l{result.get('line')}" or params:
             raise CaseError("请选择该版底稿中对应的付款用途原行。",400)
@@ -108,6 +115,16 @@ def save_note(store, workspace, author, role, data):
             raise CaseError("未找到记录时的底稿版本。", 404)
         position = context.get("params",{})
         anchor = context.get("anchor","")
+        if PARTY_PIN.fullmatch(anchor):
+            linked = db.execute("""SELECT 1 FROM reports, json_each(content,'$.graph.reviewed_party_lines.rows') AS r
+                    WHERE case_id=? AND rev=? AND json_extract(content,'$.policy.party_readings')='reviewed-party-line-v1'
+                    AND json_extract(r.value,'$.model_ref')=? AND json_extract(r.value,'$.id')=?
+                    AND json_extract(r.value,'$.doc')=? AND json_extract(r.value,'$.page')=? AND json_extract(r.value,'$.line')=?
+                    AND json_array_length(r.value,'$.rects')>0""",
+                    (context["case_id"],context["rev"],position["fact"],f"party-line/{context['doc']}/p1/l{context['line']}",
+                     context["doc"],context["page"],context["line"])).fetchone()
+            if not linked:
+                raise CaseError("所选版本没有引用这个主体字段和原件行。",404)
         use_pin = USE_PIN.fullmatch(anchor)
         if context["screen"] == "case" and (use_pin or context.get("raw_ref")):
             rows = db.execute("""SELECT json_extract(f.value,'$.id'),json_extract(f.value,'$.inspection_use.notes'),

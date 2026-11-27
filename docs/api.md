@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## 同一原行的两条主体观察
+
+底稿的 `policy.party_readings` 与 `graph.reviewed_party_lines.format` 均为 `reviewed-party-line-v1` 时，`rows` 保存 `model_ref`、`added_ref`、各自引文、页行、行框及原件和页图摘要。`pending` 表示人工补录已有原行、模型读数还待核。`same_line` 表示两条观察都经过相应的核图操作并指向相同原行。`compares_party_readings` 和 `shares_party_line` 分别表示这两个状态。`findings[].party_readings` 列出该发现实际引用的原行。
+
+核字使用现有的字段更正接口，提交目标观察、底稿版次、核图人、原文和说明。底稿按新版本出具。以 `party-reading-d06-p1-f3` 点选核字控件写走查意见时，服务端校验该版的 `params.fact`、文件、页、行和归档行框。首次保存、重复提交和跨工作区访问沿用走查意见接口的行为。
+
 ## 实付回单所引的初验与复验
 
 从规则 `2026.11.27.18` 起，`policy.retest_reference` 标记 `reinspection-receipt-reference-v1`，`graph.retest_reference_sources.rows` 保留原件单元、页、物理行、原话和对应的字段编号。符合范围的 H05 发现内含 `retest_reference`。其中 `state` 可为 `original`、`final`、`unlocated` 或 `unresolved`，分别表示回单指向初验、指向复验、与两张已核单号均不符、证据尚待核对。

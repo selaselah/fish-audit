@@ -245,6 +245,7 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
   const nameHolds = new Map([...(coverage?.agent_holds || []),...(coverage?.signer_holds || [])]
     .filter(h=>h.doc===docId && h.page===pageNumber && h.lines?.length).map(h=>[h.fact,h]));
   const editable = canReviewCurrentPaper();
+  const reviewedParties=PartyReadings.onPage(state.bundle?.report,docId,pageNumber);
   let focusRow, annotations;
   function setZoom(index) {
     zoom = Math.max(0,Math.min(index,levels.length-1));
@@ -351,6 +352,10 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
     for (const fact of pageFacts) {
       if (!pageRefs.some(source => source.ref === fact.id)) fieldPicker.add(new Option(fact.label+' · '+fact.value,fact.id));
     }
+    for (const option of fieldPicker.options) {
+      const pair=reviewedParties.get(option.value);
+      if (pair) option.textContent=pair.role+' · '+(option.value===pair.added.id?'据原件补录':'模型观察');
+    }
     fieldPicker.addEventListener('change',() => selectReference(fieldPicker.value,annotations?.button.getAttribute('aria-pressed')!=='true'));
     fieldPicker.addEventListener('keydown',event=>{
       if (annotations?.button.getAttribute('aria-pressed')!=='true' || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
@@ -399,9 +404,17 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
       label.append(check);
     }
     label.append(el('strong', fact.label + ' · ' + fact.value));
-    row.append(label, indexButton(fact.id,fact.label,fact.value), tag(fact.status), el('blockquote', fact.quote),
-      el('small', fact.id + ' · ' + (fact.source_line ? '文字层第 ' + fact.source_line.number + ' 行' :
-        '模型定位：页' + statusName(fact.region)), 'small'));
+    const pair=reviewedParties.get(fact.id), isModel=pair?.model.id===fact.id;
+    row.append(label, indexButton(fact.id,fact.label,fact.value), tag(fact.status));
+    if (isModel) row.append(PartyReadings.panel(pair,editable,()=>{
+      markPageRects(overlay,pair.added.source_line.rects);
+      revealPageMark();
+      left.focus({preventScroll:true});
+      (overlay.querySelector('rect') || left).scrollIntoView({block:'center'});
+    },()=>selectReference(pair.added.id,true)));
+    else row.append(el('blockquote',fact.quote));
+    row.append(el('small',fact.id+' · '+(fact.source_line?'文字层第 '+fact.source_line.number+' 行':'模型定位：页'+statusName(fact.region)),'small'));
+    if (pair?.added.id===fact.id) row.append(action('对照模型初读',()=>selectReference(pair.model.id,true),'ref'));
     if (fact.source_line) row.append(fold('对照本机文字层', el('blockquote', fact.source_line.text)));
     const nameHold = nameHolds.get(fact.id);
     if (nameHold) {
@@ -492,7 +505,7 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
         el('p','核图时的底稿 SHA-256'),el('code',check.report_hash));
       receipt.classList.add('field-source-check'); row.append(receipt);
     }
-    if (editable) row.append(action('更正字段', () => openAmend(docId, pageNumber, fact), 'ref'));
+    if (editable && !(isModel && pair.row.state==='pending')) row.append(action('更正字段', () => openAmend(docId, pageNumber, fact), 'ref'));
     if (fact.id === highlight) focusRow = row;
     right.append(row);
   }
@@ -665,6 +678,7 @@ function citation(ref,finding) {
     return Team.paperLink(label,prior.case_id,'button ref',new URLSearchParams({rev:String(prior.rev),fact:prior.fact}));
   }
   const source = index?.nodes.get(ref);
+  if (ref.startsWith('party-line/') && state.bundle) return PartyReadings.citation(state.bundle.report,ref,finding);
   if (ref.startsWith('acceptance-original/') && state.bundle) return PerformanceIndex.nativeReceiptCitation(state.bundle.report,ref,finding);
   if ((ref.startsWith('addendum-pdf/') || ref.startsWith('addendum-original/') || ref.startsWith('addendum-word/')) && state.bundle) return AddendumSigning.citation(ref,finding);
   if (ref.startsWith('advance-guarantee/')) {
@@ -930,6 +944,7 @@ function finding(item) {
     }
   }
   if (item.payment_window) node.append(paymentWindowPanel(item,state.bundle.report.graph));
+  for (const ref of item.party_readings || []) node.append(PartyReadings.citation(state.bundle.report,ref,item));
   if (item.payment_quality) node.append(Team.paperLink('查看验收款质量对照',state.bundle.report.case_id,'source-jump',
     new URLSearchParams({rev:state.bundle.rev,view:'payment-checks',stage:item.id})));
   if (item.retest_reference || item.inspection_use) node.append(Team.paperLink(item.inspection_use?'查看验收单付款用途':'核对回单所引的验收单',state.bundle.report.case_id,'source-jump',
@@ -1879,8 +1894,17 @@ function openReview(facts,reviewVisibility=false) {
 }
 async function openAmend(doc, page, fact, printed) {
   try {
+    const issued=state.bundle;
     state.fields ||= (await api('/api/controls')).fields;
     const current = state.detail;
+    let counterpart;
+    if (printed?.partyLine) {
+      const proof=PartyReadings.bind(state.bundle?.report,printed.partyLine);
+      if (state.bundle!==issued || !canReviewCurrentPaper() || !proof || proof.model!==fact ||
+          proof.row.doc!==doc || proof.row.page!==page || proof.row.state!=='pending') return;
+      counterpart=proof.added;
+      printed={quote:counterpart.quote,field:counterpart.field};
+    }
     state.amend = {id:current.id, rev:state.bundle.rev, doc, page, target:fact?.id || null};
     $('#amend-form').reset();
     $('#amend-reviewer').value=Team.current ? Team.session.user.name : ''; $('#amend-reviewer').readOnly=!!Team.current;
@@ -1892,7 +1916,7 @@ async function openAmend(doc, page, fact, printed) {
     const source = workpaperSource(doc,'pages/'+page);
     const submit = $('#amend-submit'); submit.disabled = true;
     const item = current.documents.find(item => item.id === doc);
-    const line=fact?.doc===doc && fact.page===page && (!printed || printed.quote===fact.source_line?.text) ? fact.source_line : null;
+    const line=counterpart?.source_line || (fact?.doc===doc && fact.page===page && (!printed || printed.quote===fact.source_line?.text) ? fact.source_line : null);
     const marks=$('#amend-marks'), pane=$('#amend-original');
     markPageRects(marks,line?.rects || []);
     image.alt=item.name+' 第 '+page+' 页';
@@ -1902,8 +1926,8 @@ async function openAmend(doc, page, fact, printed) {
     for (const [key, label] of Object.entries(state.fields)) select.add(new Option(label, key));
     select.value = printed?.field || fact?.field || '';
     $('#amend-quote').value = printed?.quote || fact?.quote || '';
-    $('#amend-value').value = printed ? '' : (fact?.value || '');
-    $('#amend-region').value = fact?.region || 'top';
+    $('#amend-value').value = counterpart?.value || (printed ? '' : (fact?.value || ''));
+    $('#amend-region').value = counterpart?.region || fact?.region || 'top';
     $('#page-dialog').close();
     $('#amend-dialog').showModal();
     try {

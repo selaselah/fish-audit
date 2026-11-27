@@ -2,6 +2,8 @@
 
 ## 在页面上记录走查意见
 
+周末可以从《验收报告》第 5 行试走一遍。打开「供应方核字」，点「看原件第 5 行」，再点「提意见」。录入时会带上底稿版本、文件、页和行。桌面可选「并排走查」，一边看原件、一边写。即使案件后来出具了新版，从「已记录」也能回到当时漏抄了“应”字的那一版。走查结束后点「复制给 Codex」即可带走意见和定位链接。[打开 R9 核字原页](http://127.0.0.1:8000/workpaper/066d632f141e4f9ab63d43c1ef2371b7?rev=9&fact=d06%2Fp1%2Ff3) · [原件旁的桌面侧栏](party-reading-walkthrough-desktop.webp) · [手机走查](party-reading-walkthrough-mobile.webp)
+
 在「分期与付款」里打开付款后才审批的水印例子，点《付款审批单》的「审批日期」，原件会定位到第 10 行。点「提意见」即可记下对这一行的建议。如果想指向底稿里展示日期的控件，先点「提意见 → 点选控件」再选日期。两种位置都可以从「已记录」重开，保留当时的底稿版本。[打开第二期审批单 R7](http://127.0.0.1:8000/workpaper/7fd2600efdb14666834148f59684cf51?rev=7&view=payment-checks&stage=H05-8) · [桌面并排记录实拍](installment-approval-walkthrough.webp) · [手机上的付款检查](installment-approval-mobile.webp)
 
 周末走查时，先点「提意见」。浏览器宽度达到 1280 像素后可选「并排走查」，在右侧写意见，左侧继续切换检查项或翻原件。写到一半打开另一份原件，草稿仍指向开始记录的位置。要把意见指向某个按钮或引文，选「点选控件」再点它。保存后侧栏可以接着记下一条。[从第二期付款检查开始](http://127.0.0.1:8000/workpaper/63a8bef1d5d8418e9aed9d38fa2f282f?rev=11&view=payment-checks&stage=H05-8) · [对照复验报告写意见](walkthrough-approval-sidebar.webp)

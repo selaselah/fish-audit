@@ -514,6 +514,10 @@ class EnterpriseFlow(unittest.TestCase):
         self.assertEqual(save(target,anchor="payment-approval-H05-9-d07-p1-l10").status_code,400)
         self.assertEqual(save({},anchor="page-dialog",doc="d07",page=1,line=10,raw_ref="payment-approval/d07/p1/l10").status_code,404)
         self.assertEqual(save({},anchor="page-dialog",doc="d07",page=1,line=9,raw_ref="payment-approval/d07/p1/l10").status_code,400)
+        party={"anchor":"party-reading-d01-p1-f3","dialog":"page-dialog","doc":"d01","page":1,"line":5}
+        self.assertEqual(save({"fact":"d01/p1/f3"},**party).status_code,404)
+        for changes in ({"page":2},{"dialog":"review-dialog"},{"anchor":"party-reading-d02-p1-f3"}):
+            self.assertEqual(save({"fact":"d01/p1/f3"},**(party | changes)).status_code,400)
         self.assertEqual(save({"view":"contract-checks"}).status_code,400)
         self.assertEqual(owner.get(url).json["notes"],[])
 

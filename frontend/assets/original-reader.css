@@ -75,3 +75,14 @@
   .archive-file { gap:4px; }
   .archive-open { gap:7px; }
 }
+.party-reading {
+  display:grid; gap:10px; margin:12px 0; padding:14px; border:1px solid var(--line);
+  border-radius:10px; background:var(--surface); color:var(--ink); text-align:start;
+}
+.party-reading .panel-head { margin:0; gap:8px; flex-wrap:wrap; }
+.party-reading .panel-head small { color:var(--accent-hover); }
+.party-reading dl { margin:0; display:grid; grid-template-columns:auto 1fr; gap:6px 12px; align-items:baseline; }
+.party-reading dt { font-size:.78rem; color:var(--muted); }
+.party-reading dd { margin:0; font-size:.88rem; overflow-wrap:anywhere; white-space:pre-wrap; }
+.party-reading-actions { display:flex; gap:6px; flex-wrap:wrap; }
+.party-reading-actions button,button.party-reading-jump { min-height:44px; }
