@@ -2,6 +2,8 @@
 
 ## 从验收风险直接核对原件
 
+打开整页扫描件后，可将原图放大至适页视图的 4 倍，点缩略图直接移到签认处。触屏可以滑动原页，桌面可以拖动或用方向键平移。旋转 90 度会保留当前查看的区域，点「适页」可重新看见整页。阅读器使用已核对摘要的页图。[体验扫描件](http://127.0.0.1:8000/?scene=word-comments&record=scan#workflow) · [手机局部核对](scan-viewport-mobile.webp)
+
 在「交付验收」选择「验收签认与批注」，可切换五份水印原件。排印件先显示签认栏，数量签收先显示原生批注，柜温超限先显示实测行，整改复验先显示缺陷关闭栏。点原行看整页，退出回到该行。扫描件从整页开始。需要检查文件版本时展开「核验原件」。[公开演练](http://127.0.0.1:8000/?scene=word-comments&record=limited#workflow) · [桌面实拍](acceptance-original-public.webp) · [扫描验收单](acceptance-original-scan-mobile.webp)
 
 工作台使用相同的控件。展开「付款检查」可见引用这张验收单的期次与检查类型，按返回键回到刚才的期款按钮。初验和复验分别归档；涉及两张原件时可以直接选文件。在多页验收单中，切换字段会同步原页，另有「整页」可以翻看同一单元的其他页。[复验固定底稿](http://127.0.0.1:8000/workpaper/7b2a051771474808a2d782d473cd6729?rev=3&view=acceptance-checks&acceptance=d06) · [手机实拍](acceptance-original-workpaper-mobile.webp)

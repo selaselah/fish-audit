@@ -7,6 +7,64 @@ const all=s=>'[...document.querySelectorAll('+JSON.stringify(s)+')]';
 const digest=(b,encoding='hex')=>createHash('sha256').update(Buffer.from(b)).digest(encoding);
 const fixed=(root,s)=>root+'/workpaper/'+s.case_id+'?rev='+s.rev+'&view=acceptance-checks&acceptance='+s.doc.id;
 
+async function inspectScan(ctx,width,signature) {
+  const {call,evaluate,wait}=ctx,{key,tap}=browserInput(ctx);
+  const pane=q('#sample-review .sample-canvas'), canvas=q('#sample-review .sample-canvas canvas');
+  const map=q('#sample-review .scan-map'), output=q('#sample-review .scan-view-state');
+  const button=id=>q('#sample-review [data-scan="'+id+'"]');
+  async function press(el) {
+    if (width===390) return tap(el);
+    await evaluate(el+'.focus()');await key('Enter');
+  }
+  async function point(x,y) {
+    const pos=await evaluate('(()=>{const r='+map+'.querySelector("canvas").getBoundingClientRect();return {x:r.left+r.width*'+x+',y:r.top+r.height*'+y+'};})()');
+    if (width===390) {
+      await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[pos]});await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+    } else {
+      await call('Input.dispatchMouseEvent',{type:'mousePressed',...pos,button:'left',clickCount:1});await call('Input.dispatchMouseEvent',{type:'mouseReleased',...pos,button:'left',clickCount:1});
+    }
+  }
+  await wait(output+'?.textContent==="1×" && !'+q('#sample-review .scan-controls')+'.hidden','full scan at fitted scale');
+  const source=await evaluate(`(()=>{const c=${canvas},w=c.width,h=c.height,d=c.getContext('2d').getImageData(0,0,w,h).data;
+    const points=[];for(let y=30;y<h && points.length<16;y+=17) for(let x=3;x<w;x+=7) {
+      const i=4*(y*w+x);if(d[i]<175) {points.push([x,y,...d.slice(i,i+4)]);break;}
+    }return {w,h,points};})()`);
+  assert.ok(source.points.length>=8,'archived ink in the scan');
+  await press(button('in'));await press(button('in'));await press(button('in'));
+  await wait(output+'.textContent==="3×" && !'+map+'.hidden','magnified verified scan');
+  assert.equal(await evaluate(q('#sample-location')+'.textContent'),'第 1 页 · 局部');
+  const [l,t,r,b]=signature.rect;
+  await point((l+r)/2,(t+b)/2);
+  await wait(pane+'.scrollTop>0 && parseFloat('+map+'.querySelector("i").style.height)<90','viewport covers part of the real page');
+  await inspect(ctx,width,'#sample-review','scan-inspection-zoom');
+  const start=await evaluate(pane+'.scrollTop');
+  await evaluate(pane+'.focus()');await key('ArrowUp');
+  await wait(pane+'.scrollTop<'+start,'keyboard pans the original');
+  await point(.5,.55);
+  const drag=await evaluate('(()=>{const el='+pane+',r=el.getBoundingClientRect();return {x:r.left+el.clientWidth/2,y:r.top+el.clientHeight/2,scroll:el.scrollTop};})()');
+  if (width===390) {
+    await call('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:drag.x,y:drag.y}]});
+    for (const offset of [12,25,42,60]) await call('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:drag.x,y:drag.y+offset}]});
+    await call('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  } else {
+    await call('Input.dispatchMouseEvent',{type:'mousePressed',x:drag.x,y:drag.y,button:'left',clickCount:1});
+    await call('Input.dispatchMouseEvent',{type:'mouseMoved',x:drag.x,y:drag.y+60,buttons:1});
+    await call('Input.dispatchMouseEvent',{type:'mouseReleased',x:drag.x,y:drag.y+60,button:'left',clickCount:1});
+  }
+  await wait(pane+'.scrollTop<'+(drag.scroll-12),'drag the actual scan');
+  await press(button('rotate'));
+  await wait(output+'.textContent==="3× · 90°"','rotate the scan while magnified');
+  const turned=await evaluate(`(()=>{const c=${canvas},d=c.getContext('2d').getImageData(0,0,c.width,c.height).data;
+    return [c.width,c.height,${JSON.stringify(source.points)}.every(([x,y,...rgba])=>{
+      const i=4*(x*c.width+c.width-1-y);return rgba.every((v,k)=>v===d[i+k]);})];})()`);
+  assert.deepEqual(turned,[source.h,source.w,true],'rotated pixels remain those of the filed scan');
+  for (let i=0;i<3;i++) await press(button('rotate'));
+  await press(button('fit'));await wait(output+'.textContent==="1×" && '+map+'.hidden','return to the entire upright scan');
+  assert.equal(await evaluate(q('#sample-location')+'.textContent'),'第 1 页 · 整页');
+  assert.equal(await evaluate(canvas+'.width'),source.w);
+  assert.equal(await evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);
+}
+
 export async function checkAcceptanceOriginals(ctx,privatePaper) {
   const {root,call,evaluate,wait}=ctx,{key,tap}=browserInput(ctx);
   const data=await (await fetch(root+'/assets/acceptance-original-samples.json')).arrayBuffer();
@@ -48,6 +106,7 @@ export async function checkAcceptanceOriginals(ctx,privatePaper) {
         if (!privatePaper) {
           await wait(q('#sample-review canvas')+'.dataset.page==="1"','archived scan');
           assert.equal(await evaluate(all('#sample-review .sample-records button[data-ref]')+'.length'),0);
+          await inspectScan(ctx,width,editions[0].doc.lines.find(line=>line.field==='acceptance_signer'));
         }
         await key('Escape');await wait('!'+dialog+'.open','close scan');
       } else {
@@ -60,6 +119,7 @@ export async function checkAcceptanceOriginals(ctx,privatePaper) {
           assert.equal(await evaluate(q(source+' .accept-source-quote')+'.textContent'),row.quote);
           if (row.field==='acceptance_signer' || row.field==='defect_closure') {
             await evaluate(open+'.focus();'+open+'.click()');await wait(dialog+'.open','open selected physical row');
+            if (!privatePaper) assert.equal(await evaluate(q('#sample-review .scan-controls')+'.hidden'),true);
             const located=privatePaper?q('#page-dialog .located')+'?.dataset.fact':q('#sample-review canvas')+'.dataset.fact';
             await wait(located+'==='+JSON.stringify(row.ref),'exact archived row');
             await key('Escape');await wait('!'+dialog+'.open && document.activeElement==='+open,'return focus to source');
@@ -137,6 +197,12 @@ export async function checkAcceptanceOriginals(ctx,privatePaper) {
     await evaluate(q('#acceptance-record')+'.value="history";'+q('#acceptance-record')+'.dispatchEvent(new Event("change"))');
     await wait(q('#public-acceptance-comments')+'?.getClientRects().length && !new URL(location.href).searchParams.has("record")','R7 review remains available');
     assert.equal(await evaluate('performance.getEntriesByType("resource").filter(e=>new URL(e.name).pathname.startsWith("/api/")).length'),0);
+    await call('Network.setBlockedURLs',{urls:['*scan-viewport.js*']});
+    await call('Page.navigate',{url:url+'scan#workflow'});await wait(card+'?.getClientRects().length','scanned evidence');
+    await evaluate(q(source+' .accept-page')+'.click()');await wait(q('#sample-review canvas')+'.dataset.page==="1"','whole scan available if navigation tools are offline');
+    assert.equal(await evaluate(q('#sample-review .scan-controls')+'.hidden'),true);
+    assert.equal(await evaluate(q('#sample-review .sample-records a')+'.pathname'),editions.find(e=>e.key==='scan').doc.original);
+    await call('Network.setBlockedURLs',{urls:[]});await key('Escape');
   }
   console.log((privatePaper?'Private':'Public')+' acceptance originals: five pinned cases, six widths, physical readings, signature rows, Word comments, scanning and independent payment evidence.');
 }

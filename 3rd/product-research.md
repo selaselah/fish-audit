@@ -1,5 +1,9 @@
 # 审计与会计软件的公开界面
 
+## 扫描原件的局部核对
+
+Adobe Acrobat 的 Pan & Zoom 通过缩略图上的矩形标记当前视野，移动矩形可以检查页内其他区域。Fish Audit 的扫描件阅读器借鉴这一操作，在兼容键盘和触屏的工具条上提供放大、旋转、适页和页内定位。缩略图框表示当前可见区域，原件的签认位置由审计员查看。[Adobe Acrobat 页面放大和平移](https://helpx.adobe.com/acrobat/using/adjusting-pdf-views.html) · [手机实拍](../docs/interaction-design/scan-viewport-mobile.webp)
+
 ## 采购协议的版本和履约明细
 
 Microsoft Dynamics 365 的采购协议可以保留每次确认的版本，履约明细可以打开相关采购行和发票行。Workiva 的文档历史可以打开指定修订版，比较两次修订。Fish Audit 在分批验收中保留当前批次，审计员切换底稿版本后能就地核对当时引用的原行和所影响的期款。盖章栏日期、适用范围与生效条件分别取自本案原件。[Dynamics 365 采购协议及版本历史](https://learn.microsoft.com/en-us/dynamics365/supply-chain/procurement/purchase-agreements#confirmations-and-version-history-for-purchase-agreements) · [Workiva 文档修订记录](https://support.workiva.com/hc/en-us/articles/360036002651-Revisions-and-history-in-Documents)

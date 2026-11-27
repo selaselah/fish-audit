@@ -33,7 +33,7 @@
   const canvas=dialog.querySelector('canvas'), status=dialog.querySelector('[role=status]');
   const context=canvas.getContext('2d');
   if (!context) return;
-  let page, sample, start, end, pageView, pointer;
+  let page, sample, start, end, pageView, pointer, scanController, scanLoad;
   const pickHint=dialog.querySelector('.page-pick-hint');
   const rectangles=new Map();
   let opener, row=rows.find(r=>r.getAttribute('aria-pressed')==='true'), mode='line';
@@ -41,6 +41,11 @@
     pageView=null;
     pickHint.hidden=true;
     if (!dialog.open || !page?.naturalWidth) { updateHover(); return; }
+    if (sample.media==='image' && !rectangles.size && scanController) {
+      scanController.show(page);
+      canvas.dataset.page=String(sample.page || 1);delete canvas.dataset.fact;status.hidden=true;
+      return;
+    }
     const width=canvas.clientWidth, height=canvas.clientHeight;
     if (!width || !height) { updateHover(); return; }
     const density=Math.min(devicePixelRatio || 1,2);
@@ -131,7 +136,7 @@
   });
   for (const button of modes) button.addEventListener('click',()=>select(row,button.dataset.scale));
   function load(next,loadPage) {
-    sample=next; pointer=null; updateHover();
+    sample=next; pointer=null; scanController?.reset(); updateHover();
     dialog.querySelector('h2').textContent=sample.title;
     dialog.querySelector('.sample-review-head span').textContent=sample.version;
     dialog.querySelector('form button').setAttribute('aria-label','关闭'+sample.title);
@@ -156,6 +161,17 @@
     const bounds=[...rectangles.values()].flat();
     start=bounds.length?Math.min(...bounds.map(r=>r[0])):0; end=bounds.length?Math.max(...bounds.map(r=>r[2])):1;
     modes[0].parentElement.hidden=!bounds.length;
+    if (sample.media==='image' && !bounds.length && !scanController) {
+      scanLoad ??= import('./scan-viewport.js').then(({createScanViewport})=>{
+        scanController=createScanViewport(canvas,dialog.querySelector('.scan-controls'),magnified=>{
+          const label='第 '+(sample.page || 1)+' 页 · '+(magnified?'局部':'整页');
+          const location=dialog.querySelector('#sample-location');
+          if (location.textContent!==label) location.textContent=label;
+          canvas.setAttribute('aria-label',sample.title+'，'+label);
+        });
+      }).catch(()=>{scanLoad=null;});
+      scanLoad.then(()=>{if (sample===next) draw();});
+    }
     if (!loadPage && page?.getAttribute('src')===sample.image) return;
     // Changing width resets the pixels, so a delayed load cannot show the previous case.
     canvas.width=canvas.width; delete canvas.dataset.fact; delete canvas.dataset.page;

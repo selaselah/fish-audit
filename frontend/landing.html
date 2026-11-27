@@ -348,6 +348,16 @@
       <div class="sample-document">
         <div class="sample-review-toolbar"><output id="sample-location" aria-live="polite"></output><div class="reading-switch" role="group" aria-label="页图视图"><button type="button" data-scale="line" aria-pressed="true">看原行</button><button type="button" data-scale="page" aria-pressed="false">整页</button></div></div>
         <div class="sample-canvas"><canvas role="img" aria-label="验收报告第 1 页"></canvas><small class="page-pick-hint" hidden>点标线看原行</small><p role="status">正在载入原页…</p></div>
+        <div class="scan-controls" role="group" aria-label="扫描原件视图" hidden>
+          <div class="scan-scale">
+            <button type="button" data-scan="out" aria-label="缩小扫描原页" title="缩小"><i class="ui-glyph ic-zoom-out" aria-hidden="true"></i></button>
+            <button type="button" data-scan="fit" title="恢复整页">适页</button>
+            <button type="button" data-scan="in" aria-label="放大扫描原页" title="放大"><i class="ui-glyph ic-zoom-in" aria-hidden="true"></i></button>
+          </div>
+          <output class="scan-view-state" aria-label="相对整页倍率与方向"></output>
+          <button type="button" data-scan="rotate" aria-label="向右旋转扫描原页九十度" title="向右旋转"><i class="ui-glyph ic-arrow-clockwise" aria-hidden="true"></i></button>
+          <button type="button" class="scan-map" aria-label="在缩略图中定位，按方向键移动查看区域" title="定位到原页区域" hidden><span><canvas aria-hidden="true"></canvas><i></i></span></button>
+        </div>
       </div>
       <div class="sample-records" role="group" aria-label="选择验收原行">
         <button type="button" data-ref="d04/p1/f8" data-line="9" data-rect="0.08145,0.40639,0.25663,0.42283" aria-pressed="false"><span>验收结论</span><strong>合格</strong></button>
