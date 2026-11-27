@@ -2,6 +2,13 @@
 
 ## 在页面上记录走查意见
 
+1. 在首页、工作台、底稿或原件上点「提意见」。桌面宽窗可选「并排走查」，左侧继续操作，右侧写意见。窄屏直接在浮窗输入。
+2. 如果意见针对某个按钮或数字，点「点选控件」再选它。例如在下方会签案例选「审批单具名栏」，或打开合同第 19 行后再写。记录会带上底稿版本、文件和可定位的页行。[试走第二期会签案例](http://127.0.0.1:8000/workpaper/8debfd4a45424070a4fbedb915de1667?rev=10&view=payment-checks&stage=H05-8) · [窄屏上的两处姓名](approval-names-joint-mobile.webp)
+3. 点「保存意见」，即可接着走查。「已记录」里可以回到当时的位置。走完后在同机 Codex 说「按本机走查清单修改」，或点「复制给 Codex」贴进指定对话。[在合同原行旁写意见](approval-names-walkthrough.webp)
+
+<details>
+<summary>其他原件和控件的走查示例</summary>
+
 对签批和扣款先后有意见时，可以直接点选「实际扣款时间」。打开下面的采购底稿，点「提意见 → 并排走查 → 点选控件」，再点 09:15。继续点这个时刻，左边打开银行回单第 1 页第 11 行，右边保留正在写的意见。在原页另写一条，系统会记下这次的页行。在「已记录」里点相应位置，就能分别回到付款卡或银行原页。手机用「提意见」浮窗。[走查第二期付款](http://127.0.0.1:8000/workpaper/32461158cc804f4d8296c628dbd448aa?rev=8&view=payment-checks&stage=H05-8) · [桌面并排记录](approval-clock-walkthrough.webp) · [手机核对两个时刻](approval-clock-mobile.webp)
 
 周末可以从《验收报告》第 5 行试走一遍。打开「供应方核字」，点「看原件第 5 行」，再点「提意见」。录入时会带上底稿版本、文件、页和行。桌面可选「并排走查」，一边看原件、一边写。即使案件后来出具了新版，从「已记录」也能回到当时漏抄了“应”字的那一版。走查结束后点「复制给 Codex」即可带走意见和定位链接。[打开 R9 核字原页](http://127.0.0.1:8000/workpaper/066d632f141e4f9ab63d43c1ef2371b7?rev=9&fact=d06%2Fp1%2Ff3) · [原件旁的桌面侧栏](party-reading-walkthrough-desktop.webp) · [手机走查](party-reading-walkthrough-mobile.webp)
@@ -39,6 +46,8 @@
 「已记录」里的位置链接可以重新打开。桌面和手机都可以把整轮清单复制给 Codex 或下载成 Markdown。本机模式的记录存入本地数据库。企业工作区按企业和账号保存个人意见，企业实例的公开页保存在当前浏览器。提交的内容是意见及位置，原件、截图和表单输入留在原界面。[本地案例](http://127.0.0.1:8000/?scene=payment-release&slip=late#workflow) · [走查接口](../api.md#产品走查意见)
 
 在 Codex 内置浏览器预览本机站点时，也可用工具栏的「Ask for changes」点选元素并将意见发到当前对话，适合当场讨论某个改动。[OpenAI 内置浏览器说明](https://help.openai.com/en/articles/20001277-using-the-built-in-browser-in-the-chatgpt-desktop-app)
+
+</details>
 
 ## 审计员怎样核对一张付款放行单
 

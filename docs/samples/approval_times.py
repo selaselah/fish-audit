@@ -25,13 +25,12 @@ def new_lines(key):
             "银行付款回单.pdf":(event,debit+"（北京时间）")}
 
 
-def materials(archive, folder, key):
-    additions = new_lines(key)
+def append_printed_rows(archive, folder, additions, master_hash, font):
     folder.mkdir(parents=True,exist_ok=True)
     files = []
     with ZipFile(archive) as z:
         raw=z.read("report.json")
-        require(digest(raw)==MASTER,"同日付款 R11 水印母本")
+        require(digest(raw)==master_hash,"已核对的水印母本")
         report=json.loads(raw)
         for doc in report["graph"]["documents"]:
             name,unit=doc["name"],doc["id"]
@@ -42,11 +41,15 @@ def materials(archive, folder, key):
             if name in additions:
                 fields=[line.split("：",1) for line in lines[2:]]
                 require(all(len(row)==2 for row in fields),"固定母本的打印栏")
-                pdf(path,path.stem,[*fields,additions[name]],font=embedded_font("ApprovalClockCJK"),spacing=31)
+                pdf(path,path.stem,[*fields,additions[name]],font=embedded_font(font),spacing=31)
             else:
                 path.write_bytes(original)
             files.append(path)
     return files,report["policy"]["profile"]
+
+
+def materials(archive,folder,key):
+    return append_printed_rows(archive,folder,new_lines(key),MASTER,"ApprovalClockCJK")
 
 
 def check_originals(archive,key,cid,folder):

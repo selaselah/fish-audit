@@ -684,7 +684,7 @@ function citation(ref,finding) {
   if (ref.startsWith('advance-guarantee/')) {
     return AdvanceGuarantee.citation(ref,finding,state.bundle?.report) || el('span','保函引文待核','small');
   }
-  if (ref.startsWith('inspection-use/') || ref.startsWith('payment-approval/') || ref.startsWith('payment-clock/')) {
+  if (ref.startsWith('inspection-use/') || ref.startsWith('payment-approval/') || ref.startsWith('payment-clock/') || ref.startsWith('contract-approver/')) {
     return InspectionUse.citation(ref,finding,state.bundle?.report) || el('span','付款用途原行待核','small');
   }
   if (ref.startsWith('mandate-pdf/') && state.bundle) return PerformanceIndex.mandateCitation(state.bundle.report,ref);
@@ -1695,7 +1695,7 @@ async function refresh() {
         if (doc && OriginalReader.pageNumbers(doc,graph).includes(page)) {
           state.openedCitation=location.hash;
           const raw=route.params.get('walkraw');
-          const ref=['inspection-use/','payment-approval/','payment-clock/'].some(prefix=>raw===prefix+doc.id+'/p'+page+'/l'+line) ? raw : undefined;
+          const ref=['inspection-use/','payment-approval/','payment-clock/','contract-approver/'].some(prefix=>raw===prefix+doc.id+'/p'+page+'/l'+line) ? raw : undefined;
           openPage(doc.id,page,undefined,Number.isSafeInteger(line) && line>0?line:undefined,undefined,ref);
         }
       }

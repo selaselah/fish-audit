@@ -28,11 +28,12 @@ export async function checkInspectionUse(ctx,cid) {
   const approvalRows=report.graph.inspection_use_sources.approvals?.flatMap(p=>p.rows) || [];
   const bankRows=report.graph.inspection_use_sources.bank_clocks?.flatMap(p=>p.rows) || [];
   const clock=a?.clock, time=bankRows.find(r=>clock?.rows.includes(r.id));
-  const row=time || (a?.fields ? approvalRows.find(r=>r.id===a.fields.date) : report.graph.inspection_use_sources.rows.find(r=>r.id===proof.row));
-  const base=time?'#payment-clock-'+id:row.field?approvalCard:card, doc=report.graph.documents.find(d=>d.id===row.doc);
+  const names=a?.names, term=report.graph.inspection_use_sources.approver_terms?.flatMap(p=>p.rows).find(r=>names?.rows.includes(r.id));
+  const row=term || time || (a?.fields ? approvalRows.find(r=>r.id===a.fields.date) : report.graph.inspection_use_sources.rows.find(r=>r.id===proof.row));
+  const base=term?'#contract-approver-'+id:time?'#payment-clock-'+id:row.field?approvalCard:card, doc=report.graph.documents.find(d=>d.id===row.doc);
   const control=base+'-'+row.doc+'-p'+row.page+'-l'+row.line;
-  assert.equal(await evaluate(q(control)+'.dataset.scope'),time?'bank_time':row.field?'approval_sheet':proof.scope);
-  assert.equal(await evaluate(q(control+' strong')+'.textContent'),time?row.quote.slice(row.quote.search(/[:：]/u)+1).trim():row.quote);
+  assert.equal(await evaluate(q(control)+'.dataset.scope'),term?'contract_term':time?'bank_time':row.field?'approval_sheet':proof.scope);
+  assert.equal(await evaluate(q(control+' strong')+'.textContent'),term?(names.required?.join('、') || row.quote):time?row.quote.slice(row.quote.search(/[:：]/u)+1).trim():row.quote);
   const label=await evaluate(q(control)+'.dataset.originalLabel');
   assert.ok(label.includes(doc.name) && label.includes('第 '+row.line+' 行'));
   async function located(fromHistory=false,printed=row) {
@@ -60,10 +61,12 @@ export async function checkInspectionUse(ctx,cid) {
   const approvalControl=r=>approvalCard+'-'+r.doc+'-p'+r.page+'-l'+r.line;
   if (a?.fields) {
     assert.equal(await evaluate(q(approvalCard)+'.dataset.approvalState'),a.state);
+    if (term) await click(approvalCard+' > details > summary');
     for (const key of ['stage','inspection','decision','date']) {
       const raw=approvalRows.find(r=>r.id===a.fields[key]);
       await click(approvalControl(raw));await located(false,raw);await evaluate(q('#page-dialog')+'.close()');
     }
+    if (term) await click(approvalCard+' > details > summary');
     const failed=await evaluate('["state","coordinates","link","decision","paid","method","omitted"].map(mode=>{'+
       'const p=structuredClone(state.bundle.report),i=p.findings.find(f=>f.id==='+JSON.stringify(id)+'),c=i.inspection_use,a=c.approval;'+
       'const r=p.graph.inspection_use_sources.approvals.flatMap(s=>s.rows).find(r=>r.id===a.fields.decision);'+
@@ -91,6 +94,28 @@ export async function checkInspectionUse(ctx,cid) {
       'return InspectionUse.bind(i,p)===null})');
     assert.deepEqual(invalid,Array(10).fill(true));
   }
+  if (term) {
+    assert.equal(await evaluate(q(base)+'.dataset.nameState'),names.state);
+    const signer=approvalRows.find(r=>r.id===names.signed_by);
+    if (signer) {
+      const button=approvalControl(signer);
+      assert.equal(await evaluate(q(button+' strong')+'.textContent'),names.listed?.join('、') || signer.quote);
+      await click(button);await located(false,signer);await evaluate(q('#page-dialog')+'.close()');
+    }
+    const invalid=await evaluate('["method","scope","raw","who","range","source","link","coords","required","listed","status","omitted"].map(mode=>{'+
+      'const p=structuredClone(state.bundle.report),i=p.findings.find(f=>f.id==='+JSON.stringify(id)+'),a=i.inspection_use.approval,x=a.names,'+
+      'r=p.graph.inspection_use_sources.approver_terms.flatMap(v=>v.rows).find(r=>x.rows.includes(r.id));'+
+      'if(mode==="method")delete p.policy.code_sha256["approval_names.py"];if(mode==="scope")x.state=x.state==="listed"?"different":"listed";'+
+      'if(mode==="who")x.signed_by=a.fields.authority;if(mode==="range")x.contract_fields.buyer=x.contract_fields.seller;'+
+      'if(mode==="source")p.graph.edges=p.graph.edges.filter(e=>e.type!=="contract_approver_source");'+
+      'if(mode==="link"){const es=p.graph.edges;if(es.some(e=>e.type==="compares_approval_names"))p.graph.edges=es.filter(e=>e.type!=="compares_approval_names");'+
+      'else es.push({type:"compares_approval_names",from:r.id,to:x.signed_by,evidence:[i.inspection_use.citation]})}'+
+      'if(mode==="raw")r.quote=r.quote.replace("第二期","第三期");if(mode==="coords")r.rects=[];'+
+      'if(mode==="required")x.required=["周湘"];if(mode==="listed")x.listed=["周湘"];'+
+      'if(mode==="status")a.status=a.status==="risk"?"missing":"risk";if(mode==="omitted")delete a.names;'+
+      'return InspectionUse.bind(i,p)===null})');
+    assert.deepEqual(invalid,Array(12).fill(true));
+  }
   for (const width of [320,390,768,820,1024,1440]) {
     await size(ctx,width);
     assert.ok(await evaluate('(()=>{const b='+q(control)+'.getBoundingClientRect();return b.width>=44 && b.height>=44 && b.left>=-1 && b.right<=innerWidth+1})()'));
@@ -100,8 +125,8 @@ export async function checkInspectionUse(ctx,cid) {
     assert.equal(root,process.env.AUDIT_ISOLATED_USE_ORIGIN);
     assert.ok(!['8000','8010'].includes(new URL(root).port));assert.deepEqual((await json('/api/walkthrough')).notes,[]);
     await size(ctx,390);
-    const cardNote=time?'希望这两个时刻同时注明各自来自哪张单据。':row.field?'建议在审批日期旁显示银行扣款日。':'建议付款检查并排显示这句用途限制和实际审批依据。';
-    const pageNote=time?'建议从银行回单的这一行直接跳到签批原件。':'希望从原件这一行也能回看付款审批。';
+    const cardNote=term?'建议把合同点名的人和审批单列的人并排呈现。':time?'希望这两个时刻同时注明各自来自哪张单据。':row.field?'建议在审批日期旁显示银行扣款日。':'建议付款检查并排显示这句用途限制和实际审批依据。';
+    const pageNote=term?'希望在这条共同签批约定旁能看到本期审批单。':time?'建议从银行回单的这一行直接跳到签批原件。':'希望从原件这一行也能回看付款审批。';
     async function compose(text,pick) {
       await click('#walk-launch');await wait(q('#walk-dialog')+'?.open && !'+q('#walk-save')+'.disabled','compose on site');
       await evaluate(q('#walk-text')+'.value='+JSON.stringify(text)+';'+q('#walk-text')+'.dispatchEvent(new Event("input"))');
@@ -125,7 +150,7 @@ export async function checkInspectionUse(ctx,cid) {
     const prior=rev>1 && (await json(api+'/reports/'+(rev-1))).report.findings.find(f=>f.id===id);
     const filed=prior?.inspection_use;
     const absent=prior && !filed?.notes.some(n=>n.row===row.id) && !filed?.approval?.rows.includes(row.id) &&
-      !filed?.approval?.clock?.rows.includes(row.id) ? rev-1 : task.rev+1;
+      !filed?.approval?.clock?.rows.includes(row.id) && !filed?.approval?.names?.rows.includes(row.id) ? rev-1 : task.rev+1;
     for (const [context,status] of [[{...a,rev:absent},404],[{...a,anchor:base.slice(1)+'-'+row.doc+'-p1-l1'},404],
       [{...a,params:{view:'payment-checks',stage:'H05-999'}},400],[{...b,line:1},400],[{...b,rev:absent},404]]) {
       const r=await fetch(root+'/api/walkthrough',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -148,7 +173,7 @@ export async function checkInspectionUse(ctx,cid) {
     await mouse('#walk-dock');await wait(docked('#performance-index'),'side-by-side installment');
     await mouse('#walk-pick');await mouse(control);
     await wait(q(control)+'.classList.contains("walk-selected") && '+q('#walk-location')+'.textContent.includes('+JSON.stringify(label)+')','pin the filed clause');
-    const alongside=time?'希望一眼看出这笔钱是在签批前还是签批后扣除。':row.field?'希望直接看到审批日期和付款日期相差几天。':'希望在这个付款条件旁直接对照审批单上的期次。';
+    const alongside=term?'核对签批人时，希望能直接看到两份原件的人名。':time?'希望一眼看出这笔钱是在签批前还是签批后扣除。':row.field?'希望直接看到审批日期和付款日期相差几天。':'希望在这个付款条件旁直接对照审批单上的期次。';
     await fill(alongside);await mouse(control);await located();
     await wait(docked('#page-dialog'),'continue writing beside the open original');
     assert.ok(await evaluate(q('#page-dialog')+'.getBoundingClientRect().right<='+q('#walk-rail')+'.getBoundingClientRect().left'),'original page fits to the left of the recorder');
@@ -170,6 +195,19 @@ export async function checkInspectionUse(ctx,cid) {
     await browserInput(ctx).key('Escape');await wait('!'+q('#walk-dialog')+'.open && '+q('#page-dialog')+'.open','dismiss feedback alone');
     await mouse('#walk-launch');await wait(q('#walk-dialog')+'.open && '+q('#walk-text')+'.value==='+JSON.stringify(draft),'draft remains bound to this PDF line');
     await mouse('#walk-saved');await mouse('#walk-history a[href*="walkraw="]');await located(true);
+    if (term && names.signed_by) {
+      const signer=approvalRows.find(r=>r.id===names.signed_by), field=approvalControl(signer);
+      await size(ctx,390);await go(fixed+'&view=payment-checks&stage='+id);
+      await wait(visible(field),'approval sheet signer on the other side of the comparison');
+      const fieldNote='审批单具名栏这里，希望能直接核对实际签批记录。', lineNote='请在具名栏原行旁显示本版合同所列的签批人。';
+      await compose(fieldNote,field);await click(field);await located(false,signer);await compose(lineNote);
+      const notes=(await json('/api/walkthrough')).notes;
+      assert.equal(notes.find(n=>n.text===fieldNote).context.anchor,field.slice(1));
+      assert.equal(notes.find(n=>n.text===lineNote).context.raw_ref,signer.id);
+      await notebook();await click('#walk-history a[href*="walkat='+field.slice(1)+'"]');
+      await wait(q(field)+'?.classList.contains("walk-mark")','back on the issued signer field');
+      await notebook();await click('#walk-history a[href*="walkline='+signer.line+'"][href*="walkraw="]');await located(true,signer);
+    }
     const after=await json(api);assert.deepEqual([after.status,after.rev,after.decisions,after.referrals],[task.status,task.rev,task.decisions,task.referrals]);
   }
   await go(fixed+'&finding='+id);
@@ -179,5 +217,13 @@ export async function checkInspectionUse(ctx,cid) {
   const trace='#trace-details [data-use-ref="'+row.id+'"]';
   await wait(visible(trace),'original payment-use row in the finding trace');
   await click(trace);await located();
+  if (term) {
+    await evaluate(q('#page-dialog')+'.close()');
+    const stage=report.findings.find(f=>f.rule==='H04' && f.stage_approvers?.includes(term.id));
+    await go(fixed+'&finding='+stage.id);
+    await wait(q('#trace-select')+'?.value==='+JSON.stringify(stage.id),'contract names on the relevant payment condition');
+    if (await evaluate(visible(details))) await click(details);
+    await wait(visible(trace),'contract name clause on the scheduled installment');await click(trace);await located(false,term);
+  }
   console.log('PASS · R'+rev+' · '+c.state+' · original PDF line '+row.line+' · six widths'+(process.env.AUDIT_ISOLATED_USE_ORIGIN?' · recorded, exported and reopened both positions':''));
 }

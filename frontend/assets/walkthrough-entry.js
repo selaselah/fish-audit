@@ -64,7 +64,7 @@ function returnToControl() {
   const comparison=anchor.startsWith('revision-') && params.get('view')==='revision-comparison'
     ? document.getElementById('revision-comparison') : null;
   const board=params.get('view')==='board-decision' && anchor.startsWith('board-');
-  const receipt=params.get('view')==='payment-checks' && /^(?:quality|retest|inspection-use|payment-approval|payment-clock)-/.test(anchor);
+  const receipt=params.get('view')==='payment-checks' && /^(?:quality|retest|inspection-use|payment-approval|payment-clock|contract-approver)-/.test(anchor);
   const party=anchor.startsWith('party-reading-');
   url.searchParams.delete('walkat');
   history.replaceState(history.state,'',url);

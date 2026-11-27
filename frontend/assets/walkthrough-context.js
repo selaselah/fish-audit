@@ -10,7 +10,7 @@ const identifier = /^[a-zA-Z][a-zA-Z0-9_-]{0,95}$/;
 const factID = /^d\d{2}\/p[1-9]\d*\/(?:[ft][1-9]\d*|h[a-f0-9]{12})$/;
 function printedRef(context, ref) {
   const address=context.doc+'/p'+context.page+'/l'+context.line;
-  return context.rev && ['inspection-use/','payment-approval/','payment-clock/'].some(prefix=>ref===prefix+address);
+  return context.rev && ['inspection-use/','payment-approval/','payment-clock/','contract-approver/'].some(prefix=>ref===prefix+address);
 }
 function knownParams(search, keys) {
   const out = {};
@@ -145,6 +145,7 @@ export function describeContext(c) {
   const edition=c.params?.view==='revision-comparison' ? '履约对照 R'+c.params.prior+' / R'+c.rev : c.rev && 'R'+c.rev;
   const board=c.params?.view==='board-decision' && ({decision:'董事会决议原文',signing:'董事会签发版本',payments:'董事会决议关联期款'}[c.params.part] || '董事会审批原件');
   const receipt=c.params?.view==='payment-checks' && (c.anchor?.startsWith('payment-approval-')?'付款审批单 '+c.params.stage:
+    c.anchor?.startsWith('contract-approver-')?'合同签批人 '+c.params.stage:
     c.anchor?.startsWith('payment-clock-')?'银行回单时刻 '+c.params.stage:
     c.anchor?.startsWith('inspection-use-')?'验收单付款用途 '+c.params.stage:
     c.anchor?.startsWith('retest-')?'复验回单核对 '+c.params.stage:

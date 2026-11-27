@@ -1,5 +1,13 @@
 # 本机审计接口
 
+## 逐期具名签批及原件定位
+
+`cited-inspection-payment-use-v5` 起，`graph.inspection_use_sources.approver_terms` 保存合同签批条款和可能修饰该条款的原行。H04、H05 的 `stage_approvers` 引用本期适用的合同原行。合同条款和独立付款审批单可以交叉核对时，H05 的 `inspection_use.approval.names` 记录 `rows`、`signed_by`、`state`，并按已有证据附上 `contract_fields`、`required` 和 `listed`。两张纸面名单可以逐人比对时，图谱边 `compares_approval_names` 连接合同条款与审批单具名栏。
+
+状态 `listed`、`partial`、`different` 分别表示所列姓名相符、缺少共同签批人、两组姓名没有交集。`missing` 表示具名依据待补，`other_stage` 表示合同条款属于其他期款，`scope` 表示版本或适用范围仍需核对。从规则 `2026.11.28.2` 的 v6 起，原件上的「指定人」等占位文字会保留其 `signed_by` 行号，`listed` 为空数组。明确拒付或实际扣款早于签发的风险可以独立出现。历史报告保留出具时的判断。
+
+走查控件例如 `contract-approver-H05-8-d04-p1-l19`，原页引用例如 `contract-approver/d04/p1/l19`。从合同第 19 行和审批单第 12 行分别记意见，可回到各自版次、原件及行框。[本机 R8 付款检查](http://127.0.0.1:8000/workpaper/da4fe9403e1b4a4b97ea05376be11975?rev=8&view=payment-checks&stage=H05-8)
+
 ## 审批和实际扣款的同日时序
 
 规则 `2026.11.27.24` 出具的 `cited-inspection-payment-use-v4` 底稿在 `graph.inspection_use_sources.bank_clocks` 归档回单时刻原行。在需要比较的 H05 发现中，`inspection_use.approval.clock` 含 `signed`、`debit`、`rows` 及 `state`。原行编号可分别追到付款审批单及银行回单。能够计算区间时还包含 `signed_at`、`debited_at` 和 `zone`，并产生 `compares_debit_time` 关系。

@@ -15,7 +15,7 @@ const InstallmentApproval = (() => {
         !request.quote.includes(request.authority) || !Array.isArray(a.evidence) || !a.evidence.every(id=>c.evidence.includes(id)) ||
         ![a.request,c.citation,c.number_ref,item.stage.clause_ref].every(id=>a.evidence.includes(id)) ||
         !same(a.documents,[...new Set(pages.map(p=>p.doc))]) || !same(a.rows,pages.flatMap(p=>p.rows.map(r=>r.id))) ||
-        new Set(a.rows).size!==a.rows.length || a.status!==(['refused','later'].includes(a.state) || a.clock?.state==='debit_first'?'risk':'missing')) return null;
+        new Set(a.rows).size!==a.rows.length || a.status!==(['refused','later'].includes(a.state) || a.clock?.state==='debit_first' || a.names?.state==='different'?'risk':'missing')) return null;
     const links=g.edges.filter(e=>e.type==='compares_payment_approval' && e.from===a.request && e.evidence?.[1]===c.citation);
     if (!same(links.map(e=>e.to),a.rows) || links.some(e=>!same(e.evidence,[a.request,c.citation,e.to]))) return null;
     const entries=[];
@@ -24,7 +24,7 @@ const InstallmentApproval = (() => {
       for (const row of page.rows) {
         const doc=readRow(row);
         const column=row.quote.split(/[:：]/u,1)[0].trim();
-        const field=titles.includes(row.quote.trim())?'title':c.format===ApprovalClock.format && ApprovalClock.signed.includes(column)?'signed_at':headings[column] || 'other';
+        const field=titles.includes(row.quote.trim())?'title':ApprovalClock.supports(c.format) && ApprovalClock.signed.includes(column)?'signed_at':ApprovalNames.supports(c.format) && ApprovalNames.signers.includes(column)?'signed_by':headings[column] || 'other';
         if (!doc || !row.id.startsWith('payment-approval/') || page.doc!==row.doc || page.page!==row.page || page.unit!==row.unit || field!==row.field ||
             ![row.id,...row.facts].every(id=>a.evidence.includes(id))) return null;
         entries.push({row,doc,scope:'approval_sheet'});
@@ -32,17 +32,21 @@ const InstallmentApproval = (() => {
     }
     function withBankRows() {
       const bankRows=ApprovalClock.bind(item,report,entries,readRow);
-      return bankRows ? [...entries,...bankRows] : null;
+      if (!bankRows) return null;
+      const terms=ApprovalNames.bind(item,report,entries,readRow);
+      return terms ? [...entries,...bankRows,...terms] : null;
     }
     if (a.documents.length!==1) return a.state==='multiple' && !a.fields && !a.bank_fields?withBankRows():null;
     if (!a.fields) return a.state==='unresolved' && !a.bank_fields?withBankRows():null;
     const [sheet]=pages, fields=Object.fromEntries(entries.map(e=>[e.row.field,e.row]));
     const names=['title',...Object.values(headings)];
     if (fields.signed_at) names.push('signed_at');
+    if (fields.signed_by) names.push('signed_by');
     if (pages.length!==1 || !sheet.complete || sheet.unit!==sheet.doc || sheet.page!==1 || entries.length!==names.length ||
         entries[0]?.doc.ext!=='.pdf' || entries[0].doc.pages!==1 || entries[0].row.field!=='title' ||
         Object.keys(a.fields).length!==names.length || names.some(k=>!fields[k]?.rects.length || a.fields[k]!==fields[k].id)) return null;
     const v=Object.fromEntries(names.map(k=>[k,printed(fields[k].quote)]));
+    if (fields.signed_by && !ApprovalNames.list(v.signed_by,c.format) && !(c.format===ApprovalNames.format && ApprovalNames.unnamed.has(v.signed_by))) return null;
     const phase=/^第([0-9一二两三四五六七八九十]+)期(预付款|验收款|质保金)$/u.exec(v.stage);
     const listed=WarrantyDates.printedDay(v.date), index=phase && BatchPhase.ordinal(phase[1]);
     if (!index || !listed || listed!==a.listed_on || !['同意支付','批准支付','不同意支付','不批准支付'].includes(v.decision)) return null;
@@ -74,7 +78,19 @@ const InstallmentApproval = (() => {
     section.setAttribute('aria-label','所附付款审批单');
     if (a.fields) heading.textContent=entries[0].doc.name+' · 第 '+entries[0].row.page+' 页';
     const clock=a.clock;
-    section.append(box('inspection-use-heading',heading,el('span',clock?ApprovalClock.labels[clock.state]:labels[a.state],a.status)));
+    section.append(box('inspection-use-heading',heading,el('span',clock?ApprovalClock.labels[clock.state]:labels[a.state],clock?.state==='debit_first' || ['later','refused'].includes(a.state)?'risk':'missing')));
+    if (a.names) {
+      const group=el('section','','named-approvers'), head=el('h6','合同与签批人'), rows=el('div','','approval-rows approval-times');
+      group.setAttribute('aria-label','合同与签批人');group.dataset.nameState=a.names.state;group.id='contract-approver-'+finding;
+      const missing=a.names.state==='partial'?a.names.required.filter(n=>!a.names.listed.includes(n)):[];
+      const status=missing.length?missing.join('、')+'签批待补':ApprovalNames.labels[a.names.state];
+      group.append(box('inspection-use-heading',head,el('span',status,a.names.state==='different'?'risk':'missing')));
+      const contract=entries.filter(e=>e.scope==='contract_term');
+      const signers=entries.filter(e=>e.row.id===a.names.signed_by);
+      if (a.names.required && contract.length===1 && signers.length===1) rows.classList.add('approval-name-pair');
+      rows.append(...[...contract,...signers].map(button));
+      group.append(rows);section.append(group);
+    }
     if (clock) {
       section.dataset.clock=clock.state;
       const times=el('div','','approval-rows approval-times');
@@ -84,13 +100,16 @@ const InstallmentApproval = (() => {
       section.append(el('p',a.paid_on+' · 本期付款','approval-days'),times);
     } else if (a.listed_on && a.paid_on) section.append(el('p','审批单 '+a.listed_on+'　/　回单付款 '+a.paid_on,'approval-days'));
     const primary=new Set(['stage','inspection','decision','date']), visible=entries.filter(e=>primary.has(e.row.field));
-    const grid=el('div','','approval-rows');
-    grid.append(...visible.map(button));section.append(grid);
-    const rest=entries.filter(e=>!primary.has(e.row.field) && e.scope!=='bank_time' && !(clock && e.row.id===clock.signed));
-    if (rest.length) {
+    if (!a.names) {
+      const grid=el('div','','approval-rows');
+      grid.append(...visible.map(button));section.append(grid);
+    }
+    const rest=entries.filter(e=>!primary.has(e.row.field) && e.scope!=='bank_time' && e.scope!=='contract_term' && e.row.id!==a.names?.signed_by && !(clock && e.row.id===clock.signed));
+    const fields=a.names?[...visible,...rest]:rest;
+    if (fields.length) {
       const details=el('details'), more=el('div','','approval-rows');
-      details.append(el('summary','核对标题、户名及审批岗位'));
-      more.append(...rest.map(button));details.append(more);section.append(details);
+      details.append(el('summary',a.names?'核对期次、验收单号及审批原文':'核对标题、户名及审批岗位'));
+      more.append(...fields.map(button));details.append(more);section.append(details);
     }
     return section;
   }

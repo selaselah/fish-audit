@@ -1,6 +1,7 @@
 // Both times belong to the same installment. Read each from its own issued instrument.
 const ApprovalClock = (() => {
   const format='cited-inspection-payment-use-v4';
+  const supports=value=>value===format || ApprovalNames.supports(value);
   const signed=['审批签发时间','签批完成时间','审批签发时刻'];
   const debits=['实际扣款时间','扣款成功时间','成功扣款时间','实际扣款时刻'];
   const events=['银行受理时间','受理时间','交易发起时间','回单打印时间','打印时间','记账时间','到账时间','回单生成时间','交易时间',
@@ -27,9 +28,9 @@ const ApprovalClock = (() => {
   }
   function inspectionNotes(report,item,all) {
     const c=item.retest_reference, {graph}=report;
-    if (report.policy.inspection_use!==format) return !c.timing_notes?.length;
+    if (!supports(report.policy.inspection_use)) return !c.timing_notes?.length;
     const ledger=graph.inspection_use_sources;
-    if (!archived(report) || ledger?.format!==format) return false;
+    if (!archived(report) || ledger?.format!==report.policy.inspection_use) return false;
     const pages=(ledger.bank_clocks || []).filter(p=>p.unit===c.bank);
     const bank=all.filter(r=>r.unit===c.bank && r.role==='bank_receipt');
     const filed=graph.payment_acceptance_sources.rows.filter(r=>r.unit===c.bank && r.role==='bank_receipt');
@@ -58,7 +59,7 @@ const ApprovalClock = (() => {
   }
   function bind(item,report,sheet,readRow) {
     const c=item.inspection_use, a=c.approval, actual=a.clock;
-    if (c.format!==format) return !actual?[]:null;
+    if (!supports(c.format)) return !actual?[]:null;
     if (!archived(report) || !Array.isArray(report.graph.inspection_use_sources.bank_clocks)) return null;
     const ledger=report.graph.inspection_use_sources.bank_clocks.filter(p=>p.unit===a.bank);
     const links=report.graph.edges.filter(e=>e.type==='compares_debit_time' && e.evidence?.[1]===c.citation);
@@ -88,5 +89,5 @@ const ApprovalClock = (() => {
     } else if (links.length) return null;
     return entries;
   }
-  return {format,signed,labels,inspectionNotes,bind};
+  return {supports,signed,labels,inspectionNotes,bind};
 })();
