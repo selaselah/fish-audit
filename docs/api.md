@@ -8,6 +8,14 @@
 
 企业工作区使用 `/api/w/<wid>/walkthrough`，沿用成员身份和写入时的 CSRF 校验，清单仅列出当前账号在该企业内的记录。企业实例的公开页使用浏览器存储。[服务端实现](../server/walkthrough.py)
 
+## 质保期满确认单的签署凭证
+
+规则 `2026.11.27.13` 在 `policy.warranty_execution` 声明 `warranty-certificate-execution-v1`。图谱在 `warranty_pdf_sources.records` 保存 PDF 签署版本、签名范围、文件和页图摘要，在 `warranty_original_sources` 保存 Word 或影像原件。Word 的 `documents[].notes` 保留批注及可定位的原页选区。归档验证重新读取所据文件并核对图关系。
+
+质保金期次的 H04 与匹配该期的 H05 在 `warranty_check.certificate` 记录凭证编号 `records`、版本状态 `state`、业务归属 `linked` 和 `evidence`。单一归属可核的确认单原行日期进入 `stated_on`，实际签发待核时 `confirmed_on` 为 `null`。影像与归属待核的单据可检查文件本身。既有 H07 的 `warranty_difference.confirmed_on` 记录两份书面记载对照时所引的确认单日期，新底稿可用同一期 `warranty_check.stated_on` 和原行核对它。工单状态 `stated_closed` 表示单上列有早于该日期的关闭记录，签批待核。
+
+固定链接使用 `/workpaper/<case_id>?rev=<rev>&view=warranty-certificate&stage=<finding_id>`。可从该期的 H04 或对应 H05 进入，走查意见另存选中的控件或批注位置。[Word 原批注 R5](http://127.0.0.1:8000/workpaper/bd4e587110604a81b0a0cb4a028323ab?rev=5&view=warranty-certificate&stage=H04-7)
+
 ## 付款放行单的签署凭证
 
 从规则 `2026.11.27.12` 起，`policy.release_comparison` 为 `payment-release-comparison-v1`。图谱出现多份放行单时也带此标记。H04 与归属于同一期的 H05 可包含 `payment_opinion.release.instruments`，每项记录原件单元 `unit`、决定 `stance`、期次 `phase`、与本次暂缓的关系 `binding`、所引验收号 `receipt_ref` 及单上日期 `signed_on` 和 `date_ref`。原行取自同一单元的 `sources`。两份归属明确的文字决定相反时，`state` 为 `decision_conflict`，其余多件待核为 `multiple_pending`。两者在实付检查上的 `timing` 均为 `unknown`。

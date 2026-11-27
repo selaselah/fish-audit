@@ -1,5 +1,14 @@
 # 合成财会审计演练
 
+## 同一张期满确认单的签署版本
+
+生成器校验固定底稿 R11 的水印、六份原件和页图摘要，生成测试签名覆盖本版、签后修订、带批注的 Word 以及整页 JPEG 四组资料。加 `--run --check-fields` 会实际提交到本机工作台，按水印原行核字并留存每次复核。每次生成使用新的演练签名，可用独立输出目录保存各批文件。[新版演练结果](../acceptance.md#质保金第三期的期满确认单与原件批注)
+
+```sh
+curl --fail http://127.0.0.1:8000/api/cases/920ea04963ef4f68905ff87533133fd4/reports/11/bundle -o /tmp/warranty-R11.zip
+server/.venv/bin/python docs/samples/warranty_originals_demo.py /tmp/warranty-R11.zip /tmp/warranty-inputs
+```
+
 ## 同一期款的两张放行单
 
 以下命令生成三组本地水印件。同一验收单的相反意见、另一验收单上的暂缓意见、相同决定列示不同日期均各有一组。加 `--run --review` 会向本机工作台提交材料，调用模型，再按生成件逐行核对。可通过 `--run-id` 生成新的演练批次。[既有固定底稿](../acceptance.md#多份放行单的适用期次与相反意见)

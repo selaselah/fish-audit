@@ -44,6 +44,7 @@ async function checkCertificate(ctx,report,rev,phase,bank) {
   await call('Page.navigate',{url:root+feedback.url});
   await wait(visible(card)+' && '+query(target)+'?.classList.contains("walk-mark")','walkthrough returned to original control');
   if (process.env.AUDIT_ISOLATED_WARRANTY_ORIGIN && note?.location) {
+    await size(ctx,390);
     assert.deepEqual((await (await fetch(root+'/api/walkthrough')).json()).notes,[]);
     await click('#walk-launch');
     await wait(query('#walk-dialog')+'?.open && !'+query('#walk-save')+'.disabled','write in the active workpaper');
@@ -52,6 +53,7 @@ async function checkCertificate(ctx,report,rev,phase,bank) {
     await click('#walk-pick');
     await click(card+' blockquote');
     await wait(query('#walk-dialog')+'.open && '+query('#walk-location')+'.textContent.includes("第 9 行")','comment location selected');
+    await inspect(ctx,390,'#walk-dialog','warranty-walkthrough');
     await click('#walk-save');
     await wait('!'+query('#walk-dialog')+'.open','opinion saved');
     await call('Page.navigate',{url:root+'/app#desk'});
