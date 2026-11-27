@@ -1,6 +1,7 @@
 """Bind warranty certificate claims to the submitted signing version."""
 
 import original_records
+import warranty_dates
 from pdf_execution import unit_graph, unit_records
 
 
@@ -49,8 +50,13 @@ def certificate(graph, contract, releases):
     linked = len(records) == len(releases) == 1 and records[0]["unit"] == releases[0].unit and same_original(contract, releases[0])
     state = records[0]["state"] if linked else "scope_pending"
     refs = [ref for r in records for ref in (r["id"], r["doc"], *(p["ref"] for p in r["pages"]), *r["fields"])]
-    return {"records":[r["id"] for r in records], "state":state, "linked":linked,
-            "evidence":list(dict.fromkeys([*refs, *original_records.review_refs(native, graph[NATIVE])]))}
+    check = {"records":[r["id"] for r in records], "state":state, "linked":linked}
+    if warranty_dates.KEY in graph:
+        check["date"] = warranty_dates.certificate(graph,releases[0]) if linked else None
+        if check["date"]:
+            refs.extend([check["date"]["ref"], *check["date"].get("heading_refs",())])
+    check["evidence"] = list(dict.fromkeys([*refs, *original_records.review_refs(native, graph[NATIVE])]))
+    return check
 
 
 def attach(finding, check, *, paid=None):
@@ -75,7 +81,10 @@ def attach(finding, check, *, paid=None):
             reasons.append("期满确认单仍列有未解决质量问题，需核实关闭情况及质保金可否返还。")
         if paid and stated and paid < stated:
             status = "risk"
-            reasons.append(f"回单付款日 {paid} 早于确认单所列期满日 {stated}，请核查提前返还依据。")
+            if "date" in cert and state in ("word_review","earlier"):
+                reasons.append(f"回单付款日 {paid} 早于送审版本所列期满日 {stated}，请核实最终签发稿及实际返还依据。")
+            else:
+                reasons.append(f"回单付款日 {paid} 早于确认单所列期满日 {stated}，请核查提前返还依据。")
         elif paid and paid == stated:
             reasons.append("付款与单上所列期满日同日，请核实当天签批与支付时分。")
     if finding["status"] == "ok" or finding["status"] == "missing" and status == "risk":

@@ -189,8 +189,12 @@ def findings(graph, phases):
     def body(ref):
         return parts(facts[ref]["source_line"]["text"])[1]
     signed=facts[r["acceptance_signer"][0]]
-    cert=terms.CONFIRM.fullmatch(body(w["confirmation_ref"]))
-    confirmation=service.printed_date(cert[1]) if cert else None
+    if "date" in w.get("certificate",{}):
+        reading=w["certificate"]["date"]
+        confirmation=reading["iso"] if reading and reading["ref"]==w["confirmation_ref"] else None
+    else:
+        cert=terms.CONFIRM.fullmatch(body(w["confirmation_ref"]))
+        confirmation=service.printed_date(cert[1]) if cert else None
     cutoff=w.get("at_submission",{}).get("as_of")
     if (w.get("certificate") and w["certificate"]["state"] not in ("typeset","word_text","current")
             or not confirmation or confirmation!=w.get("stated_on",w["confirmed_on"]) or not cutoff or confirmation>cutoff or

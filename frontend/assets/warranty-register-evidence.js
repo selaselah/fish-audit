@@ -42,7 +42,8 @@ const WarrantyRegisterEvidence = (() => {
           !call.response_id || !call.check?.response_id || (fact.response_id && fact.response_id!==call.response_id) ||
           (fact.check_response_id && fact.check_response_id!==call.check.response_id)) return null;
       const text=norm(loc.text), split=text.indexOf(':'), value=text.slice(split+1).trim();
-      if (split<1 || !value || norm(fact.quote)!==text || ![text,value].includes(norm(fact.value))) return null;
+      const printedDate=name==='warranty_release' && check.certificate && Object.hasOwn(check.certificate,'date') && WarrantyDates.issued(phase,graph)?.fact===fact;
+      if (split<1 || !value || !printedDate && (norm(fact.quote)!==text || ![text,value].includes(norm(fact.value)))) return null;
       return {ref,fact,page:fact.page,line:loc.number,quote:loc.text,value:loc.text.slice(loc.text.search(/[:：]/u)+1).trim()};
     }
     function record(unit,role) { return unique(pages.filter(p=>p.doc===unit && p.role===role && p.bounded && p.text_only)); }
@@ -79,7 +80,8 @@ const WarrantyRegisterEvidence = (() => {
           !['待维修','未关闭','维修中','待复修','处理中'].includes(d.printed_state) ||
           !['无未关闭缺陷','无未结质量问题','无未解决质量问题'].includes(norm(certificate.value).replace(/。$/u,'')) ||
           part.closed || part.signer || t.refs.warranty_closed_on || t.refs.warranty_closed_by) return false;
-      const reported=PhaseEvidence.dateOn(part.reported.fact), confirmedDay=PhaseEvidence.dateOn(confirmed.fact);
+      const reported=PhaseEvidence.dateOn(part.reported.fact);
+      const confirmedDay=check.certificate && Object.hasOwn(check.certificate,'date')?WarrantyDates.issued(phase,graph)?.iso:PhaseEvidence.dateOn(confirmed.fact);
       if (!reported || !confirmedDay || d.reported_on!==reported || t.reported_on!==reported ||
           d.confirmed_on!==confirmedDay || WarrantyTimeline.statedDate(check)!==confirmedDay || reported>=confirmedDay ||
           !check.at_submission?.as_of || confirmedDay>check.at_submission.as_of) return false;

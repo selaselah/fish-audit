@@ -19,6 +19,12 @@ const text = q('#walk-text');
 const uuid = () => crypto.randomUUID().replaceAll('-','');
 let owner, book, context, baseline, draftKey, ident, attempted, records, pick, busy=false, generation=0, successTimer;
 const drafts = new Map();
+let selectedElement;
+function markSelection(element) {
+  selectedElement?.classList.remove('walk-selected');
+  selectedElement=element;
+  selectedElement?.classList.add('walk-selected');
+}
 
 function status(message) { q('#walk-status').textContent=message; }
 function draft() {
@@ -31,6 +37,7 @@ function draft() {
   } catch { /* The current tab still retains its draft. */ }
 }
 function switchView(history) {
+  if (history) markSelection(null);
   q('#walk-form').hidden=history;
   q('#walk-history').hidden=!history;
   q('#walk-compose').setAttribute('aria-pressed',String(!history));
@@ -84,10 +91,12 @@ function endPick(el, reopen=true) {
   const old=pick; pick=null;
   old.controller.abort(); old.mark?.classList.remove('walk-mark');
   launcher.removeAttribute('data-picking'); resetButton();
-  if (el) { context=captureContext(owner,el); showLocation(); draft(); }
+  if (el) { context=captureContext(owner,el); markSelection(el); showLocation(); draft(); }
   if (reopen) { dialog.showModal(); text.focus(); }
 }
 function choosePosition() {
+  markSelection(null);
+  document.querySelectorAll('.walk-mark').forEach(el=>el.classList.remove('walk-mark'));
   dialog.close();
   const controller=new AbortController();
   pick={controller,mark:null};
@@ -95,7 +104,7 @@ function choosePosition() {
   const options={capture:true,signal:controller.signal};
   const select=target=>{
     if (!(target instanceof Element) || target.closest('#walk-launch,#walk-dialog')) return null;
-    return target.closest('button,a,input,select,textarea,label,summary,[role=tab],[role=switch],h1,h2,h3,h4,[data-warranty-note],.warranty-certificate,[data-finding]') || target;
+    return target.closest('button,a,input,select,textarea,label,summary,[role=tab],[role=switch],h1,h2,h3,h4,[data-warranty-order],[data-warranty-note],.warranty-certificate,[data-finding]') || target;
   };
   document.addEventListener('pointerover',e=>{
     const el=select(e.target);
@@ -120,7 +129,7 @@ q('#walk-saved').onclick=async()=>{
   catch (err) {if (token===generation) status('清单未载入，请再次点「已记录」。'+err.message);}
 };
 text.addEventListener('input',draft);
-dialog.addEventListener('close',()=>{ if (!pick && !dialog.open) {draft(); launcher.focus({preventScroll:true});} });
+dialog.addEventListener('close',()=>{ if (!pick && !dialog.open) {markSelection(null); draft(); launcher.focus({preventScroll:true});} });
 dialog.addEventListener('keydown',e=>{if (e.key==='Escape') e.stopPropagation();});
 q('#walk-form').addEventListener('submit',async event=>{
   event.preventDefault();

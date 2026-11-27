@@ -3,6 +3,69 @@ import {writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {inspect,size} from './review-screen.mjs';
 
+async function checkWrittenDates(ctx,report,rev,phase,bank,card) {
+  const {root,call,evaluate,wait}=ctx, cert=phase.warranty_check.certificate;
+  if (!Object.hasOwn(cert,'date')) return 'legacy';
+  const q=s=>'document.querySelector('+JSON.stringify(s)+')', panel=card+' .warranty-written-dates';
+  const c=bank?.warranty_payment.comparison, unread=card+' .warranty-date-unread';
+  async function openLine(button,source) {
+    await evaluate(q(button)+'.click()');
+    await wait(q('#page-dialog')+'.open && '+q('#page-dialog img')+'?.naturalWidth>0','cited page image');
+    assert.deepEqual(await evaluate('(()=>{const p='+q('#page-content .page-view')+'.dataset;return [p.doc,p.page,p.line,'+
+      q('#reader-revision')+'.textContent]})()'),[source.doc,String(source.page),String(source.line),'R'+rev]);
+    const literal=source.quote || report.graph.facts.find(f=>f.id===source.ref).source_line.text;
+    assert.equal(await evaluate(q('#page-dialog .located blockquote')+'.textContent'),literal);
+    assert.ok(await evaluate(q('#page-dialog .source-plane svg rect')+'!==null'));
+    const location=()=>evaluate('import("/assets/walkthrough-context.js").then(m=>m.captureContext('+q('#page-dialog')+',null))');
+    assert.equal((await location()).line,source.line);
+    const other=report.graph.facts.find(f=>f.doc===source.doc && f.page===source.page && f.source_line?.number && f.source_line.number!==source.line);
+    const pick=async value=>evaluate('(()=>{const e='+q('#reader-citation-picker')+';e.value='+JSON.stringify(value)+';e.dispatchEvent(new Event("change"))})()');
+    await pick(other.id);
+    const changed=await location();
+    assert.deepEqual([changed.params,changed.line],[{fact:other.id},other.source_line.number]);
+    await pick('');
+    assert.equal((await location()).line,undefined);
+    await evaluate(q('#page-dialog [data-close]')+'.click()');
+  }
+  if (!c) {
+    assert.equal(await evaluate(q(panel)),null);
+    const raw=report.graph.warranty_sources.lines.find(r=>r.kind==='warranty_release' && /[0-9] [0-9]/u.test(r.quote));
+    if (raw && cert.linked && !cert.date) {
+      assert.equal(await evaluate(q(unread+' blockquote')+'.textContent'),raw.quote);
+      assert.equal(await evaluate(q(unread)+'?.querySelector("time")'),null);
+      await openLine(unread+' button',raw);
+      return 'unread';
+    }
+    return 'pending';
+  }
+  const order=c.days<0?'before':c.days>0?'after':'same';
+  assert.deepEqual(await evaluate('['+q(panel)+'.dataset.warrantyPayment,'+q(panel)+'.dataset.order,'+
+    q(panel+' .warranty-date-heading strong')+'.textContent]'),[bank.id,order,c.days===0?'同日 · 时分待核':'回单'+(c.days<0?'早 ':'晚 ')+Math.abs(c.days)+' 天']);
+  const position=await evaluate('import("/assets/walkthrough-context.js").then(m=>m.captureContext(null,'+q(panel+' [data-warranty-order]')+'))');
+  assert.deepEqual([position.params.stage,position.anchor],[bank.id,await evaluate(q(panel+' [data-warranty-order]')+'.id')]);
+  for (const s of [cert.date,c.bank]) {
+    const target=panel+' [data-source="'+s.ref+'"]';
+    assert.deepEqual(await evaluate('['+q(target+' time')+'.textContent,'+q(target+' time')+'.dateTime]'),[s.literal,s.iso]);
+    await openLine(target,s);
+    const feedback=await evaluate('import("/assets/walkthrough-context.js").then(m=>{const c=m.captureContext(null,'+q(target)+');return {c,url:m.returnUrl(c)}})');
+    assert.deepEqual(feedback.c.params,{view:'warranty-certificate',stage:bank.id});
+    assert.equal(feedback.c.rev,rev);
+    await call('Page.navigate',{url:root+feedback.url});
+    await wait(q(target)+'?.classList.contains("walk-mark")','feedback points to its original dated row');
+  }
+  const tamper=await evaluate(`(() => {
+    const r=structuredClone(state.bundle.report), p=r.findings.find(v=>v.id===${JSON.stringify(phase.id)}), b=r.findings.find(v=>v.id===${JSON.stringify(bank.id)});
+    const proofs=PerformanceIndex.warrantyProofs(p,r), read=WarrantyDates.confirmation(p,r,proofs);
+    if (!read || !WarrantyDates.comparison(p,b,r,read)) return false;
+    r.graph.edges=r.graph.edges.filter(e=>e.type!=='warranty_payment_dates');
+    if (WarrantyDates.comparison(p,b,r,read)) return false;
+    p.warranty_check.certificate.date.literal='2031-01-01';
+    return WarrantyDates.confirmation(p,r,proofs)===null;
+  })()`);
+  assert.equal(tamper,true);
+  return order;
+}
+
 async function checkCertificate(ctx,report,rev,phase,bank) {
   const {root,call,evaluate,wait}=ctx, graph=report.graph, cert=phase.warranty_check.certificate;
   const records=[...graph.warranty_pdf_sources.records,...graph.warranty_original_sources.records].filter(r=>cert.records.includes(r.id));
@@ -21,12 +84,13 @@ async function checkCertificate(ctx,report,rev,phase,bank) {
   const row='[data-phase-finding="'+phase.id+'"] .warranty-event[data-event=confirmation]';
   assert.equal(await evaluate(query(row)+'.querySelector("time")?.dateTime || null'),phase.warranty_check.stated_on);
   assert.equal(phase.warranty_check.confirmed_on,null);
+  const dateMode=await checkWrittenDates(ctx,report,rev,phase,bank,card);
   assert.equal(await evaluate(query(card+' a[download]')+'.download'),source.name);
   assert.equal(await evaluate('fetch('+query(card+' a[download]')+'.href).then(r=>r.arrayBuffer()).then(b=>crypto.subtle.digest("SHA-256",b)).then(b=>Array.from(new Uint8Array(b),n=>n.toString(16).padStart(2,"0")).join(""))'),source.sha256);
   await click(card+' .agreement-check button');
   await wait(query(card+' .agreement-check')+'?.dataset.state==="match"','file hash');
   if (record.signatures?.length) assert.equal(await evaluate(query(card+' .pdf-timeline')+'.dataset.state'),record.state);
-  if (note) assert.equal(await evaluate(query(card+' blockquote')+'.textContent'),note.text);
+  if (note) assert.equal(await evaluate(query(card+' .warranty-original-note blockquote')+'.textContent'),note.text);
   await click(note?.location?card+' .warranty-original-note button':original);
   await wait(query('#page-dialog')+'.open && '+query('#page-dialog img')+'?.naturalWidth>0','physical page');
   assert.equal(await evaluate(query('#page-content .page-view')+'.dataset.doc'),record.doc);
@@ -35,7 +99,8 @@ async function checkCertificate(ctx,report,rev,phase,bank) {
   for (const width of [320,390,768,820,1024,1440]) {
     await size(ctx,width);
     assert.ok(await evaluate(query(card)+'.getBoundingClientRect().right<=innerWidth+1'));
-    await inspect(ctx,width,card,'warranty-certificate-'+record.state);
+    assert.ok(await evaluate('[...'+query(card)+'.querySelectorAll("button,time")].filter(b=>b.getClientRects().length).every(b=>b.getBoundingClientRect().right<='+query(card)+'.getBoundingClientRect().right+1)'));
+    await inspect(ctx,width,card,'warranty-certificate-'+record.state+'-'+dateMode);
   }
   const target=note?.location?card+' .warranty-original-note button':original;
   const feedback=await evaluate('import("/assets/walkthrough-context.js").then(m=>{const c=m.captureContext(null,'+query(target)+');return {c,url:m.returnUrl(c)}})');
@@ -51,7 +116,7 @@ async function checkCertificate(ctx,report,rev,phase,bank) {
     const opinion='请在这条批注旁保留维修工单入口。';
     await evaluate(query('#walk-text')+'.value='+JSON.stringify(opinion)+';'+query('#walk-text')+'.dispatchEvent(new Event("input"))');
     await click('#walk-pick');
-    await click(card+' blockquote');
+    await click(card+' .warranty-original-note blockquote');
     await wait(query('#walk-dialog')+'.open && '+query('#walk-location')+'.textContent.includes("第 9 行")','comment location selected');
     await inspect(ctx,390,'#walk-dialog','warranty-walkthrough');
     await click('#walk-save');
@@ -66,6 +131,25 @@ async function checkCertificate(ctx,report,rev,phase,bank) {
     const [saved]=(await (await fetch(root+'/api/walkthrough')).json()).notes;
     assert.deepEqual(saved.context.params,{view:'warranty-certificate',stage:phase.id});
     assert.equal(saved.context.rev,rev);
+    const pair=bank?.warranty_payment.comparison;
+    if (pair) {
+      const target=card+' .warranty-date-source[data-source="'+pair.bank.ref+'"]';
+      await click('#walk-launch');await wait(query('#walk-dialog')+'?.open && !'+query('#walk-save')+'.disabled','new opinion');
+      await evaluate(query('#walk-text')+'.value="请在回单日期旁保留付款原行。";'+query('#walk-text')+'.dispatchEvent(new Event("input"))');
+      await click('#walk-pick');await click(target+' time');
+      await wait(query('#walk-location')+'.textContent.includes("银行回单")','selected the bank date');
+      assert.equal(await evaluate('document.querySelector(".walk-selected")?.id'),await evaluate(query(target)+'.id'));
+      await inspect(ctx,390,'#walk-dialog','warranty-date-walkthrough');
+      await click('#walk-save');await wait('!'+query('#walk-dialog')+'.open','saved the bank-date opinion');
+      await wait('!document.querySelector(".walk-selected")','recorded control released');
+      await call('Page.navigate',{url:root+'/app#desk'});await wait(visible('#walk-launch')+' && '+visible('#case-list'),'queue');
+      await click('#walk-launch');await wait(query('#walk-dialog')+'?.open && !'+query('#walk-saved')+'.disabled','open recorded opinions');
+      await click('#walk-saved');await wait('document.querySelectorAll("#walk-history li a").length===2','two opinions');
+      await click('#walk-history li a');await wait(query(target)+'?.classList.contains("walk-mark")','saved link reopened selected receipt');
+      const notes=(await (await fetch(root+'/api/walkthrough')).json()).notes;
+      assert.deepEqual(notes.map(n=>n.context.params.stage),[bank.id,phase.id]);
+      assert.equal(notes[0].context.anchor,await evaluate(query(target)+'.id'));
+    }
     const detail=await (await fetch(root+'/api/cases/'+report.case_id)).json();
     assert.deepEqual([detail.rev,detail.status,detail.decisions.length],[rev,'ready',0]);
   }

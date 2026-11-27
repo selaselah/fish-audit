@@ -1043,7 +1043,8 @@ function warrantyPanel(finding,graph) {
   }
   addDate('合格终验或复验日',entry.accepted_on);
   addDate('合同日历末日',entry.calendar_end);
-  addDate(entry.certificate?'单上所列期满日':'期满确认日',WarrantyTimeline.statedDate(entry));
+  const stated=entry.certificate && Object.hasOwn(entry.certificate,'date')?WarrantyDates.issued(finding,graph)?.iso:WarrantyTimeline.statedDate(entry);
+  addDate(entry.certificate?'单上所列期满日':'期满确认日',stated);
   const cited=finding.evidence.map(ref=>facts.get(ref)).filter(Boolean);
   const transfers=cited.filter(f=>f.field==='paid_on');
   if (finding.rule==='H05') addDate(finding.warranty_payment?'回单列示付款日':'实际付款日',transfers[0]?.source_line?.text.split(/[:：]/u).slice(1).join('：').trim());

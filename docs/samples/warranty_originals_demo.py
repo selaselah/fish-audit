@@ -17,10 +17,13 @@ from word_percentage import save_document, word_file
 
 CASES = {"current":"质保期满单 · 测试签名覆盖本版", "earlier":"质保期满单 · 签后另存",
          "draft":"质保期满单 · 遗留缺陷待复核批注", "photo":"质保期满单 · 扫描签认栏"}
+DATE_CASES = {"before":("质保期满单 · 回单早于单上日期", "2026年11月26日"),
+              "same":("质保期满单 · 回单与单上日期同日", "2026年11月24日"),
+              "split":("质保期满单 · 日期数字之间留有空格", "2026年11月2 2日")}
 COMMENT = "风扇维修记录尚未结清。本单为待签稿，请核对复验和关闭凭证。"
 
 
-def materials(archive, target):
+def materials(archive, target, *, dates=False):
     with ZipFile(archive) as pack:
         report, journal = master.fixed_report(pack, master.REV, master.REPORT_SHA256)
         require(not journal["decisions"] and not journal["referrals"], "未签收的演练母本")
@@ -31,10 +34,11 @@ def materials(archive, target):
         require(lines[:2] == [WATERMARK, title], "期满确认单的水印与题名")
         rows = [line.split("：",1) for line in lines[2:]]
         require(all(len(row)==2 for row in rows), "确认单的印刷行")
-        signed = signed_copy(certificate["original"], "SyntheticWarranty")
-        copies = {"current":signed, "earlier":later_copy(signed), "photo":certificate["image"]}
+        if not dates:
+            signed = signed_copy(certificate["original"], "SyntheticWarranty")
+            copies = {"current":signed, "earlier":later_copy(signed), "photo":certificate["image"]}
         groups = {}
-        for key in CASES:
+        for key in (DATE_CASES if dates else CASES):
             folder = target/key
             folder.mkdir(parents=True,exist_ok=True)
             paths = []
@@ -42,9 +46,11 @@ def materials(archive, target):
                 path = folder/source["doc"]["name"]
                 if ident != unit:
                     path.write_bytes(source["original"])
-                elif key == "draft":
+                elif dates or key == "draft":
                     path = path.with_suffix(".docx")
-                    word_file(path, rows, title)
+                    sheet = [(label, DATE_CASES[key][1]+"双方确认质保期已满" if dates and label=="质保期满确认" else value)
+                             for label,value in rows]
+                    word_file(path, sheet, title)
                     word = Document(path)
                     paragraph, = [p for p in word.paragraphs if p.text == "质保遗留事项：无未关闭缺陷"]
                     paragraph.clear()
@@ -65,21 +71,24 @@ if __name__ == "__main__":
     parser.add_argument("archive",type=Path)
     parser.add_argument("folder",type=Path)
     parser.add_argument("--run",action="store_true")
+    parser.add_argument("--dates",action="store_true",help="生成回单早于单上日期、同日和日期数字断开的带批注 Word")
     parser.add_argument("--check-fields",action="store_true")
     args = parser.parse_args()
     if args.check_fields and not args.run:
         parser.error("--check-fields 需要 --run 提交水印演练")
-    profile, groups = materials(args.archive,args.folder)
+    profile, groups = materials(args.archive,args.folder,dates=args.dates)
+    titles = {key:row[0] for key,row in DATE_CASES.items()} if args.dates else CASES
     ids = {}
     for key, paths in groups.items():
         if args.run:
             token = digest("".join(digest(p.read_bytes()) for p in paths).encode())
-            ids[key] = submit("合成演练 · "+CASES[key],paths,"warranty-original-"+token,profile)
+            ids[key] = submit("合成演练 · "+titles[key],paths,"warranty-original-"+token,profile)
             print(key,ids[key],flush=True)
         else:
             print(key,paths[0].parent)
     if args.check_fields:
         for key, case in ids.items():
-            check_fields(args.archive,key,case,args.folder/key,case_title=CASES[key],master_hash=master.REPORT_SHA256,
-                         kind="warranty",reviewer="质保期满单水印核字")
+            replacement = ("质保期满确认单.pdf","质保期满确认",DATE_CASES[key][1]+"双方确认质保期已满") if args.dates else None
+            check_fields(args.archive,key,case,args.folder/key,case_title=titles[key],master_hash=master.REPORT_SHA256,
+                         kind="warranty",reviewer="质保期满单水印核字",replacement=replacement)
             print(key,"已按水印原件核字",flush=True)

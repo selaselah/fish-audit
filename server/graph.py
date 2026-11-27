@@ -37,6 +37,7 @@ import inspection_coverage
 import contract_folios
 import prior_installment
 import warranty_terms
+import warranty_dates
 import warranty_service
 import payment_windows
 import invoice_conditions
@@ -431,6 +432,7 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     graph["nodes"].extend(nodes)
     graph["edges"].extend(edges)
     graph["warranty_sources"]=warranty_terms.sources(graph,lambda doc,number:texts[doc,number])
+    graph[warranty_dates.KEY] = warranty_dates.sources(graph,lambda doc,number:texts[doc,number])
     ledgers = warranty_execution.sources(graph, read_original, lambda doc, number:texts[doc, number])
     graph.update(ledgers)
     nodes, edges = warranty_execution.source_graph(ledgers)
@@ -541,6 +543,7 @@ def link_procedures(graph, findings, calls):
     edges.extend(stage_payments.edges(findings))
     edges.extend(equipment_models.edges(findings))
     edges.extend(warranty_terms.edges(findings))
+    edges.extend(warranty_dates.edges(findings))
     edges.extend(signing_parties.comparisons(findings))
     edges.extend(payment_windows.edges(findings))
     expert_id = "model/expert"

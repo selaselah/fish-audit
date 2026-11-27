@@ -32,6 +32,7 @@ import contract_folios
 import prior_installment
 import warranty_terms
 import warranty_execution
+import warranty_dates
 import warranty_service
 import warranty_register
 import payment_windows
@@ -1224,7 +1225,9 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         payment = result("H05",status,detail,refs,scope,check["stage"])
         if row["kind"]=="warranty" and release_check:
             payment["warranty_check"]=release_check
-            warranty_execution.attach(payment,release_check,paid=paid.isoformat())
+            written = "date" in release_check.get("certificate",{})
+            comparison = warranty_dates.compare(graph,release_check,bank,paid,row["ref"]) if written else None
+            warranty_execution.attach(payment,release_check,paid=paid.isoformat() if not written or comparison else None)
             timing.extend(warranty_service.payment_checks(release_check.get("tickets",[]),bank,paid.isoformat()))
             snapshot=release_check.get("at_submission")
             if snapshot:
@@ -1232,6 +1235,10 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
                 as_of=snapshot["as_of"]
                 beyond=paid.isoformat()>as_of if as_of else None
                 payment["warranty_payment"]={"paid_on":paid.isoformat(),"date_refs":dates_on_receipt,"after_submission":beyond}
+                if written:
+                    payment["warranty_payment"]["comparison"] = comparison
+                    if comparison:
+                        payment["evidence"] = list(dict.fromkeys([*payment["evidence"], *comparison["evidence"]]))
                 if beyond:
                     timing.append(date_check("payment","risk",f"回单列示付款日 {paid} 晚于资料提交日 {as_of}，需核实实际扣款记录。",
                                              dates_on_receipt+bank.evidence("transfer_status","payment_designation")))

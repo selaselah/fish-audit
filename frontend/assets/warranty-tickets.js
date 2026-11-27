@@ -46,9 +46,11 @@ const WarrantyTickets = (() => {
       if (!linkedState(index,graph,finding,t,state)) continue;
       const other=(ref,field)=>fact(ref,field,graph.documents_by_kind.warranty);
       add('state','工单与期满记录',other(w.defect_ref,'warranty_defects'),state);
-      const closed=item('warranty_closed_on'), cert=other(w.confirmation_ref,'warranty_release');
+      const closed=item('warranty_closed_on'), written=w.certificate && Object.hasOwn(w.certificate,'date');
+      const reading=written?WarrantyDates.issued(finding,graph):null;
+      const cert=written?reading?.fact:other(w.confirmation_ref,'warranty_release');
       if (closed && PhaseEvidence.dateOn(closed)===t.closed_on) {
-        if (cert && PhaseEvidence.dateOn(cert)===WarrantyTimeline.statedDate(w)) add('dates',w.certificate?'两单所列日期':'关闭与期满确认日期',cert,closed);
+        if (cert && (written?reading.iso:PhaseEvidence.dateOn(cert))===WarrantyTimeline.statedDate(w)) add('dates',w.certificate?'两单所列日期':'关闭与期满确认日期',cert,closed);
         const bank=finding.warranty_payment;
         if (bank?.date_refs.length===1) {
           const paid=fact(bank.date_refs[0],'paid_on',graph.documents_by_kind.bank_receipt);
@@ -68,9 +70,11 @@ const WarrantyTickets = (() => {
         l.quote===f.source_line.text && l.facts.includes(ref))?f:null;
     }
     const defects=paper(entry.defect_ref,'warranty_defects','warranty_defects');
-    const cert=paper(entry.confirmation_ref,'warranty_release','warranty_release');
+    const written=entry.certificate && Object.hasOwn(entry.certificate,'date');
+    const reading=written?WarrantyDates.issued(phase,graph):null;
+    const cert=written?reading?.fact:paper(entry.confirmation_ref,'warranty_release','warranty_release');
     const stated=WarrantyTimeline.statedDate(entry);
-    const confirmDay=cert && PhaseEvidence.dateOn(cert)===stated?stated:null;
+    const confirmDay=cert && (written?reading.iso:PhaseEvidence.dateOn(cert))===stated?stated:null;
     const bankDates=payments.flatMap(p=>{
       const bank=p.warranty_payment;
       if (!bank || p.warranty_check?.at_submission?.as_of!==entry.at_submission?.as_of) return [];

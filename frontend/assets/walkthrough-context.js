@@ -57,16 +57,23 @@ export function captureContext(owner, element) {
         const instrument=element?.closest('[data-release-set] [data-instrument]');
         if (instrument) context.params={view:'payment-release',stage:instrument.parentElement.dataset.releaseSet,instrument:instrument.dataset.instrument};
         const certificate=element?.closest('.warranty-certificate')?.closest('[data-phase-finding]')?.dataset.phaseFinding;
-        if (certificate) context.params={view:'warranty-certificate',stage:certificate};
+        if (certificate) {
+          const payment=element.closest('[data-warranty-payment]')?.dataset.warrantyPayment;
+          context.params={view:'warranty-certificate',stage:/^H05-[1-9]\d*$/.test(payment || '')?payment:certificate};
+        }
       }
       if (owner?.id === 'page-dialog') {
         const page = document.querySelector('#page-content .page-view');
         if (page?.dataset.doc && +page.dataset.page > 0) {
           context.doc = page.dataset.doc; context.page = +page.dataset.page;
-          if (+page.dataset.line > 0) context.line = +page.dataset.line;
           delete context.params;
-          const cited = owner.querySelector('.located[data-fact]')?.dataset.fact;
-          if (context.rev && factID.test(cited || '')) context.params = {fact:cited};
+          const row=element?.closest('.evidence-row') || owner.querySelector('.evidence-row.located');
+          const cited=row?.dataset.fact;
+          const fact=context.rev && factID.test(cited || '') && graphIndex(state.bundle.report.graph).facts.get(cited);
+          if (fact && fact.doc===context.doc && fact.page===context.page) {
+            context.params={fact:cited};
+            if (fact.source_line?.number>0) context.line=fact.source_line.number;
+          } else if (+row?.dataset.gapLine>0) context.line=+row.dataset.gapLine;
         }
       }
     }
@@ -78,7 +85,9 @@ export function captureContext(owner, element) {
     const item=element.closest('.release-instrument'), file=item?.querySelector('.release-instrument-name')?.textContent;
     const control=element.closest('.release-decision-line') ? '放行决定' : element.closest('.release-compare-field')?.querySelector('small')?.textContent;
     const note=element.closest('[data-warranty-note]');
-    const sourceLabel = note?'期满确认单批注'+(note.querySelector('button')?' · '+note.querySelector('button').textContent:''):
+    const date=element.closest('.warranty-date-source'), order=element.closest('[data-warranty-order]');
+    const sourceLabel = date ? ['small','time','.warranty-date-place span'].map(s=>date.querySelector(s).textContent).join(' · ') :
+      order ? '两单日期 · '+order.textContent : note?'期满确认单批注'+(note.querySelector('button')?' · '+note.querySelector('button').textContent:''):
       file && control ? file+' · '+control : element.closest('.source-plane,#sample-review canvas') ? '原件页图' :
       element.closest('.evidence-row,.sample-records [data-ref]') ? '证据引文' :
       element.closest('.release-entry')?.querySelector('small')?.textContent;

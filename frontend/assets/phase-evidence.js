@@ -40,6 +40,8 @@ const PhaseEvidence = (() => {
   function pageReferences(graph,doc,page,facts,lineHint,calls) {
     const rows=graph?.invoice_receipt_sources?.lines || [];
     const sources=new Map();
+    const written=WarrantyDates.pageReference(graph,doc,page,lineHint,calls);
+    if (written) sources.set(written.rawLine,written);
     function add(s,label,quality,prefix,hasFact,rects=[]) {
       if (!s.line || s.doc!==doc || s.page!==page || sources.has(s.line)) return;
       if (hasFact ?? facts.some(f=>s.facts.includes(f.id) && f.quote===s.quote)) return;
@@ -129,9 +131,11 @@ const PhaseEvidence = (() => {
       event('acceptance','交付验收',dateOn(day),day,accepted.status);
     }
     if (phase.warranty_check) {
-      const w=phase.warranty_check, fact=unique(phase,'warranty_release');
+      const w=phase.warranty_check, written=w.certificate && Object.hasOwn(w.certificate,'date');
+      const statement=written?WarrantyDates.issued(phase,graph):null;
+      const fact=written?statement?.fact:unique(phase,'warranty_release');
       point('warranty','质保期满','shield-check',w.status,warranty?null:fact,warranty?()=>select('warranty'):inspect(phase));
-      event('warranty',w.certificate?'单上期满日':'期满确认',WarrantyTimeline.statedDate(w),fact,w.status);
+      event('warranty',w.certificate?'单上期满日':'期满确认',written?statement?.iso:WarrantyTimeline.statedDate(w),fact,w.status);
     }
     if (change) {
       const seal=change.effective_on===change.seller_on?change.seller_date_ref:change.buyer_date_ref;

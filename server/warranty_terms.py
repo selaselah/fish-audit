@@ -294,7 +294,12 @@ def assess(graph,contract,releases,receipts,accepted,accepted_on,stage_refs):
                 signature.get("source_check") and signed_name(signer["source_line"]["text"])):
             confirmed=day(cert[1])
         confirmations=[s for s in lines if s["kind"]=="warranty_release"]
-        if filed:
+        if filed and "date" in filed:
+            reading = filed["date"]
+            confirmed = date.fromisoformat(reading["iso"]) if reading else None
+            if reading:
+                confirmation = release.fields["warranty_release"][0]
+        elif filed:
             line=(confirmation or {}).get("source_line") or {}
             confirmed=day(cert[1]) if (filed["linked"] and cert and len(confirmations)==1 and confirmations[0]["line"]
                 and line.get("rects") and line["number"]==confirmations[0]["line"] and

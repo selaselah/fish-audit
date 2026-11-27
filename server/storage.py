@@ -56,6 +56,7 @@ import advance_guarantee
 from payment_releases import verify as verify_payment_releases
 import release_execution
 import warranty_execution
+import warranty_dates
 from invoice_conditions import verify as verify_invoice_conditions
 from repair_completion import verify as verify_repair_completion
 from contract_folios import verify as verify_contract_folios
@@ -794,6 +795,7 @@ class Store:
                 raise CaseError(f"签收前核对付款放行单原件失败。{error}", 409) from error
             try:
                 warranty_execution.verify(paper, read_original, read_text, signing=True)
+                warranty_dates.verify(paper, read_text, read_original=read_original)
             except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
                 raise CaseError(f"签收前核对期满确认单原件失败。{error}", 409) from error
             try:

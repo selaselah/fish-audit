@@ -352,6 +352,8 @@ def audit_graph(graph, controls):
         warranty = finding.get("warranty_check", {})
         if warranty.get("certificate"):
             procedure["warranty_certificate"] = {k:warranty[k] for k in ("certificate","stated_on","confirmed_on","confirmation_ref","defect_ref")}
+            if comparison := finding.get("warranty_payment",{}).get("comparison"):
+                procedure["warranty_written_dates"] = comparison
     method_ids = {key for row in procedures for key in row["methods"]}
     packet = {"profile": graph.get("profile"), "document_types": graph["documents_by_kind"], "entities": entities,
               "relations": relations, "evidence": facts, "eligible_citations": references, "procedures": procedures,

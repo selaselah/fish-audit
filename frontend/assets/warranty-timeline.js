@@ -7,7 +7,7 @@ const WarrantyTimeline = (() => {
     const n=Date.parse(value+'T00:00:00Z');
     return Number.isFinite(n) && new Date(n).toISOString().slice(0,10)===value ? n/dayMs : null;
   }
-  function certificateCard(proof,phase) {
+  function certificateCard(proof,phase,pairs,unread) {
     const {record,doc,page}=proof, url=workpaperSource(doc.id,'original');
     const card=el('section','','warranty-certificate');
     card.id='warranty-certificate-'+phase.id+'-'+record.unit.replaceAll('/','-');
@@ -17,6 +17,15 @@ const WarrantyTimeline = (() => {
     file.prepend(glyph('file-earmark-text')); file.append(glyph('arrows-angle-expand')); file.id=card.id+'-page';
     file.setAttribute('aria-label','查看'+doc.name+'第 '+page+' 页整页');
     card.append(box('warranty-file-head',file,el('strong',proof.label,'warranty-file-state')));
+    const dates=WarrantyDates.panel(pairs.filter(p=>p.stated.read.unit===record.unit),card.id);
+    if (dates) card.append(dates);
+    if (unread?.unit===record.unit) {
+      const split=/[0-9０-９][ \u00a0\u2002\u2003\u2009\u202f\u3000]+[0-9０-９]/u.test(unread.quote);
+      const anchor=action('第 '+unread.page+' 页 · 第 '+unread.line+' 行',()=>openPage(doc.id,unread.page,null,unread.line,null,'warranty-date-line/'+unread.line),'text-button');
+      anchor.append(glyph('arrows-angle-expand'));anchor.id=card.id+'-unread-line';
+      card.append(box('warranty-date-unread',el('small',split?'日期数字断开，待核原件':'单上日期待核'),
+        el('blockquote',unread.quote),anchor));
+    }
     if (proof.signature?.signatures.length) card.append(PdfSignatureCard.digital(proof.signature));
     if (proof.notes?.length) {
       for (const [i,note] of proof.notes.entries()) {
@@ -65,15 +74,20 @@ const WarrantyTimeline = (() => {
     const starts=snapshot.start_refs.map(id=>source(phase,id,'accepted_on',['acceptance','reinspection']))
       .filter(f=>f && PhaseEvidence.dateOn(f)===entry.accepted_on);
     const term=source(phase,entry.term_ref,'warranty_period',['contract'],'warranty_period');
-    const confirmation=source(phase,entry.confirmation_ref,'warranty_release',['warranty'],'warranty_release');
+    const report=state.bundle?.report.graph===graph?state.bundle.report:null;
+    const physical=entry.certificate && report?PerformanceIndex.warrantyProofs(phase,report):[];
+    const written=entry.certificate && Object.hasOwn(entry.certificate,'date');
+    const statement=written?WarrantyDates.confirmation(phase,report,physical):null;
+    const pairs=statement?payments.map(p=>WarrantyDates.comparison(phase,p,report,statement)).filter(Boolean):[];
+    const unread=written && !statement?WarrantyDates.unreadRow(phase,report,physical):null;
+    const confirmation=written?statement?.fact:source(phase,entry.confirmation_ref,'warranty_release',['warranty'],'warranty_release');
     const defect=source(phase,entry.defect_ref,'warranty_defects',['warranty'],'warranty_defects');
     const inline=entry.condition_ref===phase.stage.clause_ref;
     const condition=source(phase,entry.condition_ref,inline?'payment_stage':'warranty_condition',['contract'],inline?'inline_condition':'warranty_condition');
     const startDate=starts.length ? entry.accepted_on : null;
     const endDate=term && (entry.period?.fixed || startDate) ? entry.calendar_end : null;
-    const physical=entry.certificate && state.bundle?.report.graph===graph?PerformanceIndex.warrantyProofs(phase,state.bundle.report):[];
     const stated=statedDate(entry);
-    const certificateDate=confirmation && PhaseEvidence.dateOn(confirmation)===stated ? stated : null;
+    const certificateDate=written?statement?.iso || null:confirmation && PhaseEvidence.dateOn(confirmation)===stated ? stated : null;
     const selectedSources=(items,label)=>items.map(f=>[label,f]);
     const rows=[
       {key:'start',label:'终验 / 复验',value:startDate,refs:selectedSources(starts,'起算原件')},
@@ -83,9 +97,10 @@ const WarrantyTimeline = (() => {
     for (const payment of payments) {
       const record=payment.warranty_payment;
       if (!record || payment.warranty_check?.at_submission?.as_of!==snapshot.as_of) continue;
-      const refs=record.date_refs.map(id=>source(payment,id,'paid_on',['bank_receipt'])).filter(f=>f && PhaseEvidence.dateOn(f)===record.paid_on);
+      const pair=pairs.find(p=>p.id===payment.id);
+      const refs=pair?[pair.bank.fact]:record.date_refs.map(id=>source(payment,id,'paid_on',['bank_receipt'])).filter(f=>f && PhaseEvidence.dateOn(f)===record.paid_on);
       rows.push({key:payment.id,label:payments.length>1?'回单 '+(rows.length-2):'回单落款',value:refs.length?record.paid_on:null,
-        refs:selectedSources(refs,'付款回单'),payment});
+        refs:selectedSources(refs,'付款回单'),payment,pair});
     }
     for (const item of rows) {
       item.when=day(item.value);
@@ -93,8 +108,9 @@ const WarrantyTimeline = (() => {
     }
     const bankRows=rows.filter(r=>r.payment), futureBank=bankRows.find(r=>r.when!==null && r.when>cutoff);
     const [start,end,cert]=rows;
-    const early=bankRows.find(r=>r.when!==null && cert.when!==null && r.when<cert.when);
-    const shared=bankRows.find(r=>r.when!==null && r.when===cert.when);
+    const comparable=written?bankRows.filter(r=>r.pair):bankRows;
+    const early=comparable.find(r=>r.when!==null && cert.when!==null && r.when<cert.when);
+    const shared=comparable.find(r=>r.when!==null && r.when===cert.when);
     let focus=end, title='质保依据待核';
     if (start.when!==null && start.when>cutoff) { focus=start; title='终验日期晚于提交 '+(start.when-cutoff)+' 天'; }
     else if (end.when!==null && end.when>cutoff) title='距质保末日还有 '+(end.when-cutoff)+' 天';
@@ -183,7 +199,7 @@ const WarrantyTimeline = (() => {
           el('strong','= '+item.value.replaceAll('-','.'))));
       }
       if (item.key==='confirmation') {
-        for (const proof of physical) detail.append(certificateCard(proof,phase));
+        for (const proof of physical) detail.append(certificateCard(proof,phase,pairs,unread));
       }
       for (const [label,f] of item.refs) {
         const btn=action('',()=>openPage(f.doc,f.page,f.id),'warranty-cite');
@@ -193,7 +209,7 @@ const WarrantyTimeline = (() => {
         btn.append(el('span','，打开'+f.name+'原件','visually-hidden'));
         detail.append(btn);
       }
-      if (!item.refs.length) detail.append(el('span','本版缺少可定位的'+item.label+'依据。','small'));
+      if (!item.refs.length && !(item.key==='confirmation' && physical.length)) detail.append(el('span','本版缺少可定位的'+item.label+'依据。','small'));
       requestAnimationFrame(preview);
     }
     for (const [i,item] of rows.entries()) {
@@ -238,7 +254,9 @@ const WarrantyTimeline = (() => {
     phase?.querySelector('.warranty-event[data-event=confirmation]')?.click();
     const card=phase?.querySelector('.warranty-certificate');
     if (!card) return false;
-    revealPaperTarget(card);
+    const pair=card.querySelector('.warranty-written-dates');
+    if (finding.rule==='H05' && pair) pair.dispatchEvent(new CustomEvent('select-warranty-payment',{detail:finding.id}));
+    revealPaperTarget(finding.rule==='H05' && pair && !pair.hidden?pair:card);
     return true;
   }
   function locate(overview,params) {

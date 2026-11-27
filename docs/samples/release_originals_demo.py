@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -76,7 +77,7 @@ def materials(archive, target):
     return report["policy"]["profile"], groups
 
 
-def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MASTER[2], kind="payment_release", reviewer="水印放行单演练"):
+def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MASTER[2], kind="payment_release", reviewer="水印放行单演练", replacement=None):
     """Reconcile visible sample fields against the fixed, previously reviewed originals."""
     from config import PERFORMANCE
     from documents import prepare
@@ -99,6 +100,14 @@ def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MAS
             path = files[doc["name"]]
             page, = prepare(path,1,save_images=False)
             archived_lines = bundle.read(f"pages/{base['id']}/1.txt").decode().splitlines()
+            old_row = new_row = None
+            if replacement and name==replacement[0]:
+                label, value = replacement[1:]
+                position, = [i for i,r in enumerate(archived_lines) if r.startswith(label+"：")]
+                new_row = page["text"].splitlines()[position]
+                require(normalize(new_row)==normalize(label+"："+value) and re.findall(r"[0-9]+",new_row)==re.findall(r"[0-9]+",value),
+                        "新水印样本的原行、日期及数字分组")
+                old_row, archived_lines[position] = archived_lines[position], new_row
             require(archived_lines[0] == WATERMARK and next(n for n in report["graph"]["nodes"]
                     if n["id"] == doc["id"]+"/p1")["sha256"] == page["sha256"], "物理页及水印")
             if path.suffix == ".jpg":
@@ -107,6 +116,8 @@ def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MAS
                 require(list(map(normalize, page["text"].splitlines())) == list(map(normalize, archived_lines)),
                         "载体变更后的全部打印行")
             for source in (f for f in master["facts"] if f["doc"] == base["id"]):
+                if source["quote"] == old_row:
+                    source = {**source,"quote":new_row,"value":new_row.partition("：")[2]}
                 quote = source["quote"]
                 if quote not in archived_lines:
                     continue

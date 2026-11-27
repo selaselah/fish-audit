@@ -1259,6 +1259,24 @@ button.mandate-day.signing-day[aria-pressed=true] { box-shadow:inset 0 0 0 1px c
 .warranty-file-head { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:4px 12px; padding:6px 12px; }
 .warranty-file { display:inline-flex; align-items:center; gap:7px; max-width:100%; min-height:40px; padding:0; background:transparent; border:0; overflow-wrap:anywhere; color:var(--accent-hover); text-align:start; font-weight:600; }
 .warranty-file-state { font-size:.8rem; color:var(--ink); }
+.warranty-written-dates { margin:4px 12px 10px; min-width:0; }
+.warranty-date-heading { display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:4px 8px; margin-bottom:5px; }
+.warranty-date-heading h5 { margin:0; font-size:.8rem; font-weight:600; color:var(--secondary); }
+.warranty-date-heading strong { font-size:.8rem; color:var(--ink); }
+.warranty-written-dates[data-order=before] .warranty-date-heading strong { color:var(--attention); }
+.warranty-date-heading select { max-width:100%; }
+.warranty-date-pair { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }
+.warranty-date-source { min-width:0; display:flex; flex-direction:column; align-items:stretch; gap:3px; padding:6px 8px;
+  border:1px solid var(--line); border-radius:5px; background:var(--canvas); color:var(--ink); text-align:start; }
+.warranty-date-source:hover { border-color:var(--accent-line); background:var(--accent-soft); }
+.warranty-date-source:focus-visible { outline:2px solid var(--focus); outline-offset:1px; }
+.warranty-date-source small,.warranty-date-place { font-size:.72rem; color:var(--secondary); }
+.warranty-date-source time { font-size:.86rem; font-weight:600; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
+.warranty-date-source time span { white-space:nowrap; }
+.warranty-date-place { margin-top:auto; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:2px; color:var(--accent-hover); }
+.warranty-date-unread { margin:6px 12px; }
+.warranty-date-unread small { color:var(--attention); }
+.warranty-date-unread blockquote { margin:3px 0; font-size:.85rem; overflow-wrap:anywhere; }
 .warranty-certificate .pdf-digital { margin:2px 12px; }
 .warranty-file-status { margin:5px 12px 10px; font-size:.8rem; color:var(--secondary); }
 .warranty-original-note { margin:6px 12px; padding:6px 10px; border-inline-start:3px solid var(--accent-line); background:var(--accent-soft); }
