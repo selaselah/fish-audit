@@ -165,7 +165,7 @@ const PhaseEvidence = (() => {
     const release=opinion && phase.payment_opinion.release;
     if (release) {
       const matched=release.state==='matched', signatureDay=ReleaseEvidence.fact(graph,phase,release.date_ref);
-      const mismatch=release.signature_records && (release.signature_mismatch || ['reference_mismatch','signer_mismatch'].includes(release.state));
+      const mismatch=release.signature_records && (release.signature_mismatch || ['reference_mismatch','signer_mismatch','decision_conflict'].includes(release.state));
       point('release',release.signature_records?'放行签认':'具名放行','journal-text',matched?'ok':mismatch?'risk':'missing',null,()=>select('opinion'));
       const hold=notes.length===1 && notes[0].stance==='hold' ? notes[0] : null;
       const held=phase.payment_opinion.record_dates.find(d=>d.unit===hold?.unit && d.date===release.held_on);

@@ -145,6 +145,50 @@ async function checkExecution(ctx,report,phase,rev) {
   console.log('PASS · R'+rev+' · '+record.state+' · release tabs, original, keyboard, evidence binding and six widths');
 }
 
+async function checkComparison(ctx,report,phase,rev) {
+  const {root,call,evaluate,wait}=ctx, release=phase.payment_opinion.release;
+  const bank=report.findings.find(f=>f.rule==='H05' && f.stage?.clause_ref===phase.stage.clause_ref);
+  const base=root+'/workpaper/'+report.case_id+'?rev='+rev+'&view=payment-release&stage='+bank.id;
+  const q=s=>'document.querySelector('+JSON.stringify(s)+')', group='[data-release-set="'+phase.id+'"]';
+  const [first,second]=release.instruments, unit=group+' [data-instrument="'+second.unit+'"]', selector=unit+' .release-decision-line';
+  await call('Page.navigate',{url:base+'&instrument='+encodeURIComponent(second.unit)});
+  await wait(q(unit)+'?.getClientRects().length && '+q(unit)+'===document.activeElement','second approval in the issued installment');
+  for (const width of [1440,1024,820,768,390,320]) {
+    await size(ctx,width);
+    assert.equal(await evaluate(q(group)+'.querySelectorAll("[data-instrument]").length'),release.instruments.length);
+    assert.equal(await evaluate(q(group+' .release-flag')+'.dataset.risk'),String(release.state==='decision_conflict'));
+    assert.ok(await evaluate(q(group)+'.scrollWidth<='+q(group)+'.clientWidth+1'));
+    if (release.state==='decision_conflict') await inspect(ctx,width,group,'release-comparison');
+  }
+  for (const item of [first,second]) {
+    const row=release.sources.find(r=>r.unit===item.unit && r.role==='decision' && r.line);
+    const prefix=group+' [data-instrument="'+item.unit+'"]';
+    assert.ok(await evaluate(q(prefix+' .release-decision-line')+'.textContent.includes('+JSON.stringify(row.quote)+')'));
+    await evaluate(q(prefix+' .release-decision-line')+'.click()');
+    await wait(q('#page-dialog .page-view')+'?.dataset.doc==='+JSON.stringify(row.doc)+' && '+q('#page-dialog .located')+'?.textContent.includes('+JSON.stringify(row.quote)+')','decision cites its own physical original');
+    assert.equal(await evaluate(q('#reader-revision')+'.textContent'),'R'+rev);
+    await evaluate(q('#page-dialog [data-close]')+'.click()');
+  }
+  const field=release.instruments[1].receipt_ref;
+  await evaluate(q(unit+' .release-compare-field button')+'.click()');
+  await wait(q('#page-dialog .located')+'?.dataset.fact==='+JSON.stringify(field),'second receipt reference');
+  await evaluate(q('#page-dialog [data-close]')+'.click()');
+  await evaluate(q('#walk-launch')+'.click()');
+  await wait(q('#walk-dialog')+'?.open && !'+q('#walk-pick')+'.disabled','walkthrough can point at the second opinion');
+  await evaluate(q('#walk-pick')+'.click()');await evaluate(q(selector)+'.click()');
+  const printed=report.graph.documents.find(d=>d.id===release.sources.find(r=>r.unit===second.unit).doc).name;
+  await wait(q('#walk-dialog')+'.open && '+q('#walk-location')+'.textContent.includes('+JSON.stringify(printed)+')','selected approval named in feedback');
+  await evaluate(q('#walk-close')+'.click()');
+  const saved=await evaluate("import('/assets/walkthrough-context.js').then(m=>{const c=m.captureContext(null,"+q(selector)+");return {c,url:m.returnUrl(c,null)}})");
+  assert.deepEqual(saved.c.params,{view:'payment-release',stage:phase.id,instrument:second.unit});
+  assert.equal(saved.c.rev,rev);
+  await call('Page.navigate',{url:root+saved.url});
+  await wait(q(selector)+'?.getClientRects().length && '+q(selector)+'.classList.contains("walk-mark")','reopened walkthrough highlights the original decision');
+  await call('Page.navigate',{url:base+'&instrument=d99'});
+  await wait(q('#case-panel > [role=status]')+'?.textContent.includes("尚无可定位")','other documents cannot open this comparison');
+  console.log('PASS · R'+rev+' · both printed decisions and receipts, six widths and the recorded control return');
+}
+
 export async function checkRelease({root,call,evaluate,wait},cid,revision) {
   const api=root+'/api/cases/'+cid, task=await (await fetch(api)).json();
   assert.ok(task.title.startsWith('合成演练 · '));
@@ -154,6 +198,7 @@ export async function checkRelease({root,call,evaluate,wait},cid,revision) {
   await wait(node('.phase-choice'),'issued phases');
   const phase=report.findings.filter(f=>f.rule==='H04')[1], bank=report.findings.find(f=>f.rule==='H05');
   const r=phase.payment_opinion?.release;
+  if (r?.instruments) return checkComparison({root,call,evaluate,wait},report,phase,rev);
   if (r?.signature_records?.length) return checkExecution({root,call,evaluate,wait},report,phase,rev);
   if (!r) {
     assert.ok(!report.graph.payment_release_sources);

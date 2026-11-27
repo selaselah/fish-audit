@@ -78,3 +78,24 @@ button.release-entry { cursor:pointer; }
   .release-head .release-flag { justify-self:end; }
   .release-pane[data-originals=true] .release-pair { grid-template-columns:minmax(0,1fr); }
 }
+.release-comparison { container-type:inline-size; min-width:0; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:var(--surface,#fff); }
+.release-comparison h4 { margin:0; font:650 1rem/1.5 var(--font-ui); }
+.release-compare-basis,.release-instrument { padding:10px 14px; border-bottom:1px solid var(--line); }
+.release-compare-basis,.release-instrument-head,.release-instrument-state,.release-compare-fields { display:flex; gap:8px 16px; align-items:baseline; flex-wrap:wrap; }
+.release-compare-basis,.release-unknown,.release-compare-field small { color:var(--muted,#46536a); font:500 .78rem/1.5 var(--font-ui); }
+.release-instrument { display:grid; gap:5px; }
+.release-instrument-head { justify-content:space-between; }
+.release-instrument-state strong { font:650 .94rem/1.5 var(--font-ui); }
+.release-line-link,.release-decision-line { min-width:0; color:var(--accent-hover); border:0; border-radius:4px; background:transparent; cursor:pointer; overflow-wrap:anywhere; text-align:start; }
+.release-line-link { font:550 .82rem/1.5 var(--font-ui); text-decoration:underline; text-underline-offset:3px; padding:4px 0; }
+.release-instrument-name { font-size:.9rem; }
+.release-compare-field { display:flex; align-items:baseline; flex-wrap:wrap; gap:0 6px; }
+.release-decision-line { display:flex; justify-content:space-between; flex-wrap:wrap; align-items:baseline; gap:4px 10px; background:#f1f4fa; color:var(--ink); padding:8px 10px; font:550 .82rem/1.5 var(--font-ui); }
+.release-decision-line small { color:var(--accent-hover); white-space:nowrap; }
+.release-decision-line:hover { background:var(--accent-soft,#e9effa); }
+.release-comparison .release-guidance { margin:0; }
+@container (max-width: 420px) {
+  .release-compare-fields { display:grid; gap:1px; }
+  .release-instrument,.release-compare-basis { padding:9px 10px; }
+  .release-line-link { min-height:30px; }
+}

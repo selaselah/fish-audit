@@ -5,7 +5,7 @@ const dialogs = {'page-dialog':'资料原页','sample-review':'演练原件','sa
   'review-dialog':'人工验收','peer-dialog':'复核签收','amend-dialog':'补录原文','case-preview':'任务速览',
   'quick-dialog':'快速定位','case-finder':'查找案例'};
 const homeKeys = ['scene','slip','copy','edition','batch','record','pdf','carrier'];
-const caseKeys = ['view','stage','receipt','ticket','call','agreement','acceptance','finding','fact'];
+const caseKeys = ['view','stage','instrument','receipt','ticket','call','agreement','acceptance','finding','fact'];
 const identifier = /^[a-zA-Z][a-zA-Z0-9_-]{0,95}$/;
 const factID = /^d\d{2}\/p[1-9]\d*\/(?:[ft][1-9]\d*|h[a-f0-9]{12})$/;
 function knownParams(search, keys) {
@@ -54,6 +54,8 @@ export function captureContext(owner, element) {
         if (finding && /^[A-Z]\d{2}-[1-9]\d*$/.test(finding)) context.params = {finding};
         const stage = element?.closest('.release-card')?.closest('[data-phase-finding]')?.dataset.phaseFinding;
         if (stage && /^H04-[1-9]\d*$/.test(stage)) context.params = {view:'payment-release',stage};
+        const instrument=element?.closest('[data-release-set] [data-instrument]');
+        if (instrument) context.params={view:'payment-release',stage:instrument.parentElement.dataset.releaseSet,instrument:instrument.dataset.instrument};
       }
       if (owner?.id === 'page-dialog') {
         const page = document.querySelector('#page-content .page-view');
@@ -71,7 +73,9 @@ export function captureContext(owner, element) {
   if (element) {
     const fieldLabel=element.labels?.[0]?.cloneNode(true);
     fieldLabel?.querySelectorAll('input,select,textarea').forEach(control=>control.remove());
-    const sourceLabel = element.closest('.source-plane,#sample-review canvas') ? '原件页图' :
+    const item=element.closest('.release-instrument'), file=item?.querySelector('.release-instrument-name')?.textContent;
+    const control=element.closest('.release-decision-line') ? '放行决定' : element.closest('.release-compare-field')?.querySelector('small')?.textContent;
+    const sourceLabel = file && control ? file+' · '+control : element.closest('.source-plane,#sample-review canvas') ? '原件页图' :
       element.closest('.evidence-row,.sample-records [data-ref]') ? '证据引文' :
       element.closest('.release-entry')?.querySelector('small')?.textContent;
     const text = sourceLabel || element.getAttribute('aria-label') || fieldLabel?.textContent ||

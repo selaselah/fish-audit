@@ -565,8 +565,11 @@ class EnterpriseFlow(unittest.TestCase):
         stage_view=entity_link+"?rev=1&view=payment-checks&stage=H04-6"
         release_path="?rev=1&view=payment-release&stage=H04-6"
         self.assertEqual(admin.get(entity_link+release_path).headers["Location"],"/app#w/"+a+"/case/"+emp_case+release_path)
+        instrument_path=release_path+"&instrument=d06"
+        self.assertEqual(admin.get(entity_link+instrument_path).headers["Location"],"/app#w/"+a+"/case/"+emp_case+instrument_path)
         for query in ("?rev=1&view=payment-release", release_path+"&stage=H04-7", release_path+"&rev=2",
-                      release_path+"&view=payment-checks", "?rev=1&view=payment-release&stage=H03-1"):
+                      release_path+"&view=payment-checks", "?rev=1&view=payment-release&stage=H03-1",
+                      release_path+"&instrument=x", instrument_path+"&instrument=d05", "?rev=1&view=payment-checks&instrument=d06"):
             self.assertEqual(admin.get(entity_link+query).status_code,400)
         self.assertEqual(admin.get(stage_view).headers["Location"],"/app#w/"+a+"/case/"+emp_case+"?rev=1&view=payment-checks&stage=H04-6")
         paid_view=entity_link+"?rev=1&view=payment-checks&stage=H05-9"

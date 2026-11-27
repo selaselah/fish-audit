@@ -347,6 +347,8 @@ def audit_graph(graph, controls):
             if release:=opinion.get("release"):
                 procedure["payment_opinion"]["release"]={key:release.get(key) for key in
                     ("state","required","signer","held_on","signed_on","as_of","timing","written_timing","paid_on","signature_records","signature_mismatch","evidence")}
+                if "instruments" in release:
+                    procedure["payment_opinion"]["release"]["instruments"] = release["instruments"]
     method_ids = {key for row in procedures for key in row["methods"]}
     packet = {"profile": graph.get("profile"), "document_types": graph["documents_by_kind"], "entities": entities,
               "relations": relations, "evidence": facts, "eligible_citations": references, "procedures": procedures,

@@ -74,6 +74,7 @@ class ReleaseExecutionTests(unittest.TestCase):
             del graph[key]
         old = {**VERSION, "profile": PERFORMANCE, "version": "2026.11.27.10"}
         del old["release_execution"]
+        del old["release_comparison"]
         report = {"policy":old, "graph":graph, "findings":execute(graph, PERFORMANCE)}
         r, = [f["payment_opinion"]["release"] for f in report["findings"] if f["rule"]=="H05"]
         self.assertEqual((r["state"],r["timing"]), ("matched","after"))

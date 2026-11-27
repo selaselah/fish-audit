@@ -47,6 +47,7 @@ import contract_comments
 import acceptance_reservations
 import payment_releases
 import release_execution
+import release_comparison
 import repair_completion
 import reinspection_wait
 from acceptance_authority import CLAUSE as AUTHORITY_CLAUSE, SIGNER as ACCEPTANCE_SIGNATURE, attach as record_signatories, witness_edges
@@ -366,6 +367,8 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     graph["edges"].extend(links)
     cash=payment_releases.sources(graph,lambda doc,number:texts[doc,number])
     graph["payment_release_sources"]=cash
+    if len(release_comparison.units(cash)) > 1:
+        graph[release_comparison.KEY] = release_comparison.FORMAT
     graph["edges"].extend(payment_releases.relations(cash))
     ledgers = release_execution.sources(graph, read_original, lambda doc, page: texts[doc, page])
     graph.update(ledgers)

@@ -1,6 +1,7 @@
 """Identify what physically supports the signature on an acceptance-payment release."""
 
 import original_records
+import release_comparison
 from pdf_execution import unit_graph, unit_records
 
 
@@ -41,7 +42,8 @@ def proposed(graph, contract, opinion, row, record):
     ledger = graph["payment_release_sources"]
     clauses = [r for r in ledger["lines"] if r["unit"] == contract.unit and r["role"] == "authority" and r["line"]]
     units = {p["unit"] for p in ledger["pages"] if p["role"] == "release"}
-    return len(units) == 1 and len(clauses) == 1 and mandate(clauses[0]["quote"])[0] == row["index"]
+    identified = len(units) == 1 or bool(units and graph.get(release_comparison.KEY) == release_comparison.FORMAT)
+    return identified and len(clauses) == 1 and mandate(clauses[0]["quote"])[0] == row["index"]
 
 
 def apply(check, graph):
@@ -60,6 +62,7 @@ def apply(check, graph):
 
 
 def verify(report, read_original, read_text, *, signing=False):
+    release_comparison.program(report)
     graph, policy = report["graph"], report["policy"]
     checks = [r for f in report["findings"] if f["rule"] in ("H04", "H05") and (r := f.get("payment_opinion", {}).get("release"))]
     nodes = [n for n in graph["nodes"] if n["type"].startswith(("release_pdf_", "release_original_", "release_word_"))]

@@ -113,7 +113,7 @@ def relations(ledger):
              "evidence":[f"{s['doc']}/p{s['page']}",*s["facts"]]} for s in ledger["lines"]]
 
 
-def recognized(ledger):
+def recognized(ledger, decision_pattern=RELEASE):
     pages=[p for p in ledger.get("pages",[]) if p["role"]=="release"]
     units=set()
     for p in pages:
@@ -121,7 +121,7 @@ def recognized(ledger):
         decisions=[s for s in rows if s["role"]=="decision"]
         if (p["printed_title"] and p["identity_clear"] and p["native"] and p["text_only"]
                 and sum(other["unit"]==p["unit"] for other in pages)==1 and len(decisions)==1
-                and RELEASE.fullmatch(literal(decisions[0]["quote"])) and all(s["role"]!="qualification" for s in rows)):
+                and decision_pattern.fullmatch(literal(decisions[0]["quote"])) and all(s["role"]!="qualification" for s in rows)):
             units.add(p["unit"])
     return units
 
@@ -260,6 +260,13 @@ def apply_release(finding,release):
         else:
             finding["detail"]+=f" 原暂缓所据验收单号与放行单一致，合同指定人{release['signer']}已签认，放行日为 {release['signed_on']}。"
             return
+    elif release["state"]=="decision_conflict":
+        status="risk"
+        detail="同一验收单、同一期款的放行单分别载明恢复支付和继续暂缓。请核对最终签发版本、签批权限及生效顺序。"
+        if finding["rule"]=="H05":
+            detail+=" 请调取本笔实付时适用的审批记录。"
+    elif release["state"]=="multiple_pending":
+        detail="附有多份放行单，须逐单核对所引验收单、适用期次和最终有效版本。"
     elif release["state"]=="signature_pending":
         detail=f"放行单签认栏列名{release['signer']}，与合同指定人一致。须核实本人签署、权限及放行时间。"
         if release.get("written_timing")=="before":

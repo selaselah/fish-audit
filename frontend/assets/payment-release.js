@@ -39,6 +39,7 @@ const ReleaseEvidence = (() => {
     if (release.state==='pending' && one(rows,'approval_date') && !rows.some(s=>s.role==='date')) return '缺放行签字日';
     if (release.signature_mismatch) return '签名校验不符';
     return {matched:'已核具名放行',signature_pending:'签署身份待核',scope_pending:'放行归属待核',
+      decision_conflict:'书面意见相反',multiple_pending:'多份放行单待核',
       signer_mismatch:release.signature_records?'签认栏列名不符':'签发人不符',reference_mismatch:'原验收单号不符',absent:'待补放行单',future:'签字日晚于提交日'}[release.state] || '放行依据待核';
   }
   function filedUnit(graph,id) {
@@ -48,6 +49,7 @@ const ReleaseEvidence = (() => {
   function panel(phase,notes,report) {
     if (!report || !phase.payment_opinion?.release?.signature_records?.length) return null;
     const proofs=PerformanceIndex.releaseProofs(phase,report);
+    if (phase.payment_opinion.release.instruments) return ReleaseComparison.render(phase,report,proofs);
     if (proofs.length!==1) return null;
     const [proof]=proofs, {graph}=report, idx=graphIndex(graph), {doc,record}=proof;
     const release=phase.payment_opinion.release, rows=sources(graph,phase), filed=rows.filter(s=>s.unit===record.unit);
@@ -90,16 +92,22 @@ const ReleaseEvidence = (() => {
     model.permalink.setAttribute('aria-label','本版付款放行单核对固定链接');
     return ReleaseCard.render(model,'release-'+phase.id);
   }
-  function reveal(overview,finding,report) {
+  function reveal(overview,finding,report,instrument=null) {
     const proofs=finding && PerformanceIndex.releaseProofs(finding,report);
-    if (!overview || proofs?.length!==1) return false;
+    if (!overview || !proofs?.length || instrument && !proofs.some(p=>p.record.unit===instrument)) return false;
     const phases=report.findings.filter(f=>f.rule==='H04' && f.stage?.clause_ref===finding.stage?.clause_ref &&
-      f.payment_opinion?.release?.signature_records?.includes(proofs[0].record.id));
+      proofs.every(p=>f.payment_opinion?.release?.signature_records?.includes(p.record.id)));
     if (phases.length!==1) return false;
     const choice=overview.querySelector('[data-phase-choice="'+CSS.escape(phases[0].id)+'"]');
     if (!choice) return false;
     choice.click();
     const phase=overview.querySelector('[data-phase-finding="'+CSS.escape(phases[0].id)+'"]');
+    if (proofs.length>1) {
+      const group=phase?.querySelector('[data-release-set]');
+      const target=instrument?group?.querySelector('[data-instrument="'+CSS.escape(instrument)+'"]'):group?.querySelector('h4');
+      if (!target) return false;
+      phase.querySelector('.proof-mode[data-mode=opinion]').click();revealPaperTarget(target);return true;
+    }
     const card=phase?.querySelector('.release-card[data-release-record="'+CSS.escape(proofs[0].record.id)+'"]');
     if (!card) return false;
     phase.querySelector('.proof-mode[data-mode=opinion]').click();
@@ -110,7 +118,7 @@ const ReleaseEvidence = (() => {
   function locate(overview,params) {
     const bundle=state.bundle,valid=['stage','rev','view'].every(k=>params.getAll(k).length===1) && String(bundle.rev)===params.get('rev');
     const finding=valid && bundle.report.findings.find(f=>f.id===params.get('stage'));
-    if (reveal(overview,finding,bundle.report)) return;
+    if (params.getAll('instrument').length<=1 && reveal(overview,finding,bundle.report,params.get('instrument'))) return;
     const notice=el('p','本版所选检查尚无可定位的放行签署凭证。','note');
     notice.setAttribute('role','status');notice.tabIndex=-1;overview.prepend(notice);revealPaperTarget(notice);
   }

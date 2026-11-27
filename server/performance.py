@@ -43,6 +43,7 @@ import inspection_register
 import acceptance_payments
 import payment_releases
 import release_execution
+import release_comparison
 import repair_completion
 import reinspection_wait
 from performance_versions import (FIRST_FORMAT, BOARD_FORMAT, REINSPECTION_FORMAT, DELEGATION_FORMAT, IDENTITY_FORMAT,
@@ -760,6 +761,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
     cash=graph.get("payment_release_sources",{})
     classified.difference_update(kinds.get("payment_release",[]))
     classified.update(payment_releases.recognized(cash))
+    classified.update(release_comparison.bounded_holds(graph, contract, receipts))
     ticket_units,bounded_tickets=warranty_service.classified(graph.get("warranty_sources",{}))
     classified.difference_update(ticket_units)
     classified.update(bounded_tickets)
@@ -1138,6 +1140,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
                 if candidate:
                     release["state"]="scope_pending"
                 release_execution.apply(release,graph)
+                release_comparison.attach(release,graph,contract,record,opinion,row)
                 opinion={**opinion,"release":release,"units":list(dict.fromkeys([*opinion["units"],*release["units"]])),
                          "evidence":list(dict.fromkeys([*opinion["evidence"],*release["evidence"]]))}
         acceptance_payments.attach(check,opinion)

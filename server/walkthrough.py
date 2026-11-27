@@ -9,7 +9,7 @@ from storage import encode, stamp
 
 SCREENS = {"home", "desk", "case", "rules", "library", "team", "account"}
 HOME_PARAMS = {"scene", "slip", "copy", "edition", "batch", "record", "pdf", "carrier", "term", "agreement"}
-CASE_PARAMS = {"view", "stage", "receipt", "ticket", "call", "agreement", "acceptance", "finding", "fact"}
+CASE_PARAMS = {"view", "stage", "instrument", "receipt", "ticket", "call", "agreement", "acceptance", "finding", "fact"}
 
 
 def check_context(value):

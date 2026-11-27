@@ -139,7 +139,8 @@ const PerformanceIndex = (() => {
   }
   function specialist(item) {
     const target=id=>document.getElementById(id);
-    if (item.payment_opinion?.release?.signature_records?.length && releaseProofs(item,state.bundle.report).length===1) {
+    if (item.payment_opinion?.release?.signature_records?.length &&
+        releaseProofs(item,state.bundle.report).length===(item.payment_opinion.release.instruments?.length || 1)) {
       const bundle=state.bundle;
       return action('核对放行原件',()=>{if (state.bundle===bundle) ReleaseEvidence.reveal(target('case-panel'),item,bundle.report);},'text-button');
     }
