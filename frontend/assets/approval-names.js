@@ -1,7 +1,7 @@
 // Show a comparison only after locating the actual clause, named field and contract counterparties.
 const ApprovalNames = (() => {
   const firstFormat='cited-inspection-payment-use-v5', format='cited-inspection-payment-use-v6';
-  const supports=value=>value===firstFormat || value===format;
+  const supports=value=>[firstFormat,format,'cited-inspection-payment-use-v7','cited-inspection-payment-use-v8'].includes(value);
   const signers=['签批人姓名','审批人姓名','实际签批人'];
   const labels={listed:'两处姓名相符',different:'签批人不同',partial:'共同签批少一人',missing:'签批姓名待补',other_stage:'属于其他期款',scope:'签批范围待核'};
   const headings=['付款签批约定','付款审批人约定'];
@@ -16,7 +16,7 @@ const ApprovalNames = (() => {
   const pointers=new Set(['详附件','见附件','见签章','见附表','见下页','详附表','另附','见授权书']);
   function name(text,version) {
     return /^[\u3400-\u9fff]{2,4}$/u.test(text) &&
-      !(version===format && (unnamed.has(text) || pointers.has(text))) &&
+      !(version!==firstFormat && (unnamed.has(text) || pointers.has(text))) &&
       !/某|或|匿名|隐去|遮盖|脱敏|不详|略去|代签|代为|代验|未签|待签|代表|以及|及其|等人|等$|任何|其他|全体|双方|其本人|签批人|审批人|当事人|经授权|两人|二人|任一|共同|联合|分别|任选|之一|授权|另见|同上|详见/u.test(text) &&
       !/(?:负责人|经办人?|主管|经理|董事长?|总监|专员|员工|人员|主任|部长|组长|科长|职员|代理人|法人|签字人|法务|会计|出纳|处|科|部|室|公司|组|员|职工|工程师|总工|班长|老师)$/u.test(text) &&
       !['未填','未填写','未载明','空白','待定','本人','不适用','见附件','见签章','甲方','乙方','采购','销售','代理','无法辨认','模糊',
@@ -76,7 +76,7 @@ const ApprovalNames = (() => {
       if (!stage || BatchPhase.ordinal(stage[1])!==term.index || term.role!=='验收款') state='other_stage';
       else {
         required=term.names;listed=signer?list(value(signer),c.format):[];
-        if (signer && !listed && c.format===format && unnamed.has(value(signer))) listed=[];
+        if (signer && !listed && c.format!==firstFormat && unnamed.has(value(signer))) listed=[];
         if (!listed) return null;
         if (!listed.length) state='missing';
         else if (listed.every(n=>required.includes(n))) state=listed.length===required.length?'listed':'partial';
@@ -91,5 +91,5 @@ const ApprovalNames = (() => {
     } else if (links.length) return null;
     return entries;
   }
-  return {format,supports,unnamed,signers,labels,archived,list,bind};
+  return {format,firstFormat,supports,unnamed,signers,labels,archived,list,clause,bind};
 })();

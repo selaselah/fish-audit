@@ -321,6 +321,10 @@
 .approval-times { gap:6px; margin:0 10px 7px; }
 .approval-times .inspection-use-row { border:1px solid var(--line); border-radius:6px; padding:8px 24px 8px 10px; background:var(--surface); }
 .approval-name-pair { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.approval-change { margin:10px 0; }
+.approval-change .approval-times { margin-top:6px; }
+.approval-change-note { margin:6px 12px; color:var(--secondary); font-size:.8rem; }
+.approval-change summary, .approval-change-details > summary { padding:10px; min-height:44px; color:var(--accent-hover); font-size:.8rem; cursor:pointer; }
 .approval-times .time-label { color:var(--secondary); font-size:.75rem; }
 .approval-times strong { font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
 .installment-approval .inspection-use-heading .risk { color:var(--issue); }

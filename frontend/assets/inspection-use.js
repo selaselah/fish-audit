@@ -22,7 +22,7 @@ const InspectionUse = (() => {
   }
 
   function original(r,report,evidence) {
-    const prefix=r.id.split('/')[0], kind={'payment-approval':'payment_approval','inspection-use':'inspection_use','payment-clock':'payment_clock','contract-approver':'contract_approver'}[prefix];
+    const prefix=r.id.split('/')[0], kind={'payment-approval':'payment_approval','inspection-use':'inspection_use','payment-clock':'payment_clock','contract-approver':'contract_approver','approval-change':'approval_change'}[prefix];
     if (!kind) return null;
     const g=report.graph, idx=graphIndex(g);
     const pageId=r.doc+'/p'+r.page, node=idx.nodes.get(r.id), page=idx.nodes.get(pageId);
@@ -96,16 +96,16 @@ const InspectionUse = (() => {
   }
 
   function source(row) {
-    const label=row.id.startsWith('contract-approver/')?'合同签批约定原行':row.id.startsWith('payment-clock/')?'银行时刻原行':row.id.startsWith('payment-approval/')?'付款审批原行':'付款用途原行';
+    const label=row.id.startsWith('approval-change/')?'签批变更协议原行':row.id.startsWith('contract-approver/')?'合同签批约定原行':row.id.startsWith('payment-clock/')?'银行时刻原行':row.id.startsWith('payment-approval/')?'付款审批原行':'付款用途原行';
     return {ref:row.id,quote:row.quote,rects:row.rects,label,option:label+' · 第 '+row.line+' 行',
       rawLine:row.line,quality:'inspection_use_source'};
   }
   function pageReferences(paper,doc,page) {
     const ledger=paper?.graph.inspection_use_sources;
-    if (!ledger?.rows?.some(r=>r.doc===doc && r.page===page) && !['approvals','bank_clocks','approver_terms'].some(k=>ledger?.[k]?.some(p=>p.doc===doc && p.page===page))) return [];
+    if (!ledger?.rows?.some(r=>r.doc===doc && r.page===page) && !['approvals','bank_clocks','approver_terms','approver_changes'].some(k=>ledger?.[k]?.some(p=>p.doc===doc && p.page===page))) return [];
     const refs=new Map();
     for (const item of paper.findings) {
-      for (const {row} of [...(bind(item,paper) || []),...conditions(item,paper)]) {
+      for (const {row} of [...(bind(item,paper) || []),...conditions(item,paper),...(ApprovalChange.bind(item,paper) || []),...ApprovalChange.scopeEntries(item,paper)]) {
         if (row.doc===doc && row.page===page && row.rects.length) refs.set(row.id,source(row));
       }
     }
@@ -129,10 +129,11 @@ const InspectionUse = (() => {
     if (!report || (finding?.id && !traceReferences(report.graph,finding).includes(ref))) return null;
     const candidates=finding?.id?[finding]:report.findings.filter(f=>f.evidence.includes(ref));
     for (const item of candidates) {
-      const entry=(bind(item,report) || []).find(b=>b.row.id===ref) || conditions(item,report).find(b=>b.row.id===ref);
+      const entry=(bind(item,report) || []).find(b=>b.row.id===ref) || conditions(item,report).find(b=>b.row.id===ref) ||
+        (ApprovalChange.bind(item,report) || []).find(b=>b.row.id===ref) || ApprovalChange.scopeEntries(item,report).find(b=>b.row.id===ref);
       if (entry) {
         const {row,doc}=entry;
-        const button=action((row.id.startsWith('contract-approver/')?'合同签批':row.id.startsWith('payment-clock/')?'银行时刻':row.field?'付款审批':'付款用途')+' · '+doc.name+' · 第 '+row.page+' 页'+(row.rects.length?' · 第 '+row.line+' 行':''),()=>open(entry,report),'ref');
+        const button=action((row.id.startsWith('approval-change/')?'签批变更':row.id.startsWith('contract-approver/')?'合同签批':row.id.startsWith('payment-clock/')?'银行时刻':row.field?'付款审批':'付款用途')+' · '+doc.name+' · 第 '+row.page+' 页'+(row.rects.length?' · 第 '+row.line+' 行':''),()=>open(entry,report),'ref');
         button.dataset.useRef=ref;button.title=row.quote;
         return button;
       }
@@ -177,5 +178,5 @@ const InspectionUse = (() => {
     if (c.approval) root.append(InstallmentApproval.panel(c.approval,bound.filter(b=>b.row.field),originalButton,item.id));
     return root;
   }
-  return {bind,panel,pageReferences,citation,original};
+  return {bind,panel,pageReferences,citation,original,open};
 })();

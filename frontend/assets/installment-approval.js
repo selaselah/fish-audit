@@ -46,7 +46,7 @@ const InstallmentApproval = (() => {
         entries[0]?.doc.ext!=='.pdf' || entries[0].doc.pages!==1 || entries[0].row.field!=='title' ||
         Object.keys(a.fields).length!==names.length || names.some(k=>!fields[k]?.rects.length || a.fields[k]!==fields[k].id)) return null;
     const v=Object.fromEntries(names.map(k=>[k,printed(fields[k].quote)]));
-    if (fields.signed_by && !ApprovalNames.list(v.signed_by,c.format) && !(c.format===ApprovalNames.format && ApprovalNames.unnamed.has(v.signed_by))) return null;
+    if (fields.signed_by && !ApprovalNames.list(v.signed_by,c.format) && !(c.format!==ApprovalNames.firstFormat && ApprovalNames.unnamed.has(v.signed_by))) return null;
     const phase=/^第([0-9一二两三四五六七八九十]+)期(预付款|验收款|质保金)$/u.exec(v.stage);
     const listed=WarrantyDates.printedDay(v.date), index=phase && BatchPhase.ordinal(phase[1]);
     if (!index || !listed || listed!==a.listed_on || !['同意支付','批准支付','不同意支付','不批准支付'].includes(v.decision)) return null;

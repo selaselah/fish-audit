@@ -1504,7 +1504,7 @@ function traceEvidence(finding, index, references) {
       const group = prior.case_id + '/' + prior.rev;
       if (!archived.has(group)) archived.set(group,[]);
       archived.get(group).push(prior);
-    } else if (['page','inspection_use_line','payment_approval_line','payment_clock_line','contract_approver_line','party_reading_line'].includes(index.nodes.get(ref)?.type)) {
+    } else if (['page','inspection_use_line','payment_approval_line','payment_clock_line','contract_approver_line','approval_change_line','party_reading_line'].includes(index.nodes.get(ref)?.type)) {
       other.push(citation(ref,finding));
     }
   }

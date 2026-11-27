@@ -684,7 +684,7 @@ function citation(ref,finding) {
   if (ref.startsWith('advance-guarantee/')) {
     return AdvanceGuarantee.citation(ref,finding,state.bundle?.report) || el('span','保函引文待核','small');
   }
-  if (ref.startsWith('inspection-use/') || ref.startsWith('payment-approval/') || ref.startsWith('payment-clock/') || ref.startsWith('contract-approver/')) {
+  if (ref.startsWith('inspection-use/') || ref.startsWith('payment-approval/') || ref.startsWith('payment-clock/') || ref.startsWith('contract-approver/') || ref.startsWith('approval-change/')) {
     return InspectionUse.citation(ref,finding,state.bundle?.report) || el('span','付款用途原行待核','small');
   }
   if (ref.startsWith('mandate-pdf/') && state.bundle) return PerformanceIndex.mandateCitation(state.bundle.report,ref);
@@ -947,7 +947,7 @@ function finding(item) {
   for (const ref of item.party_readings || []) node.append(PartyReadings.citation(state.bundle.report,ref,item));
   if (item.payment_quality) node.append(Team.paperLink('查看验收款质量对照',state.bundle.report.case_id,'source-jump',
     new URLSearchParams({rev:state.bundle.rev,view:'payment-checks',stage:item.id})));
-  if (item.retest_reference || item.inspection_use) node.append(Team.paperLink(item.inspection_use?'查看验收单付款用途':'核对回单所引的验收单',state.bundle.report.case_id,'source-jump',
+  if (item.approval_change || item.retest_reference || item.inspection_use) node.append(Team.paperLink(item.approval_change?'核对签批人变更':item.inspection_use?'查看验收单付款用途':'核对回单所引的验收单',state.bundle.report.case_id,'source-jump',
     new URLSearchParams({rev:state.bundle.rev,view:'payment-checks',stage:item.id})));
   if (item.payment_opinion) {
     const graph=state.bundle.report.graph, rows=AcceptanceOpinion.rows(graph,item);
@@ -1695,7 +1695,7 @@ async function refresh() {
         if (doc && OriginalReader.pageNumbers(doc,graph).includes(page)) {
           state.openedCitation=location.hash;
           const raw=route.params.get('walkraw');
-          const ref=['inspection-use/','payment-approval/','payment-clock/','contract-approver/'].some(prefix=>raw===prefix+doc.id+'/p'+page+'/l'+line) ? raw : undefined;
+          const ref=['inspection-use/','payment-approval/','payment-clock/','contract-approver/','approval-change/'].some(prefix=>raw===prefix+doc.id+'/p'+page+'/l'+line) ? raw : undefined;
           openPage(doc.id,page,undefined,Number.isSafeInteger(line) && line>0?line:undefined,undefined,ref);
         }
       }

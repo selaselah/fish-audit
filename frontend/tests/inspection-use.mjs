@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import {browserInput,inspect,size} from './review-screen.mjs';
+import {checkApprovalChange} from './approval-changes.mjs';
 
 export async function checkInspectionUse(ctx,cid) {
   const {call,evaluate,wait,root}=ctx, api='/api/cases/'+cid;
   const json=async path=>{const r=await fetch(root+path);assert.equal(r.status,200);return r.json();};
   const task=await json(api);assert.match(task.title,/^合成演练 · /u);
   const {report,rev}=await json(api+'/reports/'+(process.env.AUDIT_USE_REV || task.rev));
+  const change=report.findings.find(f=>f.rule==='H05' && f.approval_change);
+  if (change) return checkApprovalChange(ctx,task,report,rev,change);
   const item=report.findings.find(f=>f.inspection_use) || report.findings.find(f=>f.rule==='H05' && f.stage);
   const c=item.inspection_use, {id}=item, card='#inspection-use-'+id;
   const q=s=>'document.querySelector('+JSON.stringify(s)+')', click=s=>evaluate(q(s)+'.click()');

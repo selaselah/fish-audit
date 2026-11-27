@@ -36,6 +36,7 @@ const RetestReference = (() => {
     }
     if (c.state==='unresolved') return !edges.length && !c.units && c.status==='missing'?rows:null;
     const units=c.units, contract=kinds.contract?.length===1 && kinds.contract[0];
+    if (kinds.contract_addendum?.length && !ApprovalChange.scopeEntries(report.findings.find(f=>f.rule==='H02') || {},report).length) return null;
     if (!rows.citation || citations.length!==1 || citations[0].disputed || !units || !contract || !bound('clause','clause',contract)) return null;
     const steps=report.findings.find(f=>f.rule==='H02')?.reinspection?.steps;
     if (!steps || steps.length!==3 || new Set(Object.values(units)).size!==3 ||

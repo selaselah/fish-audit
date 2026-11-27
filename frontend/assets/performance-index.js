@@ -313,18 +313,20 @@ const PerformanceIndex = (() => {
       return f.rule.startsWith('H') && control?.type==='control' && control.version===f.version && Array.isArray(f.evidence) &&
         edge?.from===control.id && edge.evidence?.length===f.evidence.length && edge.evidence.every((ref,i)=>ref===f.evidence[i]);
     });
-    for (const owner of issued) for (const change of [owner.quality_change,owner.payment_change]) {
-      if (!['H02','H03','H04','H05'].includes(owner.rule) || !change ||
+    for (const owner of issued) for (const change of [owner.quality_change,owner.payment_change,owner.approval_change]) {
+      if (!['H02','H03','H04','H05'].includes(owner.rule) || !change) continue;
+      const named=change===owner.approval_change;
+      if (named ? !change.execution || !ApprovalChange.bind(owner,report) :
           (change.state || change.applies)!=='pending' || change.effective_on!==null) continue;
       const cited=issuedReferences(owner,graph), rows=new Map(originals(owner,graph).map(r=>[r.fact.id,r]));
       const ids=[];
-      for (const [enabled,list,prefix] of [[pdf,change.execution,'addendum-pdf/'],[native,change.original_execution,'addendum-original/']]) {
+      for (const [enabled,list,prefix] of [[pdf,named?[change.execution]:change.execution,'addendum-pdf/'],[native,change.original_execution,'addendum-original/']]) {
         if (enabled && Array.isArray(list) && new Set(list).size===list.length &&
             list.every(id=>typeof id==='string' && id.startsWith(prefix))) ids.push(...list);
       }
       for (const id of ids) {
         const proof=id.startsWith('addendum-original/')?nativeAddendum(graph,id,rows):unitPdfOriginal(graph,id,'addendum');
-        if (!issuedSource(proof,cited,calls) || !owner.scope?.includes(proof.record.unit) || !change.units?.includes(proof.record.unit) ||
+        if (!issuedSource(proof,cited,calls) || !owner.scope?.includes(proof.record.unit) || !(named?change.documents:change.units)?.includes(proof.record.unit) ||
             ![id,...proof.refs].every(ref=>change.evidence?.includes(ref)) ||
             !proof.record.pages.every(p=>{
               const pageCalls=calls.filter(c=>c.doc===proof.doc.id && c.doc+'/p'+c.page===p.ref);
@@ -814,12 +816,20 @@ const PerformanceIndex = (() => {
       detail.dataset.quality=String(Boolean(quality));
       detail.replaceChildren(box('scope-check-state',el('span',item.id,'mono'),tag(item.status)),heading);
       for (const ref of item.party_readings || []) detail.append(PartyReadings.citation(state.bundle.report,ref,item));
+      if (item.approval_change) detail.append(ApprovalChange.panel(item,state.bundle.report,rev));
+      if (item.approval_change_scope) {
+        const link=InspectionUse.citation(item.approval_change_scope.scope_ref,item,state.bundle.report);
+        if (link) detail.append(link);
+      }
       if (quality) detail.append(quality);
       else if (item.payment_quality) detail.append(el('p','验收款质量对照的原行待核。','scope-empty'));
       if (retest) detail.append(retest);
       else if (item.retest_reference) detail.append(el('p','请在字段引文中核对回单所引的验收原件。','scope-empty'));
       const use=InspectionUse.panel(item,state.bundle.report,rev);
-      if (use && retest) retest.insertBefore(use,retest.querySelector('.quality-terms'));
+      if (use && retest && item.approval_change) {
+        const more=el('details','','approval-change-details');more.append(el('summary','复验单付款用途、审批与实际扣款'),use);
+        retest.insertBefore(more,retest.querySelector('.quality-terms'));
+      } else if (use && retest) retest.insertBefore(use,retest.querySelector('.quality-terms'));
       else if (use) detail.append(use);
       else if (item.inspection_use) detail.append(el('p','付款用途附注的原行待核。','scope-empty'));
       for (const proof of addendumEvidence(state.bundle.report).filter(p=>p.related.includes(item))) {
@@ -954,5 +964,5 @@ const PerformanceIndex = (() => {
     summary.append(dialog);
     return summary;
   }
-  return {includes,groups,count,originals,originalButton,matchesPrintedField,fieldLinks,issuedLimitBreach,receiptCitation,receiptEvidence,nativeReceiptCitation,mandateCitation,mandateEvidence,addendumEvidence,releaseProofs,warrantyProofs,boardProofs,overview};
+  return {includes,groups,count,originals,originalButton,matchesPrintedField,fieldLinks,issuedLimitBreach,unitPdfOriginal,receiptCitation,receiptEvidence,nativeReceiptCitation,mandateCitation,mandateEvidence,addendumEvidence,releaseProofs,warrantyProofs,boardProofs,overview};
 })();

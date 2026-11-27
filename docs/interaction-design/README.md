@@ -6,6 +6,8 @@
 2. 如果意见针对某个按钮或数字，点「点选控件」再选它。例如在下方会签案例选「审批单具名栏」，或打开合同第 19 行后再写。记录会带上底稿版本、文件和可定位的页行。[试走第二期会签案例](http://127.0.0.1:8000/workpaper/8debfd4a45424070a4fbedb915de1667?rev=10&view=payment-checks&stage=H05-8) · [窄屏上的两处姓名](approval-names-joint-mobile.webp)
 3. 点「保存意见」，即可接着走查。「已记录」里可以回到当时的位置。走完后在同机 Codex 说「按本机走查清单修改」，或点「复制给 Codex」贴进指定对话。[在合同原行旁写意见](approval-names-walkthrough.webp)
 
+周末可以从这个 6 万元的第二期付款开始。点「补充协议约定」可看第 10 行的新名单，点「最后所列盖章日」可看第 16 行的日期。若想反馈这两个值的呈现方式，可先点「提意见 → 并排走查 → 点选控件」，写到一半也能继续打开原件。手机上在「提意见」浮窗保存。从「已记录」回来时，系统会打开当时的 R10 和选定的位置。[试走第二期签批人变更](http://127.0.0.1:8000/workpaper/aaf9593f62cc43f587eaedec9a22a2f4?rev=10&view=payment-checks&stage=H05-8) · [桌面边看原件边写](approval-change-walkthrough.webp) · [手机付款底稿](approval-change-mobile.webp)
+
 <details>
 <summary>其他原件和控件的走查示例</summary>
 

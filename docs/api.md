@@ -1,5 +1,13 @@
 # 本机审计接口
 
+## 付款签批名单变更
+
+`cited-inspection-payment-use-v7` 起，`graph.inspection_use_sources.approver_changes` 保存补充协议的原始字段、页行、行框及事实引用。H04 或 H05 有 `approval_change` 时，`pending` 表示条款范围待核，`terms` 表示两份名单已定位。`before`、`same_day`、`after` 分别表示审批单日期早于、等于或晚于双方盖章栏所记的较晚日期。`days_from_seals` 为审批日期减去较晚的纸面日期。`printed_difference` 只比较证据指向的具名栏，`execution` 可追到相应 PDF 的签署检查。
+
+v8 在 H02 和 H03 的 `approval_change_scope` 中另附 `scope_ref`、`clause_ref` 和 `execution`，可查明为何该协议只影响某期的签批名单。`dates_approval_change` 关系从补充协议变更后的约定连到对应审批单的日期。`retest_reference.timing_notes` 或 `payment_acceptance.timing_notes` 把回单上的银行时刻另连回其证据行。历史底稿按签发方法回放。
+
+例如走查 API 可记录控件 `approver-change-H05-8-approval-change-d08-p1-l10` 或原页 `raw_ref=approval-change/d08/p1/l16`。服务端校验所选版次、发现、证据引用及原页行框。[本机 R10 第二期付款](http://127.0.0.1:8000/workpaper/aaf9593f62cc43f587eaedec9a22a2f4?rev=10&view=payment-checks&stage=H05-8)
+
 ## 逐期具名签批及原件定位
 
 `cited-inspection-payment-use-v5` 起，`graph.inspection_use_sources.approver_terms` 保存合同签批条款和可能修饰该条款的原行。H04、H05 的 `stage_approvers` 引用本期适用的合同原行。合同条款和独立付款审批单可以交叉核对时，H05 的 `inspection_use.approval.names` 记录 `rows`、`signed_by`、`state`，并按已有证据附上 `contract_fields`、`required` 和 `listed`。两张纸面名单可以逐人比对时，图谱边 `compares_approval_names` 连接合同条款与审批单具名栏。

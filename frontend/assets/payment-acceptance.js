@@ -66,7 +66,9 @@ const PaymentAcceptance = (() => {
         const fact=observation(row,graph);
         return {value:codeFrom(row.quote),excerpt:fact?()=>EvidenceCompare.lineExcerpt(fact,idx):null,location:'第 '+row.page+' 页 · 第 '+row.line+' 行',open:()=>open(row,graph)};
       }
-      const bank=units.bank_receipt?.includes(p.bank) && f.scope.includes(p.bank);
+      const bank=units.bank_receipt?.includes(p.bank) && f.scope.includes(p.bank) &&
+        (report.policy.inspection_use==='cited-inspection-payment-use-v8'
+          ? ApprovalClock.inspectionNotes(report,f,[...rows.values()]) : !p.timing_notes?.length);
       const citation=bank && p.citations.length===1 && located(p.citations[0],p.bank,'citation');
       const registers=p.register.map(r=>{
         const scope=validFact(r.scope_ref,'acceptance_scope',r.unit),record=batch?.records.find(a=>a.unit===r.unit && a.scope_ref===r.scope_ref);

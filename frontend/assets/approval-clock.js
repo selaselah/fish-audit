@@ -27,7 +27,7 @@ const ApprovalClock = (() => {
         page.rows.every(r=>r.field!=='rider' && r.rects?.length));
   }
   function inspectionNotes(report,item,all) {
-    const c=item.retest_reference, {graph}=report;
+    const c=item.retest_reference || item.payment_acceptance, {graph}=report;
     if (!supports(report.policy.inspection_use)) return !c.timing_notes?.length;
     const ledger=graph.inspection_use_sources;
     if (!archived(report) || ledger?.format!==report.policy.inspection_use) return false;
@@ -89,5 +89,5 @@ const ApprovalClock = (() => {
     } else if (links.length) return null;
     return entries;
   }
-  return {supports,signed,labels,inspectionNotes,bind};
+  return {supports,signed,labels,clock,compare,bankPage,inspectionNotes,bind};
 })();
