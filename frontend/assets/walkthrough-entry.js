@@ -10,8 +10,11 @@ document.body.append(launcher);
 let owner;
 const openModals = [];
 function placeLauncher() {
-  const top = openModals.filter(d => d.open && d.isConnected).at(-1);
-  if (top === owner) return;
+  for (let i=openModals.length-1;i>=0;i--) {
+    if (!openModals[i].open || !openModals[i].isConnected) openModals.splice(i,1);
+  }
+  const top = openModals.at(-1);
+  if (top === owner && launcher.isConnected && (top ? top.contains(launcher) : launcher.parentElement === document.body)) return;
   owner = top;
   if (!top) { document.body.append(launcher); return; }
   const close = top.querySelector('[data-close], button[aria-label^="关闭"], button[value="close"]');
@@ -28,6 +31,10 @@ document.addEventListener('toggle', event => {
 }, true);
 for (const panel of document.querySelectorAll('dialog[open]')) openModals.push(panel);
 placeLauncher();
+// Navigation can remove an open workpaper dialog without dispatching its close or toggle event.
+new MutationObserver(() => {
+  if (!launcher.isConnected || owner && !owner.isConnected) placeLauncher();
+}).observe(document.body,{childList:true,subtree:true});
 
 let loading = false;
 launcher.addEventListener('click', async () => {
@@ -54,6 +61,7 @@ function returnToControl() {
   const comparison=anchor.startsWith('revision-') && params.get('view')==='revision-comparison'
     ? document.getElementById('revision-comparison') : null;
   const board=params.get('view')==='board-decision' && anchor.startsWith('board-');
+  const quality=params.get('view')==='payment-checks' && anchor.startsWith('quality-');
   url.searchParams.delete('walkat');
   history.replaceState(history.state,'',url);
   function locate() {
@@ -61,13 +69,18 @@ function returnToControl() {
         comparison.dataset.rev!==params.get('rev') || comparison.dataset.prior!==params.get('prior') ||
         (params.has('entry') && comparison.dataset.entry!==params.get('entry')))) return false;
     const el = document.getElementById(anchor);
+    if (quality) {
+      const card=el?.closest('#performance-index[open] [data-quality-finding]');
+      if (!card || url.hash!==location.hash || card.dataset.caseId!==path.split('/').at(-1) ||
+          card.dataset.rev!==params.get('rev') || card.dataset.qualityFinding!==params.get('stage')) return false;
+    }
     if (board) {
       const card=el?.closest('#board-decision,#board-unavailable');
       if (!card || url.hash!==location.hash || card.dataset.caseId!==path.split('/').at(-1) || card.dataset.rev!==params.get('rev') ||
           (params.has('filing') && card.dataset.boardFiling!==params.get('filing')) ||
           (params.has('part') && card.dataset.boardPart!==params.get('part'))) return false;
     }
-    if (el?.closest('#revision-comparison:not([hidden]),#board-decision')) {
+    if (el?.closest('#revision-comparison:not([hidden]),#board-decision,[data-quality-finding]')) {
       for (let parent=el.parentElement;parent && parent.id!=='revision-comparison';parent=parent.parentElement)
         if (parent.tagName==='DETAILS') parent.open=true;
     }
@@ -81,7 +94,7 @@ function returnToControl() {
   if (!locate()) {
     jumpObserver = new MutationObserver(locate);
     jumpObserver.observe(comparison || document.body, {subtree:true, childList:true, attributes:true, attributeFilter:['hidden','open']});
-    if (!comparison && !board) jumpTimer = setTimeout(() => jumpObserver.disconnect(), 6000);
+    if (!comparison && !board && !quality) jumpTimer = setTimeout(() => jumpObserver.disconnect(), 6000);
   }
 }
 addEventListener('hashchange', returnToControl);

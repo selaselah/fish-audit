@@ -926,6 +926,8 @@ function finding(item) {
     }
   }
   if (item.payment_window) node.append(paymentWindowPanel(item,state.bundle.report.graph));
+  if (item.payment_quality) node.append(Team.paperLink('查看验收款质量对照',state.bundle.report.case_id,'source-jump',
+    new URLSearchParams({rev:state.bundle.rev,view:'payment-checks',stage:item.id})));
   if (item.payment_opinion) {
     const graph=state.bundle.report.graph, rows=AcceptanceOpinion.rows(graph,item);
     if (rows.length) node.append(lazyFold('核对付款意见原行',()=>rows.map(row=>AcceptanceOpinion.source(row,graph))));

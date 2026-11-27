@@ -490,6 +490,21 @@ class EnterpriseFlow(unittest.TestCase):
         self.assertEqual(save({"view":"board-decision"}).status_code,201)
         self.assertEqual(owner.get(f"/api/w/{wid}/walkthrough").json["notes"][0]["context"]["params"],{"view":"board-decision"})
 
+    def test_quality_walkthrough_requires_the_issued_installment_and_field(self):
+        owner,wid,headers=self.register("quality-walkthrough")
+        cid=self.submit(owner,wid,headers)
+        self.worker.run(self.store.claim())
+        context={"screen":"case","case_id":cid,"rev":1,"tab":"report","anchor":"quality-H05-8-paid_on"}
+        url=f"/api/w/{wid}/walkthrough"
+        def save(params,**changes):
+            return owner.post(url,headers=headers,json={"id":"e"*32,"text":"回单日期","context":{**context,"params":params,**changes}})
+        target={"view":"payment-checks","stage":"H05-8"}
+        self.assertEqual(save(target).status_code,404)
+        self.assertEqual(save({**target,"stage":"H05-9"}).status_code,400)
+        self.assertEqual(save(target,anchor="quality-H05-8-unlisted").status_code,400)
+        self.assertEqual(save({"view":"contract-checks"}).status_code,400)
+        self.assertEqual(owner.get(url).json["notes"],[])
+
     def test_revision_comparison_reuses_both_issued_hashes_and_the_case_access_rules(self):
         owner,wid,headers=self.register("compare-owner")
         other,outside,_=self.register("compare-other")

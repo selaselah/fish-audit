@@ -779,9 +779,13 @@ const PerformanceIndex = (() => {
       const roster=AcceptanceRoster.bind(item,state.bundle.report);
       const batch=BatchPhase.resolve(item,findings.find(f=>f.rule==='H02'),graph,state.bundle.report.calls?.pages);
       const guarantee=AdvanceGuarantee.panel(item,state.bundle.report);
+      const quality=PaymentQuality.panel(item,state.bundle.report,rev);
       detail.dataset.batch=String(Boolean(batch));
       detail.dataset.guarantee=String(Boolean(guarantee));
+      detail.dataset.quality=String(Boolean(quality));
       detail.replaceChildren(box('scope-check-state',el('span',item.id,'mono'),tag(item.status)),heading);
+      if (quality) detail.append(quality);
+      else if (item.payment_quality) detail.append(el('p','验收款质量对照的原行待核。','scope-empty'));
       for (const proof of addendumEvidence(state.bundle.report).filter(p=>p.related.includes(item))) {
         const control=AddendumSigning.jump(proof);
         control.addEventListener('click',()=>dialog.close(),{capture:true});
@@ -827,11 +831,11 @@ const PerformanceIndex = (() => {
         if (detailText) detail.append(fold('本项检查结论',el('p',detailText,'scope-reason')));
       } else if (!paired && detailText) {
         const reason=el('p',detailText,'scope-reason');
-        detail.append(detailText.length<=100 && !receipts.length && !batch && !guarantee?reason:fold('阅读本项结论',reason));
+        detail.append(detailText.length<=100 && !receipts.length && !batch && !guarantee && !quality?reason:fold('阅读本项结论',reason));
       }
       if (!paired) {
         const sources=()=>sourceView(item,graph,[...receipts,...mandates.flatMap(m=>m.proofs)]);
-        detail.append(roster || batch || guarantee || mandates.length || receipts.some(p=>p.record.kind)?lazyFold('其他字段引文',()=>[sources()]):sources());
+        detail.append(roster || batch || guarantee || quality || mandates.length || receipts.some(p=>p.record.kind)?lazyFold('其他字段引文',()=>[sources()]):sources());
       }
       detail.append(actions);
       detail.scrollTop=0;
@@ -848,7 +852,7 @@ const PerformanceIndex = (() => {
         checks.append(row); mobile.append(option);
       }
       if (unavailable) {
-        selected=null; detail.dataset.batch='false'; detail.dataset.guarantee='false';
+        selected=null; detail.dataset.batch='false'; detail.dataset.guarantee='false'; detail.dataset.quality='false';
         for (const row of checks.children) row.setAttribute('aria-pressed','false');
         const placeholder=new Option('选择本版检查项','',true,true); placeholder.disabled=true;
         mobile.prepend(placeholder); mobile.value='';

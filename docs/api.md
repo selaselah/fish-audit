@@ -1,6 +1,14 @@
 # 本机审计接口
 
+## 验收质量与本期付款
+
+规则 `2026.11.27.17` 在底稿 `policy.payment_quality` 记录 `acceptance-quality-payment-v1`。图谱 `payment_quality_sources.rows` 留存原件单元、物理页行、标签、原话及该行对应的字段编号。匹配成功的 H04/H05 含 `payment_quality`。其 `fields` 引用本期条款、合同限值、终验范围、结论、检验依据、实测及可定位的日期。`measure` 中数值和超限差额均为十进制字符串，`operator` 与 `unit` 随合同原文。
+
+H05 还列有对应的成功回单、款项用途、交易状态及日期字段。`payment.days` 等于 `payment.paid_on` 减去 `accepted_on` 的自然日数。边 `acceptance_reading_for_payment` 从实测字段指向该项发现，其 `evidence` 与发现内部的依据清单相同。缺少唯一终验日时，H04 仍可记录原文支持的质量缺陷。`/reports/<rev>/comparison/<prior>` 的相应一侧可直接打开该版本的质量对照。[两版第二期实付的核对](http://127.0.0.1:8000/workpaper/64cd9e64345841bab358728a6730f3d8?rev=8&view=revision-comparison&prior=7&entry=new-H05-8)
+
 ## 产品走查意见
+
+在验收款质量对照里提意见时，固定链接沿用 `view=payment-checks&stage=H05-8`。走查上下文保留 `case_id`、`rev`、检查项及控件 `anchor`，如 `quality-H05-8-measured_result`。服务器按工作区、账号和所选版本检查该发现及字段。复制的清单含现场链接、文件名和页行。[点选验收款原行](interaction-design/README.md#在页面上记录走查意见)
 
 本机服务的 `GET /api/walkthrough` 返回 `{"notes":[...]}`，按保存时间倒序排列。每条含 `id`、UTC 时间 `created`、意见 `text` 和页面定位 `context`。在同一台机器上工作的 Codex 可直接读取这一清单。[本机走查清单](http://127.0.0.1:8000/api/walkthrough)
 

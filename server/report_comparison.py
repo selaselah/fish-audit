@@ -177,7 +177,10 @@ def side(item, other):
     preferred = [ref for ref in (comparison.get("stated_ref"), (comparison.get("bank") or {}).get("ref"), stage.get("clause_ref")) if ref]
     fields = PRIORITY[f["rule"]]
     board = f.get("effect_review", {}).get("board_decision")
-    if f["rule"] == "H01" and board:
+    quality = f.get("payment_quality", {}).get("fields", {})
+    if quality:
+        preferred = [quality[key] for key in ("acceptance_criteria","measured_result","accepted_on","paid_on","clause") if key in quality]
+    elif f["rule"] == "H01" and board:
         preferred = [board["fields"][k] for k in ("effect_clause", "approval_result", "approval_signer") if k in board["fields"]]
     elif f["rule"] == "H01" and len(f.get("delegations", [])) == 1:
         grant = f["delegations"][0]
@@ -191,15 +194,16 @@ def side(item, other):
     sources.sort(key=lambda s: (preferred.index(s["ref"]) if s["ref"] in preferred else len(preferred),
                                 not s["different"], fields.index(s["field"]) if s["field"] in fields else len(fields),
                                 s["doc"], s["page"], s["line"]))
-    preview = sources[:3]
+    limit = 4 if quality else 3
+    preview = sources[:limit]
     if preview and not any(s["different"] for s in preview):
-        changed = next((s for s in sources[3:] if s["different"]), None)
+        changed = next((s for s in sources[limit:] if s["different"]), None)
         if changed:
             preview[-1] = changed
     return {"id": f["id"], "rule": f["rule"], "title": f["title"], "status": f["status"], "detail": f["detail"], "basis": f.get("basis"),
             "stage": stage.get("name"), "instrument": item["instrument"], "source_count": len(sources), "sources": preview,
             "certificate": bool(((f.get("warranty_check") or {}).get("certificate") or {}).get("records")),
-            "board_decision": bool(board and board["records"])}
+            "board_decision": bool(board and board["records"]), "payment_quality": bool(quality)}
 
 
 def pair(older, newer):

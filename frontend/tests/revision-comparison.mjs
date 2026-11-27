@@ -76,6 +76,13 @@ export async function checkRevisionComparison(ctx,cid) {
       await wait('state.bundle?.rev==='+meta.rev+' && '+q('#board-decision')+'?.dataset.boardFiling','board filing from the selected revision');
       await navigate(pinned);await wait(q('#revision-comparison')+'?.dataset.entry==='+JSON.stringify(entry),'fixed comparison after board filing');
     } else assert.equal(await evaluate(q(board)),null);
+    const quality=area+' .revision-links a[id$="-quality"]';
+    if (item.payment_quality) {
+      await click(quality);
+      await wait('state.bundle?.rev==='+meta.rev+' && '+q('#performance-index[open] [data-quality-finding]')+
+        '?.dataset.qualityFinding==='+JSON.stringify(item.id),'quality comparison for this receipt and issued revision');
+      await navigate(pinned);await wait(q('#revision-comparison')+'?.dataset.entry==='+JSON.stringify(entry),'back from quality comparison');
+    } else assert.equal(await evaluate(q(quality)),null);
   }
   if (process.env.AUDIT_COMPARISON_RESILIENCE && versions.length>1) {
     const alternate=versions.find(v=>v.rev!==prior).rev;

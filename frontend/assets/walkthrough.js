@@ -104,7 +104,7 @@ function choosePosition() {
   const options={capture:true,signal:controller.signal};
   const select=target=>{
     if (!(target instanceof Element) || target.closest('#walk-launch,#walk-dialog')) return null;
-    return target.closest('button,a,input,select,textarea,label,summary,[role=tab],[role=switch],h1,h2,h3,h4,[data-warranty-order],[data-warranty-note],[data-board-note],[data-board-row],#board-unavailable,.warranty-certificate,[data-finding]') || target;
+    return target.closest('button,a,input,select,textarea,label,summary,[role=tab],[role=switch],h1,h2,h3,h4,[data-warranty-order],[data-warranty-note],[data-board-note],[data-board-row],#board-unavailable,.quality-order,.warranty-certificate,[data-finding]') || target;
   };
   document.addEventListener('pointerover',e=>{
     const el=select(e.target);

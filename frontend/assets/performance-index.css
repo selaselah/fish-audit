@@ -267,7 +267,27 @@
 @media (max-width:650px) {
   .batch-phase-modes button,.batch-phase-empty .text-button,.batch-phase-proof > details summary { min-height:44px; }
   .phase-evidence .proof-switch { flex-wrap:wrap; max-width:100%; }
-  .scope-dialog[data-single=false] .scope-detail:is([data-batch=true],[data-guarantee=true]) > h3 {
+  .scope-dialog[data-single=false] .scope-detail:is([data-batch=true],[data-guarantee=true],[data-quality=true]) > h3 {
     position:absolute; width:1px; height:1px; margin:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap;
   }
 }
+
+.quality-payment { margin:0 0 14px; border:1px solid var(--line); border-radius:8px; background:var(--surface); overflow:clip; }
+.quality-heading { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:2px 9px; padding:11px 12px 7px; }
+.quality-heading h4 { margin:0; font-size:.94rem; }
+.quality-heading > span { color:var(--issue); font-size:.8rem; font-weight:600; }
+.quality-readings,.quality-dates { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; padding:0 10px 9px; }
+.quality-payment button { position:relative; display:grid; align-content:center; min-width:0; min-height:44px; padding:7px 10px; text-align:left; line-height:1.35; color:var(--ink); background:var(--canvas); border:1px solid var(--line); border-radius:5px; }
+.quality-payment button:is(:hover,:focus-visible) { color:var(--accent-hover); border-color:var(--accent); }
+.quality-payment :is(button,summary):focus-visible { outline:2px solid var(--focus); outline-offset:-2px; }
+.quality-payment button small { color:var(--secondary); font-size:.75rem; font-weight:500; }
+.quality-payment .quality-metric strong { min-width:0; overflow-wrap:anywhere; font-size:clamp(1.12rem,2vw,1.45rem); font-variant-numeric:tabular-nums; font-weight:610; }
+.quality-payment .measured strong { color:var(--issue); }
+.quality-payment button .ui-glyph { position:absolute; top:7px; right:7px; font-size:.72rem; color:var(--accent-hover); }
+.quality-payment .quality-day { background:var(--surface); }
+.quality-day strong { font-size:.88rem; font-weight:600; font-variant-numeric:tabular-nums; }
+.quality-order { grid-column:1/-1; margin:0; color:var(--secondary); font-size:.78rem; }
+.quality-terms { border-top:1px solid var(--line); }
+.quality-terms summary { min-height:44px; padding:11px 12px; color:var(--accent-hover); font-size:.83rem; cursor:pointer; }
+.quality-terms .quality-term { width:calc(100% - 20px); margin:0 10px 6px; padding-right:23px; background:var(--surface); }
+.quality-term strong { font-size:.84rem; font-weight:520; overflow-wrap:anywhere; }

@@ -77,6 +77,10 @@ const RevisionComparison = (() => {
       const board=Team.paperLink('董事会审批原件',cid,'text-button',new URLSearchParams({rev:meta.rev,view:'board-decision'}));
       board.id=card.id+'-board';links.append(board);
     }
+    if (item.payment_quality) {
+      const quality=Team.paperLink('验收款质量对照',cid,'text-button',new URLSearchParams({rev:meta.rev,view:'payment-checks',stage:item.id}));
+      quality.id=card.id+'-quality';links.append(quality);
+    }
     card.append(links);
     return card;
   }

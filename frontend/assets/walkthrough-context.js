@@ -56,6 +56,8 @@ export function captureContext(owner, element) {
         if (stage && /^H04-[1-9]\d*$/.test(stage)) context.params = {view:'payment-release',stage};
         const instrument=element?.closest('[data-release-set] [data-instrument]');
         if (instrument) context.params={view:'payment-release',stage:instrument.parentElement.dataset.releaseSet,instrument:instrument.dataset.instrument};
+        const quality=element?.closest('[data-quality-finding]') ||
+          (!element && owner?.id==='performance-index' && owner.querySelector('[data-quality-finding]'));
         const certificate=element?.closest('.warranty-certificate')?.closest('[data-phase-finding]')?.dataset.phaseFinding;
         if (certificate) {
           const payment=element.closest('[data-warranty-payment]')?.dataset.warrantyPayment;
@@ -67,6 +69,10 @@ export function captureContext(owner, element) {
         const comparison=element?element.closest('#revision-comparison'):document.getElementById('revision-comparison');
         if (comparison && !comparison.hidden && comparison.dataset.entry)
           context.params={view:'revision-comparison',prior:comparison.dataset.prior,entry:comparison.dataset.entry};
+        if (quality) {
+          context.params={view:'payment-checks',stage:quality.dataset.qualityFinding};
+          if (!element) {context.anchor=quality.id;context.target='验收款质量对照';}
+        }
       }
       if (owner?.id === 'page-dialog') {
         const page = document.querySelector('#page-content .page-view');
@@ -95,14 +101,16 @@ export function captureContext(owner, element) {
     const boardFile=boardNote?.closest('#board-decision')?.querySelector('.warranty-file')?.textContent;
     const boardRow=element.closest('[data-board-row]');
     const date=element.closest('.warranty-date-source'), order=element.closest('[data-warranty-order]');
-    const sourceLabel = element.id==='board-unavailable' ? element.textContent :
+    const sourceLabel = element.closest('[data-quality-label]')?.dataset.qualityLabel ||
+      (element.closest('.quality-order') ? '两单日期 · '+element.closest('.quality-order').textContent : null) ||
+      (element.id==='board-unavailable' ? element.textContent :
       boardRow ? [boardRow.querySelector('small').textContent,boardRow.querySelector('button').textContent].join(' · ') :
       boardNote ? [boardFile,'原批注',boardNote.querySelector('button')?.textContent].filter(Boolean).join(' · ') :
       date ? ['small','time','.warranty-date-place span'].map(s=>date.querySelector(s).textContent).join(' · ') :
       order ? '两单日期 · '+order.textContent : note?'期满确认单批注'+(note.querySelector('button')?' · '+note.querySelector('button').textContent:''):
       file && control ? file+' · '+control : element.closest('.source-plane,#sample-review canvas') ? '原件页图' :
       element.closest('.evidence-row,.sample-records [data-ref]') ? '证据引文' :
-      element.closest('.release-entry')?.querySelector('small')?.textContent;
+      element.closest('.release-entry')?.querySelector('small')?.textContent);
     const text = sourceLabel || element.getAttribute('aria-label') || fieldLabel?.textContent ||
       (element.matches('button,a,summary,label,h1,h2,h3,h4,[role=tab]') && element.textContent) || element.title;
     const label = text && text.replace(/\s+/g,' ').trim();
@@ -118,7 +126,8 @@ export function describeContext(c) {
   const screen = c.screen==='case' ? screens.case+' '+c.case_id.slice(0,8) : screens[c.screen];
   const edition=c.params?.view==='revision-comparison' ? '履约对照 R'+c.params.prior+' / R'+c.rev : c.rev && 'R'+c.rev;
   const board=c.params?.view==='board-decision' && ({decision:'董事会决议原文',signing:'董事会签发版本',payments:'董事会决议关联期款'}[c.params.part] || '董事会审批原件');
-  return [screen, c.example || sections[c.section], edition, caseTabs[c.tab], board, dialogs[c.dialog],
+  const quality=c.params?.view==='payment-checks' && c.anchor?.startsWith('quality-') && '验收款核对 '+c.params.stage;
+  return [screen, c.example || sections[c.section], edition, caseTabs[c.tab], board, quality, dialogs[c.dialog],
     c.doc && (c.doc+' · 第 '+c.page+' 页'), c.line && '第 '+c.line+' 行', c.target].filter(Boolean).join(' › ');
 }
 export function returnUrl(c, workspace) {

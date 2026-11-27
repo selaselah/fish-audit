@@ -1,5 +1,21 @@
 # 合成财会审计演练
 
+## 验收款回单日期与实测超限
+
+母本取自冷藏柜采购 R7 的五份水印原件。合同限值 4℃，终验单列 9 月 20 日实测 8℃，第二期成功回单列 9 月 21 日。以下命令生成三组变体，分别将回单日改为 9 月 19 日、9 月 20 日，以及将回单用途改为「设备采购款」。生成器核对母本及原件摘要、水印和待改原行。
+
+```sh
+curl --fail http://127.0.0.1:8000/api/cases/64cd9e64345841bab358728a6730f3d8/reports/7/bundle -o /tmp/payment-quality-R7.zip
+server/.venv/bin/python docs/samples/quality_payments.py /tmp/payment-quality-R7.zip /tmp/payment-quality-inputs
+```
+
+生成命令可加 `--run --check-fields`，使用本机服务逐页解析和复检，并按这组水印原件核字。下载已出具的 R8 证据包，可直接复核当时使用的程序及实物原页。[各回单的预期及实际结果](../acceptance.md#终验实测超限与第二期实付)
+
+```sh
+curl --fail http://127.0.0.1:8000/api/cases/64cd9e64345841bab358728a6730f3d8/reports/8/bundle -o /tmp/payment-quality-R8.zip
+server/.venv/bin/python server/verify.py /tmp/payment-quality-R8.zip --render-performance --rules-from-git 312720c
+```
+
 ## 董事会决议、柜温验收和第二期付款
 
 母本是同一份带水印的采购底稿 R4，共五份原件。生成器先校验 R4 底稿及各原件的 SHA-256 与水印。四组输入分别使用签名覆盖提交版的 PDF、签后有增量修订的 PDF、有原生批注的 Word 及整页 JPEG。`hot` 使用同一份有批注的审批单，将验收单唯一一处实测值从 3℃ 改为 8℃，保留「合格」结论及第二期 6 万元回单。PDF 使用本次演练生成的测试证书。[九案与固定底稿](../acceptance.md#董事会批准条件及第二期验收款)
