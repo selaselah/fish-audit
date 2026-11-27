@@ -1,5 +1,6 @@
 """Locate a short model reading of the installment count on its complete printed contract line."""
 import re
+from decimal import Decimal
 from hashlib import sha256
 
 from contract_folios import line_numbers, verify_page_geometry
@@ -90,6 +91,89 @@ def attach(findings, row):
         if f["rule"] in ("H03", "H04", "H05", "H06") and row["unit"] in f["scope"] and (f["rule"] == "H03" or f.get("stage")):
             f["installment_count"] = row["id"]
             f["evidence"] = list(dict.fromkeys([*f["evidence"], row["id"], row["model_ref"], row["doc"] + "/p1"]))
+
+
+def schedule_page(graph, read_text, rows):
+    """Identify the original on which the numbered terms can be enumerated without an unclassified rider."""
+    from graph import LABELS, PRINTED_TITLES
+
+    contracts = graph["documents_by_kind"].get("contract", [])
+    if len(contracts) != 1:
+        return None
+    unit = contracts[0]
+    pages = [p for p in graph.get("payment_window_sources", {}).get("pages", []) if p["unit"] == unit]
+    if len(pages) != 1 or (pages[0]["doc"], pages[0]["page"], pages[0]["native"], pages[0]["text_only"]) != (unit,1,True,True):
+        return None
+    register = {(r["line"], r["quote"]) for r in rows if r["unit"] == unit and r["field"] in ("payment_term","payment_stage")}
+    if not register:
+        return None
+    # printed_rows already checked the archived text digest for this page.
+    lines = [(i, s) for i, s in enumerate(read_text(unit, 1).splitlines(), 1) if not is_page_marker(s)]
+    if not lines or PRINTED_TITLES.get(lines[0][1].strip()) != "contract":
+        return None
+    ordinary = {label for field in ("contract_id","buyer","seller","subject","total","signed_on","effect_on","effect_clause",
+                                    "buyer_signature","seller_signature","quantity_agreed","acceptance_criteria") for label in LABELS[field]}
+    for location in lines[1:]:
+        if location not in register:
+            label, body = column(location[1])
+            if label not in ordinary or not body or re.search("分期|付款|支付|结算|另行|另签|另附|补充协议", body):
+                return None
+    return unit + "/p1"
+
+
+def pending_schedule(graph, contract, plan, findings, printed_rows):
+    """Recount a single original's numbered clauses when H03 still has an arithmetic discrepancy."""
+    from payment_quality import witness
+    from performance import stage_terms
+
+    unit = contract.unit
+    if (plan.get("status") != "missing" or plan.get("scope") != [unit]
+            or contract.fields["adjustment"] or contract.incomplete("adjustment", "payment_stage")
+            or plan.get("contract_folios", {}).get("whole") or plan.get("contract_comments")
+            or set(graph["documents_by_kind"]) - {"contract","acceptance","remediation","reinspection","warranty","bank_receipt"}):
+        return None
+    rows = [r for r in printed_rows if r["unit"] == unit and r["field"] in ("payment_term", "payment_stage")]
+    headers = [r for r in rows if r["field"] == "payment_term"]
+    clauses = [r for r in rows if r["field"] == "payment_stage"]
+    known = {(r["line"], r["quote"]) for r in rows}
+    if (len(headers) != 1 or not clauses or headers[0]["line"] >= clauses[0]["line"]
+            or any((n["line"], n["quote"]) not in known for n in contract.notes)):
+        return None
+    header = headers[0]
+    label, value = column(header["quote"])
+    match = COUNT.fullmatch(value)
+    if label not in HEADINGS or not match or not (declared := ordinal(match[1])):
+        return None
+    observation = witness(printed_rows, contract, "payment_term")
+    if observation and observation[1] == value:
+        header_ref = observation[0]
+    else:
+        derived = [r for r in graph.get(KEY, {}).get("rows", []) if r["unit"] == unit and r["rects"]
+                   and (r["line"], r["quote"], r["count"]) == (header["line"], header["quote"], declared)
+                   and r["model_ref"] in plan["evidence"]]
+        if len(derived) != 1:
+            return None
+        header_ref = derived[0]["id"]
+    stages = [f["stage"] for f in findings if f["rule"] == "H04" and f.get("stage")]
+    if len(stages) != len(clauses):
+        return None
+    refs, total = [], Decimal(0)
+    for index, (row, stage) in enumerate(zip(clauses, stages), 1):
+        label, body = column(row["quote"])
+        numbered = re.fullmatch("第(" + NUM + ")期", label)
+        ref = stage["clause_ref"]
+        if (not numbered or ordinal(numbered[1]) != index or stage["name"] != label or stage["clause"] != body
+                or ref not in plan["evidence"] or witness(printed_rows, contract, "payment_stage", clause=ref) != (ref, body)):
+            return None
+        share, kind, _ = stage_terms(body)
+        if not kind or share != stage["share"] or not 0 < Decimal(share) <= 100:
+            return None
+        total += Decimal(share)
+        refs.append(ref)
+    if declared == len(refs) and total == 100:
+        return None
+    return {"declared": declared, "listed": len(refs), "share_total": format(total.normalize(), "f"),
+            "header": header_ref, "clauses": refs}
 
 
 def verify_originals(report, read_original):

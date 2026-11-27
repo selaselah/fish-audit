@@ -23,6 +23,20 @@ def packet(omissions, **kwargs):
 
 
 class InspectionUseTests(unittest.TestCase):
+    def test_incomplete_schedule_still_exposes_the_named_sheets_payment_restriction(self):
+        import retest_reference
+        p, read, layout = packet([(4,BAN)], changes={(1,"payment_term"):"分四期付款"})
+        f, = payments(p)
+        self.assertEqual((f["retest_reference"]["status"], f["inspection_use"]["state"], f["status"]), ("missing","ban","risk"))
+        use.verify(p,read,read_layout=layout)
+        g = p["graph"]
+        g[retest_reference.KEY] = retest_reference.sources(g, read, retest_reference.FIRST_FORMAT)
+        p["policy"].update(version="2026.11.28.6",retest_reference=retest_reference.FIRST_FORMAT)
+        p["findings"] = execute(g,PERFORMANCE)
+        self.assertNotIn("inspection_use",payments(p)[0])
+        with self.assertRaisesRegex(ValueError,"重审"):
+            retest_reference.guard_prior_signoff(p,read)
+
     def test_scope_and_conditions_are_independent_of_acceptable_quality(self):
         for unit, text, state, status, scope in [
             (4,BAN,"ban","risk","cited"), (4,APPROVAL,"approval","missing","cited"),

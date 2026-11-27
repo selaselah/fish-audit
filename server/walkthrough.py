@@ -12,7 +12,7 @@ HOME_PARAMS = {"scene", "slip", "copy", "edition", "batch", "record", "pdf", "ca
 CASE_PARAMS = {"view", "stage", "instrument", "receipt", "ticket", "call", "agreement", "acceptance", "finding", "fact", "prior", "entry", "filing", "part"}
 QUALITY_PIN = re.compile(r"quality-(H0[45]-[1-9][0-9]{0,7})(?:-(clause|acceptance_criteria|inspection_basis|measured_result|"
                          r"acceptance_scope|acceptance_result|accepted_on|payment_designation|transfer_status|paid_on|terms|order))?")
-RETEST_PIN = re.compile(r"retest-(H05-[1-9][0-9]{0,7})(?:-(clause|citation|payment_designation|transfer_status|paid_on|terms|order|"
+RETEST_PIN = re.compile(r"retest-(H05-[1-9][0-9]{0,7})(?:-(clause|citation|payment_designation|transfer_status|paid_on|terms|order|schedule|"
                         r"(?:original|final)_(?:acceptance_number|accepted_on|acceptance_result|acceptance_scope|defect_number)|"
                         r"(?:repair|final)_(?:original_acceptance|repair_number)|repair_(?:repaired_on|defect_number)|final_defect_closure))?")
 USE_PIN = re.compile(r"(?:inspection-use|payment-approval|payment-clock|contract-approver)-(H05-[1-9][0-9]{0,7})(?:-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7}))?")
@@ -210,9 +210,20 @@ def save_note(store, workspace, author, role, data):
             check = json.loads(row[0]) if row and row[0] else {}
             field = pin[2]
             has_order = "days_from_final" in check if retest else bool(check.get("payment"))
+            if field == "schedule":
+                schedule = check.get("schedule_review") or {}
+                plan = db.execute("""SELECT json_extract(f.value,'$.evidence') FROM reports, json_each(content,'$.findings') f
+                          WHERE case_id=? AND rev=? AND json_extract(content,'$.policy.retest_reference')=?
+                          AND json_extract(f.value,'$.rule')='H03' AND json_extract(f.value,'$.status')='missing'""",
+                                  (context["case_id"],context["rev"],check.get("format"))).fetchone()
+                refs = [schedule.get("header"), *schedule.get("clauses",[])]
+                if (not plan or check.get("format") != "reinspection-receipt-reference-v2"
+                        or check.get("fields",{}).get("clause") not in refs[1:]
+                        or not set(refs) <= set(check.get("evidence",[])) & set(json.loads(plan[0]))):
+                    raise CaseError("所选版本没有对应的分期安排待核记录。",404)
             if (not check or field == "order" and not has_order or
                     check.get("state") == "unresolved" and field not in (None,"citation") or
-                    field not in (None,"terms","order") and field not in check.get("fields",{})):
+                    field not in (None,"terms","order","schedule") and field not in check.get("fields",{})):
                 raise CaseError("所选版本的这项验收款检查没有引用该位置。",404)
         if position.get("view") == "board-decision" and ("filing" in position or "part" in position):
             records = db.execute("""SELECT json_extract(f.value,'$.effect_review.board_decision.records')

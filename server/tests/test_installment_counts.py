@@ -51,6 +51,18 @@ def packet(*, body="分三期付款", suffix="", extra=(), vote="clear", rectang
 
 
 class InstallmentCountTests(unittest.TestCase):
+    def test_document_match_can_cite_the_complete_printed_header_without_passing_the_plan(self):
+        p, text, layout = packet(body="分四期付款")
+        plan = next(f for f in p["findings"] if f["rule"] == "H03")
+        payment = next(f for f in p["findings"] if f["rule"] == "H05")
+        row, = p["graph"][counts.KEY]["rows"]
+        audit = payment["retest_reference"]
+        self.assertEqual((plan["status"],payment["status"],audit["state"],audit["status"]),("missing","missing","final","missing"))
+        self.assertEqual(audit["schedule_review"]["header"],row["id"])
+        self.assertTrue({row["id"],row["model_ref"]} <= set(payment["evidence"]) & set(plan["evidence"]))
+        counts.verify(p,text,read_layout=layout)
+        verify_findings(p)
+
     def test_only_declared_count_is_derived_and_failed_inspection_is_still_adverse(self):
         for bank,state in (("FY-02","final"),("YS-01","original")):
             p,text,layout=packet(bank=bank);g=p["graph"]

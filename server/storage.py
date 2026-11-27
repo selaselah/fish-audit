@@ -833,6 +833,7 @@ class Store:
             try:
                 retest_reference.verify(paper,read_text,read_original=read_original,
                                         read_layout=lambda doc, page: stored_page_layout(db, case_id, doc, page))
+                retest_reference.guard_prior_signoff(paper,read_text)
             except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
                 raise CaseError(f"签收前核对回单所据初验与复验失败。{error}",409) from error
             try:
@@ -986,6 +987,7 @@ class Store:
             try:
                 references = (f["retest_reference"] for f in paper["findings"] if f.get("retest_reference"))
                 retest_reference.verify_positions(paper["graph"], references, page_layout)
+                retest_reference.guard_prior_signoff(paper,page_text)
             except (KeyError,TypeError,ValueError) as error:
                 raise CaseError(f"签收前核对回单所据初验与复验失败。{error}",409) from error
             try:

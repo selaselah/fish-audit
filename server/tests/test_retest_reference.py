@@ -95,6 +95,72 @@ class RetestReceiptTests(unittest.TestCase):
             p,_=sample((code,));f,=payments(p)
             self.assertEqual(f["retest_reference"]["state"],"unresolved")
 
+    def test_only_the_documentary_match_survives_an_incomplete_installment_schedule(self):
+        for count, middle, code, paid, state, status, total in (
+                ("四","60","FY-02","2026-09-27","final","missing","100"),
+                ("四","60","YS-01","2026-09-27","original","risk","100"),
+                ("三","50","FY-02","2026-09-21","final","risk","90"),
+                ("四","50.25","FY-02","2026-09-26","final","missing","90.25"),
+                ("三","50","FY-03","2026-09-27","unlocated","missing","90")):
+            with self.subTest(count=count, middle=middle, code=code, paid=paid):
+                contract = [(k,l,"分"+count+"期付款" if k=="payment_term" else
+                             "最终验收合格后支付"+middle+"%" if l=="第二期" else v) for k,l,v in CONTRACT]
+                bank = [*BANK_DOC,(refs.FIELD,"付款依据验收单号",code)]
+                p,read = sample(groups=[contract,OLD,FIX,FINAL,WARRANTY,bank], dates=(paid,))
+                payment, = payments(p)
+                match = payment["retest_reference"]
+                plan = next(f for f in p["findings"] if f["rule"] == "H03")
+                proof = match["schedule_review"]
+                self.assertEqual((plan["status"], payment["status"], match["state"], match["status"]), ("missing",status,state,status))
+                self.assertEqual((proof["declared"],proof["listed"],proof["share_total"]), (4 if count=="四" else 3,3,total))
+                self.assertTrue({proof["header"],*proof["clauses"]} <= set(plan["evidence"]) & set(match["evidence"]))
+                self.assertEqual(proof["clauses"],[f["stage"]["clause_ref"] for f in p["findings"] if f["rule"]=="H04"])
+                refs.verify(p,read)
+                verify_findings(p)
+                if state == "unlocated":
+                    self.assertFalse(refs.edges(p["findings"]))
+                else:
+                    self.assertEqual(refs.edges(p["findings"])[0]["to"],match["fields"][state+"_acceptance_number"])
+
+    def test_missing_clauses_are_not_inferred_from_arithmetic_or_ambiguous_originals(self):
+        for kw in ({"omissions":[(1,"另签结算附件后生效")]}, {"omissions":[(1,"说明：其余项目见来函")]},
+                   {"omissions":[(1,"设备采购合同")]}, {"omissions":[(1,"第二期：最终验收合格后支付40%")]},
+                   {"omissions":[(1,"结算方式：分五期付款")]}, {"changes":{(4,"original_acceptance"):"YS-02"}},
+                   {"changes":{(3,"contract_id"):"YL-122"}}, {"changes":{(6,"payee"):"另一个供应方"}}):
+            with self.subTest(kw=kw):
+                options = {**kw,"changes":{(1,"payment_term"):"分四期付款",**kw.get("changes",{})}}
+                p,read = sample(**options)
+                self.assertFalse(any(f.get("retest_reference",{}).get("schedule_review") for f in payments(p)))
+                self.assertFalse(refs.edges(p["findings"]))
+                refs.verify(p,read)
+
+    def test_issued_schedule_evidence_and_earlier_signoffs(self):
+        for code,status in (("FY-02","missing"),("YS-01","risk")):
+            p,read = sample((code,),changes={(1,"payment_term"):"分四期付款"})
+            for target in ("total","count","field","ledger","hold","result"):
+                changed = deepcopy(p)
+                f, = payments(changed)
+                c = f["retest_reference"]
+                if target == "total": c["schedule_review"]["share_total"] = "90"
+                if target == "count": c["schedule_review"]["declared"] = 3
+                if target == "field": c["schedule_review"]["clauses"].reverse()
+                if target == "ledger": del changed["graph"][refs.KEY]["schedule_page"]
+                if target == "hold": del c["schedule_review"]
+                if target == "result": c["status"] = "ok"
+                with self.subTest(target=target, code=code), self.assertRaises(ValueError):
+                    refs.verify(changed,read)
+            g = p["graph"]
+            g[refs.KEY] = refs.sources(g,read,refs.FIRST_FORMAT)
+            g["edges"] = [e for e in g["edges"] if e["type"] != refs.EDGE]
+            p["policy"].update(version="2026.11.28.6",retest_reference=refs.FIRST_FORMAT)
+            p["findings"] = execute(g,PERFORMANCE)
+            self.assertEqual(payments(p)[0]["retest_reference"]["state"],"unresolved")
+            refs.verify(p,read)
+            if status == "risk":
+                with self.assertRaisesRegex(ValueError,"重审"): refs.guard_prior_signoff(p,read)
+            else:
+                refs.guard_prior_signoff(p,read)
+
     def test_duplicate_raw_lines_foreign_identity_and_missing_chain_remain_unresolved(self):
         for kw in ({"omissions":[(4,"复验单编号：FY-03")]},{"omissions":[(3,"整改记录编号：ZG-02")]},
                    {"omissions":[(6,"付款依据验收单号：YS-01")]},{"omissions":[(6,"附注：本笔转账已撤销")]},

@@ -9,10 +9,12 @@ from payment_quality import BANK, printed_rows, readings, witness
 from reinspection import CLOSED, LINK_KEYS, SIGNED_FAILURE
 from warranty_terms import bank_identity
 
-FORMAT = "reinspection-receipt-reference-v1"
+FIRST_FORMAT = "reinspection-receipt-reference-v1"
+FORMAT = "reinspection-receipt-reference-v2"
 KEY = "retest_reference_sources"
 EDGE = "receipt_names_inspection"
 SINCE = (2026,11,27,18)
+SCHEDULE_SINCE = (2026,11,28,7)
 INITIAL = (*LINK_KEYS,"acceptance_number","defect_number","accepted_on","acceptance_result","acceptance_scope")
 REPAIR = (*LINK_KEYS,"original_acceptance","repair_number","defect_number","repaired_on")
 FINAL = (*INITIAL,"original_acceptance","repair_number","defect_closure")
@@ -22,13 +24,18 @@ IDS = {"acceptance_number","original_acceptance","repair_number","defect_number"
 STEPS = (("original",INITIAL),("repair",REPAIR),("final",FINAL))
 
 
-def sources(graph,read_text):
+def sources(graph,read_text,method=FORMAT):
     from graph import LABELS
+    from installment_counts import schedule_page
     related = graph.get(GRAPH_KEY,{}).get("rows",[])
     kinds = graph["documents_by_kind"]
     chain = kinds.get("remediation") or kinds.get("reinspection") or any(f["field"]=="original_acceptance" for f in graph["facts"])
     active = chain and any(r["role"]=="bank_receipt" for r in related)
-    return {"format":FORMAT,"rows":printed_rows(graph,read_text,ROLES,extra_labels=LABELS) if active else []}
+    rows = printed_rows(graph,read_text,ROLES,extra_labels=LABELS) if active else []
+    ledger = {"format":method,"rows":rows}
+    if method == FORMAT and rows and (page := schedule_page(graph, read_text, rows)):
+        ledger["schedule_page"] = page
+    return ledger
 
 
 def clean(graph, unit):
@@ -80,6 +87,7 @@ def register(graph,h02,contract,rows):
 
 
 def records(graph,findings):
+    from installment_counts import pending_schedule
     from performance import CONDITIONS, Material, ORD, PASS, matches_stage, number as ordinal_number, stage_terms
 
     rows=graph.get(KEY,{}).get("rows")
@@ -96,6 +104,10 @@ def records(graph,findings):
     ledger=graph[GRAPH_KEY]
     reg=register(graph,h02,contract,rows)
     plan=next((f for f in findings if f["rule"]=="H03"),{})
+    method = graph[KEY]["format"]
+    partial = None
+    if method == FORMAT and reg and graph[KEY].get("schedule_page") == contract.unit + "/p1":
+        partial = pending_schedule(graph,contract,plan,findings,rows)
     contract_ids=readings(rows,contract,LINK_KEYS)
     for f in findings:
         stage=f.get("stage")
@@ -114,7 +126,7 @@ def records(graph,findings):
         refs=[stage["clause_ref"]]
         for row in originals:
             refs.extend([row["id"],f"{row['doc']}/p{row['page']}",*row["facts"]])
-        check={"format":FORMAT,"bank":unit,"state":"unresolved","status":"missing","fields":fields,
+        check={"format":method,"bank":unit,"state":"unresolved","status":"missing","fields":fields,
                "citations":[r["id"] for r in citations],"evidence":refs}
         if timing:
             check["timing_notes"]=timing
@@ -130,7 +142,8 @@ def records(graph,findings):
         if citation and literal_code(bank,FIELD,citation):
             fields["citation"]=citation[0]
             check["number"]=citation[1]
-        if (not reg or not contract_ids or plan.get("status")!="ok" or stage["clause_ref"] not in plan["evidence"] or
+        eligible_plan = plan.get("status") == "ok" or partial and stage["clause_ref"] in partial["clauses"]
+        if (not reg or not contract_ids or not eligible_plan or stage["clause_ref"] not in plan["evidence"] or
                 not clause or clause[1]!=stage["clause"] or not clean(graph,contract.unit) or not clean(graph,unit)
                 or not b or not bank_identity(contract,bank) or "citation" not in fields or
                 not receipt_pages or any(p["ambiguous"] for p in receipt_pages) or
@@ -142,6 +155,9 @@ def records(graph,findings):
             continue
         units,proofs=reg
         check["units"]=units
+        if partial:
+            check["schedule_review"] = partial
+            refs.extend([partial["header"], *partial["clauses"], contract.unit + "/p1"])
         refs.extend(v[0] for v in contract_ids.values())
         refs.extend(v[0] for v in b.values())
         fields.update({k:b[k][0] for k in ("payment_designation","transfer_status","paid_on")})
@@ -160,7 +176,7 @@ def records(graph,findings):
         failure = check["final_result"] in SIGNED_FAILURE or check["final_closure"] in {"未关闭","待关闭","未完成","未结清"}
         if role=="original" and check["original_result"] in SIGNED_FAILURE or role=="final" and (days<0 or failure):
             check["status"]="risk"
-        elif role=="final" and days>0 and final["acceptance_result"][1] in PASS and final["defect_closure"][1] in CLOSED:
+        elif not partial and role=="final" and days>0 and final["acceptance_result"][1] in PASS and final["defect_closure"][1] in CLOSED:
             check["status"]="ok"
         yield f,check
 
@@ -183,8 +199,12 @@ def explanation(check):
 def apply(graph,findings):
     for f,c in records(graph,findings):
         f["retest_reference"]=c
-        if c["status"]!="ok" and f["status"]=="ok":f["detail"]=explanation(c)
-        else:f["detail"]+=" "+explanation(c)
+        detail = explanation(c)
+        if schedule := c.get("schedule_review"):
+            detail += (f" 合同列明 {schedule['declared']} 期，原页逐项列出 {schedule['listed']} 期，"
+                       f"比例合计 {schedule['share_total']}%。完整付款安排仍待核。")
+        if c["status"]!="ok" and f["status"]=="ok":f["detail"]=detail
+        else:f["detail"]+=" "+detail
         if LEVEL[c["status"]]>LEVEL[f["status"]]:f["status"]=c["status"]
         f["evidence"]=list(dict.fromkeys([*f["evidence"],*c["evidence"]]))
         f["scope"]=list(dict.fromkeys([*f["scope"],*c.get("units",{}).values()]))
@@ -215,16 +235,33 @@ def verify_positions(graph, checks, read_layout):
             raise ValueError(f"回单所据初验与复验的引文位置与底稿不符（{doc} 第 {page} 页）")
 
 
+def guard_prior_signoff(report, read_text):
+    from performance import FORMAT as PERFORMANCE, compute
+
+    graph, findings = report["graph"], report["findings"]
+    ledger = graph.get(KEY, {})
+    if (ledger.get("format") != FIRST_FORMAT or report["policy"].get("performance_checks") != PERFORMANCE
+            or not any(f["rule"] == "H03" and f["status"] == "missing" for f in findings)
+            or not any(f.get("retest_reference", {}).get("state") == "unresolved" for f in findings)):
+        return
+    revised = compute({**graph, KEY: sources(graph, read_text)})
+    for f in revised:
+        ref = f.get("retest_reference", {})
+        if ref.get("schedule_review") and (ref["status"] == "risk" or f.get("inspection_use", {}).get("status") == "risk"):
+            raise ValueError("分期安排待核，本笔回单所引的验收凭证出现旧版未列的付款风险，请重审后签收。")
+
+
 def verify(report,read_text,*,read_original=None,read_layout=None):
     graph,p,findings=report["graph"],report["policy"],report["findings"]
     actual=[e for e in graph["edges"] if e["type"]==EDGE]
-    current=tuple(map(int,p.get("version","0").split(".")))>=SINCE
-    if not current:
+    revision=tuple(map(int,p.get("version","0").split(".")))
+    if revision < SINCE:
         if KEY in graph or p.get("retest_reference") or "retest_reference.py" in p.get("code_sha256",{}) or actual or any("retest_reference" in f for f in findings):
             raise ValueError("历史底稿含未出具的复验回单引用判断")
         return
-    if (p.get("retest_reference")!=FORMAT or "code_sha256" in p and "retest_reference.py" not in p["code_sha256"] or
-            graph.get(KEY)!=sources(graph,read_text) or actual!=edges(findings)):
+    method = FORMAT if revision >= SCHEDULE_SINCE else FIRST_FORMAT
+    if (p.get("retest_reference")!=method or "code_sha256" in p and "retest_reference.py" not in p["code_sha256"] or
+            graph.get(KEY)!=sources(graph,read_text,method) or actual!=edges(findings)):
         raise ValueError("复验回单引用所据原行、方法或图关系不符")
     expected={f["id"]:c for f,c in records(graph,findings)}
     for f in findings:
