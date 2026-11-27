@@ -23,15 +23,16 @@ CASES = {"current": "放行单 · 测试签名覆盖本版", "earlier": "放行�
          "comment": "放行单 · Word 草稿会签批注", "scan": "放行单 · 扫描签认栏"}
 
 
-def materials(archive, target):
-    case, rev, expected = MASTER
+def materials(archive, target, *, master=MASTER, title=TITLE, decision=("放行决定","解除第二期验收款暂缓"),
+              comment=COMMENT, signature_field="SyntheticRelease"):
+    case, rev, expected = master
     with ZipFile(archive) as package:
         content = package.read("report.json")
         manifest, journal = (json.loads(package.read(k+".json")) for k in ("manifest","journal"))
         report = json.loads(content)
         require(manifest["revision"] == rev and digest(content) == manifest["report_sha256"] == expected
                 and report["case_id"] == journal["id"] == case and journal["title"].startswith("合成演练 · ")
-                and not journal["decisions"] and not journal["referrals"], "虚构采购的已签发 R6")
+                and not journal["decisions"] and not journal["referrals"], f"虚构采购的已签发 R{rev}")
         documents = {}
         for doc in report["graph"]["documents"]:
             unit = doc["id"]
@@ -39,14 +40,14 @@ def materials(archive, target):
             raw = package.read(f"originals/{unit}.pdf")
             require(doc["ext"] == ".pdf" and doc["pages"] == 1 and lines[0] == WATERMARK
                     and digest(raw) == doc["sha256"], "原件和水印")
-            if doc["name"] == TITLE+".pdf":
-                require(lines[1] == TITLE, "放行单标题")
+            if doc["name"] == title+".pdf":
+                require(lines[1] == title, title+"标题")
                 rows = [line.split("：",1) for line in lines[2:]]
                 image = package.read(f"pages/{unit}/1.jpg")
                 page, = [n for n in report["graph"]["nodes"] if n["id"] == unit+"/p1"]
                 require(digest(image) == page["sha256"] and all(len(row) == 2 for row in rows), "原件页图与字段")
             documents[doc["name"]] = raw
-    signed = signed_copy(documents[TITLE+".pdf"], "SyntheticRelease")
+    signed = signed_copy(documents[title+".pdf"], signature_field)
     carriers = {"current": (".pdf",signed), "earlier": (".pdf",later_copy(signed)), "scan": (".jpg",image)}
     groups = {}
     for key in CASES:
@@ -55,20 +56,20 @@ def materials(archive, target):
         files = []
         for name, data in documents.items():
             path = folder/name
-            if name == TITLE+".pdf" and key == "comment":
+            if name == title+".pdf" and key == "comment":
                 path = path.with_suffix(".docx")
-                word_file(path,rows,TITLE)
+                word_file(path,rows,title)
                 word = Document(path)
-                paragraph, = [p for p in word.paragraphs if p.text.startswith("放行决定：")]
-                left, right = paragraph.text.split("解除第二期验收款暂缓")
+                paragraph, = [p for p in word.paragraphs if p.text.startswith(decision[0]+"：")]
+                left, right = paragraph.text.split(decision[1])
                 paragraph.clear()
                 paragraph.add_run(left)
-                selected = paragraph.add_run("解除第二期验收款暂缓")
+                selected = paragraph.add_run(decision[1])
                 paragraph.add_run(right)
-                word.add_comment(selected,COMMENT,author="演练财务复核员",initials="CW")
+                word.add_comment(selected,comment,author="演练财务复核员",initials="CW")
                 save_document(word,path)
             else:
-                if name == TITLE+".pdf":
+                if name == title+".pdf":
                     ext,data = carriers[key]
                     path = path.with_suffix(ext)
                 path.write_bytes(data)
@@ -133,7 +134,7 @@ def check_fields(archive, key, case, folder, *, case_title=None, master_hash=MAS
                     same = [f for f in report["graph"]["facts"] if f["doc"] == doc["id"] and f["field"] == source["field"]
                             and normalize(f["quote"]) == normalize(quote) and normalize(f["value"]) == normalize(source["value"])]
                 if len(same) == 1 and same[0]["status"] in ("anchored","visual") and (source["status"] == "confirmed"
-                        or path.suffix == ".jpg" and source["field"] == kind):
+                        or same[0]["status"] == "visual" and source["field"] == kind):
                     confirm.append(same[0]["id"])
         if confirm:
             post(api+"/attest", {"rev":get(api)["rev"], "reviewer":reviewer, "decision":"confirm", "facts":confirm,

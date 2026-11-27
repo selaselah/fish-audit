@@ -19,6 +19,7 @@ import signer_clock
 import equipment_models
 import equipment_exchanges
 import contract_effect
+import board_execution
 import pdf_execution
 import mandate_execution
 import mandate_originals
@@ -352,7 +353,7 @@ def check_approval(contract, approvals, party):
     return "ok","约定的董事会批准决定、日期和签认已有材料支持。",refs
 
 
-def effect(contract, approvals=(), version=FORMAT, grants=(), mandate_records=(), original_sources=None):
+def effect(contract, approvals=(), version=FORMAT, grants=(), mandate_records=(), original_sources=None, board_graph=None):
     fields = ("contract","contract_id","buyer","seller","signed_on","effect_clause","contract_state","effect_on","valid_until",
               "buyer_signature","seller_signature","adjustment")
     refs = contract.evidence(*fields)
@@ -402,8 +403,13 @@ def effect(contract, approvals=(), version=FORMAT, grants=(), mandate_records=()
     else:
         status, detail = "ok", "合同编号、双方、签订日期及签署栏相符；双方签署的约定生效条件已有材料支持。"
     scope = [contract.unit]
+    decision = None
     if board:
         approval_status, note, evidence = check_approval(contract,approvals,board[1])
+        decision = board_execution.decision(board_graph, contract, approvals, board[1])
+        if decision:
+            approval_status, note = board_execution.review(approval_status, note, decision)
+            refs.extend(decision["evidence"])
         refs.extend(evidence)
         scope.extend(doc.unit for doc in approvals)
         if status == "ok" or approval_status == "risk":
@@ -426,6 +432,8 @@ def effect(contract, approvals=(), version=FORMAT, grants=(), mandate_records=()
             if item["status"]=="risk" or status=="ok":
                 status = item["status"]
     finding = result("H01",status,detail,refs,scope)
+    if decision:
+        finding["effect_review"] = {"board_decision":decision}
     if delegations:
         finding["delegations"] = delegations
     return finding
@@ -753,7 +761,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
     approvals = materials("contract_approval") if version != FIRST_FORMAT else []
     grants = materials("power_of_attorney") if version in MANDATE_FORMATS else ()
     signed = effect(contract, approvals, version, grants, graph.get("mandate_pdf_sources", {}).get("records", ()),
-                    graph.get("mandate_original_sources"))
+                    graph.get("mandate_original_sources"), graph if version == FORMAT else None)
     if version in EFFECT_FORMATS:
         contract_effect.review(signed,graph.get("contract_effect_sources",{}),contract,graph)
         pdf_execution.review(signed, graph, contract.unit)

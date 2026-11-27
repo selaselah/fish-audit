@@ -216,7 +216,7 @@ def review(finding,ledger,contract,graph):
     pages=[p for p in ledger.get("pages",[]) if p["unit"] in units]
     conditions=[s for s in ledger.get("conditions",[]) if s["unit"] in units]
     mixed=[p for p in pages if not p["text_only"] or not p["native"]]
-    finding["effect_review"]={"conditions":conditions,"mixed_pages":mixed}
+    finding.setdefault("effect_review", {}).update(conditions=conditions, mixed_pages=mixed)
     if board_pages:
         finding["effect_review"]["approval_pages"]=board_pages
     refs=[f"{p['doc']}/p{p['page']}" for p in pages]

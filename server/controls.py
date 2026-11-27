@@ -53,6 +53,7 @@ from release_execution import FORMAT as RELEASE_EXECUTION
 from release_comparison import FORMAT as RELEASE_COMPARISON
 from warranty_execution import FORMAT as WARRANTY_EXECUTION
 from warranty_dates import FORMAT as WARRANTY_DATES
+from board_execution import FORMAT as BOARD_DECISION
 from contract_changes import FORMAT as ADDENDUM_FORMAT
 from delegation import FORMAT as DELEGATION_FORMAT
 from transfers import RULES as TRANSFER_RULES, check_transfers
@@ -83,7 +84,7 @@ CATALOG = {
 }
 VERSION = {"profile": PROFILE, "version": RULE_VERSION, "background": ACCOUNTING, "performance_checks":PERFORMANCE_FORMAT,
            "release_execution": RELEASE_EXECUTION, "release_comparison": RELEASE_COMPARISON, "warranty_execution": WARRANTY_EXECUTION,
-           "warranty_dates": WARRANTY_DATES,
+           "warranty_dates": WARRANTY_DATES, "board_decision": BOARD_DECISION,
            "advance_guarantee":ADVANCE_GUARANTEE,
            "invoice_receipt_conditions":INVOICE_RECEIPT, "acceptance_reservations":RESERVATIONS, "acceptance_word_reviews":WORD_REVIEWS, "contract_word_reviews":CONTRACT_WORD_REVIEWS, "payment_releases":PAYMENT_RELEASES, "equipment_models":EQUIPMENT_MODELS, "repair_completion":REPAIR_COMPLETION, "reinspection_wait": REINSPECTION_WAIT, "contract_folios": CONTRACT_FOLIOS, "inspection_coverage":INSPECTION_COVERAGE, "prior_installment":PRIOR_INSTALLMENT,
            "quality_number_classification":QUALITY_NUMBER_FORMAT, "quality_references":QUALITY_REFERENCE_FORMAT,

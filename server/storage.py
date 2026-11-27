@@ -57,6 +57,7 @@ from payment_releases import verify as verify_payment_releases
 import release_execution
 import warranty_execution
 import warranty_dates
+import board_execution
 from invoice_conditions import verify as verify_invoice_conditions
 from repair_completion import verify as verify_repair_completion
 from contract_folios import verify as verify_contract_folios
@@ -794,6 +795,7 @@ class Store:
             except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
                 raise CaseError(f"签收前核对付款放行单原件失败。{error}", 409) from error
             try:
+                board_execution.verify(paper, read_original, read_text, signing=True)
                 warranty_execution.verify(paper, read_original, read_text, signing=True)
                 warranty_dates.verify(paper, read_text, read_original=read_original)
             except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
@@ -811,7 +813,7 @@ class Store:
             except (KeyError, TypeError, ValueError) as error:
                 raise CaseError(f"签收前核对回单所据验收原件失败。{error}", 409) from error
             if row["profile"]!=BANK:
-                signing_proofs = {r["id"] for key in ("acceptance_pdf_sources", "acceptance_original_sources", "addendum_pdf_sources", "addendum_original_sources", "mandate_pdf_sources", "mandate_original_sources", release_execution.PDF, release_execution.NATIVE, warranty_execution.PDF, warranty_execution.NATIVE)
+                signing_proofs = {r["id"] for key in ("acceptance_pdf_sources", "acceptance_original_sources", "addendum_pdf_sources", "addendum_original_sources", "mandate_pdf_sources", "mandate_original_sources", release_execution.PDF, release_execution.NATIVE, warranty_execution.PDF, warranty_execution.NATIVE, board_execution.PDF, board_execution.NATIVE)
                               for r in graph.get(key, {}).get("records", [])}
                 full_page_checks = [f for f in paper["findings"] if any(f.get(key) for key in FULL_PAGE_EVIDENCE)
                                     or signing_proofs.intersection(f["evidence"])]

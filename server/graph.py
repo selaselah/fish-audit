@@ -38,6 +38,7 @@ import contract_folios
 import prior_installment
 import warranty_terms
 import warranty_dates
+import board_execution
 import warranty_service
 import payment_windows
 import invoice_conditions
@@ -396,6 +397,11 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     graph["nodes"].extend(nodes)
     graph["edges"].extend(edges)
     calls = {(p["doc"], p["number"]): p["extraction"] for p in pages}
+    board = board_execution.sources(graph, read_original, lambda doc, page: texts[doc, page])
+    graph.update(board)
+    nodes, edges = board_execution.source_graph(board)
+    graph["nodes"].extend(nodes)
+    graph["edges"].extend(edges)
     graph["contract_effect_sources"]=contract_effect.sources(graph,lambda doc,number:texts[doc,number],calls=calls)
     graph["acceptance_pdf_sources"] = acceptance_execution.sources(graph, read_original)
     nodes, edges = acceptance_execution.source_graph(graph["acceptance_pdf_sources"])
