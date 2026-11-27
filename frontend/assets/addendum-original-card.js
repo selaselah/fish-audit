@@ -31,27 +31,6 @@ const AddendumOriginalCard = (() => {
     select(views.some(v=>v.key===first)?first:views[0].key);
     return root;
   }
-  function checkOriginal(url,expected) {
-    const row=element('div','','agreement-check'),button=element('button','核对当前文件'),result=element('output');
-    button.type='button';
-    button.addEventListener('click',async()=>{
-      if (button.getAttribute('aria-disabled')==='true') return;
-      if (!globalThis.crypto?.subtle) {result.textContent='此浏览器无法计算 SHA-256';return;}
-      button.setAttribute('aria-disabled','true');row.dataset.state='checking';result.textContent='正在核对…';
-      try {
-        const reply=await fetch(url,{cache:'no-store',mode:'same-origin',credentials:'same-origin'});
-        if (!reply.ok) throw new Error('Original unavailable');
-        const hashed=await crypto.subtle.digest('SHA-256',await reply.arrayBuffer());
-        const actual=Array.from(new Uint8Array(hashed),byte=>byte.toString(16).padStart(2,'0')).join('');
-        const matches=actual===expected;
-        row.dataset.state=matches?'match':'mismatch';
-        result.textContent=matches?'文件与本版留存摘要一致':'文件与本版留存摘要不符';
-      } catch {
-        row.dataset.state='unavailable';result.textContent='原件读取失败，可以重试';
-      } finally {button.removeAttribute('aria-disabled');}
-    });
-    row.append(button,result);return row;
-  }
   function render(model,terms,id) {
     const {record,filename,original,pages,rows,notes}=model;
     const root=element('section','','agreement-original');
@@ -135,7 +114,7 @@ const AddendumOriginalCard = (() => {
       [model.word?.part,model.word?.part_sha256]]) {
       if (name && value) hashes.append(element('dt',name),element('dd',value));
     }
-    verify.append(checkOriginal(original,model.sourceHash),hashes);footer.append(verify);
+    verify.append(originalFileCheck(original,model.sourceHash),hashes);footer.append(verify);
     if (model.request) {
       const ask=element('button','起草补件要求','agreement-request');
       ask.type='button';ask.addEventListener('click',model.request);footer.append(ask);

@@ -1,0 +1,499 @@
+{
+  "rule_version": "2026.11.27.10",
+  "editions": [
+    {
+      "key": "clean",
+      "case_id": "42400d4c7b5d40b8965a3a2ca69121ea",
+      "rev": 9,
+      "report_sha256": "36d241603806b375d777fa8c89739529b419862cc992ec778ec423f8d1a02bdc",
+      "id": "acceptance-original/d02",
+      "state": "word_text",
+      "status": "missing",
+      "doc": {
+        "id": "d02",
+        "title": "验收报告",
+        "name": "验收报告.docx",
+        "page": 1,
+        "media": "word",
+        "version": "合成案例 · R9",
+        "source_sha256": "d322daf59912e1c94887b2982a5555b36dba69ed4b470f975498006fdafceb23",
+        "page_sha256": "77ecedfd922c9164a228ffeec60694c8e32363dba47bdc6946275e5acf0ef5b1",
+        "original": "/showcase/acceptance-original-clean.docx",
+        "image": "/assets/acceptance-review-page.jpg",
+        "lines": [
+          {
+            "ref": "d02/p1/f8",
+            "field": "acceptance_result",
+            "label": "验收结论",
+            "value": "合格",
+            "quote": "验收结论：合格",
+            "line": 9,
+            "page": 1,
+            "rect": [
+              0.14761,
+              0.40874,
+              0.28392,
+              0.4233
+            ],
+            "rects": [
+              [
+                0.14761,
+                0.40874,
+                0.28392,
+                0.4233
+              ]
+            ]
+          },
+          {
+            "ref": "d02/p1/f11",
+            "field": "measured_result",
+            "label": "实测结果",
+            "value": "柜温 3℃",
+            "quote": "实测结果：柜温 3℃",
+            "line": 12,
+            "page": 1,
+            "rect": [
+              0.14824,
+              0.52039,
+              0.31344,
+              0.53495
+            ],
+            "rects": [
+              [
+                0.14824,
+                0.52039,
+                0.28392,
+                0.53495
+              ],
+              [
+                0.28957,
+                0.52087,
+                0.31344,
+                0.53301
+              ]
+            ]
+          },
+          {
+            "ref": "d02/p1/f13",
+            "field": "acceptance_signer",
+            "label": "验收签认",
+            "value": "演练许澄（已签字）",
+            "quote": "验收签认：演练许澄（已签字）",
+            "line": 14,
+            "page": 1,
+            "rect": [
+              0.14761,
+              0.59466,
+              0.40955,
+              0.60922
+            ],
+            "rects": [
+              [
+                0.14761,
+                0.59466,
+                0.40955,
+                0.60922
+              ]
+            ]
+          }
+        ]
+      },
+      "notes": []
+    },
+    {
+      "key": "limited",
+      "case_id": "84c4fa7a1a8e4dd594a03717614ed7ef",
+      "rev": 9,
+      "report_sha256": "b9191dfe18b26a71c30f4e2ff8f375aa5c2c3d01b6dde42686c4922281d1e1eb",
+      "id": "acceptance-original/d02",
+      "state": "word_review",
+      "status": "risk",
+      "doc": {
+        "id": "d02",
+        "title": "验收报告",
+        "name": "验收报告.docx",
+        "page": 1,
+        "media": "word",
+        "version": "合成案例 · R9",
+        "source_sha256": "26d8d357447ffa3cb0800c8fc6f21432beb34efdfda54a097b8bc621f5d83dd3",
+        "page_sha256": "77ecedfd922c9164a228ffeec60694c8e32363dba47bdc6946275e5acf0ef5b1",
+        "original": "/showcase/acceptance-review.docx",
+        "image": "/assets/acceptance-review-page.jpg",
+        "lines": [
+          {
+            "ref": "d02/p1/f7",
+            "field": "acceptance_result",
+            "label": "验收结论",
+            "value": "合格",
+            "quote": "验收结论：合格",
+            "line": 9,
+            "page": 1,
+            "rect": [
+              0.14761,
+              0.40874,
+              0.28392,
+              0.4233
+            ],
+            "rects": [
+              [
+                0.14761,
+                0.40874,
+                0.28392,
+                0.4233
+              ]
+            ]
+          },
+          {
+            "ref": "d02/p1/f10",
+            "field": "measured_result",
+            "label": "实测结果",
+            "value": "柜温 3℃",
+            "quote": "实测结果：柜温 3℃",
+            "line": 12,
+            "page": 1,
+            "rect": [
+              0.14824,
+              0.52039,
+              0.31344,
+              0.53495
+            ],
+            "rects": [
+              [
+                0.14824,
+                0.52039,
+                0.28392,
+                0.53495
+              ],
+              [
+                0.28957,
+                0.52087,
+                0.31344,
+                0.53301
+              ]
+            ]
+          },
+          {
+            "ref": "d02/p1/f12",
+            "field": "acceptance_signer",
+            "label": "验收签认",
+            "value": "演练许澄（已签字）",
+            "quote": "验收签认：演练许澄（已签字）",
+            "line": 14,
+            "page": 1,
+            "rect": [
+              0.14761,
+              0.59466,
+              0.40955,
+              0.60922
+            ],
+            "rects": [
+              [
+                0.14761,
+                0.59466,
+                0.40955,
+                0.60922
+              ]
+            ]
+          }
+        ]
+      },
+      "notes": [
+        {
+          "anchor": {
+            "end": 7,
+            "paragraph": 9,
+            "quote": "验收结论：合格",
+            "selected": "合格",
+            "start": 5
+          },
+          "author": "演练仓储复核员",
+          "date": "2026-09-20T03:00:00Z",
+          "id": "acceptance-word/d02/n1",
+          "key": "0",
+          "location": {
+            "facts": [
+              "d02/p1/f7"
+            ],
+            "line": 9,
+            "page": 1,
+            "page_sha256": "77ecedfd922c9164a228ffeec60694c8e32363dba47bdc6946275e5acf0ef5b1",
+            "text_sha256": "331d9f1bba1bd3183ae062d10427429780fef5090c48028e8521a62144dea199",
+            "unit": "d02"
+          },
+          "shortened": false,
+          "text": "本次仅核对到货数量，制冷性能须由技术部另行终验。"
+        }
+      ]
+    },
+    {
+      "key": "hot",
+      "case_id": "8f40e32a890c4812b2e2fc5e4929b501",
+      "rev": 9,
+      "report_sha256": "efe81e37df5b93d2add3aa705bd03a9fc810be997a9be0024f95b3d328f224c8",
+      "id": "acceptance-original/d02",
+      "state": "word_review",
+      "status": "issue",
+      "doc": {
+        "id": "d02",
+        "title": "验收报告",
+        "name": "验收报告.docx",
+        "page": 1,
+        "media": "word",
+        "version": "合成案例 · R9",
+        "source_sha256": "f3aa103a6ccca2fb1d5b92149b72c0b40bdf1a8101aafdbf4018fa002112e0f5",
+        "page_sha256": "905e58c2733100e79f03f576a16115a507660ddb39142bc77ae578c088f44948",
+        "original": "/showcase/acceptance-original-hot.docx",
+        "image": "/assets/acceptance-original-hot.jpg",
+        "lines": [
+          {
+            "ref": "d02/p1/f8",
+            "field": "acceptance_result",
+            "label": "验收结论",
+            "value": "合格",
+            "quote": "验收结论：合格",
+            "line": 9,
+            "page": 1,
+            "rect": [
+              0.14761,
+              0.40874,
+              0.28392,
+              0.4233
+            ],
+            "rects": [
+              [
+                0.14761,
+                0.40874,
+                0.28392,
+                0.4233
+              ]
+            ]
+          },
+          {
+            "ref": "d02/p1/f11",
+            "field": "measured_result",
+            "label": "实测结果",
+            "value": "柜温 8℃",
+            "quote": "实测结果：柜温 8℃",
+            "line": 12,
+            "page": 1,
+            "rect": [
+              0.14824,
+              0.52039,
+              0.31344,
+              0.53495
+            ],
+            "rects": [
+              [
+                0.14824,
+                0.52039,
+                0.28392,
+                0.53495
+              ],
+              [
+                0.28957,
+                0.52087,
+                0.31344,
+                0.53301
+              ]
+            ]
+          },
+          {
+            "ref": "d02/p1/f13",
+            "field": "acceptance_signer",
+            "label": "验收签认",
+            "value": "演练许澄（已签字）",
+            "quote": "验收签认：演练许澄（已签字）",
+            "line": 14,
+            "page": 1,
+            "rect": [
+              0.14761,
+              0.59466,
+              0.40955,
+              0.60922
+            ],
+            "rects": [
+              [
+                0.14761,
+                0.59466,
+                0.40955,
+                0.60922
+              ]
+            ]
+          }
+        ]
+      },
+      "notes": [
+        {
+          "anchor": {
+            "end": 7,
+            "paragraph": 9,
+            "quote": "验收结论：合格",
+            "selected": "合格",
+            "start": 5
+          },
+          "author": "演练仓储复核员",
+          "date": "2026-09-20T03:00:00Z",
+          "id": "acceptance-word/d02/n1",
+          "key": "0",
+          "location": {
+            "facts": [
+              "d02/p1/f8"
+            ],
+            "line": 9,
+            "page": 1,
+            "page_sha256": "905e58c2733100e79f03f576a16115a507660ddb39142bc77ae578c088f44948",
+            "text_sha256": "6c5f16e6ae6cedaa77060095c04e8a27946a01405d1564ff9b7ace51ddf3df92",
+            "unit": "d02"
+          },
+          "shortened": false,
+          "text": "本次仅核对到货数量，制冷性能须由技术部另行终验。"
+        }
+      ]
+    },
+    {
+      "key": "scan",
+      "case_id": "c3975bbf83cc45df8106e6737fdd03c6",
+      "rev": 3,
+      "report_sha256": "93b2994043be18d9352f3bc41d5394127ba753ee87b0ae4ecb3ab080accd6335",
+      "id": "acceptance-original/d02",
+      "state": "photo",
+      "status": "missing",
+      "doc": {
+        "id": "d02",
+        "title": "验收报告",
+        "name": "验收报告.jpg",
+        "page": 1,
+        "media": "image",
+        "version": "合成案例 · R3",
+        "source_sha256": "77ecedfd922c9164a228ffeec60694c8e32363dba47bdc6946275e5acf0ef5b1",
+        "page_sha256": "820989f41d16482ddb121dce9a184af5789128473c5eaa3c046b32b8ce8e3949",
+        "original": "/assets/acceptance-review-page.jpg",
+        "image": "/assets/acceptance-original-scan.jpg",
+        "lines": []
+      },
+      "notes": []
+    },
+    {
+      "key": "retest",
+      "case_id": "7b2a051771474808a2d782d473cd6729",
+      "rev": 3,
+      "report_sha256": "2a33b0f0a0b72a8aed9188391f810866340bcfdc2f30f4b6a741c14b60dab170",
+      "id": "acceptance-original/d06",
+      "state": "word_text",
+      "status": "issue",
+      "doc": {
+        "id": "d06",
+        "title": "复验报告",
+        "name": "复验报告.docx",
+        "page": 1,
+        "media": "word",
+        "version": "合成案例 · R3",
+        "source_sha256": "bdb47a04f625f79203404f9b34d7f753b8204df2f4c0743d5b4ca554216dd55c",
+        "page_sha256": "fffaed0bcada43c24fd169da95e1c742b2edd968b19a5ff001fb4cb2f49a820e",
+        "original": "/showcase/acceptance-original-retest.docx",
+        "image": "/assets/acceptance-original-retest.jpg",
+        "lines": [
+          {
+            "ref": "d06/p1/f7",
+            "field": "acceptance_result",
+            "label": "复验结论",
+            "value": "合格",
+            "quote": "复验结论：合格",
+            "line": 9,
+            "page": 1,
+            "rect": [
+              0.14824,
+              0.40874,
+              0.28392,
+              0.4233
+            ],
+            "rects": [
+              [
+                0.14824,
+                0.40874,
+                0.28392,
+                0.4233
+              ]
+            ]
+          },
+          {
+            "ref": "d06/p1/f10",
+            "field": "measured_result",
+            "label": "实测结果",
+            "value": "柜温 3℃",
+            "quote": "实测结果：柜温 3℃",
+            "line": 12,
+            "page": 1,
+            "rect": [
+              0.14824,
+              0.52039,
+              0.31344,
+              0.53495
+            ],
+            "rects": [
+              [
+                0.14824,
+                0.52039,
+                0.28392,
+                0.53495
+              ],
+              [
+                0.28957,
+                0.52087,
+                0.31344,
+                0.53301
+              ]
+            ]
+          },
+          {
+            "ref": "d06/p1/f12",
+            "field": "acceptance_signer",
+            "label": "复验签认",
+            "value": "演练许澄（已签字）",
+            "quote": "复验签认：演练许澄（已签字）",
+            "line": 14,
+            "page": 1,
+            "rect": [
+              0.14824,
+              0.59466,
+              0.40955,
+              0.60922
+            ],
+            "rects": [
+              [
+                0.14824,
+                0.59466,
+                0.40955,
+                0.60922
+              ]
+            ]
+          },
+          {
+            "ref": "d06/p1/f18",
+            "field": "defect_closure",
+            "label": "缺陷关闭结论",
+            "value": "已关闭",
+            "quote": "缺陷关闭结论：已关闭",
+            "line": 20,
+            "page": 1,
+            "rect": [
+              0.14761,
+              0.81796,
+              0.34171,
+              0.83252
+            ],
+            "rects": [
+              [
+                0.14761,
+                0.81796,
+                0.34171,
+                0.83252
+              ]
+            ]
+          }
+        ]
+      },
+      "notes": []
+    }
+  ]
+}

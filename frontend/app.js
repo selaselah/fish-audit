@@ -661,6 +661,7 @@ function citation(ref,finding) {
     return Team.paperLink(label,prior.case_id,'button ref',new URLSearchParams({rev:String(prior.rev),fact:prior.fact}));
   }
   const source = index?.nodes.get(ref);
+  if (ref.startsWith('acceptance-original/') && state.bundle) return PerformanceIndex.nativeReceiptCitation(state.bundle.report,ref,finding);
   if ((ref.startsWith('addendum-pdf/') || ref.startsWith('addendum-original/') || ref.startsWith('addendum-word/')) && state.bundle) return AddendumSigning.citation(ref,finding);
   if (ref.startsWith('advance-guarantee/')) {
     return AdvanceGuarantee.citation(ref,finding,state.bundle?.report) || el('span','保函引文待核','small');
@@ -1601,6 +1602,9 @@ async function refresh() {
           target.focus();
           if (target.dataset.auditScope==='payment' && route.params.has('stage'))
             target.dispatchEvent(new CustomEvent('open-payment-stage',{detail:route.params.get('stage')}));
+          else if (target.dataset.auditScope==='acceptance' && route.params.has('acceptance'))
+            target.dispatchEvent(new CustomEvent('open-acceptance-source',{detail:route.params.getAll('acceptance').length===1 &&
+              route.params.getAll('rev').length===1 && route.params.getAll('view').length===1?route.params.get('acceptance'):null}));
           else target.click();
         } else if (target?.id==='payment-proof') {
           if (route.params.has('receipt')) target.dispatchEvent(new CustomEvent('select-proof',{detail:route.params.get('receipt')}));

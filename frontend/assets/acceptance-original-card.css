@@ -1,0 +1,44 @@
+.accept-original { min-width:0; color:var(--ink); background:var(--surface); }
+.accept-original > header,.accept-original > footer { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.accept-original > header { padding:0 12px; border-bottom:1px solid var(--line); }
+.accept-file { display:inline-flex; gap:6px; align-items:center; min-height:46px; color:var(--accent-hover); font:600 .86rem/1.45 var(--font-ui); overflow-wrap:anywhere; text-decoration:none; }
+.accept-file:hover,.accept-locator:hover { text-decoration:underline; }
+.accept-status { flex-shrink:0; color:#68430c; background:#fff2d8; border-radius:4px; padding:3px 7px; font:600 .74rem/1.45 var(--font-ui); }
+.accept-file-body { display:grid; grid-template-columns:88px minmax(0,1fr); gap:14px; align-items:start; padding:12px; }
+.accept-file-sheet,.accept-field-inspector,.accept-source { min-width:0; }
+.accept-page { display:grid; width:100%; gap:4px; padding:6px; border:1px solid var(--line); border-radius:5px; background:#f1f4f8; color:var(--accent-hover); text-decoration:none; cursor:pointer; }
+.accept-thumb { display:grid; place-items:center; height:83px; }
+.accept-thumb canvas { max-width:100%; height:100%; width:auto; object-fit:contain; filter:drop-shadow(0 1px 2px #182b422f); }
+.accept-page-number,.accept-locator { display:flex; align-items:center; justify-content:space-between; gap:5px; font:600 .75rem/1.5 var(--font-ui); color:var(--accent-hover); }
+.accept-page-select,.accept-field-select,.accept-proof-picker { width:100%; max-width:100%; min-height:44px; border:1px solid var(--line); border-radius:5px; color:var(--ink); background:var(--surface); font:.85rem var(--font-ui); }
+.accept-field-tabs { display:flex; flex-wrap:wrap; border-bottom:1px solid var(--line); }
+.accept-field-tabs button { min-height:44px; padding:4px 9px; border:0; border-bottom:2px solid transparent; border-radius:0; font:550 .8rem/1.4 var(--font-ui); color:var(--secondary); background:transparent; cursor:pointer; }
+.accept-field-tabs button[aria-selected=true] { border-color:var(--accent); color:var(--accent-hover); }
+.accept-field-inspector > p,.accept-review-limit { font-size:.82rem; color:var(--secondary); }
+.accept-field-panel { padding-top:8px; }
+.accept-source-line { display:grid; gap:6px; width:100%; min-height:52px; padding:5px 0; text-align:left; border:0; background:transparent; color:var(--ink); cursor:pointer; }
+.accept-source-quote { font:550 .96rem/1.45 var(--font-ui); overflow-wrap:anywhere; }
+.accept-source-crop:empty { display:none; }
+.accept-source-crop canvas { max-width:100%; max-height:44px; width:auto; vertical-align:middle; }
+.accept-locator { justify-content:flex-start; }
+.accept-original > footer { padding:0 12px; border-top:1px solid var(--line); }
+.accept-original > footer:has(details[open]) { display:block; }
+.accept-file-verify { min-width:0; color:var(--secondary); font-size:.8rem; }
+.accept-file-verify summary,.accept-original > footer > a { min-height:44px; padding-block:12px; cursor:pointer; }
+.accept-file-verify code { display:block; margin-bottom:9px; font:500 .76rem/1.5 ui-monospace,monospace; overflow-wrap:anywhere; }
+.accept-original > footer > a { color:var(--accent-hover); font-size:.8rem; }
+.accept-proof-picker { margin-bottom:6px; }
+.accept-example-tools { display:flex; flex-wrap:wrap; align-items:center; gap:5px 8px; padding:8px 0 10px; border-bottom:1px solid var(--line); font:500 .82rem/1.45 var(--font-ui); color:var(--secondary); }
+.accept-example-tools select { min-height:44px; max-width:100%; padding:4px 22px 4px 7px; color:var(--ink); font:inherit; border:1px solid var(--line); border-radius:5px; background:var(--surface); }
+.accept-example-tools output { margin-left:auto; font-weight:600; color:#784d0d; }
+.accept-example-tools output[data-state=issue] { color:#972d42; }
+.public-accept-file { padding-block:10px; }
+.public-accept-file > [role=status],.public-accept-file > a,.accept-source-retry { margin-inline-end:10px; }
+.accept-source-retry { min-height:44px; color:var(--accent-hover); }
+@media(max-width:600px) {
+  .accept-file-body { grid-template-columns:58px minmax(0,1fr); gap:8px; padding:8px; }
+  .accept-thumb { height:58px; }
+  .accept-page { padding:4px; }
+  .accept-page-number { font-size:.68rem; }
+  .accept-field-tabs button { flex:1; padding-inline:3px; white-space:nowrap; }
+}

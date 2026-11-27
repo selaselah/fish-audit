@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## Word 与影像验收单的签认凭证
+
+自规则 `2026.11.27.10` 起，`policy.acceptance_originals` 记录 `acceptance-original-execution-v1`。`graph.acceptance_original_sources.records` 为每个验收或复验单元保存文件摘要、物理页及其摘要、签认字段、审阅来源、批注编号和未定位批注数。Word 审阅记录位于 `graph.acceptance_word_reviews.documents`，两项程序引用同一份原始批注及正文选区。[签认凭证](../server/acceptance_originals.py) · [Word 原生批注](../server/acceptance_comments.py)
+
+`H02.acceptance_originals` 保存本项所据的验收凭证，每个相关付款检查在各自的 `evidence` 中引用凭证，图谱保留指向该发现的 `supports_result` 边。用 `/workpaper/{case}?rev={rev}&view=acceptance-checks&acceptance={unit}` 打开固定版底稿。合册支持该版实际归属的单元，如 `unit/d02/p3`。重复定位参数返回 400。历史版或无关单元显示该版未收录，证据包仍可按原签发版本验证。[五案演练](acceptance.md#验收签认数量签收与整改复验)
+
 ## Word 与影像补充协议的签署凭证
 
 规则 `2026.11.27.09` 在 `policy.addendum_originals` 写入 `addendum-original-execution-v1`。报告的 `graph.addendum_original_sources.records` 按协议单元列出 `id`、`unit`、`doc`、原件 SHA-256、物理页清单、签章字段及审阅来源。状态 `word_text` 表示所检查页仅见排印文字，`word_visual` 表示页中有图形或需核对的版面，`word_review` 表示存在批注、修订或审阅范围待核，`photo` 表示上传的影像。其他待核原件使用 `review`。

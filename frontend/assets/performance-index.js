@@ -298,7 +298,7 @@ const PerformanceIndex = (() => {
     }
     index.addendumEvidence=[...proofs.values()]; return index.addendumEvidence;
   }
-  function receiptEvidence(item,report) {
+  function pdfReceiptEvidence(item,report) {
     const {graph,policy}=report;
     if (policy.acceptance_pdf!=='pdf-acceptance-execution-v1' || !['H02','H04','H05','H06'].includes(item.rule) || item.status==='ok') return [];
     const index=graphIndex(graph), cited=issuedReferences(item,graph);
@@ -309,6 +309,66 @@ const PerformanceIndex = (() => {
         policy.code_sha256?.['controls.py']!=='eeff68cc20371bace1b158ebf70cc33885603b3913d8896f7b95236be19cd8a6') return [];
     }
     return ids.map(id=>unitPdfOriginal(graph,id,'acceptance')).filter(proof=>issuedSource(proof,cited,report.calls?.pages));
+  }
+  function nativeReceiptEvidence(item,report) {
+    const {graph,policy}=report, format='acceptance-original-execution-v1';
+    const ledger=graph.acceptance_original_sources, reviews=graph.acceptance_word_reviews;
+    if (!['H02','H04','H05','H06'].includes(item.rule) || ledger?.format!==format || policy?.acceptance_originals!==format ||
+        reviews?.format!=='word-acceptance-comments-v1' || policy.acceptance_word_reviews!==reviews.format ||
+        !Array.isArray(ledger.records) || !Array.isArray(reviews.documents) ||
+        !['acceptance_originals.py','original_records.py','acceptance_comments.py'].every(file=>/^[a-f0-9]{64}$/.test(policy.code_sha256?.[file]))) return [];
+    const owners=report.findings.filter(f=>f.rule==='H02'), [owner]=owners;
+    if (owners.length!==1 || !Array.isArray(owner.acceptance_originals) || !owner.acceptance_originals.length ||
+        new Set(owner.acceptance_originals).size!==owner.acceptance_originals.length) return [];
+    const cited=issuedReferences(item,graph), held=issuedReferences(owner,graph);
+    const basis=new Map(originals(owner,graph).map(row=>[row.fact.id,row]));
+    const allowed=new Set(['acceptance_signer','acceptance_result','measured_result','defect_closure']);
+    const proofs=[];
+    for (const id of owner.acceptance_originals) {
+      if (!cited.has(id) || !held.has(id)) continue;
+      const source=unitSource(graph,id,'acceptance_original',['acceptance','reinspection'],'acceptance_signer');
+      if (!source || !owner.scope.includes(source.record.unit) || !item.scope.includes(source.record.unit)) continue;
+      const signers=graph.facts.filter(f=>f.doc===source.doc.id && (f.unit || f.doc)===source.record.unit && f.field==='acceptance_signer');
+      if (signers.length!==source.record.fields.length || signers.some((f,i)=>f.id!==source.record.fields[i])) continue;
+      const proof=MandateOriginals.bind(graph,source,basis,'acceptance');
+      if (!issuedSource(proof,held,report.calls?.pages) || !issuedSource(proof,cited,report.calls.pages)) continue;
+      const lines=[];
+      for (const row of basis.values()) {
+        const {fact}=row;
+        if (!row.printedLine || !allowed.has(fact.field) || !cited.has(fact.id) || (fact.unit || fact.doc)!==proof.record.unit ||
+            fact.doc!==proof.doc.id || !proof.record.pages.some(p=>p.ref===fact.doc+'/p'+fact.page && p.sha256===fact.page_sha256)) continue;
+        const text=fact.source_line.text;
+        if (text!==fact.quote) {
+          if (fact.field!=='measured_result' || !/^实测结果[：:]柜温 -?[0-9]+(?:\.[0-9]+)?(?:℃|°C)$/u.test(text) ||
+              text.replace('柜温 ','柜温')!==fact.quote) continue;
+          const page=graphIndex(graph).nodes.get(fact.doc+'/p'+fact.page),call=report.calls.pages.find(c=>c.doc===fact.doc && c.page===fact.page);
+          if (!FolioTranscriptions.visuallyRead(fact,call) && !fieldReceiptOperation(fact,proof.doc,page)) continue;
+        }
+        lines.push({...row,line:row.printedLine});
+      }
+      let initial='acceptance_signer';
+      const reading=lines.find(row=>row.fact.field==='measured_result');
+      if (owner.status==='issue' && owner.reinspection?.state==='open' &&
+          owner.reinspection.steps?.some(s=>s.role==='final' && s.unit===proof.record.unit)) initial='defect_closure';
+      else if (owner.status==='issue' && reading && [...basis.values()].some(r=>r.line && r.fact.field==='acceptance_criteria' &&
+          graph.documents_by_kind.contract?.includes(r.fact.unit || r.fact.doc) && issuedLimitBreach(owner.detail,r.fact,reading.fact))) initial='measured_result';
+      else if (owner.status==='risk' && proof.notes?.some(n=>n.location)) initial='notes';
+      proofs.push({...proof,lines,initial});
+    }
+    return proofs;
+  }
+  function receiptEvidence(item,report) {
+    return [...pdfReceiptEvidence(item,report),...nativeReceiptEvidence(item,report)];
+  }
+  function nativeReceiptCitation(report,id,finding) {
+    const owner=finding || report.findings.find(f=>f.rule==='H02');
+    const proof=owner && nativeReceiptEvidence(owner,report).find(p=>p.record.id===id);
+    if (!proof) return el('span','验收签认来源待核','small');
+    const open=action(proof.doc.name+' · 签认原件',()=>{
+      document.querySelector('[data-audit-scope="acceptance"]')?.dispatchEvent(new CustomEvent('open-acceptance-source',{detail:proof.record.unit}));
+    },'ref');
+    open.dataset.acceptanceCitation=id;open.setAttribute('aria-haspopup','dialog');open.setAttribute('aria-controls','performance-index');
+    return open;
   }
   const mandateSides={buyer:'甲方授权',seller:'乙方授权',unassigned:'委托书归属待核'};
   const mandatePending=['missing','risk','issue'];
@@ -457,7 +517,8 @@ const PerformanceIndex = (() => {
       tools.append(button);
       return button;
     }
-    control('签名覆盖范围',()=>PdfSignatureCard.digital(receipt.signature)).dataset.receiptRange=receipt.record.id;
+    const native=Boolean(receipt.record.kind);
+    if (!native) control('签名覆盖范围',()=>PdfSignatureCard.digital(receipt.signature)).dataset.receiptRange=receipt.record.id;
     if (related.length) {
       control('付款检查 · '+related.length+' 项',()=>{
         const list=box('scope-receipt-links');
@@ -474,7 +535,27 @@ const PerformanceIndex = (() => {
         return list;
       }).dataset.receiptPayments=receipt.record.id;
     }
-    return box('scope-receipt-proof',receiptButton(receipt),tools,panel);
+    if (!native) return box('scope-receipt-proof',receiptButton(receipt),tools,panel);
+    const {doc,record}=receipt, index=graphIndex(graph), bundle=state.bundle, route=Team.route();
+    const original=workpaperSource(doc.id,'original');
+    const current=()=>state.bundle===bundle && Team.route().id===route.id && Team.route().page===route.page;
+    const pageControl=(number,fact)=>()=>{
+      const b=action('',()=>{if (current()) openPage(doc.id,number,fact);});
+      b.setAttribute('aria-haspopup','dialog');b.setAttribute('aria-controls','page-dialog');return b;
+    };
+    const model={
+      record:record.id,name:doc.name,original,hash:doc.sha256,label:receipt.label,unplaced:record.unplaced,
+      initial:receipt.initial,partial:receipt.word && receipt.word.coverage!=='complete',notes:receipt.notes || [],
+      pages:record.pages.map(p=>{const number=Number(p.ref.split('/p').pop());
+        return {number,control:pageControl(number),thumbnail:async()=>current() && EvidenceCompare.pageThumbnail({doc:doc.id,page:number},index)};
+      }),
+      lines:receipt.lines.map(({fact,line})=>({ref:fact.id,field:fact.field,page:fact.page,line,quote:fact.source_line.text,
+        control:pageControl(fact.page,fact.id),excerpt:async()=>current() && EvidenceCompare.lineExcerpt(fact,index)})),
+      permalink:()=>Team.paperLink('固定链接',bundle.report.case_id,'accept-original-link',new URLSearchParams({
+        rev:String(bundle.rev),view:'acceptance-checks',acceptance:record.unit})),
+    };
+    const card=AcceptanceOriginalCard.render(model,'accept-'+item.id+'-'+encodeURIComponent(record.id));
+    return box('scope-receipt-proof',card,...(tools.children.length?[tools,panel]:[]));
   }
   function issuedLimitBreach(detail,criterion,reading) {
     const statement='合同要求“'+criterion.value+'”，验收原页记载“'+reading.value+'”，实测值超出约定限值。';
@@ -567,6 +648,7 @@ const PerformanceIndex = (() => {
     detail.setAttribute('aria-labelledby','scope-check-title');
     dialog.append(box('scope-head',box('',box('scope-context',back,el('small','合同履约审查 · R'+rev)),title),close),filters,mobile,box('scope-body',checks,detail));
     let shown=[],group,selected;
+    const shownReceipts=new Map();
     function select(item) {
       selected=item.id; mobile.value=selected;
       for (const row of checks.children) row.setAttribute('aria-pressed',String(row.dataset.check===selected));
@@ -607,11 +689,24 @@ const PerformanceIndex = (() => {
           for (const r of receiptEvidence(phase,state.bundle.report)) byProof.get(r.record.id)?.push(phase);
         }
       }
-      for (const receipt of receipts) {
-        detail.append(receiptPanel(receipt,item,byProof.get(receipt.record.id),graph,(phase,proof)=>{
+      function makeReceipt(receipt) {
+        return receiptPanel(receipt,item,byProof.get(receipt.record.id),graph,(phase,proof)=>{
           previous={group,item,proof,phase:phase.id}; back.hidden=false;
           showGroup(payments,phase); back.focus();
-        }));
+        });
+      }
+      if (receipts.length>1 && receipts.some(p=>p.record.kind)) {
+        const picker=el('select','','accept-proof-picker'),slot=box('accept-picked-proof');
+        picker.setAttribute('aria-label','选择本项所据验收原件');
+        for (const p of receipts) picker.add(new Option(p.doc.name+' · 第 '+p.page+' 页',p.record.id));
+        const selectedProof=receipts.find(p=>p.record.id===shownReceipts.get(item.id)) || receipts.find(p=>p.record.kind);
+        function choose(id) {
+          picker.value=id;shownReceipts.set(item.id,id);slot.replaceChildren(makeReceipt(receipts.find(p=>p.record.id===id)));
+        }
+        picker.addEventListener('change',()=>choose(picker.value));choose(selectedProof.record.id);
+        detail.append(picker,slot);
+      } else {
+        for (const receipt of receipts) detail.append(makeReceipt(receipt));
       }
       if (roster) {
         detail.append(AcceptanceRosterCard.render(roster,'scope-signers','page-dialog'));
@@ -622,7 +717,7 @@ const PerformanceIndex = (() => {
       }
       if (!paired) {
         const sources=()=>sourceView(item,graph,[...receipts,...mandates.flatMap(m=>m.proofs)]);
-        detail.append(roster || batch || guarantee || mandates.length?lazyFold('其他字段引文',()=>[sources()]):sources());
+        detail.append(roster || batch || guarantee || mandates.length || receipts.some(p=>p.record.kind)?lazyFold('其他字段引文',()=>[sources()]):sources());
       }
       detail.append(actions);
       detail.scrollTop=0;
@@ -668,6 +763,19 @@ const PerformanceIndex = (() => {
     }
     for (const scope of groupsHere) {
       const button=action('',()=>open(scope),'scope-card');
+      if (scope.id==='acceptance') button.addEventListener('open-acceptance-source',event=>{
+        const owner=scope.items.find(f=>f.rule==='H02');
+        const proof=owner && nativeReceiptEvidence(owner,state.bundle.report).find(p=>p.record.unit===event.detail);
+        previous=null;back.hidden=true;
+        if (proof) shownReceipts.set(owner.id,proof.record.id);
+        showGroup(scope,owner);
+        if (!dialog.open) dialog.showModal();
+        if (proof) detail.querySelector('[data-receipt-original="'+CSS.escape(proof.record.id)+'"]')?.focus();
+        else {
+          const note=el('p','本版未收录所选验收签认原件。','scope-empty'); note.setAttribute('role','status');note.tabIndex=-1;
+          detail.replaceChildren(note);note.focus();
+        }
+      });
       if (scope.id==='contract') button.addEventListener('open-mandate-note',event=>{
         const {item,record,note}=event.detail;
         previous=null; back.hidden=true;
@@ -692,5 +800,5 @@ const PerformanceIndex = (() => {
     summary.append(dialog);
     return summary;
   }
-  return {includes,groups,count,originals,fieldLinks,issuedLimitBreach,receiptCitation,receiptEvidence,mandateCitation,mandateEvidence,addendumEvidence,overview};
+  return {includes,groups,count,originals,fieldLinks,issuedLimitBreach,receiptCitation,receiptEvidence,nativeReceiptCitation,mandateCitation,mandateEvidence,addendumEvidence,overview};
 })();

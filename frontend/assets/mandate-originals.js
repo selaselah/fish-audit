@@ -9,10 +9,14 @@ const MandateOriginals = (() => {
     review:'委托书原件的签发依据待核'
   };
   const families={
-    mandate:{kind:'power_of_attorney',labels},
-    addendum:{kind:'contract_addendum',labels:{
+    mandate:{kinds:['power_of_attorney'],labels},
+    addendum:{kinds:['contract_addendum'],labels:{
       word_text:'Word 排印原件',word_visual:'Word 签章页待核图',word_review:'Word 定稿待核',
       photo:'补充协议影像',review:'原件签署依据待核'
+    }},
+    acceptance:{kinds:['acceptance','reinspection'],labels:{
+      word_text:'Word 排印件',word_visual:'Word 含图形',word_review:'Word 审阅版',
+      photo:'扫描或拍照原件',review:'签认原件待核'
     }}
   };
   const digest=value=>typeof value==='string' && /^[a-f0-9]{64}$/.test(value);
@@ -22,14 +26,15 @@ const MandateOriginals = (() => {
     return edges.length===1 && edges[0].from===from && same(edges[0].evidence,evidence);
   }
   function wordReview(graph,source,rows,role) {
-    const {record,doc}=source, index=graphIndex(graph), ledger=graph[role+'_original_sources'];
+    const {record,doc}=source, index=graphIndex(graph), ledger=role==='acceptance'?graph.acceptance_word_reviews:graph[role+'_original_sources'];
+    const relation=role==='acceptance'?'word_review':role+'_word_review';
     const documents=ledger.documents.filter(d=>d?.doc===doc.id || d?.id===record.review), [word]=documents;
     const units=(graph.audit_documents || graph.documents).filter(u=>(u.source || u.id)===doc.id);
-    const assigned=units.filter(u=>graph.documents_by_kind[families[role].kind].includes(u.id));
+    const assigned=units.filter(u=>families[role].kinds.some(k=>graph.documents_by_kind[k]?.includes(u.id)));
     if (documents.length!==1 || word.id!==record.review || word.id!==role+'-word/'+doc.id || word.doc!==doc.id ||
         word.original_sha256!==doc.sha256 || !same(word.units,assigned.map(u=>u.id)) ||
         index.nodes.get(word.id)?.type!==role+'_word_review' || index.nodes.get(word.id).doc!==doc.id ||
-        !edge(graph,doc.id,word.id,role+'_word_review_source',[doc.id]) ||
+        !edge(graph,doc.id,word.id,relation+'_source',[doc.id]) ||
         !edge(graph,word.id,record.id,role+'_original_word',[doc.id,word.id])) return null;
     if (!['complete','partial','unreadable'].includes(word.coverage) || !Array.isArray(word.limitations) ||
         !Array.isArray(word.notes) || (word.coverage==='complete')!==!word.limitations.length ||
@@ -41,13 +46,13 @@ const MandateOriginals = (() => {
     let unplaced=0;
     for (const [i,n] of word.notes.entries()) {
       if (n?.id!==word.id+'/n'+(i+1) || index.nodes.get(n.id)?.type!==role+'_word_comment' ||
-          index.nodes.get(n.id).doc!==doc.id || !edge(graph,word.id,n.id,role+'_word_review_comment',[doc.id,word.id]) ||
+          index.nodes.get(n.id).doc!==doc.id || !edge(graph,word.id,n.id,relation+'_comment',[doc.id,word.id]) ||
           typeof n.text!=='string' || typeof n.author!=='string' || typeof n.shortened!=='boolean' ||
           !AcceptanceComments.validAnchor(n.anchor)) return null;
       const loc=n.location;
       let fact;
       if (loc===null) {
-        if (graph.edges.some(e=>e.to===n.id && e.type===role+'_word_review_anchor')) return null;
+        if (graph.edges.some(e=>e.to===n.id && e.type===relation+'_anchor')) return null;
         if (record.unit!==doc.id) { unplaced++; continue; }
       } else {
         if (!loc || !n.anchor || !Number.isSafeInteger(loc.page) || loc.page<1 || loc.page>doc.pages ||
@@ -57,10 +62,10 @@ const MandateOriginals = (() => {
         const split=units.filter(u=>u.source && u.page===loc.page);
         if (split.length>1 || loc.unit!==(split[0]?.id || doc.id) || page?.type!=='page' || page.layer!=='text' ||
             !digest(loc.page_sha256) || page.sha256!==loc.page_sha256 || !digest(loc.text_sha256) ||
-            page.text_sha256!==loc.text_sha256 || !edge(graph,pageId,n.id,role+'_word_review_anchor',[pageId,...loc.facts])) return null;
+            page.text_sha256!==loc.text_sha256 || !edge(graph,pageId,n.id,relation+'_anchor',[pageId,...loc.facts])) return null;
         if (loc.unit!==record.unit) continue;
         const printed=loc.printed ?? n.anchor.quote;
-        if (!record.pages.some(p=>p.ref===pageId) || typeof printed!=='string' ||
+        if (!record.pages.some(p=>p.ref===pageId) || typeof printed!=='string' || role==='acceptance' && printed!==n.anchor.quote ||
             AcceptanceComments.printedKey(printed)!==AcceptanceComments.printedKey(n.anchor.quote) ||
             !loc.facts.every(id=>{
               const row=rows.get(id), f=row?.fact;
@@ -82,7 +87,7 @@ const MandateOriginals = (() => {
     return {word:{id:word.id,coverage:word.coverage,limitations:word.limitations,part:word.part,part_sha256:word.part_sha256},notes,refs};
   }
   function bind(graph,source,rows,role='mandate') {
-    const ledger=graph[role+'_original_sources'];
+    const ledger=role==='acceptance'?graph.acceptance_word_reviews:graph[role+'_original_sources'];
     if (!source || !Array.isArray(ledger?.documents)) return null;
     const {record,doc}=source, index=graphIndex(graph);
     if (!Object.hasOwn(families[role].labels,record.state) || !Array.isArray(record.notes) ||

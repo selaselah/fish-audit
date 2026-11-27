@@ -291,6 +291,12 @@ def create_app(store, worker):
                     or not re.fullmatch(r"(?:d[0-9]{2}|unit/d[0-9]{2}/p[1-9][0-9]{0,7})",unit)):
                 raise CaseError("请选择本版补充协议原件或合册页。",400)
             args["agreement"] = unit
+        if "acceptance" in request.args:
+            unit = request.args["acceptance"]
+            if (args.get("view") != "acceptance-checks" or any(len(request.args.getlist(k)) != 1 for k in ("rev","view","acceptance"))
+                    or not re.fullmatch(r"(?:d[0-9]{2}|unit/d[0-9]{2}/p[1-9][0-9]{0,7})",unit)):
+                raise CaseError("请选择本版验收签认原件或合册页。",400)
+            args["acceptance"] = unit
         if "call" in request.args:
             calls = request.args.getlist("call")
             if (args.get("view") != "execution" or any(len(request.args.getlist(k)) != 1 for k in ("rev","view","call"))
@@ -325,7 +331,8 @@ def create_app(store, worker):
     @app.get("/showcase/<filename>")
     def showcase_document(filename):
         if filename in {"signing-text.docx", "acceptance-review.docx", "contract-payment-review.docx",
-                        "addendum-original-printed.docx", "addendum-original-commented.docx"}:
+                        "addendum-original-printed.docx", "addendum-original-commented.docx",
+                        "acceptance-original-clean.docx", "acceptance-original-hot.docx", "acceptance-original-retest.docx"}:
             return send_file(FRONTEND / "showcase" / filename, as_attachment=True,
                              mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
         if filename not in {"contract.pdf", "acceptance.pdf", "transfer.pdf", "signing-contract.pdf",

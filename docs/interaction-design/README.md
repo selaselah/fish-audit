@@ -1,5 +1,11 @@
 # Fish Audit 产品界面与交互设计
 
+## 从验收风险直接核对原件
+
+在「交付验收」选择「验收签认与批注」，可切换五份水印原件。排印件先显示签认栏，数量签收先显示原生批注，柜温超限先显示实测行，整改复验先显示缺陷关闭栏。点原行看整页，退出回到该行。扫描件从整页开始。需要检查文件版本时展开「核验原件」。[公开演练](http://127.0.0.1:8000/?scene=word-comments&record=limited#workflow) · [桌面实拍](acceptance-original-public.webp) · [扫描验收单](acceptance-original-scan-mobile.webp)
+
+工作台使用相同的控件。展开「付款检查」可见引用这张验收单的期次与检查类型，按返回键回到刚才的期款按钮。初验和复验分别归档；涉及两张原件时可以直接选文件。在多页验收单中，切换字段会同步原页，另有「整页」可以翻看同一单元的其他页。[复验固定底稿](http://127.0.0.1:8000/workpaper/7b2a051771474808a2d782d473cd6729?rev=3&view=acceptance-checks&acceptance=d06) · [手机实拍](acceptance-original-workpaper-mobile.webp)
+
 ## 从签署疑点打开 Word 原批注
 
 在「分期与付款」选择「验收款收票前提」，可切换 PDF、排印 Word、带批注的 Word 和扫描件。每次切换同步案例版次和可下载原件。Word 资料把条款对照、原批注、签章栏放在同一组选项里。选中批注时显示被批文字、批注署名和原文，点击行号即可查看原页。展开校验值后点「核对当前文件」，浏览器会读取原件，核对是否与本版留存摘要一致。扫描件打开整页。[体验协议载体对照](http://127.0.0.1:8000/?scene=addendum-invoice&carrier=commented#workflow) · [桌面实拍](agreement-word-public.webp) · [手机工作台](agreement-word-workpaper-mobile.webp)

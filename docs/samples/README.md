@@ -1,5 +1,19 @@
 # 合成财会审计演练
 
+## 验收签认与复验原件
+
+五案各取一版已签发的水印底稿，离线重算并导出公开的验收原件、页图、字段位置和批注选区。以下命令从本机已有底稿核对发布资产。使用 `--archives /path/to/bundles` 可改从证据包核对，文件名为 `clean-R9.zip`、`limited-R9.zip`、`hot-R9.zip`、`scan-R3.zip`、`retest-R3.zip`。[案件和固定底稿](../acceptance.md#验收签认数量签收与整改复验)
+
+```sh
+server/.venv/bin/python docs/samples/publish_acceptance_originals.py --check
+```
+
+扫描演练使用排印案 R8 的归档水印 JPEG，复验演练使用六份水印材料。下面的命令在指定目录生成两组输入。加入 `--run --check-fields` 会上传至本机服务，调用模型，并以模拟复核人核对指定字段。[排印验收单 R8 证据包](http://127.0.0.1:8000/api/cases/42400d4c7b5d40b8965a3a2ca69121ea/reports/8/bundle)
+
+```sh
+server/.venv/bin/python docs/samples/acceptance_originals_demo.py /path/to/clean-R8.zip /tmp/acceptance-examples
+```
+
 ## 同一补充协议的 Word 批注与扫描件
 
 本地已签发的两份 R5 和一份 R2 均可离线复算。以下命令核对固定报告摘要、逐页调用记录、公开原件及精确裁片所据的行坐标，两份 Word 的打印页须逐字节相同。[水印演练记录](../acceptance.md#word-与扫描版补充协议的收票条件)

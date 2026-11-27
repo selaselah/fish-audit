@@ -33,6 +33,7 @@ import {checkWarrantyTimeline} from './warranty-timeline.mjs';
 import {checkWarrantyTickets} from './warranty-tickets.mjs';
 import {checkPrivateWarrantyRegister, checkPublicWarrantyRegister} from './warranty-register.mjs';
 import {checkNativeAgreements} from './addendum-originals.mjs';
+import {checkAcceptanceOriginals} from './acceptance-originals.mjs';
 import {checkPrivateAddendumSigning,checkPublicAddendumSigning} from './addendum-signing.mjs';
 import {checkWarrantyPhotos} from './warranty-photos.mjs';
 import {checkNavigation,checkPrior} from './prior-installment.mjs';
@@ -62,6 +63,8 @@ const publicPurchase=process.argv.includes('--public-purchase-preview');
 const publicPeriod=process.argv.includes('--public-guarantee-period');
 const publicWarrantyRegister=process.argv.includes('--public-warranty-register');
 const privateWarrantyRegister=process.argv.includes('--workpaper-warranty-register');
+const privateAcceptanceOriginals=process.argv.includes('--workpaper-acceptance-originals');
+const publicAcceptanceOriginals=process.argv.includes('--public-acceptance-originals');
 const privateOriginals=process.argv.includes('--workpaper-addendum-originals');
 const publicOriginals=process.argv.includes('--public-addendum-originals');
 const privateAddendum=process.argv.includes('--workpaper-addendum-signing');
@@ -153,9 +156,9 @@ const publicBank=process.argv.includes('--public-bank-acceptance');
 const previewQueue=process.argv.includes('--preview-queue');
 const acceptanceRoster=process.argv.includes('--acceptance-roster'), publicRoster=process.argv.includes('--public-acceptance-roster');
 const receiptPdf=caseArgument('--acceptance-pdf-case');
-const publicTest=publicOriginals || publicAddendum || publicWarrantyRegister || publicPeriod || publicStandards || publicPurchase || publicRoster || publicProof || publicClock || publicTiming || publicBank || product || ruleCatalog || publicInspection || publicContractComments || publicWordComments || publicSuppliers || publicPdf || publicFolios;
+const publicTest=publicAcceptanceOriginals || publicOriginals || publicAddendum || publicWarrantyRegister || publicPeriod || publicStandards || publicPurchase || publicRoster || publicProof || publicClock || publicTiming || publicBank || product || ruleCatalog || publicInspection || publicContractComments || publicWordComments || publicSuppliers || publicPdf || publicFolios;
 const scopeCase=caseArgument('--scope-case'), publicTopics=process.argv.includes('--public-audit-topics');
-const seeded = [privateWarrantyRegister,traceCase,periodCase,advanceGuaranteeCase,batchStandardCase,mandateOriginalCase,mandatePdfCase,batchCase,receiptPdf,acceptanceRoster,publicTopics,scopeCase,publicTest,proofCase,signerClock,signerTiming,originalCase,citedOriginal,bankAcceptance,previewQueue,contractCommentCase,commentCase,supplierCase,pdfCase,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+const seeded = [privateAcceptanceOriginals,privateWarrantyRegister,traceCase,periodCase,advanceGuaranteeCase,batchStandardCase,mandateOriginalCase,mandatePdfCase,batchCase,receiptPdf,acceptanceRoster,publicTopics,scopeCase,publicTest,proofCase,signerClock,signerTiming,originalCase,citedOriginal,bankAcceptance,previewQueue,contractCommentCase,commentCase,supplierCase,pdfCase,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 privateOriginals,privateAddendum,reviewDecisionCase,invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
 const root = originalCase ? process.env.AUDIT_READER_ORIGIN || 'http://127.0.0.1:8000' : publicTest || publicTopics ? process.env.AUDIT_PRODUCT_ORIGIN || 'http://127.0.0.1:8000' : brokenPayment ? process.env.SYNTHETIC_PAYMENT_ORIGIN : legacyCase ? process.env.SYNTHETIC_LEGACY_ORIGIN : waitingCase ? process.env.SYNTHETIC_WRITER_ORIGIN :
@@ -220,10 +223,12 @@ try {
   };
   const click = (label, container='document') => evaluate('[...'+container+'.querySelectorAll("button,a")].find(b=>b.textContent==='+JSON.stringify(label)+' && b.getClientRects().length).click()');
   await call('Runtime.enable');
-  await call('Page.navigate',{url:product || publicOriginals || publicAddendum || publicWarrantyRegister || publicPeriod || publicStandards || publicPurchase || isolatedEntry ? root : root+'/app'});
+  await call('Page.navigate',{url:product || publicAcceptanceOriginals || publicOriginals || publicAddendum || publicWarrantyRegister || publicPeriod || publicStandards || publicPurchase || isolatedEntry ? root : root+'/app'});
   if (isolatedEntry) {
     assert.ok(!seeded && !['8000','8010'].includes(new URL(root).port));
     await checkIntakeEntry({root,call,evaluate,wait,entry,click});
+  } else if (privateAcceptanceOriginals || publicAcceptanceOriginals) {
+    await checkAcceptanceOriginals({root,call,evaluate,wait},privateAcceptanceOriginals);
   } else if (privateOriginals || publicOriginals) {
     await checkNativeAgreements({root,call,evaluate,wait},privateOriginals);
   } else if (publicAddendum) {

@@ -26,7 +26,10 @@
   <script src="/assets/pdf-signature-card.js" defer></script>
   <link rel="stylesheet" href="/assets/addendum-card.css">
   <script src="/assets/addendum-card.js" defer></script>
+  <script src="/assets/original-file-check.js" defer></script>
   <script src="/assets/addendum-original-card.js" defer></script>
+  <script src="/assets/acceptance-original-card.js" defer></script>
+  <link rel="stylesheet" href="/assets/acceptance-original-card.css">
   <script src="/assets/public-agreement-carriers.js" defer></script>
   <script src="/assets/public-addendum-signing.js" defer></script>
   <script src="/assets/public-pdf-signing.js" defer></script>
@@ -36,6 +39,7 @@
   <link rel="stylesheet" href="/assets/acceptance-comments.css">
   <script src="/assets/acceptance-comment-card.js" defer></script>
   <script src="/assets/public-acceptance-comments.js" defer></script>
+  <script src="/assets/public-acceptance-originals.js" defer></script>
   <link rel="stylesheet" href="/assets/acceptance-roster.css">
   <script src="/assets/acceptance-roster-card.js" defer></script>
   <script src="/assets/public-acceptance-roster.js" defer></script>
@@ -248,7 +252,7 @@
           <div id="scene-inspection" class="inspection-sample" role="tabpanel" aria-labelledby="scene-tab-inspection">
             <div class="signing-sample-header"><span><i class="ui-glyph ic-clipboard-check" aria-hidden="true"></i> 采购验收</span>
               <label id="inspection-example-choice" hidden><span class="sr-only">选择采购验收案例</span>
-                <select id="inspection-example"><option value="readings">实测温度超限</option><option value="standards">分批验收标准变更</option><option value="signers">验收签字人</option><option value="equipment">设备抽检</option><option value="named">合同指定抽检</option><option value="supplier">供货主体</option><option value="comments">Word 审阅批注</option></select></label>
+                <select id="inspection-example"><option value="readings">实测温度超限</option><option value="standards">分批验收标准变更</option><option value="signers">验收签字人</option><option value="equipment">设备抽检</option><option value="named">合同指定抽检</option><option value="supplier">供货主体</option><option value="comments">验收签认与批注</option></select></label>
               <small id="inspection-version">合成案例 · R8</small></div>
             <div id="inspection-readings">
               <h3>合同标准与验收实测</h3>
@@ -270,7 +274,7 @@
               <div id="inspection-demo"><a href="/showcase/inspection-acceptance.pdf" target="_blank" rel="noopener">查看演练验收单</a></div></div>
             <div id="inspection-named" hidden><h3>冷藏柜采购 · 指定设备验收</h3>
               <div id="named-inspection-demo"><a href="/showcase/named-inspection-contract.pdf" target="_blank" rel="noopener">查看演练合同中的必检清单</a></div></div>
-            <div id="inspection-comments" hidden><a href="/showcase/acceptance-review.docx">下载含批注的水印验收单</a></div>
+            <div id="inspection-comments" data-integrity="sha256-dQiGtDEQ2yyJs+fLb77/5XU6CCQOSIxiH9cbn5Ay7D0=" hidden><a href="/showcase/acceptance-review.docx">下载含批注的水印验收单</a></div>
             <div id="inspection-signers" hidden><a href="/showcase/acceptance-roster-receipt.pdf" target="_blank" rel="noopener">查看水印验收报告签字栏</a></div>
             <div id="inspection-supplier" hidden><a href="/showcase/supplier-contract.pdf" target="_blank" rel="noopener">查看含签署原因的演练合同</a></div>
             <div id="inspection-standards" data-integrity="sha256-AFkrCvkS4rckcDTUITueXuV4Avs5kxgG34yPFJidhmM=" hidden>

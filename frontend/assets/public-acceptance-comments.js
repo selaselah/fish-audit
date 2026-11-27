@@ -1,7 +1,8 @@
 const PublicAcceptanceComments = (() => {
   const pending=new Set();
-  async function open(role='acceptance') {
-    const contract=role==='contract', slot=document.getElementById(contract?'payment-comments':'inspection-comments');
+  async function open(role='acceptance',target) {
+    const contract=role==='contract', slot=target || document.getElementById(contract?'payment-comments':'inspection-comments');
+    if (!contract && !target) return PublicAcceptanceOriginals.open(slot,legacy=>open(role,legacy));
     if (pending.has(role) || slot.dataset.revision) return;
     pending.add(role);
     try {
