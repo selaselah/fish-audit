@@ -7,8 +7,11 @@ from datetime import date
 from unicodedata import normalize
 
 
-FORMAT = "named-acceptance-signatures-v5"
+CLOCK_FORMAT = "named-acceptance-signatures-v5"
+FORMAT = "named-acceptance-signatures-v6"
+FORMATS = (CLOCK_FORMAT, FORMAT)
 SINCE = "2026.11.26.24"
+ROSTER_SINCE = "2026.11.28.21"
 SIGNER = re.compile(r"([\u3400-\u9fff]{2,8})(?:签认|签字|签署|签名)(?:时间|时刻|时分)")
 DEBIT = {"实际扣款时间", "扣款成功时间", "成功扣款时间", "实际扣款时刻", "扣款时间"}
 OTHER = {"银行受理时间", "受理时间", "交易发起时间", "回单打印时间", "打印时间", "记账时间", "到账时间", "回单生成时间", "交易时间"}
@@ -53,7 +56,7 @@ def legible(row):
 
 
 def located_rows(ledger):
-    return [*ledger["dates"], *ledger["clock_rows"]] if ledger.get("format") == FORMAT else []
+    return [*ledger["dates"], *ledger["clock_rows"]] if ledger.get("format") in FORMATS else []
 
 
 def verify_geometry(report, read_layout=None):
@@ -73,7 +76,7 @@ def verify_geometry(report, read_layout=None):
 
 def bank_dates(material, ledger):
     """Allow a distinct native time column to coexist with the payment date, irrespective of the model's field label."""
-    if ledger.get("format") != FORMAT:
+    if ledger.get("format") not in FORMATS:
         return material
     by_location = {(r["doc"], r["page"], r["line"], r["quote"]): r for r in ledger["clock_rows"]
                    if r["unit"] == material.unit and legible(r)}

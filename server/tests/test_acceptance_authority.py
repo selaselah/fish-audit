@@ -32,6 +32,52 @@ def checks(graph):
 
 
 class AcceptanceAuthorityTests(unittest.TestCase):
+    def test_explicit_joint_roster_keeps_each_name_and_compares_the_last_required_date(self):
+        from acceptance_authority import instruction
+        from model import audit_graph
+        from unittest.mock import patch
+        names=("周宁","林岚","陈和平")
+        dates=[(2,n+"签认日期：2026年9月"+str(d)+"日") for n,d in zip(names,(20,25,27))]
+        for span in ("周宁、林岚、陈和平","周宁、林岚与陈和平","周宁、林岚和陈和平"):
+            clause="终验须由"+span+"共同签字确认"
+            graph=sample(clause,names,omissions=dates,edit=lambda i,k,l,v:"2026年9月25日" if k=="paid_on" else v)
+            findings=execute(graph,graph["profile"])
+            acceptance=next(f for f in findings if f["rule"]=="H02")["acceptance_authority"]
+            paid=next(f for f in findings if f["rule"]=="H05")
+            self.assertEqual(acceptance["required"],list(names))
+            self.assertEqual((paid["status"],paid["signer_timing"]["days"]),("risk",-2))
+            with patch("model.structured",return_value=({"followups":[]},{})):
+                _,expert=audit_graph(graph,findings)
+            basis=next(p["joint_acceptance_timing"] for p in expert["input"]["procedures"] if p["rule"]=="H05")
+            self.assertEqual([r["quote"] for r in basis["dates"]],[raw for _,raw in dates])
+            self.assertEqual(basis["clause"][0]["quote"],"验收签认约定："+clause)
+        for bad in ("周宁、林岚或陈和平","周宁、林岚、林岚","周宁、林岚、采购部","周宁、林岚等","周宁、林岚、项目负责人"):
+            self.assertIsNone(instruction("验收签认约定：终验须由"+bad+"共同签字确认",listed=True))
+        for people,days in ((names[:2],dates),(names,dates[:2]),(names,[*dates,(2,dates[-1][1])])):
+            graph=sample("终验须由周宁、林岚、陈和平共同签字确认",people,omissions=days)
+            paid=next(f for f in compute(graph) if f["rule"]=="H05")
+            self.assertEqual((paid["signer_timing"]["state"],paid["signer_timing"]["days"]),("incomplete",None))
+
+    def test_combined_model_dates_only_bind_to_one_contiguous_verbatim_run(self):
+        from signer_timing import bind_date_transcriptions, dated_line, source_graph
+        lines=[p+"签认日期：2026年9月"+str(d)+"日" for p,d in zip(("周宁","林岚","陈和平"),(20,25,27))]
+        def source(text,rows=(1,2,3),text_only=True,disputed=False):
+            native=[dated_line("d02","d02",1,i,line,[]) for i,line in zip(rows,lines*2)]
+            term=dated_line("d02","d02",1,None,text,[{"id":"d02/p1/f9","status":"disputed" if disputed else "visual"}])
+            observations=[*native,term]
+            bind_date_transcriptions(observations,{"d02/p1":{"clause_text_only":text_only}})
+            return term,[e for e in source_graph(observations)[1] if e["type"]=="transcribed_signer_date"]
+        joined="".join(lines)
+        observation,edges=source(joined)
+        self.assertEqual(observation["printed_rows"],[f"signer-date/d02/p1/l{i}" for i in (1,2,3)])
+        self.assertEqual([e["to"] for e in edges],observation["printed_rows"])
+        for text,options in ((joined.replace("27日","28日"),{}),(joined,{"rows":(1,2,4)}),
+                (joined,{"rows":(1,2,3,4,5,6)}),(joined,{"text_only":False}),(joined,{"disputed":True}),
+                (joined+"待核",{}),(lines[1]+lines[0],{})):
+            term,edges=source(text,**options)
+            self.assertNotIn("printed_rows",term)
+            self.assertFalse(edges)
+
     def test_single_and_joint_require_exact_persons_on_independent_rows(self):
         for clause,names,mode in (("终验由周宁签字确认",("周宁",),"single"),(JOINT,("林岚","周宁"),"joint")):
             graph=sample(clause,names)

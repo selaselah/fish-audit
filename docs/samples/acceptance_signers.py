@@ -14,7 +14,7 @@ CASES = {"joint":"合同约定两人共同终验且均签字","missing":"共同�
          "image":"两人验收签字另有影像代签说明",
          "before":"验收款早于第二人签认三天","same_day":"验收款与最后签认同日","after":"验收款晚于第二人签认一天",
          "clock_early":"验收款在最后签认前扣款","clock_late":"验收款在最后签认后扣款",
-         "clock_print":"验收款回单仅列打印时刻"}
+         "clock_print":"验收款回单仅列打印时刻","three_before":"第二期验收款早于第三位约定验收人的签认日期"}
 PAID_DAYS = {"before":22, "same_day":25, "after":26}
 CLOCKS = {"clock_early":("实际扣款时间","13:10","before"), "clock_late":("实际扣款时间","16:30","after"),
           "clock_print":("回单打印时间","16:30","missing")}
@@ -27,6 +27,8 @@ def generate(seed,mode):
     folder.mkdir(parents=True,exist_ok=True)
     records=reinspection_records(code,"closed") if mode=="retest" else documents(code,"complete")
     clause="终验及整改复验均须由周宁、林岚共同签字确认" if mode=="retest" else "终验须由周宁、林岚共同签字确认"
+    if mode=="three_before":
+        clause="终验须由周宁、林岚、陈和平共同签字确认"
     records["采购合同"].append(("验收签认约定",clause))
     for title,label in (("验收报告","验收签认"),("复验报告","复验签认")):
         if title not in records:
@@ -36,9 +38,13 @@ def generate(seed,mode):
             names=["周宁"]
         elif mode=="different":
             names=["周宁","何平"]
+        elif mode=="three_before":
+            names.append("陈和平")
         records[title]=[(k,v) for k,v in records[title] if k!=label]+[(label,n+"（已签字）") for n in names]
-    if mode in PAID_DAYS or mode in CLOCKS:
+    if mode in PAID_DAYS or mode in CLOCKS or mode=="three_before":
         records["验收报告"].extend([("周宁签认日期","2026年9月20日"), ("林岚签认日期","2026年9月25日")])
+        if mode=="three_before":
+            records["验收报告"].append(("陈和平签认日期","2026年9月27日"))
         title = next(k for k in records if "回单" in k)
         records[title] = [(k, f"2026年9月{PAID_DAYS.get(mode,25)}日" if k == "付款日期" else v) for k,v in records[title]]
         if mode in CLOCKS:
@@ -60,6 +66,12 @@ def check(paper,mode):
     h=next(f for f in findings if f["rule"]=="H02")
     a=h["acceptance_authority"]
     payment = next(f for f in findings if f["rule"]=="H05")
+    if mode=="three_before":
+        timing=payment["signer_timing"]
+        assert a["required"]==timing["required"]==["周宁","林岚","陈和平"]
+        assert (payment["stage"]["name"],payment["status"],timing["state"],timing["days"])==("第二期","risk","before",-2)
+        assert timing["latest_on"]=="2026-09-27" and paper["result"]["human_required"]
+        return
     if mode in CLOCKS:
         timing = payment.get("signer_timing", {})
         clock = timing.get("clock", {})

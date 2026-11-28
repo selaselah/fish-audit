@@ -63,7 +63,24 @@ def required_names(value, joint):
     return names
 
 
-def instruction(raw):
+def listed_names(value):
+    if re.search(r"或|任选|任一|任意|至少|至多|等|及其|另行|替补|[（）()]",value):
+        return None
+    names = [part.strip() for part in value.split("、")]
+    last = names[-1]
+    if len(names)==1 or not person(last):
+        # A conjunction inside a person's name (e.g. 陈和平) is not a list separator.
+        splits = [(last[:i].strip(),last[i+1:].strip()) for i,ch in enumerate(last) if ch in "与和及"]
+        valid = [pair for pair in splits if all(person(name) for name in pair)]
+        if len(valid)!=1:
+            return None
+        names[-1:] = valid[0]
+    if len(names)!=len(set(names)) or not all(person(n) and not re.search(r"(?:部门|科室|中心|代表|[部科处组])$",n) for n in names):
+        return None
+    return names
+
+
+def instruction(raw, *, listed=False):
     label,body = parts(raw)
     if label not in LABELS[CLAUSE]:
         return None
@@ -74,7 +91,7 @@ def instruction(raw):
     if not match:
         return None
     joint = match[3].startswith("共同")
-    names = required_names(match[2],joint)
+    names = listed_names(match[2]) if joint and listed else required_names(match[2],joint)
     if not names:
         return None
     return "joint" if joint else "single","final_and_reinspection" if "复验" in match[1] else "final",names
@@ -140,7 +157,7 @@ def page_evidence(graph, read_text, version=FORMAT, *, separate_payments=True, s
         def record(raw, line, facts, native):
             label,body = parts(raw)
             clock = None
-            if version == signer_clock.FORMAT and (unit in receipts or unit in banks):
+            if version in signer_clock.FORMATS and (unit in receipts or unit in banks):
                 clock = signer_clock.source(unit, doc, number, line, raw, facts, bank=unit in banks)
                 if clock:
                     clocks.append(clock)
@@ -170,7 +187,7 @@ def page_evidence(graph, read_text, version=FORMAT, *, separate_payments=True, s
                     signoff = (fact.get("attestation") or {}) if fact else {}
                     row.update(name=name,confirmed=bool(native and name and fact and name==signed_name(fact["quote"])
                                and fact["status"]=="confirmed" and signoff.get("decision")=="confirm" and signoff.get("source_check")))
-                elif fact and instruction(raw)!=instruction(fact["quote"]):
+                elif fact and instruction(raw,listed=version==FORMAT)!=instruction(fact["quote"],listed=version==FORMAT):
                     row["fact"] = None
                 rows.append(row)
         if page.get("layer")=="text":
@@ -186,11 +203,13 @@ def page_evidence(graph, read_text, version=FORMAT, *, separate_payments=True, s
                 record(f["quote"],None,[f],False)
     ambiguous = any(not s["name"] for s in signatures)
     timing = {}
+    if version==FORMAT:
+        signer_timing.bind_date_transcriptions(dates,pages)
     if version in signer_timing.FORMATS:
-        joint = any((instruction(s["quote"]) or (None,))[0] == "joint" for s in rules)
+        joint = any((instruction(s["quote"],listed=version==FORMAT) or (None,))[0] == "joint" for s in rules)
         timing = {"dates": dates if rules or ambiguous else [],
                   "bank_pages": signer_timing.bank_pages(graph, read_text, pages) if joint else []}
-        if version == signer_clock.FORMAT:
+        if version in signer_clock.FORMATS:
             timing["clock_rows"] = clocks if joint else []
     if not rules and not ambiguous:
         return {"format":version,"clauses":[],"signatures":[],"pages":[],"visual_notes":[],**timing}
@@ -240,8 +259,10 @@ def check(graph, contract, receipts, retests, *, contract_supported, other_terms
     cited = [*contract_refs,*(ref for row in clauses for ref in refs(row))]
     cited.extend(f"{p['doc']}/p{p['page']}" for p in source["pages"])
     cited.extend(n["fact"] for n in source["visual_notes"])
-    primary = [r for r in clauses if r["unit"]==contract.unit and r["fact"] and r["native"] and instruction(r["quote"])]
-    parsed = instruction(primary[0]["quote"]) if len(primary)==1 else None
+    directives = [instruction(r["quote"],listed=source.get("format")==FORMAT) for r in clauses
+                  if r["unit"]==contract.unit and r["fact"] and r["native"]]
+    primary = [directive for directive in directives if directive]
+    parsed = primary[0] if len(primary)==1 else None
     mode,scope,required = parsed or ("unresolved",None,[])
     def readable(unit):
         pages=[p for p in source["pages"] if p["unit"]==unit]
@@ -324,17 +345,24 @@ def witness_edges(findings):
     return result
 
 
+def roster_changed(graph, rows):
+    contracts = graph["documents_by_kind"].get("contract",())
+    return any(r["native"] and r["unit"] in contracts and instruction(r["quote"],listed=True)!=instruction(r["quote"]) for r in rows)
+
+
 def verify_sources(report,read_text,*,signing=False,read_layout=None):
     policy,graph=report["policy"],report["graph"]
     marker=policy.get("acceptance_authority")
     dated_nodes = [n for n in graph["nodes"] if n["type"] in ("acceptance_signer_date", "acceptance_clock_line")]
-    dated_edges = [e for e in graph["edges"] if e["type"] in ("signer_date_source", "acceptance_clock_source")]
+    dated_edges = [e for e in graph["edges"] if e["type"] in ("signer_date_source", "acceptance_clock_source", "transcribed_signer_date")]
     def at_least(version):
         current = policy.get("version") or "0"
         return tuple(map(int, current.split("."))) >= tuple(map(int, version.split(".")))
     code = policy.get("code_sha256")
-    if (marker != FORMAT and (at_least(signer_clock.SINCE) or "signer_clock.py" in (code or {})) or
-            marker == FORMAT and code is not None and "signer_clock.py" not in code):
+    if at_least(signer_clock.ROSTER_SINCE) and marker!=FORMAT:
+        raise ValueError("这版底稿缺少验收会签名单的逐人核对程序")
+    if (marker not in signer_clock.FORMATS and (at_least(signer_clock.SINCE) or "signer_clock.py" in (code or {})) or
+            marker in signer_clock.FORMATS and code is not None and "signer_clock.py" not in code):
         raise ValueError("底稿缺少具名签认与实际扣款时刻的核对程序")
     if (marker not in (signer_timing.PRINTED_ROWS_FORMAT, FORMAT) and at_least(signer_timing.PRINTED_ROWS_SINCE) or
             marker not in signer_timing.FORMATS[1:] and at_least(signer_timing.INDEPENDENT_SINCE)):
@@ -345,12 +373,14 @@ def verify_sources(report,read_text,*,signing=False,read_layout=None):
         raise ValueError("底稿缺少共同签认时序程序或混入其他版本的原行")
     if "calls" in report:
         signer_clock.verify_geometry(report, read_layout)
+        signer_timing.verify_expert_basis(report)
     if not marker:
         if "acceptance_authority.py" in policy.get("code_sha256",{}) or "acceptance_authority_sources" in graph or policy.get("performance_checks") in PERFORMANCE_FORMATS:
             raise ValueError("缺少底稿所据的具名验收签认程序")
-        if signing and any(f["rule"]=="H02" and f["status"]=="ok" for f in report["findings"]):
+        if signing and any(f["rule"]=="H02" for f in report["findings"]):
             legacy=page_evidence(graph,read_text,LEGACY_FORMAT)
-            if legacy["clauses"] or legacy["signatures"]:
+            positive=any(f["rule"]=="H02" and f["status"]=="ok" for f in report["findings"])
+            if roster_changed(graph,legacy["clauses"]) or positive and (legacy["clauses"] or legacy["signatures"]):
                 raise ValueError("旧版终验有具名签认约定或待辨签字栏，请按现行程序重审后签收。")
         return
     source=page_evidence(graph,read_text,marker,separate_payments=at_least("2026.11.28.1"),separate_changes=at_least("2026.11.28.4"))
@@ -364,7 +394,9 @@ def verify_sources(report,read_text,*,signing=False,read_layout=None):
         raise ValueError("验收签字的原件归属、具名约定或逐人证据关系不符")
     if (dated_nodes, dated_edges) != signer_timing.source_graph(source.get("dates", []), source.get("clock_rows", [])):
         raise ValueError("共同签认日期的原行或归属关系不符")
-    if signing and marker != FORMAT and source["clauses"] and any(f["rule"] == "H05" for f in report["findings"]):
+    if signing and marker!=FORMAT and roster_changed(graph,source["clauses"]):
+        raise ValueError("旧版尚未逐人核对合同的验收会签名单，请核对签认和本期付款依据，重审后签收。")
+    if signing and marker not in signer_clock.FORMATS and source["clauses"] and any(f["rule"] == "H05" for f in report["findings"]):
         from performance import compute
         current = compute({**graph, "acceptance_authority_sources": page_evidence(graph,read_text)})
         for entry in current:
