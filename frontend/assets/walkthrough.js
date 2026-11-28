@@ -166,7 +166,9 @@ async function readHistory() {
   if (token!==generation || !(docked || dialog.open)) return;
   // Notes are append-only. A list requested before a save can arrive after its acknowledgement.
   const notes=new Map([...records,...rows].map(note=>[note.id,note]));
-  records=[...notes.values()].sort((a,b)=>b.created.localeCompare(a.created) || b.id.localeCompare(a.id));
+  const sorted=[...notes.values()].sort((a,b)=>b.created.localeCompare(a.created) || b.id.localeCompare(a.id));
+  if (sorted.length===records.length && sorted.every((note,i)=>note.id===records[i].id)) return;
+  records=sorted;
   renderHistory();
 }
 function renderHistory() {

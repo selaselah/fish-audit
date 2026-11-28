@@ -64,6 +64,19 @@ const WarrantyDates = (() => {
     const parsed=parse(f);
     return parsed && parsed.iso===read.iso && parsed.literal===read.literal?{...s,...parsed,read}:null;
   }
+  function receiptDate(item,report) {
+    const {graph,policy}=report, ledger=graph.payment_quality_sources;
+    const banks=graph.documents_by_kind.bank_receipt?.filter(unit=>item.scope.includes(unit));
+    if (item.rule!=='H05' || banks?.length!==1 || policy.payment_quality!=='acceptance-quality-payment-v4' ||
+        ledger?.format!==policy.payment_quality || !Array.isArray(ledger.rows) ||
+        !/^[a-f0-9]{64}$/u.test(policy.code_sha256?.['payment_quality.py'])) return null;
+    const [bank]=banks, facts=graph.facts.filter(f=>(f.unit || f.doc)===bank && f.field==='paid_on');
+    if (facts.length!==1 || !item.evidence.includes(facts[0].id)) return null;
+    const [fact]=facts, source=PerformanceIndex.originals(item,graph).find(s=>s.fact===fact);
+    if (!PerformanceIndex.matchesPrintedField(source,report,ledger.rows,bank,'paid_on')) return null;
+    const date=parse(fact);
+    return date && {ref:fact.id,day:date.iso};
+  }
   function confirmation(item,report,proofs=[]) {
     if (!report || !item) return null;
     const check=item.warranty_check, cert=check?.certificate, read=cert?.date;
@@ -166,5 +179,5 @@ const WarrantyDates = (() => {
     root.append(head,body);choose(pairs[0].id);
     return root;
   }
-  return {parse,printedDay,confirmation,comparison,unreadRow,issued,pageReference,panel};
+  return {parse,printedDay,receiptDate,confirmation,comparison,unreadRow,issued,pageReference,panel};
 })();

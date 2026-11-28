@@ -1379,10 +1379,13 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         if check.get("delivery_register") and all(ref in payment["evidence"] for ref in check["delivery_register"]):
             payment["delivery_register"] = check["delivery_register"]
             if register["status"]!="ok":
-                if register["state"] in ("register_duplicate","register_difference") and payment["status"] in ("missing","ok"):
+                if register["state"] in ("register_duplicate","register_difference","register_prohibited") and payment["status"] in ("missing","ok"):
                     payment["status"] = "risk"
                 payment["detail"] += " "+register["detail"]
-                payment["detail"] += f" 回单列明 {paid} 实付，请核对付款当时所据的设备交付记录。"
+                if register["state"]=="register_substitution":
+                    payment["detail"] += f" 回单列明 {paid} 实付，请核对该日前已有的批准或生效协议及相应交接记录。"
+                else:
+                    payment["detail"] += f" 回单列明 {paid} 实付，请核对付款当时所据的设备交付记录。"
         output.append(payment)
     return output
 

@@ -53,13 +53,12 @@ launcher.addEventListener('click', async () => {
 });
 
 // A saved link can point to an element that is rendered after the workpaper loads.
-let jumpObserver, jumpTimer, jumpRoute;
+let stopJump, jumpRoute;
 function returnToControl() {
   const url=new URL(location.href), anchor=url.searchParams.get('walkat');
   const route=url.pathname+url.hash;
   if (!anchor && jumpRoute===route) return;
-  jumpObserver?.disconnect();
-  clearTimeout(jumpTimer);
+  stopJump?.();
   for (const old of document.querySelectorAll('.walk-mark')) old.classList.remove('walk-mark');
   jumpRoute=null;
   if (!anchor || !/^[a-zA-Z][a-zA-Z0-9_-]{0,95}$/.test(anchor)) return;
@@ -75,7 +74,19 @@ function returnToControl() {
   const formView=form && ({H01:'contract-signing-form',H02:'acceptance-checks'}[form[1].slice(0,3)] || 'payment-checks');
   url.searchParams.delete('walkat');
   history.replaceState(history.state,'',url);
-  let marked;
+  let marked, fallbackTimer;
+  const interaction=new AbortController(), observer=new MutationObserver(locate);
+  function release() {
+    observer.disconnect();
+    clearTimeout(fallbackTimer);
+    interaction.abort();
+    marked?.classList.remove('walk-mark');
+    stopJump=null;
+  }
+  stopJump=release;
+  // Keep the selected position through late rendering, until the reader acts or leaves this route.
+  for (const event of ['pointerdown','keydown'])
+    document.addEventListener(event,release,{capture:true,signal:interaction.signal});
   function locate() {
     if (comparison && (url.hash!==location.hash || comparison.dataset.caseId!==path.split('/').at(-1) ||
         comparison.dataset.rev!==params.get('rev') || comparison.dataset.prior!==params.get('prior') ||
@@ -106,7 +117,7 @@ function returnToControl() {
     }
     if (el?.closest('#revision-comparison:not([hidden]),#board-decision,[data-limit-finding],[data-quality-finding],[data-retest-finding],[data-use-finding],[data-count-finding],[data-form-finding],[data-number-finding],[data-serial-finding]')) {
       for (let parent=el.parentElement;parent && parent.id!=='revision-comparison';parent=parent.parentElement)
-        if (parent.tagName==='DETAILS') parent.open=true;
+        if (parent.tagName==='DETAILS' && !parent.open) parent.open=true;
     }
     if (!el?.getClientRects().length) return false;
     if (marked===el) return true;
@@ -116,14 +127,12 @@ function returnToControl() {
     el.scrollIntoView({block:'center'});
     if (focusTarget && el.matches('button,a[href],input,select,textarea,summary,[tabindex]')) el.focus({preventScroll:true});
     el.classList.add('walk-mark');
-    clearTimeout(jumpTimer);
-    jumpTimer=setTimeout(()=>{el.classList.remove('walk-mark');jumpObserver.disconnect();},2400);
+    clearTimeout(fallbackTimer);
     return true;
   }
-  jumpObserver = new MutationObserver(locate);
-  jumpObserver.observe(document.body, {subtree:true, childList:true, attributes:true, attributeFilter:['hidden','open']});
+  observer.observe(document.body, {subtree:true, childList:true, attributes:true, attributeFilter:['hidden','open']});
   if (!locate() && !comparison && !board && !receipt && !party && !limits && !form)
-    jumpTimer = setTimeout(() => jumpObserver.disconnect(), 6000);
+    fallbackTimer = setTimeout(release,6000);
 }
 addEventListener('hashchange', returnToControl);
 addEventListener('walkthrough-return', returnToControl);

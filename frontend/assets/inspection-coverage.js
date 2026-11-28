@@ -1,10 +1,11 @@
 // Each selectable device and its readings belong to the originals cited by one H02 finding.
 const InspectionCoverage = (() => {
-  const legacy = 'inspection-coverage-v1', current = 'inspection-coverage-v3';
-  const formats = new Set([legacy,'inspection-coverage-v2',current]);
+  const legacy = 'inspection-coverage-v1', current = 'inspection-coverage-v4';
+  const registerFormats = new Set(['inspection-coverage-v3',current]);
+  const formats = new Set([legacy,'inspection-coverage-v2',...registerFormats]);
   const registerStates={register_match:'两份清单的编号逐一相符',register_difference:'合同与终验编号不一致',
     register_duplicate:'编号重复',register_spelling:'编码口径待核',register_incomplete:'完整编号待核',
-    register_scope:'适用范围待核',register_source:'原件待核'};
+    register_scope:'适用范围待核',register_source:'原件待核',register_substitution:'代用批准依据待核',register_prohibited:'实收编号与禁止代用条款冲突'};
   const namedKind = 'inspection_required_serials';
   const labels = {
     covered:'检测范围相符', short:'检测台数不足', records:'单机记录待补', repeated:'同台重复',
@@ -326,22 +327,35 @@ const InspectionCoverage = (() => {
     const graph=report?.graph, ledger=graph?.inspection_coverage_sources;
     const accepted=report?.findings.find(f=>f.rule==='H02'), check=accepted?.inspection_coverage;
     if (!finding?.delivery_register || !['H02','H04','H05'].includes(finding.rule) || check?.mode!=='delivery_register' ||
-        ledger?.purpose!=='delivery_register' || ledger.format!==current || check.format!==current ||
-        report.policy.inspection_coverage!==current || !/^[a-f0-9]{64}$/u.test(report.policy.code_sha256?.['inspection_coverage.py'])) return [];
+        ledger?.purpose!=='delivery_register' || !registerFormats.has(ledger.format) || check.format!==ledger.format ||
+        report.policy.inspection_coverage!==ledger.format || !/^[a-f0-9]{64}$/u.test(report.policy.code_sha256?.['inspection_coverage.py'])) return [];
     const same=(a,b)=>Array.isArray(a) && Array.isArray(b) && a.length===b.length && a.every((x,i)=>x===b[i]);
     if (!same(check.register?.rows,accepted.delivery_register) || !same(finding.delivery_register,accepted.delivery_register)) return [];
     const index=graphIndex(graph), all=sources(graph);
-    const checked=all.filter(r=>check.register.rows.includes(r.id) && ['ordered_serials','population'].includes(r.kind) &&
+    const rowById=new Map(all.map(r=>[r.id,r]));
+    const checked=check.register.rows.map(id=>rowById.get(id)).filter(r=>r &&
+      (['ordered_serials','population'].includes(r.kind) || ledger.format===current && r.kind==='substitution') &&
       check.scope.includes(r.unit) && [accepted,finding].every(f=>f.scope.includes(r.unit) &&
         [r.id,r.doc+'/p'+r.page,...r.facts].every(ref=>check.evidence.includes(ref) && f.evidence.includes(ref) &&
           index.supports.get('finding/'+f.id)?.has(ref))));
-    if (checked.length!==check.register.rows.length) return [];
+    if (checked.length!==check.register.rows.length || new Set(check.register.rows).size!==checked.length) return [];
     const codes=r=>value(r).split(/[、,，]/u).map(code=>code.trim());
     const left=unique(checked,'ordered_serials'), right=unique(checked,'population');
     const fromContract=left?codes(left):[], fromReceipt=right?codes(right):[];
     const onlyLeft=fromContract.filter(code=>!fromReceipt.includes(code)), onlyRight=fromReceipt.filter(code=>!fromContract.includes(code));
-    const differences=check.state==='register_difference' && same(onlyLeft,check.register.contract_only) && same(onlyRight,check.register.receipt_only);
-    const compared=['register_match','register_difference','register_duplicate','register_spelling'].includes(check.state);
+    const conflict=['register_difference','register_prohibited'].includes(check.state);
+    const differences=conflict && same(onlyLeft,check.register.contract_only) && same(onlyRight,check.register.receipt_only);
+    const notes=checked.filter(r=>r.kind==='substitution');
+    const mentioned=new Set(notes.flatMap(r=>r.quote.match(/[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*/gu) || []));
+    const citedCodes=[...new Set([...fromContract,...fromReceipt])].filter(code=>mentioned.has(code));
+    if (check.state==='register_substitution' && (!notes.length || check.status!=='missing')) return [];
+    if (check.state==='register_prohibited') {
+      const clause=notes[0], equipment='([A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*)';
+      const ban=clause?.quote.match(new RegExp('^(?:供货约定|设备代用约定|交付约定)[:：]\\s*(?:不得|禁止|严禁)(?:以|用)\\s*'+equipment+'\\s*(?:代替|替代)\\s*'+equipment+'[。.]?\\s*$','u'));
+      if (notes.length!==1 || clause?.unit!==left?.unit || check.status!=='issue' || !ban ||
+          !same(onlyRight,[ban[1]]) || !same(onlyLeft,[ban[2]])) return [];
+    }
+    const compared=conflict || ['register_match','register_duplicate','register_spelling'].includes(check.state);
     if (compared) {
       const duplicate=[fromContract,fromReceipt].some(ids=>new Set(ids).size!==ids.length);
       const quantity=kind=>value(unique(all,kind)).match(/^([1-9][0-9]*)\s*台$/u)?.[1];
@@ -350,22 +364,24 @@ const InspectionCoverage = (() => {
           Number(quantity('ordered'))!==fromContract.length || Number(quantity('received'))!==fromReceipt.length ||
           fromContract.length!==fromReceipt.length || (check.state==='register_duplicate')!==duplicate ||
           check.state==='register_match' && (onlyLeft.length || onlyRight.length) ||
-          check.state==='register_difference' && (!onlyLeft.length || !onlyRight.length || !differences)) return [];
+          conflict && (!onlyLeft.length || !onlyRight.length || !differences)) return [];
     }
     const result=checked.map(row=>{
       const page=row.doc+'/p'+row.page, physical=index.nodes.get(page);
       const call=report.calls.pages.find(p=>p.doc===row.doc && p.page===row.page);
       const rects=call?.delivery_register_rects?.[row.line];
-      const role=row.kind==='ordered_serials'?'contract':'acceptance';
-      if (!graph.documents_by_kind[role]?.includes(row.unit) || call?.page_sha256!==physical?.sha256 ||
-          row.line!=null && (!Array.isArray(rects) || !rects.every(b=>Array.isArray(b) && b.length===4 &&
+      const role=ledger.pages.find(p=>p.unit===row.unit && p.doc===row.doc && p.page===row.page)?.role;
+      const note=row.kind==='substitution';
+      if (!(note?['contract','acceptance','contract_addendum'].includes(role):role===(row.kind==='ordered_serials'?'contract':'acceptance')) ||
+          !graph.documents_by_kind[role]?.includes(row.unit) || call?.page_sha256!==physical?.sha256 ||
+          row.line!=null && (!Array.isArray(rects) || !rects.length || !rects.every(b=>Array.isArray(b) && b.length===4 &&
             b.every(n=>Number.isFinite(n) && n>=0 && n<=1) && b[0]<b[2] && b[1]<b[3]))) return null;
-      const label=role==='contract'?'合同约定编号':'终验实收编号';
+      const label=note?{contract:'合同代用约定',acceptance:'验收代用说明',contract_addendum:'补充协议条款'}[role]:role==='contract'?'合同约定编号':'终验实收编号';
       const tokens=codes(row);
-      const marks=differences?(role==='contract'?onlyLeft:onlyRight):
+      const marks=check.state==='register_substitution'?citedCodes:differences?(note?[...onlyLeft,...onlyRight]:role==='contract'?onlyLeft:onlyRight):
         check.state==='register_duplicate'?tokens.filter((code,i)=>tokens.indexOf(code)!==i):[];
       return {ref:row.id,doc:index.documents.get(row.doc),page:row.page,rawLine:row.line,quote:row.quote,
-        rects:rects || [],fact:row.facts.length===1?row.facts[0]:null,label,marks,
+        rects:rects || [],fact:row.facts.length===1?row.facts[0]:null,label,marks,substitution:note,
         quality:'delivery_register_source',option:label+(row.line?' · 第 '+row.line+' 行':' · 页图')};
     });
     return result.includes(null)?[]:result;
@@ -374,9 +390,10 @@ const InspectionCoverage = (() => {
     const lines=registerSources(report,finding);
     if (!lines.length) return null;
     const group=element('div',null,'delivery-register-lines');
-    group.setAttribute('role','group');group.setAttribute('aria-label','合同与终验设备编号');
+    const check=report.findings.find(f=>f.rule==='H02').inspection_coverage;
+    if (check.state==='register_substitution') group.classList.add('register-approval');
+    group.setAttribute('role','group');group.setAttribute('aria-label',lines.some(s=>s.substitution)?'设备编号及代用原文':'合同与终验设备编号');
     if (pin) {
-      const check=report.findings.find(f=>f.rule==='H02').inspection_coverage;
       group.append(element('strong',registerStates[check.state] || '设备清单待核','register-outcome'));
     }
     for (const line of lines) group.append(workpaperLineButton(line,finding,pin));

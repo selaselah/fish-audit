@@ -18,14 +18,31 @@ CASES = {
     "reordered": ("同一批四台冷藏柜的终验登记顺序不同", tuple(reversed(ORDERED))),
     "masked": ("冷藏柜验收清单末台只写了部分编号", (*ORDERED[:3], "FA-01**")),
 }
+SUBSTITUTIONS = {
+    "permission": ("合同约定经书面批准可以代用末台冷藏柜", "采购合同", "供货约定", "经采购方书面批准，可用FA-0109代替FA-0104。"),
+    "application": ("终验注明冷藏柜代用申请尚待批准", "验收报告", "验收备注", "以FA-0109代替FA-0104的申请已提交，仍待批准。"),
+    "agreement": ("末台冷藏柜另附待签的变更协议", "采购合同补充协议", "供货约定", "本协议拟以FA-0109代替FA-0104，须双方签字后生效。"),
+    "prohibited": ("冷藏柜合同点名禁止末台设备代用", "采购合同", "供货约定", "不得以FA-0109代替FA-0104。"),
+    "maintenance": ("冷藏柜保养条款只要求更换滤芯", "采购合同", "维护说明", "每六个月更换空气滤芯。"),
+}
 
 
 def build(folder, key):
-    title, received = CASES[key]
+    if key in SUBSTITUTIONS:
+        title, file, label, wording = SUBSTITUTIONS[key]
+        received = (*ORDERED[:3], "FA-0109")
+    else:
+        title, received = CASES[key]
     code = sha256(("delivery-register-v1-" + key).encode()).hexdigest()[:8].upper()
     records = documents(code, "complete")
     records["采购合同"].extend([("约定设备型号", "YL-C4"), ("约定设备序列号", "、".join(ORDERED))])
     records["验收报告"].extend([("实收设备型号", "YL-C4"), ("实收设备序列号", "、".join(received))])
+    if key in SUBSTITUTIONS:
+        if file == "采购合同补充协议":
+            contract = records["采购合同"]
+            records[file] = [("补充协议编号", "YL-BG-"+code), ("原合同编号", contract[0][1]), *contract[1:4],
+                             ("补充协议状态", "待双方签署")]
+        records[file].append((label, wording))
     folder.mkdir(parents=True, exist_ok=True)
     files = []
     for name, fields in records.items():
@@ -47,6 +64,7 @@ def check_fields(cid, title, files):
     report = wait(cid)
     parties = {"合同编号":"contract_id","采购方":"buyer","供应方":"seller","采购标的":"subject"}
     labels = {"采购合同.pdf":parties, "验收报告.pdf":{**parties,"验收范围":"acceptance_scope"},
+              "采购合同补充协议.pdf":{**parties,"原合同编号":"base_contract_ref","补充协议编号":"addendum_number"},
               "银行付款回单.pdf":{"合同编号":"contract_id","款项用途":"payment_designation","付款日期":"paid_on",
                               "交易状态":"transfer_status","付款户名":"payer","收款户名":"payee"}}
     for path in files:
@@ -79,14 +97,15 @@ def check_fields(cid, title, files):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("folder", type=Path)
-    parser.add_argument("--case", choices=CASES)
+    parser.add_argument("--case", choices=[*CASES,*SUBSTITUTIONS])
+    parser.add_argument("--substitution", action="store_true", help="生成含代用条件、申请、补充协议、明文禁止或保养条款的五组演练")
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--check-fields", action="store_true", help="按水印原页逐项核对归属及回单字段")
     args = parser.parse_args()
     if args.check_fields and not args.run:
         parser.error("--check-fields 需要 --run")
     submitted = []
-    for case in ([args.case] if args.case else CASES):
+    for case in ([args.case] if args.case else SUBSTITUTIONS if args.substitution else CASES):
         title, paths = build(args.folder / case, case)
         if args.run:
             token = sha256(b"".join(sha256(p.read_bytes()).digest() for p in paths)).hexdigest()

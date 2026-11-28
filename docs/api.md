@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## 设备代用约定、终验附注及补充协议
+
+规则 `2026.11.28.17` 使用 `inspection-coverage-v4`。设备清单比对中，`graph.inspection_coverage_sources.rows[].kind=substitution` 保存提到具体编号的代用原文。与本次材料相联的说明排在 `H02.inspection_coverage.register.rows` 两份清单之后。H02、相关期款及实际付款的 `delivery_register` 共引原行。专家输入和归档页行框沿用 `delivery_register_sources`、`delivery_register_rects`。
+
+状态 `register_substitution` 表示需补核批准或生效依据。`register_prohibited` 表示主合同禁止的代用方向与实收差异吻合，`contract_only`、`receipt_only` 保留两份清单的原始编号。关联到第二期付款的补充协议可使用 `anchor=serial-H05-8-d05-p1-l9` 记录控件意见，或在原页以 `raw_ref=inspection-line/d05/p1/l9` 记录该行。历史版本依当版规则复算。受新增代用依据影响的旧底稿在签收通过前需要重审。[R2 付款和协议原行](http://127.0.0.1:8000/workpaper/8184e581520747078afb38e74edf5f41?rev=2&view=payment-checks&stage=H05-8)
+
 ## 设备清单的原行及走查定位
 
 规则 `2026.11.28.16` 的 `policy.inspection_coverage` 为 `inspection-coverage-v3`。专项比对使用 `graph.inspection_coverage_sources.purpose=delivery_register`。H02 的 `inspection_coverage.register.rows` 保存合同约定及终验实收清单的引用。确认错号时，`contract_only` 与 `receipt_only` 分别列出两份原件各自独有的编号。H02 及引用该终验的 H04、H05 在 `delivery_register` 中列出所用的原行。专家收到的行在 `calls.expert.input.delivery_register_sources`，定位矩形在对应页的 `delivery_register_rects`。

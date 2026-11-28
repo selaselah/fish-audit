@@ -10,11 +10,13 @@ from performance import verify_findings
 from test_performance import BANK_DOC, CONTRACT, RECEIPT, WARRANTY, material
 
 
-def example(received, ordered="QC-001、QC-002", *, extra=(), edit=None, omitted=False, attestations=None):
+def example(received, ordered="QC-001、QC-002", *, extra=(), edit=None, omitted=False, attestations=None, supplement=None):
     contract = ("other","约定设备序列号",ordered)
     receipt = ("delivered_serials","实收设备序列号",received)
     groups = [CONTRACT + [( "equipment_model","约定设备型号","YL-C4")],
               RECEIPT + [("equipment_model","实收设备型号","YL-C4")], WARRANTY, BANK_DOC]
+    if supplement:
+        groups.append(supplement)
     lines = list(extra)
     for i, row in enumerate((contract, receipt), 1):
         if row[2] is None:
@@ -47,6 +49,75 @@ def summary(paper):
 
 
 class DeliveryRegisterTests(unittest.TestCase):
+    def test_substitution_conditions_applications_and_an_express_prohibition(self):
+        cases = [
+            ([(1,"供货约定：经采购方书面批准，可用QC-009代替QC-001。")],"substitution","missing","missing"),
+            ([(2,"验收备注：以QC-009代替QC-001的申请仍待批准。")],"substitution","missing","missing"),
+            ([(1,"交付约定：不得以QC-009代替QC-001。")],"prohibited","issue","risk"),
+            ([(1,"交付约定：不得以QC-001代替QC-009。")],"substitution","missing","missing"),
+            ([(1,"交付约定：不得以QC-009代替QC-001，但经批准除外。")],"substitution","missing","missing"),
+            ([(1,"交付约定：不得以QC-009代替QC-001。"),(1,"例外约定：采购方可另行书面同意。")],"source","missing","missing"),
+            ([(1,"维护说明：定期更换空气滤芯。"),(1,"财务备注：收款账号由012345改为056789。")],"difference","issue","risk"),
+        ]
+        for notes,state,status,paid in cases:
+            with self.subTest(notes=notes):
+                paper,read=example("QC-002、QC-009",extra=notes,omitted=True)
+                h,phases,bank=summary(paper)
+                self.assertEqual((h["inspection_coverage"]["state"],h["status"],bank["status"]),("register_"+state,status,paid))
+                refs=h["delivery_register"]
+                self.assertEqual(len(refs),2 if state=="difference" else 3)
+                self.assertNotIn("delivery_register",phases[0])
+                for f in (*phases[1:],bank):
+                    self.assertEqual(f["delivery_register"],refs)
+                    self.assertTrue(set(refs)<=set(f["evidence"]))
+                if state=="substitution":
+                    self.assertIn("2026-09-21",bank["detail"])
+                    self.assertIn("批准",bank["detail"])
+                inspection.verify(paper,read)
+                verify_findings(paper)
+        paper,_=example("QC-002、QC-009",extra=cases[0][0],edit=lambda i,k,l,v:"不合格" if k=="acceptance_result" else v)
+        self.assertEqual(summary(paper)[0]["status"],"issue")
+
+    def test_addendum_note_needs_its_own_verified_identity(self):
+        change=[("contract_addendum","","采购合同补充协议"),("base_contract_ref","原合同编号","YL-121"),
+                ("addendum_number","补充协议编号","BC-121"),*CONTRACT[2:5]]
+        wording="供货约定：本协议拟以QC-009代替QC-001，须双方签字后生效。"
+        for change_fields,expected in (({},"substitution"),({"base_contract_ref":"YL-122"},"scope"),
+                                        ({"buyer":"另一采购方"},"scope"),({"addendum_number":"待定"},"scope")):
+            with self.subTest(change=change_fields):
+                paper,read=example("QC-002、QC-009",extra=[(5,wording)],supplement=change,
+                                   edit=lambda i,k,l,v:change_fields.get(k,v) if i==5 else v)
+                h,_,bank=summary(paper)
+                self.assertEqual(h["inspection_coverage"]["state"],"register_"+expected)
+                ref=next(r["id"] for r in inspection.register_rows(paper["graph"]) if r["quote"]==wording)
+                self.assertEqual(ref in h["delivery_register"],expected=="substitution")
+                self.assertEqual(ref in bank["delivery_register"],expected=="substitution")
+                if expected=="substitution":
+                    fields={f["field"] for f in paper["graph"]["facts"] if f["doc"]=="d05" and f["id"] in h["evidence"]}
+                    self.assertTrue({"base_contract_ref","addendum_number","buyer","seller","subject"}<=fields)
+                inspection.verify(paper,read)
+                verify_findings(paper)
+
+    def test_issued_comparison_that_omitted_a_qualification_requires_review_before_approval(self):
+        clause="供货约定：经书面批准，可用QC-009代替QC-001。"
+        for note,hold in ((clause,True),("日常维护：更换滤芯。",False)):
+            paper,read=example("QC-002、QC-009",extra=[(1,note)])
+            graph=paper["graph"]
+            ledger=inspection.sources(graph,read,version=inspection.REGISTER_FORMAT)
+            graph["inspection_coverage_sources"]=ledger
+            nodes,edges=inspection.source_graph(ledger)
+            graph["nodes"]=[n for n in graph["nodes"] if n["type"]!="inspection_line"]+nodes
+            graph["edges"]=[e for e in graph["edges"] if e["type"]!="inspection_coverage_source"]+edges
+            paper["policy"].update(version="2026.11.28.16",inspection_coverage=inspection.REGISTER_FORMAT)
+            paper["findings"]=execute(graph,PERFORMANCE)
+            self.assertEqual(summary(paper)[0]["inspection_coverage"]["state"],"register_difference")
+            inspection.verify(paper,read)
+            if hold:
+                with self.assertRaisesRegex(ValueError,"代用.*重审"):
+                    inspection.verify(paper,read,signing=True)
+            else:
+                inspection.verify(paper,read,signing=True)
+
     def test_original_registers_bind_to_final_acceptance_and_its_payments(self):
         for actual,state,status,payment in (("QC-002、QC-009","difference","issue","risk"),
                                             ("QC-002、QC-002","duplicate","risk","risk"),

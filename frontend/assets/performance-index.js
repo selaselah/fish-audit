@@ -95,7 +95,7 @@ const PerformanceIndex = (() => {
     button.append(el('small',label),el('strong',display),glyph('arrows-angle-expand'),el('span',button.title,'visually-hidden'));
     return button;
   }
-  function sourceView(item, graph, pdfProofs=[]) {
+  function sourceView(item, graph, pdfProofs=[], initialRef) {
     const rows=originals(item,graph);
     if (!rows.length) return el('p','本版没有可从此项直接打开的字段引文。','scope-empty');
     const pick=el('select'), fileGroups=new Map();
@@ -126,6 +126,10 @@ const PerformanceIndex = (() => {
           fact.page===clue.page && (fact.unit || fact.doc)===clue.unit && fact.quote===clue.quote);
         if (hit>=0) { initial=hit; break; }
       }
+    }
+    if (initialRef) {
+      const chosen=rows.findIndex(row=>row.fact.id===initialRef);
+      if (chosen>=0) initial=chosen;
     }
     const first=preferred.map(field=>rows.findIndex(row=>row.fact.field===field)).find(i=>i>=0);
     pick.value=String(initial>=0?initial:first??0);
@@ -167,8 +171,9 @@ const PerformanceIndex = (() => {
       const label=el('label','字段引文'); label.htmlFor=pick.id;
       heading.replaceChildren(label);
     }
-    return box('scope-source',box('scope-source-head',heading,field),box('scope-excerpt-head',quality,mode),crop,quote,
-      box('scope-source-footer',place,open));
+    // Loading the original-line crop must not move the button that opens the source.
+    return box('scope-source',box('scope-source-head',heading,field),box('scope-source-footer',place,open),
+      box('scope-excerpt-head',quality,mode),crop,quote);
   }
   function specialist(item) {
     const target=id=>document.getElementById(id);
@@ -826,6 +831,11 @@ const PerformanceIndex = (() => {
       for (const row of measurementNumberSources(state.bundle.report,item)) detail.append(workpaperLineButton(row,item));
       const register=InspectionCoverage.registerControls(state.bundle.report,item);
       if (register) detail.append(register);
+      const substitution=register && item.rule==='H05' && ['register_substitution','register_prohibited'].includes(
+        findings.find(f=>f.rule==='H02')?.inspection_coverage?.state);
+      const bankDate=!paired && substitution && WarrantyDates.receiptDate(item,state.bundle.report);
+      const sources=()=>sourceView(item,graph,[...receipts,...mandates.flatMap(m=>m.proofs)],bankDate?.ref);
+      if (bankDate) detail.append(lazyFold('回单付款日 '+bankDate.day,()=>[sources()]));
       for (const ref of item.party_readings || []) detail.append(PartyReadings.citation(state.bundle.report,ref,item));
       if (item.installment_count) detail.append(InstallmentCount.citation(state.bundle.report,item.installment_count,item,true));
       if (item.approval_change) detail.append(ApprovalChange.panel(item,state.bundle.report,rev));
@@ -891,8 +901,7 @@ const PerformanceIndex = (() => {
         const reason=el('p',detailText,'scope-reason');
         detail.append(detailText.length<=100 && !receipts.length && !batch && !guarantee && !quality && !retest?reason:fold('阅读本项结论',reason));
       }
-      if (!paired) {
-        const sources=()=>sourceView(item,graph,[...receipts,...mandates.flatMap(m=>m.proofs)]);
+      if (!paired && !bankDate) {
         detail.append(register || roster || batch || guarantee || quality || retest || mandates.length || receipts.some(p=>p.record.kind)?lazyFold('其他字段引文',()=>[sources()]):sources());
       }
       detail.append(actions);

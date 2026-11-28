@@ -203,22 +203,24 @@ def save_note(store, workspace, author, role, data):
             doc,page,line = pin.groups()[1:] if pin else (context["doc"],context["page"],context["line"])
             serial = anchor.startswith("serial-") or context.get("raw_ref","").startswith("inspection-line/")
             if serial:
-                prefix, finding_key, ledger, marker, version, rects = ("inspection-line","delivery_register",
-                    "inspection_coverage_sources","inspection_coverage","inspection-coverage-v3","delivery_register_rects")
+                prefix, finding_key, ledger, marker, versions, rects = ("inspection-line","delivery_register",
+                    "inspection_coverage_sources","inspection_coverage",("inspection-coverage-v3","inspection-coverage-v4"),"delivery_register_rects")
             else:
-                prefix, finding_key, ledger, marker, version, rects = ("measurement-number","measurement_numbers",
-                    "measurement_number_sources","measurement_numbers","printed-measurement-spacing-v1","measurement_number_rects")
+                prefix, finding_key, ledger, marker, versions, rects = ("measurement-number","measurement_numbers",
+                    "measurement_number_sources","measurement_numbers",("printed-measurement-spacing-v1",),"measurement_number_rects")
             ref = f"{prefix}/{doc}/p{page}/l{line}"
             linked = db.execute("""SELECT 1 FROM reports,json_each(content,'$.findings') f,
                 json_each(f.value,?) n,json_each(content,?) r,
                 json_each(content,'$.calls.pages') p WHERE case_id=? AND rev=?
-                AND json_extract(content,?)=? AND (?=0 OR json_extract(content,'$.graph.inspection_coverage_sources.purpose')='delivery_register')
+                AND json_extract(content,?) IN (SELECT value FROM json_each(?)) AND (?=0 OR (
+                    json_extract(content,'$.graph.inspection_coverage_sources.purpose')='delivery_register' AND
+                    json_extract(content,'$.graph.inspection_coverage_sources.format')=json_extract(content,'$.policy.inspection_coverage')))
                 AND n.value=? AND json_extract(r.value,'$.id')=n.value
                 AND EXISTS (SELECT 1 FROM json_each(f.value,'$.evidence') e WHERE e.value=n.value)
                 AND ((? IS NULL AND json_extract(f.value,'$.rule')='H02') OR json_extract(f.value,'$.id')=?)
                 AND json_extract(r.value,'$.doc')=? AND json_extract(r.value,'$.page')=? AND json_extract(r.value,'$.line')=?
                 AND json_extract(p.value,'$.doc')=? AND json_extract(p.value,'$.page')=? AND json_array_length(p.value,?)>0""",
-                ("$."+finding_key,"$.graph."+ledger+".rows",context["case_id"],context["rev"],"$.policy."+marker,version,int(serial),
+                ("$."+finding_key,"$.graph."+ledger+".rows",context["case_id"],context["rev"],"$.policy."+marker,json.dumps(versions),int(serial),
                  ref,pin[1] if pin else None,pin[1] if pin else None,doc,int(page),int(line),doc,int(page),f'$.{rects}."{line}"')).fetchone()
             if not linked:
                 raise CaseError("所选底稿没有引用这条验收原行。",404)

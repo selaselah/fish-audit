@@ -501,9 +501,10 @@ try {
       assert.ok(Math.abs(phases.reduce((sum,f)=>sum+Number(f.stage.share),0)-100)<1e-8);
     }
     if (!phases.length) assert.ok(phaseChecks.length && phaseChecks.every(f=>f.status==='missing'));
-    await wait('!!document.querySelector("#new-case")','new audit');
+    await wait('typeof Team!=="undefined" && Team.session && document.querySelector("#intake-scopes input") && document.querySelector("#new-case")?.getClientRects().length','new audit');
     await evaluate('document.querySelector("#new-case").click()');
-    await evaluate('const p=document.querySelector("#upload-profile");p.value="cn-contract-performance/v1";p.dispatchEvent(new Event("change"));');
+    await wait('document.querySelector("#upload-dialog")?.open','audit scope picker');
+    await evaluate('document.querySelector(\'#intake-scopes input[value="cn-contract-performance/v1"]\').click()');
     assert.ok(await evaluate('document.querySelector("#profile-note").textContent.includes("质保期满确认单")'));
     await call('Page.navigate',{url:root+'/workpaper/'+performanceCase+'?rev='+task.rev});
     await wait('!!document.querySelector(".performance-panel .performance-overview")','contract performance report');

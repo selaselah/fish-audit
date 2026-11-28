@@ -786,7 +786,7 @@ function workpaperLineButton(source,finding,pin=true) {
     quote.replaceChildren(...source.quote.split(/([A-Za-z0-9._*＊?-]+)/u).map((word,i)=>
       i%2===1?el(source.marks.includes(word)?'mark':'span',word,'register-code'):word));
   }
-  button.append(el('small',number?label+' · '+place:place),quote,glyph('arrows-angle-expand'));
+  button.append(el('small',number || source.substitution?label+' · '+place:place),quote,glyph('arrows-angle-expand'));
   if (number && source.copy) button.append(el('small',source.copy.label+' · '+source.copy.value,'number-copy'));
   return button;
 }
