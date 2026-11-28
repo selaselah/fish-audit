@@ -124,6 +124,7 @@ BOARD_CONDITION = re.compile(r"(?:本合同|合同|本协议)?(?:自|经)?" + PA
                              r"(甲方|乙方|采购方|供应方)董事会批准(?:之日|当日)?(?:起|后|时)?(?:即)?生效")
 FINAL_SCOPES = {"全部","全部交付","全部交付终验","全部交付最终验收","全部标的最终验收","最终验收","整体验收","终验","全量验收"}
 PASS = {"合格","验收合格","全部合格","通过","验收通过","最终验收合格","终验合格"}
+FAILED_ACCEPTANCE = {"不合格","验收不合格","未通过","验收未通过","拒收","最终验收不合格","终验不合格"}
 CLEAN = {"无","无遗留事项","无保留事项","无整改事项","无异常"}
 SIMPLE_FULL = {"一次性全额结算","一次性付清","一次性全额付款","一次结清","一次性结清","一次付清"}
 CONDITIONS = {
@@ -469,7 +470,7 @@ def inspect_quality(required, basis, reading):
     return "ok",""
 
 
-def acceptance(contract, receipts, *, criterion=None, signature_ok=None, quantity_change=None, quality_graph=None):
+def acceptance(contract, receipts, *, criterion=None, signature_ok=None, quantity_change=None, quality_graph=None, resolve_strict=True):
     keys = ("contract_id","buyer","subject")
     fields = (*keys,"acceptance","seller","accepted_on","acceptance_scope","acceptance_result","acceptance_signer",
               "acceptance_exception","quantity_accepted","inspection_basis","measured_result")
@@ -489,16 +490,19 @@ def acceptance(contract, receipts, *, criterion=None, signature_ok=None, quantit
     if r.fields["seller"] and (not contract.single("seller") or r.single("seller") != contract.single("seller")):
         return finding("risk","验收资料所列供应方与合同未能一致对应，请核验主体。")
     outcome, scope = r.body("acceptance_result"), r.body("acceptance_scope")
-    if outcome in {"不合格","验收不合格","未通过","验收未通过","拒收","最终验收不合格","终验不合格"}:
+    if outcome in FAILED_ACCEPTANCE:
         return finding("issue","本合同对应验收记录明确记载“" + outcome + "”，需查明缺陷及复验处置。")
     quality = None
     if contract.fields["acceptance_criteria"] or r.fields["inspection_basis"] or r.fields["measured_result"]:
         basis, reading = r.body("inspection_basis"), r.body("measured_result")
         standard = contract.body("acceptance_criteria") if criterion is None else criterion
         quality = inspect_quality(standard,basis,reading)
-        if quality[0] in ("risk","missing") and quality_graph is not None:
+        if quality_graph is not None:
             proof = payment_quality.comparison(quality_graph,{"evidence":refs})
-            if payment_quality.same_within(proof):
+            if quality_graph[payment_quality.KEY]["format"]==payment_quality.FORMAT and (
+                    proof.get("reading_notes") if proof else payment_quality.incomplete_notes(quality_graph,{"evidence":refs})):
+                quality = ("reading_required","判定限值所需的原始检测记录及测量口径")
+            elif resolve_strict and quality[0] in ("risk","missing") and payment_quality.same_within(proof):
                 quality = ("ok","")
         if criterion and standard!=basis:
             observation = inspect_quality(standard,standard,reading)
@@ -518,7 +522,9 @@ def acceptance(contract, receipts, *, criterion=None, signature_ok=None, quantit
     missing = []
     if quantity_change is not None and quality is None:
         missing.append("本次终验的质量标准及实际检验记录")
-    if quality and quality[0] != "ok":
+    if quality and quality[0]=="reading_required":
+        missing.append(quality[1])
+    elif quality and quality[0] != "ok":
         return finding(*quality)
     if contract.incomplete("acceptance_criteria"):
         missing.append("合同验收标准原文")
@@ -854,10 +860,10 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
     def evaluate(contract, selected):
         quantity = change.get("quantity") if change else None
         criterion = (change["applied_criterion"] or "") if change and not (quantity and change["scope_clear"]) else None
-        quality_graph = graph if (version==FORMAT and graph.get(payment_quality.KEY,{}).get("format")==payment_quality.FORMAT
-                                  and not (change or extra_units or pending_units or repairs or retests)) else None
+        quality_graph = graph if (version==FORMAT and graph.get(payment_quality.KEY,{}).get("format") in payment_quality.OPEN_FORMATS
+                                  and not (change or repairs or retests)) else None
         finding = acceptance(contract,selected,criterion=criterion,quantity_change=quantity,signature_ok=signatory if authority else None,
-                             quality_graph=quality_graph)
+                             quality_graph=quality_graph,resolve_strict=not (extra_units or pending_units))
         units = {doc.unit for doc in selected}
         acceptance_execution.apply(finding,[r for r in pdf_records if r["unit"] in units])
         acceptance_originals.apply(finding, graph, units)
@@ -1376,6 +1382,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("warranty_payment") != entry.get("warranty_payment")
                 or saved.get("payment_quality") != entry.get("payment_quality")
                 or saved.get("quality_comparison") != entry.get("quality_comparison")
+                or saved.get("reading_caveats") != entry.get("reading_caveats")
                 or saved.get("retest_reference") != entry.get("retest_reference")
                 or saved.get("inspection_use") != entry.get("inspection_use")
                 or saved.get("party_readings") != entry.get("party_readings")

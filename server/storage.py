@@ -81,7 +81,7 @@ TRANSIENT_WRITER_CODES = {getattr(sqlite3,k) for k in ("SQLITE_BUSY","SQLITE_BUS
 
 
 FULL_PAGE_EVIDENCE = (
-    "quality_change", "quality_comparison", "acceptance_authority", "acceptance_execution", "signer_timing", "date_checks", "batch_acceptance",
+    "quality_change", "quality_comparison", "reading_caveats", "acceptance_authority", "acceptance_execution", "signer_timing", "date_checks", "batch_acceptance",
     "effect_review", "warranty_check", "warranty_difference", "payment_window", "acceptance_reservations", "acceptance_comments",
     "contract_comments", "stage_payments", "invoice_receipt", "payment_change", "payment_opinion",
     "equipment_models", "inspection_coverage", "payment_acceptance", "execution_basis", "contract_folios",
@@ -970,8 +970,8 @@ class Store:
             return row[0] if row else None
         def page_layout(doc, page):
             return stored_page_layout(db,case_id,doc,page)
-        if (any(f.get("quality_comparison") for f in paper["findings"]) or
-                paper["policy"].get("payment_quality") in (payment_quality.FIRST_FORMAT,payment_quality.BASIS_FORMAT) and
+        if (any(f.get("quality_comparison") or f.get("payment_quality") or f.get("reading_caveats") for f in paper["findings"]) or
+                paper["policy"].get("payment_quality") in (payment_quality.FIRST_FORMAT,payment_quality.BASIS_FORMAT,payment_quality.OPEN_FORMAT) and
                 any(f["rule"]=="H02" for f in paper["findings"])):
             try:
                 payment_quality.verify(paper,page_text,read_layout=page_layout,signing=True)

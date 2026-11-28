@@ -4,6 +4,7 @@ import json
 import re
 
 from config import CaseError
+from payment_quality import FORMAT as QUALITY_FORMAT, OPEN_FORMAT
 from storage import encode, stamp
 
 
@@ -168,12 +169,13 @@ def save_note(store, workspace, author, role, data):
                 raise CaseError("所选底稿没有引用这条合同分期总述。",404)
         elif context["screen"]=="case" and context.get("raw_ref","").startswith("measurement-note/"):
             linked=db.execute("""SELECT 1 FROM reports,json_each(content,'$.findings') f,
-                json_each(f.value,'$.quality_comparison.reading_notes') n,json_each(content,'$.calls.pages') p
-                WHERE case_id=? AND rev=? AND json_extract(content,'$.policy.payment_quality')='acceptance-quality-payment-v3'
+                json_each(COALESCE(json_extract(f.value,'$.quality_comparison.reading_notes'),json_extract(f.value,'$.reading_caveats'))) n,
+                json_each(content,'$.calls.pages') p
+                WHERE case_id=? AND rev=? AND json_extract(content,'$.policy.payment_quality') IN (?,?)
                 AND json_extract(f.value,'$.rule')='H02' AND json_extract(n.value,'$.doc')=? AND json_extract(n.value,'$.page')=?
                 AND json_extract(n.value,'$.line')=? AND json_extract(p.value,'$.doc')=json_extract(n.value,'$.doc')
                 AND json_extract(p.value,'$.page')=json_extract(n.value,'$.page') AND json_array_length(p.value,?)>0""",
-                (context["case_id"],context["rev"],context["doc"],context["page"],context["line"],
+                (context["case_id"],context["rev"],OPEN_FORMAT,QUALITY_FORMAT,context["doc"],context["page"],context["line"],
                  f'$.measurement_note_rects."{context["line"]}"')).fetchone()
             if not linked:
                 raise CaseError("所选版本没有可定位的测量精度说明原行。",404)
@@ -241,10 +243,12 @@ def save_note(store, workspace, author, role, data):
         if context["screen"] == "case" and (pin := QUALITY_PIN.fullmatch(anchor) or RETEST_PIN.fullmatch(anchor) or LIMIT_PIN.fullmatch(anchor)):
             retest = pin.re == RETEST_PIN
             path = "$.quality_comparison" if pin.re==LIMIT_PIN else ("$.retest_reference" if retest else "$.payment_quality")
-            row = db.execute("""SELECT json_extract(f.value,?) FROM reports, json_each(content,'$.findings') AS f
+            row = db.execute("""SELECT json_extract(f.value,?),json_extract(f.value,'$.reading_caveats') FROM reports, json_each(content,'$.findings') AS f
                            WHERE case_id=? AND rev=? AND json_extract(f.value,'$.id')=?""",
                              (path,context["case_id"],context["rev"],pin[1])).fetchone()
             check = json.loads(row[0]) if row and row[0] else {}
+            if not check and pin.re==LIMIT_PIN and row and row[1]:
+                check = {"reading_notes":json.loads(row[1])}
             field = pin[2]
             has_order = "days_from_final" in check if retest else bool(check.get("payment"))
             note_pin = field and field.startswith("reading-")

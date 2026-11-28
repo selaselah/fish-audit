@@ -1,5 +1,15 @@
 # 合成财会审计演练
 
+## 重建含端点限值和检测记录用例
+
+沿用已校验摘要的冷藏柜采购母本，生成五组、共 25 份有水印的原件。包含恰在上限的取整读数、略高于上限的取整读数、合同上的仪器允差要求、检验费按分舍入，以及验收范围待确认。每组保留同一笔第二期付款。[下载 R7 母本](http://127.0.0.1:8000/api/cases/64cd9e64345841bab358728a6730f3d8/reports/7/bundle) · [逐案核对结果](../acceptance.md#含端点的柜温限值与原始检测记录)
+
+```sh
+PYTHONPATH=server server/.venv/bin/python docs/samples/inspection_limits.py /tmp/master-R7.zip /tmp/inspection-precision --precision
+```
+
+加 `--case contract_note` 仅生成合同标明仪器允差的案例。加 `--run --check-fields` 会向本机提交资料，核对母本、实际页图和印刷字段，再生成待人工验收的底稿。
+
 ## 重建严格限值和取整读数
 
 用已核摘要的 R7 冷藏柜采购母本生成四组水印材料。前三组分别演练合同排除边界、终验单排除边界、双方严格下限均满足。第四组在验收报告第 15 行补入「柜温读数已取整，判定须核对未取整的原始记录」。各组保留原来的第二期付款安排和银行回单。[下载 R7 母本](http://127.0.0.1:8000/api/cases/64cd9e64345841bab358728a6730f3d8/reports/7/bundle) · [四组预期结果和实际底稿](../acceptance.md#实测八度时的严格限值和取整说明)

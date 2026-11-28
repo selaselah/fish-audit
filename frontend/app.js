@@ -574,8 +574,8 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
     if (source) gaps.push({...source,quality:['seller','delivery_note'].includes(source.kind)?'supplier_reference':'reservation_reference'});
   }
   if (lineHint && !gaps.some(g=>g.line===lineHint)) {
-    const report=state.bundle?.report, h02=report?.findings.find(f=>f.quality_comparison?.reading_notes);
-    const note=h02?.quality_comparison.reading_notes.find(n=>n.doc===docId && n.page===pageNumber && n.line===lineHint);
+    const report=state.bundle?.report, h02=report?.findings.find(f=>f.quality_comparison?.reading_notes || f.reading_caveats);
+    const note=(h02?.quality_comparison?.reading_notes || h02?.reading_caveats)?.find(n=>n.doc===docId && n.page===pageNumber && n.line===lineHint);
     if (note && PaymentQuality.bind(h02,report)) gaps.push({line:note.line,quote:note.quote,quality:'measurement_precision'});
   }
   for (const gap of gaps) {
@@ -928,7 +928,15 @@ function finding(item) {
   const heading = item.stage ? item.stage.name + (item.stage.share ? ' · ' + item.stage.share + '%' : '') +
     (item.execution_basis ? ' 扣款凭证' : item.rule === 'H05' ? ' 实付时点' : item.rule==='H06'?' 回单合计':' 付款条件') : item.execution_basis?'扣款凭证':item.title;
   const node = box('finding-body',el('p', item.detail, 'finding-detail'),el('p', '执行依据 · ' + item.basis, 'muted'));
-  if (item.quality_comparison) {
+  if (item.reading_caveats) {
+    const notes=PaymentQuality.panel(item,state.bundle.report,state.bundle.rev);
+    if (notes) {
+      const docs=state.bundle.report.graph.documents;
+      const citations=item.reading_caveats.map(n=>' 《'+docs.find(d=>d.id===n.doc).name+'》第 '+n.page+' 页第 '+n.line+' 行载“'+n.quote+'”。').join('');
+      if (item.detail.endsWith(citations)) node.querySelector('.finding-detail').textContent=item.detail.slice(0,-citations.length);
+      node.prepend(notes);
+    }
+  } else if (item.quality_comparison) {
     const limits=PaymentQuality.panel(item,state.bundle.report,state.bundle.rev);
     if (limits) {
       const explanation=[...node.children];
@@ -1836,8 +1844,9 @@ function draftSupplement(note) {
   if (!canReviewCurrentPaper()) return;
   openReview();
   $('#review-decision input[value=return]').click();
-  $('#review-note').value=note;
-  $('#review-note').focus();
+  const input=$('#review-note');
+  input.value=note;input.classList.add('prefilled-review');
+  input.focus();input.setSelectionRange(0,0);input.scrollTop=0;
 }
 
 const reviewDecisions = {
@@ -1933,6 +1942,7 @@ function openReview(facts,reviewVisibility=false) {
   $('#submit-review').disabled=false;
   updateReviewDecision();
   $('#reviewer').value=Team.current ? Team.session.user.name : ''; $('#reviewer').readOnly=!!Team.current;
+  $('#review-note').classList.remove('prefilled-review');
   $('#review-note').value = '';
   $('#review-dialog').showModal();
 }

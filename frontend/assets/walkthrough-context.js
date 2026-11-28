@@ -152,7 +152,8 @@ export function captureContext(owner, element, pagePoint) {
     const side=element.closest('#revision-comparison .revision-side')?.querySelector('h3')?.textContent;
     const target=label && (side?side+' · '+label:label);
     context.target = target && target.length <= 96 ? target : '所选位置';
-    const named = element.closest('[id]');
+    const precisionSource=element.closest('.quality-payment .quality-draft')?.getAttribute('aria-describedby');
+    const named = precisionSource ? document.getElementById(precisionSource) : element.closest('[id]');
     if (named && identifier.test(named.id) && !['content','case-panel','main'].includes(named.id)) context.anchor = named.id;
   }
   return context;

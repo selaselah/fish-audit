@@ -1,5 +1,13 @@
 # 本机审计接口
 
+## 含端点限值所引的精度说明
+
+规则 `2026.11.28.11` 使用 `policy.payment_quality = acceptance-quality-payment-v4`。合同或验收原页上适用的取整、允差等说明可使含端点限值的 `result` 成为 `reading_required`。相同限值也可产生这项对照。此时 `observed` 保存文件登记的读数，每侧保留原限值和比较符。偏离量仅在能够确定越界时出具。
+
+H02 完整对照引用 `quality_comparison.reading_notes[]`。验收范围、结论等证据不足以构成对照时，`reading_caveats[]` 仅列可定位的说明原行，字段同为 `doc`、`unit`、`page`、`line`、`quote`。两种形式均将原页纳入 `evidence`，并在 `calls.pages[].measurement_note_rects` 留存对应行框。付款侧只有在期款和原件可对应时才出具 `payment_quality.comparison`。[范围待核的 R9](http://127.0.0.1:8000/workpaper/e2c5afe848dc47eeb39188e97abf54b5?rev=9&view=acceptance-limits)
+
+固定版次的走查意见可保存测量说明控件及 `measurement-note/<doc>/p<page>/l<line>`。签收通过与独立复核通过都会核验当前原件及引文位置。旧版按归档的方法复算，签收时会另查是否漏列适用的精度说明。业务退回沿用原有签收接口，界面上的「起草补件意见」只在当前可验收的底稿上打开可编辑的草稿。[R8 第二期补件依据](http://127.0.0.1:8000/workpaper/57abf85981374ed39f5cd9cae5175f2c?rev=8&view=payment-checks&stage=H05-8)
+
 ## 严格限值与读数精度
 
 规则 `2026.11.28.10` 出具 `policy.payment_quality = acceptance-quality-payment-v3`。H02 的 `quality_comparison.limits` 分别保留合同和验收单的比较符、数值、单位和结果。H04/H05 引用本期验收比较时使用 `payment_quality.comparison`。

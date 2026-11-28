@@ -29,6 +29,84 @@ def example(*, date="2026-09-21", standard="柜温不高于4℃", measure="柜�
 
 
 class PaymentQualityEvidence(unittest.TestCase):
+    def test_inclusive_limits_use_the_filed_precision_before_declaring_compliance_or_an_excess(self):
+        note="测量精度说明：柜温读数已取整，判定须核对未取整的原始记录"
+        for contract,basis,value,doc,status in (
+                ("柜温不高于8℃","柜温≤8.000℃","柜温8℃",2,"missing"),
+                ("柜温不高于7.99℃","柜温不高于7.99℃","柜温8℃",2,"missing"),
+                ("柜温不低于-2.49℃","柜温至少-2.49℃","柜温-2.50℃",1,"missing"),
+                ("柜温不高于7.99℃","柜温不高于8℃","柜温8℃",1,"risk")):
+            with self.subTest(contract=contract,basis=basis):
+                p,text=example(standard=contract,measure=value,changes={(2,"inspection_basis"):basis},omissions=[(doc,note)])
+                h=next(f for f in p["findings"] if f["rule"]=="H02");proof=h["quality_comparison"]
+                n,=proof["reading_notes"]
+                self.assertEqual((h["status"],n["doc"],n["quote"]),(status,f"d{doc:02d}",note))
+                self.assertEqual(text(n["doc"],n["page"]).splitlines()[n["line"]-1],note)
+                self.assertIn(("合同" if doc==1 else "验收单")+f"第 {n['page']} 页第 {n['line']} 行",h["detail"])
+                self.assertTrue(all(v["result"]=="reading_required" and "outside_by" not in v for v in proof["limits"].values()))
+                self.assertNotIn("超出",h["detail"])
+                related=[f for f in p["findings"] if f.get("payment_quality")]
+                self.assertEqual([(f["rule"],f["stage"]["name"],f["status"]) for f in related],[("H04","第二期",status),("H05","第二期","missing")])
+                self.assertTrue(all(f["payment_quality"]["comparison"]["reading_notes"]==[n] for f in related))
+                quality.verify(p,text);verify_findings(p)
+
+    def test_measurement_qualification_preserves_independent_acceptance_findings(self):
+        note="仪器说明：柜温判定须核对仪器允差"
+        for key,value,status,reason in (
+                ("quantity_accepted","1台","risk","数量"),("accepted_on","2025-02-01","risk","早于"),
+                ("acceptance_exception","尚待复验","risk","遗留"),("acceptance_signer",None,"missing","签认")):
+            p,text=example(standard="柜温不高于7.99℃",changes={(2,key):value},omissions=[(2,note)])
+            h=next(f for f in p["findings"] if f["rule"]=="H02")
+            self.assertEqual(h["status"],status);self.assertIn(reason,h["detail"]);self.assertIn(note,h["detail"])
+            self.assertNotIn("超出",h["detail"]);quality.verify(p,text)
+        p,text=example(standard="柜温不高于7.99℃",changes={(2,"acceptance_result"):"不合格"},omissions=[(2,note)])
+        h=next(f for f in p["findings"] if f["rule"]=="H02")
+        self.assertEqual(h["status"],"issue");self.assertIn("不合格",h["detail"]);self.assertNotIn("reading_caveats",h)
+        quality.verify(p,text)
+
+    def test_incomplete_acceptance_quotes_the_caveat_without_issuing_a_final_comparison(self):
+        note="检测说明：柜温读数已取整"
+        for key in ("acceptance_result","acceptance_scope","seller"):
+            p,text=example(standard="柜温不高于7.99℃",changes={(2,key):None},omissions=[(2,note)])
+            h=next(f for f in p["findings"] if f["rule"]=="H02");n,=h["reading_caveats"]
+            self.assertEqual(h["status"],"missing");self.assertNotIn("quality_comparison",h)
+            self.assertEqual(n["quote"],note);self.assertIn(f"{n['doc']}/p{n['page']}",h["evidence"])
+            self.assertFalse(any(f.get("payment_quality") for f in p["findings"]))
+            self.assertEqual(quality.reading_notes(p["findings"]),[n]);quality.verify(p,text);verify_findings(p)
+            h["reading_caveats"]=[]
+            with self.assertRaisesRegex(ValueError,"精度说明"):quality.verify(p,text)
+
+    def test_fee_rounding_is_separate_only_for_a_complete_monetary_clause(self):
+        fee="检验费用结算：费用金额四舍五入到分"
+        for line,qualified in ((fee,False),("测量精度说明：柜温读数已取整，检验费用金额四舍五入到分",True),
+                               (fee+"。仪器读数含允差",True),("金额说明：付款金额四舍五入到分",False)):
+            p,text=example(standard="柜温不高于7.99℃",omissions=[(2,line)])
+            h=next(f for f in p["findings"] if f["rule"]=="H02");bank=next(f for f in p["findings"] if f["rule"]=="H05")
+            if qualified:
+                self.assertEqual(h["quality_comparison"]["reading_notes"][0]["quote"],line)
+                self.assertEqual(bank["status"],"missing")
+            else:
+                self.assertEqual(h["status"],"issue");self.assertEqual(bank["payment_quality"]["measure"]["outside_by"],"0.01")
+                self.assertFalse(quality.reading_notes(p["findings"]))
+            quality.verify(p,text)
+
+    def test_previous_precision_rule_replays_and_requires_reaudit_only_for_affected_papers(self):
+        for bound,scope,note,blocked in (
+                ("8","全部交付终验","测量说明：柜温读数已取整",True),
+                ("7.99","全部交付终验","测量说明：柜温读数已取整",True),
+                ("7.99",None,"测量说明：柜温读数已取整",True),
+                ("7.99","全部交付终验","检验费用结算：费用金额四舍五入到分",False)):
+            p,text=example(standard=f"柜温不高于{bound}℃",changes={(2,"acceptance_scope"):scope},omissions=[(2,note)])
+            g=p["graph"];g[quality.KEY]=quality.sources(g,text,quality.OPEN_FORMAT)
+            g["edges"]=[e for e in g["edges"] if e["type"] not in (quality.EDGE,quality.BASIS_EDGE)]
+            p["findings"]=execute(g,PERFORMANCE);g["edges"].extend(quality.edges(p["findings"]))
+            p["policy"].update(version="2026.11.28.10",payment_quality=quality.OPEN_FORMAT)
+            for f in p["findings"]:f["version"]=p["policy"]["version"]
+            quality.verify(p,text);verify_findings(p)
+            if blocked:
+                with self.assertRaisesRegex(ValueError,"重审"):quality.verify(p,text,signing=True)
+            else:quality.verify(p,text,signing=True)
+
     def test_exact_excluded_boundary_on_either_original_has_no_invented_excess(self):
         cases=(
             ("柜温低于8℃","柜温不高于8℃","柜温8℃",("excluded_boundary","within")),

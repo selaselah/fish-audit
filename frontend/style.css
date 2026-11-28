@@ -309,6 +309,7 @@ dialog::backdrop { background: rgb(24 30 47 / 45%); }
 .review-choice:has(:focus-visible) { outline: 2px solid var(--focus); outline-offset: 2px; }
 .review-choice:has(:disabled) { cursor: default; background: var(--soft); color: var(--muted); border-color: var(--line); }
 #review-dialog .actions { border-top: 1px solid var(--line); padding-top: 14px; }
+#review-note.prefilled-review { field-sizing:content; min-height:6rem; max-height:min(32dvh,12rem); }
 @media (max-width: 540px) {
   #review-dialog { max-height: calc(100svh - 24px); }
   #review-dialog .actions { position: sticky; bottom: 0; background: var(--surface); padding-block: 10px 4px; }

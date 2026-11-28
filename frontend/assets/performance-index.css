@@ -289,6 +289,7 @@
 .quality-evaluation:is(.outside,.excluded_boundary) { color:var(--issue); }
 .quality-payment .quality-note { margin:0 10px 9px; width:calc(100% - 20px); padding-right:26px; }
 .quality-note strong { font-size:.84rem; font-weight:550; overflow-wrap:anywhere; }
+.quality-payment .quality-draft { display:inline-flex; align-items:center; margin:0 10px 10px; color:var(--accent-hover); background:var(--surface); }
 .quality-payment button .ui-glyph { position:absolute; top:7px; right:7px; font-size:.72rem; color:var(--accent-hover); }
 .quality-payment .quality-day { background:var(--surface); }
 .quality-day strong { font-size:.88rem; font-weight:600; font-variant-numeric:tabular-nums; }
