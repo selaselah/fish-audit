@@ -731,17 +731,57 @@ function contractSigningSources(report, finding) {
   return accepted;
 }
 
-function contractSigningButton(source,finding) {
+function measurementNumberSources(report, finding=report?.findings.find(f=>f.rule==='H02')) {
+  const ledger=report?.graph.measurement_number_sources, format='printed-measurement-spacing-v1';
+  if (!finding?.measurement_numbers || finding.status==='ok' || ledger?.format!==format || report.policy.measurement_numbers!==format ||
+      !/^[a-f0-9]{64}$/u.test(report.policy.code_sha256?.['measurement_spacing.py'])) return [];
+  const {nodes,documents,facts}=graphIndex(report.graph), cited=[];
+  const names={acceptance_criteria:'合同限值待核',inspection_basis:'检验依据待核',measured_result:'实测读数待核'};
+  const hasBreak=text=>typeof text==='string' && /(?:[0-9]\s+[0-9.]|[.\-]\s+[0-9])/u.test(text.normalize('NFKC'));
+  for (const r of ledger.rows) {
+    const page=r.doc+'/p'+r.page, node=nodes.get(r.id), pg=nodes.get(page), doc=documents.get(r.doc);
+    const call=report.calls.pages.find(p=>p.doc===r.doc && p.page===r.page);
+    if (!names[r.field] || !doc || !Array.isArray(r.facts) || !finding.measurement_numbers.includes(r.id) || !finding.scope.includes(r.unit) ||
+        ![r.id,page,...r.facts].every(ref=>finding.evidence.includes(ref)) || !['original','transcription'].includes(r.origin) ||
+        node?.type!=='measurement_number_review' || node.label!==r.quote || node.doc!==r.doc || node.page!==r.page ||
+        node.line!==r.line || node.field!==r.field || node.origin!==r.origin || pg?.type!=='page' || call?.page_sha256!==pg.sha256 ||
+        !report.graph.edges.some(e=>e.type==='measurement_number_source' && e.from===page && e.to===r.id &&
+          e.evidence[0]===page && e.evidence.length===r.facts.length+1 && r.facts.every((ref,i)=>e.evidence[i+1]===ref)) ||
+        !report.graph.edges.some(e=>e.type==='supports_result' && e.from===r.id && e.to==='finding/'+finding.id)) continue;
+    const readings=r.facts.map(ref=>facts.get(ref));
+    if (readings.some(f=>!f || f.field!==r.field || f.doc!==r.doc || f.page!==r.page || (f.unit || f.doc)!==r.unit)) continue;
+    const transcriptionGap=r.origin==='transcription' && r.readings?.some(t=>readings.some(f=>
+      t.id===f.id && t.value===f.value && t.quote===f.quote && (hasBreak(t.value) || hasBreak(t.quote))));
+    if (!(r.origin==='original' && hasBreak(r.quote)) && !transcriptionGap) continue;
+    const fact=readings.length===1?readings[0]:null;
+    const rects=call.measurement_number_rects?.[r.line];
+    if (r.line===null ? r.origin!=='transcription' || !fact || r.id!=='measurement-number/'+fact.id || fact.quote!==r.quote :
+        !Number.isInteger(r.line) || r.line<1 || r.id!=='measurement-number/'+page+'/l'+r.line || pg.layer!=='text' || !Array.isArray(rects) ||
+        !rects.every(b=>Array.isArray(b) && b.length===4 && b.every(n=>Number.isFinite(n) && n>=0 && n<=1) && b[0]<b[2] && b[1]<b[3])) continue;
+    const label=names[r.field];
+    const copy=fact && {label:fact.amendment || /\/h[a-f0-9]+$/u.test(fact.id)?'人工抄录':'模型摘录',value:fact.value};
+    cited.push({ref:r.id,label,doc,page:r.page,rawLine:r.line,rects:rects || [],quote:r.quote,fact:fact?.id,copy,
+      quality:'measurement_number_source',option:label+(r.line?' · 第 '+r.line+' 行':' · 页图')});
+  }
+  return cited;
+}
+
+function workpaperLineButton(source,finding) {
   const {doc,page,rawLine,ref,label}=source;
-  const place=doc.name+' · 第 '+page+' 页 · 第 '+rawLine+' 行';
-  const open=()=>OriginalReader.open(doc,page,{rawRef:ref,lineHint:rawLine});
-  if (!finding) return action(label+' · 第 '+page+' 页第 '+rawLine+' 行',open,'ref');
+  const number=source.quality==='measurement_number_source';
+  const place=doc.name+' · 第 '+page+' 页'+(rawLine?' · 第 '+rawLine+' 行':'');
+  const open=()=>OriginalReader.open(doc,page,source.rects.length?{rawRef:ref,lineHint:rawLine}:{highlight:source.fact});
+  if (!finding) return action(label+' · 第 '+page+' 页'+(rawLine?'第 '+rawLine+' 行':''),open,'ref');
   const button=action('',open,'signing-form-source'), field=doc.id+'-p'+page+'-l'+rawLine;
-  button.id='form-'+finding.id+'-'+field;
-  Object.assign(button.dataset,{formFinding:finding.id,caseId:state.bundle.report.case_id,rev:String(state.bundle.rev)});
+  if (rawLine && source.rects.length) {
+    button.id=(number?'number-':'form-')+finding.id+'-'+field;
+    button.dataset[number?'numberFinding':'formFinding']=finding.id;
+  }
+  Object.assign(button.dataset,{caseId:state.bundle.report.case_id,rev:String(state.bundle.rev)});
   button.dataset.originalLabel=label+' · '+place;
   button.setAttribute('aria-haspopup','dialog'); button.setAttribute('aria-controls','page-dialog');
-  button.append(el('small',place),el('strong',source.quote),glyph('arrows-angle-expand'));
+  button.append(el('small',number?label+' · '+place:place),el('strong',source.quote),glyph('arrows-angle-expand'));
+  if (number && source.copy) button.append(el('small',source.copy.label+' · '+source.copy.value,'number-copy'));
   return button;
 }
 
@@ -786,7 +826,7 @@ function contractEffectPanel(finding,graph) {
   const signingSources=contractSigningSources(state.bundle.report,finding);
   for (const item of conditions) {
     const signing=signingSources.find(s=>s.ref===item.id);
-    if (signing) { panel.append(contractSigningButton(signing,finding)); continue; }
+    if (signing) { panel.append(workpaperLineButton(signing,finding)); continue; }
     const fact=item.facts.map(id=>facts.get(id)).find(f=>f?.quote===item.quote);
     const button=action((documents.get(item.doc)?.name || '合同')+' · 第 '+item.page+' 页',
       ()=>openPage(item.doc,item.page,fact?.id,fact?null:item.line),'ref');

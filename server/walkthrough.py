@@ -13,6 +13,7 @@ HOME_PARAMS = {"scene", "slip", "copy", "edition", "batch", "record", "pdf", "ca
 CASE_PARAMS = {"view", "stage", "instrument", "receipt", "ticket", "call", "agreement", "acceptance", "finding", "fact", "prior", "entry", "filing", "part"}
 READING_LOCATION = r"reading-d[0-9]{2,8}-p[1-9][0-9]{0,7}-l[1-9][0-9]{0,7}"
 FORM_PIN = re.compile(r"form-(H0[1245]-[1-9][0-9]{0,7})-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7})")
+NUMBER_PIN = re.compile(r"number-(H0[245]-[1-9][0-9]{0,7})-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7})")
 QUALITY_PIN = re.compile(r"quality-(H0[45]-[1-9][0-9]{0,7})(?:-(clause|acceptance_criteria|inspection_basis|measured_result|"
                          r"acceptance_scope|acceptance_result|accepted_on|payment_designation|transfer_status|paid_on|terms|order|"+READING_LOCATION+r"))?")
 LIMIT_PIN = re.compile(r"limits-(H02-[1-9][0-9]{0,7})(?:-(acceptance_criteria|inspection_basis|measured_result|acceptance_result|"+READING_LOCATION+r"))?")
@@ -36,7 +37,7 @@ def check_context(value):
         patterns["intake"] = r"contract|purchase|travel|payment"
     if screen == "case":
         patterns.update(case_id=r"[a-f0-9]{32}", tab=r"report|evidence|graph|activity", doc=r"d[0-9]{2,8}",
-                        raw_ref=r"(?:inspection-use|payment-approval|payment-clock|contract-approver|approval-change|installment-count|measurement-note|contract-signing-form)/d[0-9]{2,8}/p[1-9][0-9]{0,7}/l[1-9][0-9]{0,7}")
+                        raw_ref=r"(?:inspection-use|payment-approval|payment-clock|contract-approver|approval-change|installment-count|measurement-note|contract-signing-form|measurement-number)/d[0-9]{2,8}/p[1-9][0-9]{0,7}/l[1-9][0-9]{0,7}")
         if "case_id" not in value:
             raise CaseError("走查底稿编号缺失。", 400)
     result = {"screen": screen}
@@ -68,13 +69,13 @@ def check_context(value):
     anchor = result.get("anchor", "")
     if params.get("view")=="contract-signing-form" and (not result.get("rev") or set(params)!={"view"}):
         raise CaseError("请选择一版合同签署底稿。",400)
-    if anchor.startswith("form-H"):
-        pin = FORM_PIN.fullmatch(anchor)
+    if anchor.startswith(("form-H","number-H")):
+        pin = FORM_PIN.fullmatch(anchor) or NUMBER_PIN.fullmatch(anchor)
         view = pin and {"H01":"contract-signing-form","H02":"acceptance-checks"}.get(pin[1][:3])
         if (not pin or screen!="case" or not result.get("rev") or result.get("tab","report")!="report"
                 or {"doc","dialog"}.intersection(result) or params != (
                     {"view":view} if view else {"view":"payment-checks","stage":pin[1]})):
-            raise CaseError("请选择该版底稿中所引的合同签署要求。",400)
+            raise CaseError("请选择该版底稿在当前检查项引用的原行。",400)
     if anchor.startswith("limits-H"):
         pin = LIMIT_PIN.fullmatch(anchor)
         if not pin or screen!="case" or not result.get("rev") or params!={"view":"acceptance-limits"}:
@@ -90,7 +91,7 @@ def check_context(value):
             raise CaseError("请选择该版原页中的主体核字位置。",400)
     if raw := result.get("raw_ref"):
         if (not result.get("rev") or raw.partition("/")[2] != f"{result.get('doc')}/p{result.get('page')}/l{result.get('line')}" or params
-                or raw.startswith("contract-signing-form/") and result.get("dialog")!="page-dialog"):
+                or raw.startswith(("contract-signing-form/","measurement-number/")) and result.get("dialog")!="page-dialog"):
             raise CaseError("请选择该版底稿所引的原件页和行。",400)
     if screen == "case" and anchor.startswith(("quality-H","retest-H","inspection-use-","payment-approval-","payment-clock-","contract-approver-","approver-change-","installment-count-")):
         pin = QUALITY_PIN.fullmatch(anchor) or RETEST_PIN.fullmatch(anchor) or USE_PIN.fullmatch(anchor) or CHANGE_PIN.fullmatch(anchor) or COUNT_PIN.fullmatch(anchor)
@@ -197,6 +198,23 @@ def save_note(store, workspace, author, role, data):
                  doc,page,f'$.contract_signing_form_rects."{line}"')).fetchone()
             if not linked:
                 raise CaseError("所选底稿没有引用这条合同签署要求。",404)
+        elif context["screen"]=="case" and (NUMBER_PIN.fullmatch(anchor) or context.get("raw_ref","").startswith("measurement-number/")):
+            pin = NUMBER_PIN.fullmatch(anchor)
+            doc,page,line = pin.groups()[1:] if pin else (context["doc"],context["page"],context["line"])
+            ref = f"measurement-number/{doc}/p{page}/l{line}"
+            linked = db.execute("""SELECT 1 FROM reports,json_each(content,'$.findings') f,
+                json_each(f.value,'$.measurement_numbers') n,json_each(content,'$.graph.measurement_number_sources.rows') r,
+                json_each(content,'$.calls.pages') p WHERE case_id=? AND rev=?
+                AND json_extract(content,'$.policy.measurement_numbers')='printed-measurement-spacing-v1'
+                AND n.value=? AND json_extract(r.value,'$.id')=n.value
+                AND EXISTS (SELECT 1 FROM json_each(f.value,'$.evidence') e WHERE e.value=n.value)
+                AND ((? IS NULL AND json_extract(f.value,'$.rule')='H02') OR json_extract(f.value,'$.id')=?)
+                AND json_extract(r.value,'$.doc')=? AND json_extract(r.value,'$.page')=? AND json_extract(r.value,'$.line')=?
+                AND json_extract(p.value,'$.doc')=? AND json_extract(p.value,'$.page')=? AND json_array_length(p.value,?)>0""",
+                (context["case_id"],context["rev"],ref,pin[1] if pin else None,pin[1] if pin else None,
+                 doc,int(page),int(line),doc,int(page),f'$.measurement_number_rects."{line}"')).fetchone()
+            if not linked:
+                raise CaseError("所选底稿没有引用这个待核的验收数值。",404)
         elif context["screen"]=="case" and context.get("raw_ref","").startswith("measurement-note/"):
             linked=db.execute("""SELECT 1 FROM reports,json_each(content,'$.findings') f,
                 json_each(COALESCE(json_extract(f.value,'$.quality_comparison.reading_notes'),json_extract(f.value,'$.reading_caveats'))) n,

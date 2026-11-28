@@ -42,6 +42,7 @@ import board_execution
 import warranty_service
 import payment_windows
 import payment_quality
+import measurement_spacing
 import retest_reference
 import inspection_use
 import party_readings
@@ -460,6 +461,12 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     graph["edges"].extend(edges)
     graph["warranty_sources"]=warranty_terms.sources(graph,lambda doc,number:texts[doc,number])
     graph[payment_quality.KEY] = payment_quality.sources(graph,lambda doc,number:texts[doc,number])
+    numeric_rows = measurement_spacing.sources(graph,lambda doc,number:texts[doc,number])
+    if numeric_rows:
+        graph[measurement_spacing.KEY] = {"format":measurement_spacing.FORMAT,"rows":numeric_rows}
+        nodes, edges = measurement_spacing.graph_records(numeric_rows)
+        graph["nodes"].extend(nodes)
+        graph["edges"].extend(edges)
     graph[warranty_dates.KEY] = warranty_dates.sources(graph,lambda doc,number:texts[doc,number])
     ledgers = warranty_execution.sources(graph, read_original, lambda doc, number:texts[doc, number])
     graph.update(ledgers)

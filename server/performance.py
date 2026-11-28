@@ -35,6 +35,7 @@ import warranty_terms
 import warranty_execution
 import warranty_dates
 import payment_quality
+import measurement_spacing
 import retest_reference
 import inspection_use
 import installment_approval
@@ -185,7 +186,8 @@ class Material:
         self.fields = defaultdict(list)
         self.refs = []
         self.gaps = []
-        self.uncertain = set()
+        self.measurement_numbers = [r for r in graph.get(measurement_spacing.KEY, {}).get("rows", ()) if r["unit"] == unit]
+        self.uncertain = {r["field"] for r in self.measurement_numbers}
         doc = next((d for d in graph.get("audit_documents", graph["documents"]) if d["id"] == unit), {})
         source = doc.get("source", unit)
         page = doc.get("page")
@@ -493,7 +495,9 @@ def acceptance(contract, receipts, *, criterion=None, signature_ok=None, quantit
     if outcome in FAILED_ACCEPTANCE:
         return finding("issue","本合同对应验收记录明确记载“" + outcome + "”，需查明缺陷及复验处置。")
     quality = None
-    if contract.fields["acceptance_criteria"] or r.fields["inspection_basis"] or r.fields["measured_result"]:
+    if r.measurement_numbers or (criterion is None and contract.measurement_numbers):
+        quality = ("reading_required", "保留数字原貌的验收标准及原始检测记录")
+    elif contract.fields["acceptance_criteria"] or r.fields["inspection_basis"] or r.fields["measured_result"]:
         basis, reading = r.body("inspection_basis"), r.body("measured_result")
         standard = contract.body("acceptance_criteria") if criterion is None else criterion
         quality = inspect_quality(standard,basis,reading)
@@ -1084,6 +1088,12 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         payment_quality.review_acceptance(graph,accepted)
         if accepted.get("quality_comparison") and accepted["status"]!="ok":
             accepted_on = None
+    numeric_rows = [r for r in graph.get(measurement_spacing.KEY,{}).get("rows",()) if r["unit"] in accepted["scope"]]
+    if numeric_rows:
+        measurement_spacing.attach(accepted,numeric_rows)
+        if accepted.get("reinspection",{}).get("state") == "closed":
+            accepted["reinspection"]["state"] = "open"
+        accepted_on = None
     if payment_change and not scoped_change:
         payment_amendments.attach(plan,payment_change)
     if version == FORMAT and (batch or scoped_change):
@@ -1242,6 +1252,8 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
             check["detail"] += f" 本期以合同生效为前提，{signing_sources}所列签署要求仍须核实。"
         elif kind=="acceptance" and acceptance_sources:
             check["detail"] += f" {acceptance_sources}同时约定了验收文件的签署方式，须核对本期验收凭证。"
+        if numeric_rows and kind in ("acceptance","warranty","batch"):
+            measurement_spacing.attach(check,numeric_rows)
         output.append(check)
         stages.append((row,check))
 
@@ -1355,6 +1367,8 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
             payment["detail"] += f" 回单列示付款日 {paid}，请对照{signing_sources}，补核当时的签署依据。"
         elif row["kind"]=="acceptance" and acceptance_sources:
             payment["detail"] += f" 回单列示付款日 {paid}，请按{acceptance_sources}核对付款时已有的验收签署凭证。"
+        if check.get("measurement_numbers"):
+            measurement_spacing.attach(payment,[r for r in numeric_rows if r["id"] in check["measurement_numbers"]],paid=paid)
         output.append(payment)
     return output
 
@@ -1405,6 +1419,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("payment_quality") != entry.get("payment_quality")
                 or saved.get("quality_comparison") != entry.get("quality_comparison")
                 or saved.get("reading_caveats") != entry.get("reading_caveats")
+                or saved.get("measurement_numbers") != entry.get("measurement_numbers")
                 or saved.get("retest_reference") != entry.get("retest_reference")
                 or saved.get("inspection_use") != entry.get("inspection_use")
                 or saved.get("party_readings") != entry.get("party_readings")

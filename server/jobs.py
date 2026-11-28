@@ -17,6 +17,7 @@ import payment_execution
 import advance_guarantee
 import inspection_use
 import payment_quality
+import measurement_spacing
 import installment_counts
 from graph import PRINTED_TITLES, attach_prior_invoices, build_graph, compact, heading_candidates, invoice_number_edges, link_procedures
 from payment_releases import submission_day
@@ -27,7 +28,7 @@ from storage import encode
 
 
 METHODS = {name: (SERVER / name).read_bytes() for name in
-           ("advance_guarantee.py", "addendum_execution.py", "addendum_originals.py", "board_execution.py", "original_records.py", "acceptance_authority.py", "acceptance_comments.py", "acceptance_execution.py", "acceptance_originals.py", "contract_comments.py", "acceptance_payments.py", "acceptance_reservations.py", "calculations.py", "capacity.py", "cn_workdays.py", "conclusions.py", "config.py", "contract_calendar.py", "contract_changes.py", "contract_effect.py", "contract_folios.py", "controls.py", "delegation.py", "delivery_batches.py", "documents.py", "equipment_exchanges.py", "equipment_models.py", "field_receipts.py", "field_sources.py", "folio_transcription.py", "graph.py", "guarantee_period.py", "inspection_coverage.py", "inspection_register.py", "installments.py", "invoice_approval.py", "invoice_comparison.py", "invoice_conditions.py", "invoice_history.py", "invoice_identity.py", "invoice_masks.py", "invoice_proof.py", "jobs.py", "mandate_execution.py", "mandate_originals.py", "model.py", "payment_acceptance.py", "payment_execution.py", "payment_amendments.py", "payment_checks.py", "payment_quality.py", "retest_reference.py", "inspection_use.py", "party_readings.py", "installment_approval.py", "installment_counts.py", "approval_clock.py", "approval_names.py", "approval_changes.py", "payment_history.py", "payment_index.py", "payment_notes.py", "payment_reference.py", "payment_releases.py", "release_comparison.py", "release_execution.py", "payment_visibility.py", "payment_windows.py", "pdf_execution.py", "peer_review.py", "performance.py", "performance_versions.py", "policy.py", "prior_installment.py", "protocol.py", "signer_clock.py", "signer_timing.py", "signing_parties.py", "stage_payments.py", "quality_labels.py", "quality_references.py", "receipt_packets.py", "reinspection.py", "reinspection_wait.py", "repair_completion.py", "storage.py", "supplier_pages.py", "supplements.py", "transfers.py", "trial_run.py", "warranty_dates.py", "warranty_execution.py", "warranty_register.py", "warranty_service.py", "warranty_terms.py", "work_progress.py")}
+           ("advance_guarantee.py", "addendum_execution.py", "addendum_originals.py", "board_execution.py", "original_records.py", "acceptance_authority.py", "acceptance_comments.py", "acceptance_execution.py", "acceptance_originals.py", "contract_comments.py", "acceptance_payments.py", "acceptance_reservations.py", "calculations.py", "capacity.py", "cn_workdays.py", "conclusions.py", "config.py", "contract_calendar.py", "contract_changes.py", "contract_effect.py", "contract_folios.py", "controls.py", "delegation.py", "delivery_batches.py", "documents.py", "equipment_exchanges.py", "equipment_models.py", "field_receipts.py", "field_sources.py", "folio_transcription.py", "graph.py", "guarantee_period.py", "inspection_coverage.py", "inspection_register.py", "installments.py", "invoice_approval.py", "invoice_comparison.py", "invoice_conditions.py", "invoice_history.py", "invoice_identity.py", "invoice_masks.py", "invoice_proof.py", "jobs.py", "mandate_execution.py", "mandate_originals.py", "measurement_spacing.py", "model.py", "payment_acceptance.py", "payment_execution.py", "payment_amendments.py", "payment_checks.py", "payment_quality.py", "retest_reference.py", "inspection_use.py", "party_readings.py", "installment_approval.py", "installment_counts.py", "approval_clock.py", "approval_names.py", "approval_changes.py", "payment_history.py", "payment_index.py", "payment_notes.py", "payment_reference.py", "payment_releases.py", "release_comparison.py", "release_execution.py", "payment_visibility.py", "payment_windows.py", "pdf_execution.py", "peer_review.py", "performance.py", "performance_versions.py", "policy.py", "prior_installment.py", "protocol.py", "signer_clock.py", "signer_timing.py", "signing_parties.py", "stage_payments.py", "quality_labels.py", "quality_references.py", "receipt_packets.py", "reinspection.py", "reinspection_wait.py", "repair_completion.py", "storage.py", "supplier_pages.py", "supplements.py", "transfers.py", "trial_run.py", "warranty_dates.py", "warranty_execution.py", "warranty_register.py", "warranty_service.py", "warranty_terms.py", "work_progress.py")}
 CODE_DIGESTS = {name: digest(source) for name, source in METHODS.items()}
 
 
@@ -195,9 +196,12 @@ class Worker:
         use_lines = contract_folios.line_numbers(inspection_use.all_rows(graph[inspection_use.KEY]))
         count_lines = contract_folios.line_numbers(graph.get(installment_counts.KEY, {}).get("rows", []))
         precision_lines = contract_folios.line_numbers(payment_quality.reading_notes(findings))
+        number_lines = contract_folios.line_numbers(graph.get(measurement_spacing.KEY,{}).get("rows", ()))
         form_lines = contract_folios.line_numbers(contract_effect.form_rows(graph["contract_effect_sources"]))
         execution_lines = contract_folios.line_numbers(graph[payment_execution.KEY]["rows"])
         for page, call in zip(pages, traces):
+            if numbers := number_lines.get((page["doc"],page["number"])):
+                call[measurement_spacing.RECTS] = contract_folios.geometry(numbers,page["layer"])
             if numbers := form_lines.get((page["doc"],page["number"])):
                 call[contract_effect.FORM_RECTS] = contract_folios.geometry(numbers,page["layer"])
             if numbers := precision_lines.get((page["doc"],page["number"])):
@@ -233,6 +237,8 @@ class Worker:
             policy["party_readings"] = graph["reviewed_party_lines"]["format"]
         if graph.get(installment_counts.KEY):
             policy["installment_count"] = installment_counts.FORMAT
+        if graph.get(measurement_spacing.KEY):
+            policy["measurement_numbers"] = measurement_spacing.FORMAT
         report = {"case_id": case_id, "policy": policy, "graph": graph, "findings": findings,
                   "result": result, "calls": calls}
         supplement = store.supplement_record(report)

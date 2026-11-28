@@ -821,8 +821,9 @@ const PerformanceIndex = (() => {
       detail.dataset.quality=String(Boolean(quality));
       detail.replaceChildren(box('scope-check-state',el('span',item.id,'mono'),tag(item.status)),heading);
       if (item.acceptance_signing_requirements || item.stage && ['H04','H05'].includes(item.rule)) {
-        for (const row of contractSigningSources(state.bundle.report,item)) detail.append(contractSigningButton(row,item));
+        for (const row of contractSigningSources(state.bundle.report,item)) detail.append(workpaperLineButton(row,item));
       }
+      for (const row of measurementNumberSources(state.bundle.report,item)) detail.append(workpaperLineButton(row,item));
       for (const ref of item.party_readings || []) detail.append(PartyReadings.citation(state.bundle.report,ref,item));
       if (item.installment_count) detail.append(InstallmentCount.citation(state.bundle.report,item.installment_count,item,true));
       if (item.approval_change) detail.append(ApprovalChange.panel(item,state.bundle.report,rev));

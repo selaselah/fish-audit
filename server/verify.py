@@ -53,6 +53,7 @@ import release_execution
 import warranty_execution
 import warranty_dates
 import payment_quality
+import measurement_spacing
 import retest_reference
 import inspection_use
 import party_readings
@@ -309,6 +310,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
     warranty_execution.verify(report, read_original, page_text)
     warranty_dates.verify(report, page_text)
     payment_quality.verify(report,page_text,read_original=read_original)
+    measurement_spacing.verify(report,page_text,read_original=read_original)
     retest_reference.verify(report,page_text)
     inspection_use.verify(report,page_text)
     party_readings.verify(report,page_text)
@@ -491,6 +493,7 @@ def render_addendum_sources(bundle, report, nodes):
     selected.update(r["doc"] for r in graph.get(inspection_use.KEY,{}).get("rows",[]))
     selected.update(p["doc"] for key in ("approvals","bank_clocks","approver_terms") for p in graph.get(inspection_use.KEY,{}).get(key,[]))
     selected.update(r["doc"] for r in graph.get(party_readings.KEY,{}).get("rows",[]))
+    selected.update(r["doc"] for r in graph.get(measurement_spacing.KEY,{}).get("rows",[]))
     for key in ("acceptance_pdf_sources", "acceptance_original_sources", "addendum_pdf_sources", "addendum_original_sources", "mandate_pdf_sources", "mandate_original_sources", release_execution.PDF, release_execution.NATIVE, warranty_execution.PDF, warranty_execution.NATIVE, board_execution.PDF, board_execution.NATIVE):
         selected.update(r["doc"] for r in graph.get(key,{}).get("records",[]))
     selected.update(p["doc"] for p in graph.get("inspection_coverage_sources",{}).get("pages",[]))
@@ -536,6 +539,8 @@ def render_addendum_sources(bundle, report, nodes):
                 require(layout["lines"].get(line_number, []) == rects, "验收单付款用途附注的行坐标未能从原件重现")
             for line_number, rects in trace.get(installment_counts.RECTS, {}).items():
                 require(layout["lines"].get(line_number, []) == rects, "分期总述的行坐标未能从合同原件重现")
+            for line_number, rects in trace.get(measurement_spacing.RECTS, {}).items():
+                require(layout["lines"].get(line_number, []) == rects, "验收数值的行坐标未能从原件重现")
             for line_number, rects in trace.get(advance_guarantee.RECTS, {}).items():
                 require(layout["lines"].get(line_number, []) == rects, "预付款保函的行坐标未能从原件重现")
             for line_number, rects in trace.get("signer_timing_rects", {}).items():

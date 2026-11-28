@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 from capacity import CURRENT_JOB, request_attempt
 from config import AUDITOR_MODEL, CaseError, MODEL, PROMPT_VERSION
 from contract_effect import expert_rows
+import measurement_spacing
 from performance import FIELD_NAMES as PERFORMANCE_FIELDS, compute as performance_checks
 from policy import MAPPING, SOURCES
 from protocol import canonical, response_request
@@ -389,6 +390,8 @@ def audit_graph(graph, controls):
                 for r in graph["reviewed_party_lines"]["rows"] if r["id"] in cited_parties]
         if reference := finding.get("retest_reference"):
             procedure["retest_reference"] = reference
+        if finding.get("measurement_numbers"):
+            procedure["measurement_numbers"] = finding["measurement_numbers"]
         if quality := finding.get("payment_quality"):
             procedure["payment_quality"] = quality
         warranty = finding.get("warranty_check", {})
@@ -402,6 +405,8 @@ def audit_graph(graph, controls):
               "methods": {key: SOURCES[key] for key in sorted(method_ids)}}
     if signing := expert_rows(graph,controls):
         packet["contract_signing_requirements"] = signing
+    if numbers := measurement_spacing.expert_rows(graph,controls):
+        packet["measurement_number_sources"] = numbers
     result, trace = structured(AUDITOR_MODEL, AUDIT, [{"type": "input_text",
                                "text": canonical(packet)}], schema, "audit_followups")
     trace["input"] = packet

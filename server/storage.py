@@ -61,6 +61,7 @@ import payment_quality
 import retest_reference
 import inspection_use
 import party_readings
+import measurement_spacing
 import installment_counts
 import board_execution
 from invoice_conditions import verify as verify_invoice_conditions
@@ -81,7 +82,7 @@ TRANSIENT_WRITER_CODES = {getattr(sqlite3,k) for k in ("SQLITE_BUSY","SQLITE_BUS
 
 
 FULL_PAGE_EVIDENCE = (
-    "quality_change", "quality_comparison", "reading_caveats", "acceptance_authority", "acceptance_execution", "acceptance_signing_requirements", "signer_timing", "date_checks", "batch_acceptance",
+    "quality_change", "quality_comparison", "reading_caveats", "measurement_numbers", "acceptance_authority", "acceptance_execution", "acceptance_signing_requirements", "signer_timing", "date_checks", "batch_acceptance",
     "effect_review", "warranty_check", "warranty_difference", "payment_window", "acceptance_reservations", "acceptance_comments",
     "contract_comments", "stage_payments", "invoice_receipt", "payment_change", "payment_opinion",
     "equipment_models", "inspection_coverage", "payment_acceptance", "execution_basis", "contract_folios",
@@ -833,6 +834,7 @@ class Store:
                 raise CaseError(f"签收前核对回单所据验收原件失败。{error}", 409) from error
             try:
                 payment_quality.verify(paper,read_text,read_original=read_original,signing=True)
+                measurement_spacing.verify(paper,read_text,read_original=read_original,signing=True)
             except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
                 raise CaseError(f"签收前核对验收款质量凭证失败。{error}",409) from error
             try:
@@ -988,6 +990,10 @@ class Store:
                 payment_execution.verify(paper,page_text,signing=True,read_layout=page_layout)
             except (KeyError,TypeError,ValueError) as error:
                 raise CaseError(f"签收前核对扣款凭证失败。{error}",409) from error
+            try:
+                measurement_spacing.verify(paper,page_text,read_layout=page_layout,signing=True)
+            except (KeyError,TypeError,ValueError) as error:
+                raise CaseError(f"签收前核对验收数值失败。{error}",409) from error
             try:
                 party_readings.verify(paper,page_text,signing=True,read_layout=page_layout)
             except (KeyError,TypeError,ValueError) as error:

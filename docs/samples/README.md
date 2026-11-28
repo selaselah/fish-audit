@@ -1,5 +1,16 @@
 # 合成财会审计演练
 
+## 重建验收数字间距用例
+
+先下载水印母本，再从仓库根目录运行下列命令。生成四组各 4 份 PDF 和 1 份 Word 合同审批单。四组分别改变实测值、合同上限、验收单所引上限或数字与单位间的空白。[母本证据包](http://127.0.0.1:8000/api/cases/64cd9e64345841bab358728a6730f3d8/reports/7/bundle)
+
+```sh
+curl -fsS http://127.0.0.1:8000/api/cases/64cd9e64345841bab358728a6730f3d8/reports/7/bundle -o /tmp/inspection-master.zip
+server/.venv/bin/python docs/samples/inspection_limits.py /tmp/inspection-master.zip /tmp/inspection-spacing --spacing
+```
+
+`--case reading_gap` 可只生成终验读数案例。加 `--run --check-fields` 会把这些带水印的文件送到本机服务进行模型审查，并按母本核对排印字段。单独重建的 20 份原件已经与首次演练逐份核对 SHA-256。[四组原件和模型摘录的对照](../acceptance.md#验收数字中间留白与第二期付款)
+
 ## 重建合同与验收报告的签署用例
 
 四组各含采购合同、验收报告、质保期满确认单和银行付款回单，共 16 份带水印的 PDF。合同第 19 行分别写明两份文件都要签字并盖章、两份文件都要盖章并签字、仅合同项下的验收报告须签字并盖章，以及两份文件都可签字或盖章。第二组回单是 9 月 21 日的第二期 6 万元，其余三组是 9 月 2 日的首期 3 万元。

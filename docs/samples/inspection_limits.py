@@ -35,7 +35,17 @@ PRECISION = {
 }
 
 
-def scenarios(strict, precision):
+SPACING = {
+    "reading_gap": ("终验柜温读数的两位数字分开排印", [("验收报告.pdf","实测结果","柜温1 2℃")], None),
+    "contract_gap": ("合同柜温上限的数字分开排印", limits("柜温不高于1 8℃","柜温不高于18℃"), None),
+    "basis_gap": ("验收单所引上限的小数点与数字分开", limits("柜温不高于8℃","柜温不高于7 . 9℃"), None),
+    "unit_space": ("柜温数值完整，只有数字与单位间留白", [("验收报告.pdf","实测结果","柜温 8 ℃")], None),
+}
+
+
+def scenarios(strict, precision, spacing=False):
+    if spacing:
+        return SPACING
     if precision:
         return PRECISION
     if strict:
@@ -54,11 +64,12 @@ if __name__ == "__main__":
     group.add_argument("--strict",action="store_true",help="生成含严格上限、下限或读数取整说明的原件")
     group.add_argument("--precision",action="store_true",help="生成含端点限值、原始读数口径及费用舍入说明的对照原件")
     parser.add_argument("--case",help="只生成指定的一组")
+    group.add_argument("--spacing",action="store_true",help="重建检验读数内部留白及单位间距的对照案例")
     args = parser.parse_args()
     if args.check_fields and not args.run:
         parser.error("--check-fields 需要 --run 提交水印演练")
     ids = {}
-    samples = scenarios(args.strict,args.precision)
+    samples = scenarios(args.strict,args.precision,args.spacing)
     if args.case:
         if args.case not in samples:
             parser.error("该组案例不存在")

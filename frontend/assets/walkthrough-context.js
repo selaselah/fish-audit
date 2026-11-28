@@ -12,7 +12,7 @@ const identifier = /^[a-zA-Z][a-zA-Z0-9_-]{0,95}$/;
 const factID = /^d\d{2}\/p[1-9]\d*\/(?:[ft][1-9]\d*|h[a-f0-9]{12})$/;
 function printedRef(context, ref) {
   const address=context.doc+'/p'+context.page+'/l'+context.line;
-  return context.rev && ['inspection-use/','payment-approval/','payment-clock/','contract-approver/','approval-change/','installment-count/','measurement-note/','contract-signing-form/'].some(prefix=>ref===prefix+address);
+  return context.rev && ['inspection-use/','payment-approval/','payment-clock/','contract-approver/','approval-change/','installment-count/','measurement-note/','contract-signing-form/','measurement-number/'].some(prefix=>ref===prefix+address);
 }
 function knownParams(search, keys) {
   const out = {};
@@ -75,7 +75,7 @@ export function captureContext(owner, element, pagePoint) {
         if (stage && /^H04-[1-9]\d*$/.test(stage)) context.params = {view:'payment-release',stage};
         const instrument=element?.closest('[data-release-set] [data-instrument]');
         if (instrument) context.params={view:'payment-release',stage:instrument.parentElement.dataset.releaseSet,instrument:instrument.dataset.instrument};
-        const receiptSelector='[data-quality-finding],[data-retest-finding],[data-use-finding],#performance-index [data-form-finding]';
+        const receiptSelector='[data-quality-finding],[data-retest-finding],[data-use-finding],#performance-index [data-form-finding],#performance-index [data-number-finding]';
         const receiptCard=element?.closest(receiptSelector+',[data-count-finding]') || (!element && owner?.id==='performance-index' &&
           (owner.querySelector(receiptSelector) || owner.querySelector('[data-count-finding]')));
         const certificate=element?.closest('.warranty-certificate')?.closest('[data-phase-finding]')?.dataset.phaseFinding;
@@ -90,8 +90,8 @@ export function captureContext(owner, element, pagePoint) {
         if (comparison && !comparison.hidden && comparison.dataset.entry)
           context.params={view:'revision-comparison',prior:comparison.dataset.prior,entry:comparison.dataset.entry};
         if (receiptCard) {
-          const finding=receiptCard.dataset.countFinding || receiptCard.dataset.useFinding || receiptCard.dataset.qualityFinding || receiptCard.dataset.retestFinding || receiptCard.dataset.formFinding;
-          context.params=receiptCard.dataset.formFinding?.startsWith('H02-')?{view:'acceptance-checks'}:{view:'payment-checks',stage:finding};
+          const finding=receiptCard.dataset.countFinding || receiptCard.dataset.useFinding || receiptCard.dataset.qualityFinding || receiptCard.dataset.retestFinding || receiptCard.dataset.formFinding || receiptCard.dataset.numberFinding;
+          context.params=finding.startsWith('H02-')?{view:'acceptance-checks'}:{view:'payment-checks',stage:finding};
           if (!element) {context.anchor=receiptCard.id;context.target=receiptCard.getAttribute('aria-label') || receiptCard.dataset.originalLabel;}
         }
         if (element?.closest('[data-form-finding^="H01-"]')) context.params={view:'contract-signing-form'};
@@ -164,7 +164,7 @@ export function describeContext(c) {
   const screen = c.screen==='case' ? screens.case+' '+c.case_id.slice(0,8) : screens[c.screen];
   const edition=c.params?.view==='revision-comparison' ? '履约对照 R'+c.params.prior+' / R'+c.rev : c.rev && 'R'+c.rev;
   const board=c.params?.view==='board-decision' && ({decision:'董事会决议原文',signing:'董事会签发版本',payments:'董事会决议关联期款'}[c.params.part] || '董事会审批原件');
-  const signing=c.raw_ref?.startsWith('contract-signing-form/') ? '合同签署原行' : c.anchor?.startsWith('form-H02-') ? '验收签署条件' : c.params?.view==='contract-signing-form' && '合同签署条件';
+  const signing=c.raw_ref?.startsWith('measurement-number/')?'验收数值原行':c.anchor?.startsWith('number-H02-')?'验收数值核对':c.raw_ref?.startsWith('contract-signing-form/') ? '合同签署原行' : c.anchor?.startsWith('form-H02-') ? '验收签署条件' : c.params?.view==='contract-signing-form' && '合同签署条件';
   const receipt=c.params?.view==='payment-checks' && (c.anchor?.startsWith('payment-approval-')?'付款审批单 '+c.params.stage:
     c.anchor?.startsWith('form-H04-')?'期款条件 '+c.params.stage:
     c.anchor?.startsWith('form-H05-')?'实付回单 '+c.params.stage:

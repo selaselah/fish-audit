@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## 验收数字原行和走查定位
+
+自规则 `2026.11.28.15` 起，若合同限值、检验依据或实测值的数字内部有歧义间距，`policy.measurement_numbers` 与 `graph.measurement_number_sources.format` 均为 `printed-measurement-spacing-v1`。每个 `rows[]` 项保存材料单元、文件、页、字段、引文及所引观察编号。可定位的原行使用 `measurement-number/d05/p1/l12` 这类编号，页记录的 `measurement_number_rects` 保存行框。只有抄录提供间距时，`origin=transcription` 并保留相应 `readings`。无可靠原行的抄录使用观察编号组成的引用，`line` 为空。
+
+H02 和依赖该项验收的 H04、H05 在 `measurement_numbers` 中引用同一编号，专家输入的 `measurement_number_sources` 保存其内容。针对底稿控件的意见可使用 `view=payment-checks&stage=H05-8` 与 `anchor=number-H05-8-d05-p1-l12`。在原页使用 `dialog=page-dialog` 和对应的 `raw_ref`。保存时校验该版底稿确实引用了所选页行。历史底稿按归档版本复算，旧版有相关歧义时，签收通过前需重审。[第二期实付 R7](http://127.0.0.1:8000/workpaper/9991314d0b1e447493df87bb49849c79?rev=7&view=payment-checks&stage=H05-8)
+
 ## 验收与期款共引的签署条款
 
 规则 `2026.11.28.14` 使用 `contract-effect-sources-v9`。原件条款明确共同约束合同和验收文件时，H01 的条款行和相应图谱节点均带 `applies_to=["contract","acceptance"]`。H02 在 `acceptance_signing_requirements` 和 `evidence` 中保存所引的同一编号。专家收到的 `calls.expert.input.contract_signing_requirements` 同时保留文件、页、行、引文和适用范围，具体 H02 保留引用编号。单一主合同的签署约定仍由 H01 及对应期款核查。
