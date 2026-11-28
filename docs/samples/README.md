@@ -331,13 +331,15 @@ server/.venv/bin/python docs/samples/delivery_batches.py --run --run-id local-ba
 
 ## 供货主体与 PDF 签署意见
 
-运行 `server/.venv/bin/python docs/samples/supplier_annotations.py --seed supplier-demo` 可生成四套带水印的资料，分别演练签后附注要求取得送货单、终验供货方与合同不同、合同签名仅确认到货数量、验收报告签名仅确认到货数量。[供货主体演练结果](../acceptance.md#验收供货主体批注和签署原因)
+运行 `server/.venv/bin/python docs/samples/supplier_annotations.py --seed supplier-demo` 可生成六套带水印的资料，覆盖签后附注要求取得送货单、终验供货方与合同不同、合同或验收单仅签认到货数量，以及同一验收报告两种顺序的连续签名。[供货主体演练结果](../acceptance.md#验收供货主体批注和签署原因)
 
 以下命令会将两个签署范围案例上传至本机服务。脚本核对原件摘要和水印，模拟审计人员核对字段，再检查签名原因原文、所签文件与受影响的期款。生成的自签证书仅用于水印演练。[两个案例的预期差异](../acceptance.md#签名只确认到货数量时的合同与验收款)
 
 ```bash
 server/.venv/bin/python docs/samples/supplier_annotations.py --seed quantity-review --case reason receipt_reason --run
 ```
+
+用 `--case receipt_pair receipt_pair_reverse` 可对照两种顺序。脚本核对每条原因及证书所签修订的字节摘要、验收风险引用的修订、后两期条件与实际付款的证据。每次生成使用新的演练证书，上传重试编号由整组原件的摘要确定。[两次签认的预期结果](../acceptance.md#一份验收报告的两次电子签认)
 
 ## 排印稿、电子签署版与签后修订版
 

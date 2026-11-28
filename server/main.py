@@ -540,6 +540,30 @@ def create_app(store, worker):
         return verified_download(store.files / case_id / doc / ("original" + match["ext"]), match["sha256"],
                                  match["name"], "application/octet-stream", attachment=True)
 
+    @business.get("/cases/<case_id>/reports/<int:rev>/documents/<doc>/signed-revisions/<int:edition>")
+    def signed_revision(case_id, rev, doc, edition):
+        report = store.report(case_id,rev)["report"]
+        graph = report["graph"]
+        ledger = graph.get(signature_purposes.KEY,{})
+        ref = f"signature-purpose/{doc}/r{edition}"
+        rows = [r for r in ledger.get("rows",[]) if r["id"]==ref and r["doc"]==doc and r["revision"]==edition]
+        source = next((d for d in graph["documents"] if d["id"]==doc and d["ext"]==".pdf"),None)
+        if (not source or len(rows)!=1 or ledger.get("format")!=signature_purposes.REVISION_FORMAT
+                or report["policy"].get(signature_purposes.KEY)!=ledger["format"]):
+            raise CaseError("该版底稿没有引用这次 PDF 签名的文件修订。",404)
+        row, = rows
+        with verified_stream(store.files/case_id/doc/"original.pdf",source["sha256"]) as stream:
+            raw = stream.read()
+        try:
+            verified = signature_purposes.sources({**graph,"documents":[source]},lambda _:raw)
+        except (ValueError,KeyError,TypeError) as error:
+            raise CaseError("签名修订与归档证据不符，无法下载。",409) from error
+        if row not in verified:
+            raise CaseError("签名修订与所引签名域、证书或原件摘要不符。",409)
+        name = Path(source["name"]).stem+f"-修订{edition}.pdf"
+        return send_file(BytesIO(raw[:row["ends_at"]]),download_name=name,mimetype="application/pdf",
+                         as_attachment=True,etag=row["signed_sha256"])
+
     @business.get("/cases/<case_id>/documents/<doc>/pages/<int:number>/thumbnail", defaults={"thumbnail": True})
     @business.get("/cases/<case_id>/documents/<doc>/pages/<int:number>")
     def page_image(case_id, doc, number, thumbnail=False):

@@ -240,7 +240,7 @@ class Worker:
         link_sources(graph)
         policy = {**VERSION, "profile": profile, "code_sha256": CODE_DIGESTS, "archived_methods": True, "calculations": FORMAT}
         if graph.get(signature_purposes.KEY):
-            policy[signature_purposes.KEY] = signature_purposes.FORMAT
+            policy[signature_purposes.KEY] = graph[signature_purposes.KEY]["format"]
         if graph.get(receipt_parties.KEY):
             policy[receipt_parties.KEY] = receipt_parties.FORMAT
         if graph.get("reviewed_party_lines"):

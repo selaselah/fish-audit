@@ -1,4 +1,4 @@
-"""Keep the reason on a current PDF signature tied to the document it signs."""
+"""Bind each declared PDF signature purpose to the bytes of the revision it signed."""
 
 from hashlib import sha256
 from io import BytesIO
@@ -8,7 +8,9 @@ from unicodedata import normalize
 
 KEY = "signature_purposes"
 FORMAT = "signed-pdf-purpose-v1"
+REVISION_FORMAT = "signed-pdf-purpose-v2"
 SINCE = (2026, 11, 28, 26)
+MULTIPLE_SINCE = (2026, 11, 28, 28)
 ROLES = {"contract":"合同", "acceptance":"验收报告", "reinspection":"复验报告"}
 QUANTITY_ONLY = {
     "仅确认到货数量", "本次签署仅确认到货数量", "仅确认到货数量,不代表终验合格",
@@ -16,16 +18,22 @@ QUANTITY_ONLY = {
 }
 
 
-def reason_text(raw, name):
+def reason_text(raw, name, expected=None):
     from pyhanko.pdf_utils import generic
     from pyhanko.pdf_utils.reader import PdfFileReader
     from pyhanko.sign.fields import enumerate_sig_fields
+    from pdf_execution import MAX_SIGNATURES, signature
 
     reader = PdfFileReader(BytesIO(raw), strict=True)
-    fields = list(islice(enumerate_sig_fields(reader, filled_status=True), 2))
-    if len(fields)!=1 or str(fields[0][0])!=name:
+    limit = 1 if expected is None else MAX_SIGNATURES
+    fields = list(islice(enumerate_sig_fields(reader, filled_status=True), limit+1))
+    matched = [(value,field) for field_name,value,field in fields if str(field_name)==name]
+    if len(fields)>limit or len(matched)!=1:
         return None
-    reason = fields[0][1].get_object().get("/Reason")
+    value,field = matched[0]
+    if expected is not None and signature(reader,field,value,name,len(raw))!={**expected,"coverage":"ENTIRE_FILE","state":"current"}:
+        return None
+    reason = value.get_object().get("/Reason")
     if isinstance(reason, generic.TextStringObject):
         text = str(reason)
         if 0<len(text)<=512 and text.strip() and not any(ord(c)<32 and c not in "\t\r\n" for c in text):
@@ -33,7 +41,39 @@ def reason_text(raw, name):
     return None
 
 
-def sources(graph, read_original):
+def signed_purposes(raw, proof):
+    from pdf_execution import inspect_original
+
+    signatures = proof["signatures"]
+    if len(signatures)==1:
+        sig, = signatures
+        if sig["state"]=="current" and sig.get("coverage")=="ENTIRE_FILE":
+            if sig["ends_at"]!=len(raw):
+                raise ValueError("签名原因与签名覆盖的原件不符")
+            yield sig, reason_text(raw,sig["field"]), {}
+        return
+    if any(s["state"] not in ("earlier","current") for s in signatures):
+        return
+    if inspect_original(raw)!=("current",signatures):
+        raise ValueError("多次签名的签名域、证书或修订范围与 PDF 原件不符")
+    ordered = sorted(signatures,key=lambda s:s["revision"])
+    if (len({s["field"] for s in ordered})!=len(ordered) or len({s["revision"] for s in ordered})!=len(ordered)
+            or [s["state"] for s in ordered]!=["earlier"]*(len(ordered)-1)+["current"]
+            or ordered[-1]["ends_at"]!=len(raw)):
+        return
+    for sig in ordered:
+        signed = raw[:sig["ends_at"]]
+        reason = reason_text(signed,sig["field"],expected=sig)
+        if reason:
+            yield sig, reason, {"ends_at":len(signed),"coverage":sig["coverage"],"signed_sha256":sha256(signed).hexdigest()}
+
+
+def ledger(rows):
+    fmt = REVISION_FORMAT if any("signed_sha256" in r for r in rows) else FORMAT
+    return {"format":fmt,"rows":rows}
+
+
+def sources(graph, read_original, *, multiple=True):
     if not read_original:
         return []
     kinds = graph.get("documents_by_kind", {})
@@ -52,18 +92,17 @@ def sources(graph, read_original):
             continue
         role = roles[0]
         proof = contracts.get(unit) if role=="contract" else inspections.get(unit)
-        if not proof or proof["state"]!="current" or len(proof["signatures"])!=1:
-            continue
-        sig, = proof["signatures"]
-        if sig["state"]!="current" or sig.get("coverage")!="ENTIRE_FILE":
+        if not proof or proof["state"]!="current" or not proof["signatures"] or (not multiple and len(proof["signatures"])!=1):
             continue
         raw = read_original(doc)
-        if sha256(raw).hexdigest()!=doc["sha256"] or doc["sha256"]!=proof["original_sha256"] or sig["ends_at"]!=len(raw):
+        if sha256(raw).hexdigest()!=doc["sha256"] or doc["sha256"]!=proof["original_sha256"]:
             raise ValueError("签名原因与签名覆盖的原件不符")
-        reason = reason_text(raw,sig["field"])
-        if reason:
+        for sig,reason,extent in signed_purposes(raw,proof):
+            if not reason:
+                continue
             label = normalize("NFKC",reason).strip().removesuffix("。")
-            rows.append({"id":"signature-purpose/"+unit,"doc":unit,"role":role,"source":proof["id"],
+            ref = "signature-purpose/"+unit+("/r"+str(sig["revision"]) if extent else "")
+            rows.append({"id":ref,"doc":unit,"role":role,"source":proof["id"],**extent,
                          "original_sha256":doc["sha256"],"field":sig["field"],"revision":sig["revision"],
                          "certificate_sha256":sig["certificate_sha256"],"reason":reason,
                          "scope":"quantity_only" if label in QUANTITY_ONLY else "as_stated"})
@@ -95,7 +134,8 @@ def apply(graph, findings):
         for r in used:
             if r["scope"]=="quantity_only":
                 action = "双方同意合同条款的签署依据" if r["role"]=="contract" else "性能、质量及终验范围的签认依据"
-                f["detail"] += f" {ROLES[r['role']]}电子签名所填原因仅确认到货数量，请另核{action}。"
+                signed = f"修订 {r['revision']} 的签名" if "coverage" in r else "电子签名"
+                f["detail"] += f" {ROLES[r['role']]}{signed}所填原因仅确认到货数量，请另核{action}。"
                 if f["rule"] in ("H01","H02") and f["status"] in ("ok","missing"):
                     f["status"] = "risk"
                 elif f["status"]=="ok":
@@ -107,17 +147,19 @@ def verify(report, read_original, *, signing=False):
     nodes = [n for n in graph["nodes"] if n["type"]=="pdf_signature_purpose"]
     edges = [e for e in graph["edges"] if e["type"]=="declares_signature_purpose"]
     used_here = any(KEY in f for f in report["findings"])
-    if tuple(map(int,policy.get("version","0").split(".")))<SINCE:
+    version = tuple(map(int,policy.get("version","0").split(".")))
+    if signing and version<MULTIPLE_SINCE:
+        limited = [r for r in sources(graph,read_original) if r["scope"]=="quantity_only" and
+                   ("coverage" in r or version<SINCE)]
+        if any(f["rule"] in ("H01","H02") and cited(f,limited) for f in report["findings"]):
+            raise ValueError("签名属性明确仅确认到货数量，本版尚未核对该签署范围，请重新审计后签收。")
+    if version<SINCE:
         if KEY in graph or KEY in policy or nodes or edges or used_here:
             raise ValueError("旧版底稿出现未出具的签名原因判断")
-        if signing:
-            restrictive = [r for r in sources(graph,read_original) if r["scope"]=="quantity_only"]
-            if any(f["rule"] in ("H01","H02") and f["status"] in ("ok","missing") and cited(f,restrictive)
-                   for f in report["findings"]):
-                raise ValueError("签名属性明确仅确认到货数量，本版尚未核对该签署范围，请重新审计后签收。")
         return
-    rows = sources(graph,read_original)
-    if (graph.get(KEY)!=({"format":FORMAT,"rows":rows} if rows else None) or policy.get(KEY)!=(FORMAT if rows else None)
+    rows = sources(graph,read_original,multiple=version>=MULTIPLE_SINCE)
+    expected = ledger(rows) if rows else None
+    if (graph.get(KEY)!=expected or policy.get(KEY)!=(expected["format"] if expected else None)
             or (nodes,edges)!=source_graph(rows)):
         raise ValueError("签名原因、所属原件或图谱关系与所签 PDF 不符")
     expert = report.get("calls",{}).get("expert") or {}

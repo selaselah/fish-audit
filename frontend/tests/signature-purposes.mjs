@@ -1,14 +1,75 @@
 import assert from 'node:assert/strict';
 import {browserInput,inspect,size} from './review-screen.mjs';
 
+async function checkRevisionPair(ctx,report,path,rev,title) {
+  const {call,evaluate,wait}=ctx, {click,key}=browserInput(ctx);
+  const q=s=>'document.querySelector('+JSON.stringify(s)+')';
+  const rows=report.graph.signature_purposes.rows;
+  const fields=title.includes('数量签认在后')?['QualityReview','SyntheticApproval']:['SyntheticApproval','QualityReview'];
+  assert.deepEqual(rows.map(r=>[r.field,r.revision,r.coverage]),[
+    [fields[0],2,'ENTIRE_REVISION'],[fields[1],3,'ENTIRE_FILE']]);
+  assert.notEqual(rows[0].certificate_sha256,rows[1].certificate_sha256);
+  for (const f of report.findings.filter(f=>['H01','H02','H04','H05'].includes(f.rule))) {
+    const view=f.rule==='H01'?'contract-checks':f.rule==='H02'?'acceptance-checks':'payment-checks&stage='+f.id;
+    await call('Page.navigate',{url:path+'&view='+view});
+    await wait(q('#performance-index[open] .scope-check[aria-pressed=true]')+'?.dataset.check==='+JSON.stringify(f.id),'selected '+f.id);
+    const expected=f.rule==='H02' || ['H04','H05'].includes(f.rule) && ['第二期','第三期'].includes(f.stage.name);
+    assert.deepEqual(await evaluate('[...document.querySelectorAll(".purpose-series q")].map(e=>e.textContent)'),expected?rows.map(r=>r.reason):[]);
+    if (f.rule!=='H05') continue;
+    const doc=report.graph.documents.find(d=>d.id===rows[0].doc);
+    const source=row=>'#signature-purpose-'+f.id+'-'+row.doc+'-r'+row.revision;
+    for (const width of [1440,1024,768,390,360,320]) {
+      await size(ctx,width);
+      for (const row of rows) assert.ok(await evaluate(q(source(row))+'.scrollWidth<='+q(source(row))+'.clientWidth+1'));
+      if (![1440,390].includes(width)) continue;
+      await inspect(ctx,width,'.purpose-series','signed-revisions');
+      for (const row of rows) {
+        const summary=q(source(row)),detail=summary+'.parentElement';
+        await evaluate(summary+'.focus()');await key('Enter');await wait(detail+'.open','signed edition expanded');
+        assert.deepEqual(await evaluate('[...'+detail+'.querySelectorAll("dd")].map(e=>e.textContent)'),[row.field,
+          '文件修订 '+row.revision+' · '+(row.coverage==='ENTIRE_FILE'?'整份提交件':'较早修订'),row.certificate_sha256,row.signed_sha256]);
+        const link=detail+'.querySelector("a")';
+        const response=await fetch(await evaluate(link+'.href'));
+        assert.equal(response.status,200);assert.equal(response.headers.get('etag'),'"'+row.signed_sha256+'"');
+        const bytes=Buffer.from(await response.arrayBuffer());
+        assert.equal(bytes.length,row.ends_at);assert.equal(Buffer.from(await crypto.subtle.digest('SHA-256',bytes)).toString('hex'),row.signed_sha256);
+        await inspect(ctx,width,'.purpose-series details[open]','signed-revision-'+row.revision);
+        await key('Enter');await wait('!'+detail+'.open','fold signed attributes');
+      }
+    }
+    for (const row of rows) {
+      const control=q(source(row));
+      await click(q('#walk-launch'));await wait(q('#walk-dialog[open]')+' && !'+q('#walk-save')+'.disabled','recorder ready');
+      await click(q('#walk-pick'));await click(control);
+      await wait(q('#walk-excerpt blockquote')+'?.textContent==='+JSON.stringify(row.reason),'selected revision quote');
+      const place=await evaluate(q('#walk-location')+'.textContent');
+      assert.ok(place.includes(doc.name) && place.includes('修订 '+row.revision));assert.doesNotMatch(place,/第\s*\d+\s*(页|行)/u);
+      await click(q('#walk-close'));
+      await size(ctx,1024);await click(q('#performance-index .scope-actions > button:last-child'));
+      const finding='.finding[data-finding="'+f.id+'"]';
+      const refs='[...'+q(finding)+'.querySelectorAll(".finding-body details > summary")].find(n=>n.textContent.startsWith("查看本项全部引文"))';
+      await wait(refs+'?.getClientRects().length','finding citations');
+      if (!await evaluate(refs+'.parentElement.open')) await click(refs);
+      const citation=q(finding+' a[href*="walkat='+source(row).slice(1)+'"]');
+      await wait(citation+'?.getClientRects().length','exact revision link');await click(citation);
+      await wait(control+'?.matches("#performance-index[open] .walk-mark")','revision restored from finding');
+    }
+    const invalid=await evaluate('(()=>{const r=structuredClone(state.bundle.report),p=r.graph.signature_purposes.rows;'+
+      'p[0].ends_at=p[1].ends_at;return SignaturePurposes.bind(r,r.findings.find(f=>f.id==='+JSON.stringify(f.id)+'),p[0].id)})()');
+    assert.equal(invalid,null);
+  }
+  console.log('PASS R'+rev,'both signed PDF revisions, exact downloads, role, installments, citations and individual feedback');
+}
+
 export async function checkSignaturePurposes(ctx,cid,requested) {
   const {root,call,evaluate,wait}=ctx,{click,key}=browserInput(ctx);
   const base=root+'/api/cases/'+cid, task=await (await fetch(base)).json();
-  assert.ok(task.title.startsWith('合成演练') && task.title.includes('到货数量'));
+  assert.ok(task.title.startsWith('合成演练') && /到货数量|两次签名/u.test(task.title));
   const rev=Number(requested || task.rev), {report}=await (await fetch(base+'/reports/'+rev)).json();
   const row=report.graph.signature_purposes?.rows[0];
   const q=s=>'document.querySelector('+JSON.stringify(s)+')';
   const path=root+'/workpaper/'+cid+'?rev='+rev;
+  if (task.title.includes('两次签名') && row) return checkRevisionPair(ctx,report,path,rev,task.title);
   const stage=f=>f.rule==='H01'?'contract-checks':f.rule==='H02'?'acceptance-checks':'payment-checks&stage='+f.id;
   for (const f of report.findings.filter(f=>['H01','H02','H04','H05'].includes(f.rule))) {
     await call('Page.navigate',{url:path+'&view='+stage(f)});

@@ -185,8 +185,11 @@ export function captureContext(owner, element, pagePoint) {
   const purpose=element?.closest('#performance-index[open] [data-signature-purpose]');
   if (purpose && purpose.dataset.caseId===context.case_id && purpose.dataset.rev===String(context.rev) && state.bundle?.rev===context.rev) {
     const source=SignaturePurposes.locate(state.bundle.report,purpose.id);
-    if (source) return {screen:'case',case_id:context.case_id,rev:context.rev,tab:'report',anchor:purpose.id,
-      params:SignaturePurposes.params(source.finding),target:fileLabel(source.doc.name+' · 签名属性') || 'PDF 签名属性'};
+    if (source) {
+      const attribute=(source.row.coverage?'修订 '+source.row.revision+' ':'')+'签名属性';
+      return {screen:'case',case_id:context.case_id,rev:context.rev,tab:'report',anchor:purpose.id,
+        params:SignaturePurposes.params(source.finding),target:fileLabel(source.doc.name+' · '+attribute) || attribute};
+    }
   }
   if (bankSource && context.rev && context.case_id===state.bundle?.report.case_id) {
     const selected=ReceiptParties.selection(bankSource,state.bundle.report,context.rev);

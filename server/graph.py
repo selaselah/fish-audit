@@ -460,7 +460,7 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     graph["edges"].extend(edges)
     purposes = signature_purposes.sources(graph,read_original)
     if purposes:
-        graph[signature_purposes.KEY] = {"format":signature_purposes.FORMAT,"rows":purposes}
+        graph[signature_purposes.KEY] = signature_purposes.ledger(purposes)
         nodes, edges = signature_purposes.source_graph(purposes)
         graph["nodes"].extend(nodes)
         graph["edges"].extend(edges)

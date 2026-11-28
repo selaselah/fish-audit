@@ -12,8 +12,16 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 NOTE = "实际供货单位另附送货单，请核对与合同供应方的关系。"
 THIRD = "山岚演练交付中心"
 REASON = "仅确认到货数量，实际供货单位及终验质量仍待核对。"
+SECOND_REASON = "已收到检测资料，终验质量结论以正式检测报告为准。"
 CASES = {"comment": "签后批注要求核对实际供货方", "different": "签名控件与不同的终验供货方",
-         "reason": "电子签名原因仅确认到货数量", "receipt_reason": "验收报告电子签名仅确认到货数量"}
+         "reason": "电子签名原因仅确认到货数量", "receipt_reason": "验收报告电子签名仅确认到货数量",
+         "receipt_pair": "验收报告两次签名各自确认的范围", "receipt_pair_reverse": "验收报告两次签名，数量签认在后"}
+
+
+def receipt_signatures(mode):
+    quantity = ("SyntheticApproval", REASON)
+    testing = ("QualityReview", SECOND_REASON)
+    return {"receipt_reason":[quantity],"receipt_pair":[quantity,testing],"receipt_pair_reverse":[testing,quantity]}.get(mode,[])
 
 
 def check_quantity_scope(report, mode):
@@ -71,13 +79,14 @@ def run(seed, upload, modes):
     submitted = []
     for mode in modes:
         title = CASES[mode]
+        receipts = receipt_signatures(mode)
         folder = base / mode
         folder.mkdir()
         paths, originals = [], {}
         for name, fields in records.items():
             path = folder / (name + ".pdf")
             if name == "采购合同":
-                content = raw.read_bytes() if mode == "receipt_reason" else signed
+                content = raw.read_bytes() if receipts else signed
                 if mode == "reason":
                     content = signed_copy(raw.read_bytes(), reason=REASON)
                 path.write_bytes(with_comment(content) if mode == "comment" else content)
@@ -85,8 +94,11 @@ def run(seed, upload, modes):
                 if mode == "different" and name == "验收报告":
                     fields = [(k, THIRD if k == "供应方" else v) for k, v in fields]
                 pdf(path, name, fields, font=font)
-                if mode == "receipt_reason" and name == "验收报告":
-                    path.write_bytes(signed_copy(path.read_bytes(), reason=REASON))
+                if receipts and name == "验收报告":
+                    receipt = path.read_bytes()
+                    for field,reason in receipts:
+                        receipt = signed_copy(receipt,field,reason=reason)
+                    path.write_bytes(receipt)
             page, = prepare(path, 1, save_images=False)
             lines = page["text"].splitlines()
             assert lines[0] == WATERMARK and all(k + "：" + v in lines for k, v in fields)
@@ -94,12 +106,28 @@ def run(seed, upload, modes):
             originals[path.name] = (sha256(path.read_bytes()).hexdigest(), page)
         if upload:
             title = "合成演练 · " + title
-            cid = submit(title, paths, seed + mode + originals["采购合同.pdf"][0][:16], PROFILE)
+            material_key = sha256("".join(originals[name][0] for name in sorted(originals)).encode("ascii")).hexdigest()
+            cid = submit(title, paths, mode + "-" + material_key, PROFILE)
             print(mode, cid, flush=True)
             submitted.append((mode, title, cid, originals))
     for mode, title, cid, originals in submitted:
         report = read_back(cid, title, originals, wait(cid))
         acceptance = next(f for f in report["findings"] if f["rule"] == "H02")
+        if len(receipt_signatures(mode))==2:
+            first, last = report["graph"]["signature_purposes"]["rows"]
+            assert [(r["field"],r["reason"]) for r in (first,last)] == receipt_signatures(mode)
+            assert (first["coverage"],last["coverage"]) == ("ENTIRE_REVISION","ENTIRE_FILE")
+            limited, = [r for r in (first,last) if r["scope"]=="quantity_only"]
+            assert "修订 "+str(limited["revision"])+" 的签名" in acceptance["detail"]
+            assert acceptance["signature_purposes"] == [first["id"], last["id"]] and acceptance["status"] == "risk"
+            assert {f["stage"]["name"] for f in report["findings"] if f["rule"] == "H04" and f.get("signature_purposes")} == {"第二期","第三期"}
+            payment, = [f for f in report["findings"] if f["rule"]=="H05" and f.get("stage")]
+            assert (payment["stage"]["name"],payment["status"],payment["signature_purposes"]) == ("第二期","missing",acceptance["signature_purposes"])
+            raw = (base/mode/"验收报告.pdf").read_bytes()
+            assert first["ends_at"] < last["ends_at"] == len(raw)
+            assert all(sha256(raw[:r["ends_at"]]).hexdigest()==r["signed_sha256"] for r in (first,last))
+            print(mode,cid,"R" + str(get("/api/cases/" + cid)["rev"]),first["coverage"],last["coverage"],flush=True)
+            continue
         supplier = acceptance["acceptance_reservations"]["supplier"]
         page, = report["graph"]["supplier_page_sources"]["pages"]
         assert supplier["page_inspections"] == [page["id"]] and page["id"] in acceptance["evidence"]

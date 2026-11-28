@@ -111,7 +111,7 @@ function returnToControl() {
   const board=params.get('view')==='board-decision' && anchor.startsWith('board-');
   const receipt=params.get('view')==='payment-checks' && /^(?:quality|retest|inspection-use|payment-approval|payment-clock|contract-approver|approver-change|installment-count|mandate-date)-/.test(anchor);
   const party=anchor.startsWith('party-reading-');
-  const purpose=/^signature-purpose-(H0[1245]-[1-9]\d*)-(d\d{2,8})$/.exec(anchor);
+  const purpose=/^signature-purpose-(H0[1245]-[1-9]\d*)-(d\d{2,8})(?:-r([1-9]\d{0,7}))?$/.exec(anchor);
   const proof=/^(stage-)?proof-(H05-[1-9]\d*)-d\d+-p[1-9]\d*-l[1-9]\d*$/.exec(anchor);
   const timing=/^timing-(H05-[1-9]\d*)-(?:signer-date|joint-clock)-d\d+-p[1-9]\d*-l[1-9]\d*$/.exec(anchor);
   const limits=params.get('view')==='acceptance-limits' && anchor.startsWith('limits-H02-');
@@ -142,7 +142,7 @@ function returnToControl() {
       const view={H01:'contract-checks',H02:'acceptance-checks'}[purpose[1].slice(0,3)] || 'payment-checks';
       if (!el?.matches('#performance-index[open] summary[data-signature-purpose]') || url.hash!==location.hash ||
           el.dataset.caseId!==path.split('/').at(-1) || el.dataset.rev!==params.get('rev') || el.dataset.findingKey!==purpose[1] ||
-          el.dataset.signaturePurpose!=='signature-purpose/'+purpose[2] || params.get('view')!==view ||
+          el.dataset.signaturePurpose!=='signature-purpose/'+purpose[2]+(purpose[3]?'/r'+purpose[3]:'') || params.get('view')!==view ||
           (view==='payment-checks' && params.get('stage')!==purpose[1])) return false;
     }
     if (timing) {

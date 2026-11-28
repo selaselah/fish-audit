@@ -17,7 +17,7 @@ SCREENS = {"home", "desk", "case", "rules", "library", "team", "account"}
 HOME_PARAMS = {"scene", "slip", "copy", "edition", "batch", "record", "pdf", "carrier", "term", "agreement"}
 CASE_PARAMS = {"view", "stage", "instrument", "receipt", "ticket", "call", "agreement", "acceptance", "finding", "fact", "prior", "entry", "filing", "part"}
 READING_LOCATION = r"reading-d[0-9]{2,8}-p[1-9][0-9]{0,7}-l[1-9][0-9]{0,7}"
-PURPOSE_PIN = re.compile(r"signature-purpose-(H0[1245]-[1-9][0-9]{0,7})-(d[0-9]{2,8})")
+PURPOSE_PIN = re.compile(r"signature-purpose-(H0[1245]-[1-9][0-9]{0,7})-(d[0-9]{2,8})(?:-r([1-9][0-9]{0,7}))?")
 FORM_PIN = re.compile(r"form-(H0[1245]-[1-9][0-9]{0,7})-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7})")
 ACCEPTANCE_LINE_PIN = re.compile(r"(?:number|serial)-(H0[245]-[1-9][0-9]{0,7})-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7})")
 SUBSTITUTION_ORDER_PIN = re.compile(r"serial-(H0[245]-[1-9][0-9]{0,7})-order")
@@ -369,11 +369,13 @@ def save_note(store, workspace, author, role, data):
             issued=db.execute("SELECT content FROM reports WHERE case_id=? AND rev=?",(context["case_id"],context["rev"])).fetchone()
             paper=json.loads(issued[0])
             ledger=paper["graph"].get(signature_purposes.KEY,{})
-            ref="signature-purpose/"+pin[2]
+            ref="signature-purpose/"+pin[2]+("/r"+pin[3] if pin[3] else "")
             finding=next((f for f in paper["findings"] if f["id"]==pin[1]),None)
             rows=[r for r in ledger.get("rows",[]) if r["doc"]==pin[2] and r["id"]==ref]
-            if (ledger.get("format")!=signature_purposes.FORMAT or paper["policy"].get(signature_purposes.KEY)!=signature_purposes.FORMAT
+            if (ledger.get("format") not in (signature_purposes.FORMAT,signature_purposes.REVISION_FORMAT)
+                    or paper["policy"].get(signature_purposes.KEY)!=ledger["format"]
                     or not finding or ref not in finding.get(signature_purposes.KEY,[]) or len(rows)!=1 or
+                    (pin[3] and (ledger["format"]!=signature_purposes.REVISION_FORMAT or rows[0]["revision"]!=int(pin[3]))) or
                     not signature_purposes.cited(finding,rows)):
                 raise CaseError("该版检查未引用所选 PDF 的签名原因。",404)
         if pin:=MANDATE_DATE_PIN.fullmatch(anchor):

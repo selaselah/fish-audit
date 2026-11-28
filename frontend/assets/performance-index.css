@@ -17,6 +17,13 @@
   transition:border-color .14s,background-color .14s;
 }
 .signature-purpose { margin:12px 0; border:1px solid var(--line); border-radius:8px; background:var(--surface); }
+.purpose-series { margin:12px 0; border:1px solid var(--line); border-radius:8px; }
+.purpose-series h4 { margin:0; padding:10px 14px; color:var(--secondary); font-size:.85rem; font-weight:550; overflow-wrap:anywhere; }
+.purpose-edition,.purpose-download { display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 10px; font-variant-numeric:tabular-nums; }
+.purpose-edition small,.purpose-download small { color:var(--secondary); font-size:.78rem; }
+.purpose-series .signature-purpose { margin:0; border:0; border-top:1px solid var(--line); border-radius:0; }
+.purpose-series .signature-purpose:last-child { border-radius:0 0 8px 8px; }
+.purpose-series .signature-purpose:not([open]) q { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:3; overflow:hidden; }
 .signature-purpose > summary { display:grid; gap:7px; padding:12px 14px; border-radius:7px; color:var(--ink); list-style:none; cursor:pointer; }
 .signature-purpose > summary::-webkit-details-marker { display:none; }
 .signature-purpose > summary:focus-visible { outline:2px solid var(--focus); outline-offset:-2px; }
@@ -28,7 +35,7 @@
 .purpose-attributes { border-top:1px solid var(--line); padding:10px 14px; }
 .purpose-attributes dl { display:grid; grid-template-columns:auto minmax(0,1fr); gap:6px 12px; margin:0 0 8px; font-size:.84rem; }
 .purpose-attributes dd { margin:0; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
-.purpose-fingerprint { font-family:var(--mono,ui-monospace,monospace); }
+.purpose-fingerprint { font-family:var(--mono,ui-monospace,monospace); user-select:all; }
 .purpose-attributes a { display:inline-flex; align-items:center; min-height:44px; font-weight:600; }
 @media (max-width:420px) {
   .purpose-attributes dt:has(+ .purpose-fingerprint),.purpose-fingerprint { grid-column:1 / -1; }

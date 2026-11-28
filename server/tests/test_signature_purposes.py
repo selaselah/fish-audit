@@ -21,8 +21,10 @@ class SignaturePurposeTests(unittest.TestCase):
         cls.surface = printed(material([CONTRACT,RECEIPT]),"d01")
         cls.limited = signed_copy(cls.surface,reason=REASON)
         cls.neutral = signed_copy(cls.surface,reason="并非仅确认到货数量")
+        cls.review_reason = "已收到检测资料，终验质量结论以正式检测报告为准。"
+        cls.pair = signed_copy(cls.limited,"QualityReview",reason=cls.review_reason)
 
-    def paper(self, raw, role):
+    def paper(self, raw, role, *, version="2026.11.28.26"):
         digest = sha256(raw).hexdigest()
         state,sigs = inspect_original(raw)
         doc = {"id":"d01","ext":".pdf","sha256":digest}
@@ -34,7 +36,7 @@ class SignaturePurposeTests(unittest.TestCase):
         else:
             graph["acceptance_pdf_sources"]={"records":[proof]}
         read = lambda doc:raw
-        rows = purposes.sources(graph,read)
+        rows = purposes.sources(graph,read,multiple=tuple(map(int,version.split(".")))>=purposes.MULTIPLE_SINCE)
         findings = []
         for rule,stage,refs in (("H01",None,[source]),("H02",None,[source]),("H04","第一期",[]),
                                 ("H04","第二期",[source]),("H05","第二期",[source]),("H05",None,[source])):
@@ -42,10 +44,10 @@ class SignaturePurposeTests(unittest.TestCase):
             if stage:
                 f["stage"]={"name":stage}
             findings.append(f)
-        report = {"graph":graph,"policy":{"version":"2026.11.28.26"},"findings":findings}
+        report = {"graph":graph,"policy":{"version":version},"findings":findings}
         if rows:
-            graph[purposes.KEY]={"format":purposes.FORMAT,"rows":rows}
-            report["policy"][purposes.KEY]=purposes.FORMAT
+            graph[purposes.KEY]=purposes.ledger(rows)
+            report["policy"][purposes.KEY]=graph[purposes.KEY]["format"]
             graph["nodes"],graph["edges"]=purposes.source_graph(rows)
         purposes.apply(graph,findings)
         procedures=[]
@@ -96,6 +98,100 @@ class SignaturePurposeTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError,"重新审计"):purposes.verify(report,read,signing=True)
             else:
                 purposes.verify(report,read,signing=True)
+
+    def test_each_purpose_belongs_to_its_own_signed_bytes(self):
+        paper,read=self.paper(self.pair,"acceptance",version="2026.11.28.28")
+        first,last=paper["graph"][purposes.KEY]["rows"]
+        self.assertEqual(paper["policy"][purposes.KEY],purposes.REVISION_FORMAT)
+        self.assertNotEqual(first["certificate_sha256"],last["certificate_sha256"])
+        for row,raw,revision,reason,coverage in ((first,self.limited,2,REASON,"ENTIRE_REVISION"),
+                                                 (last,self.pair,3,self.review_reason,"ENTIRE_FILE")):
+            self.assertEqual((row["id"],row["ends_at"],row["signed_sha256"],row["reason"],row["coverage"]),
+                             (f"signature-purpose/d01/r{revision}",len(raw),sha256(raw).hexdigest(),reason,coverage))
+            self.assertEqual(row["original_sha256"],sha256(self.pair).hexdigest())
+        owner=next(f for f in paper["findings"] if f["rule"]=="H02")
+        self.assertEqual((owner["status"],owner[purposes.KEY]),("risk",[first["id"],last["id"]]))
+        self.assertIn("修订 2",owner["detail"])
+        self.assertNotIn("修订 3",owner["detail"])
+        purposes.verify(paper,read,signing=True)
+        for key in ("field","certificate_sha256","signed_sha256","reason","coverage","id"):
+            with self.subTest(key=key):
+                changed=deepcopy(paper)
+                changed["graph"][purposes.KEY]["rows"][0][key]=last[key]
+                with self.assertRaisesRegex(ValueError,"签名原因"):purposes.verify(changed,read)
+        changed=deepcopy(paper)
+        parent=changed["graph"]["acceptance_pdf_sources"]["records"][0]
+        parent["signatures"][0]["certificate_sha256"]=last["certificate_sha256"]
+        with self.assertRaisesRegex(ValueError,"证书"):purposes.verify(changed,read)
+        no_later_reason = signed_copy(self.limited,"QualityReview")
+        partial,partial_read=self.paper(no_later_reason,"acceptance",version="2026.11.28.28")
+        earlier_row,=partial["graph"][purposes.KEY]["rows"]
+        self.assertEqual((earlier_row["id"],earlier_row["reason"],earlier_row["coverage"]),
+                         ("signature-purpose/d01/r2",REASON,"ENTIRE_REVISION"))
+        purposes.verify(partial,partial_read)
+        old,read=self.paper(self.pair,"acceptance",version="2026.11.28.27")
+        purposes.verify(old,read)
+        with self.assertRaisesRegex(ValueError,"重新审计"):purposes.verify(old,read,signing=True)
+        earlier,read=self.paper(later_copy(self.pair),"acceptance",version="2026.11.28.28")
+        self.assertNotIn(purposes.KEY,earlier["graph"])
+        purposes.verify(earlier,read)
+
+    def test_download_returns_the_issued_signature_revision(self):
+        from config import PERFORMANCE
+        from main import create_app
+        from storage import Store
+
+        paper,_=self.paper(self.pair,"acceptance",version="2026.11.28.28")
+        doc=paper["graph"]["documents"][0]
+        doc.update(name="水印演练验收.pdf",size=len(self.pair))
+        cid="c"*32
+        with TemporaryDirectory() as temp:
+            store=Store(Path(temp))
+            store.create(cid,"验收签名修订",[doc],cid,cid,PERFORMANCE)
+            folder=store.files/cid/doc["id"];folder.mkdir(parents=True)
+            original=folder/"original.pdf";original.write_bytes(self.pair)
+            client=create_app(store,None).test_client()
+            path=f"/api/cases/{cid}/reports/1/documents/d01/signed-revisions/"
+            with patch.object(store,"report",return_value={"report":paper}):
+                for rev,raw in ((2,self.limited),(3,self.pair)):
+                    response=client.get(path+str(rev))
+                    self.assertEqual((response.status_code,response.data),(200,raw))
+                    self.assertEqual(response.get_etag()[0],sha256(raw).hexdigest())
+                self.assertEqual(client.get(path+"1").status_code,404)
+                row=paper["graph"][purposes.KEY]["rows"][0]
+                row["reason"]="其他签名所填的说明"
+                self.assertEqual(client.get(path+"2").status_code,409)
+                original.write_bytes(self.limited)
+                self.assertEqual(client.get(path+"3").status_code,409)
+
+    def test_feedback_distinguishes_two_signatures_on_the_same_finding(self):
+        from config import PERFORMANCE
+        from main import create_app
+        from storage import Store, encode, stamp
+        from uuid import uuid4
+
+        paper,_=self.paper(self.pair,"acceptance",version="2026.11.28.28")
+        doc=paper["graph"]["documents"][0]
+        doc.update(name="水印演练验收.pdf",size=len(self.pair))
+        cid="d"*32;paper["case_id"]=cid
+        with TemporaryDirectory() as temp:
+            store=Store(Path(temp));store.create(cid,"同份文件的两次签名",[doc],cid,cid,PERFORMANCE)
+            payload=encode(paper)
+            with store.connect(write=True) as db:
+                db.execute("INSERT INTO reports VALUES(?,1,?,?,?)",(cid,stamp(),sha256(payload.encode()).hexdigest(),payload))
+            client=create_app(store,None).test_client()
+            def note(edition,stage="H05-5",**extra):
+                where={"screen":"case","case_id":cid,"rev":1,"tab":"report","params":{"view":"payment-checks","stage":stage},
+                       "anchor":"signature-purpose-"+stage+"-d01"+edition,**extra}
+                return client.post("/api/walkthrough",json={"id":uuid4().hex,"text":"希望核对所签修订","context":where})
+            for suffix in ("-r2","-r3"):
+                self.assertEqual(note(suffix).status_code,201)
+            self.assertEqual(note("").status_code,404)
+            self.assertEqual(note("-r1").status_code,404)
+            self.assertEqual(note("-r2","H04-3").status_code,404)
+            self.assertEqual(note("-r2",doc="d01",page=1,line=2).status_code,400)
+            anchors={n["context"]["anchor"] for n in client.get("/api/walkthrough").json["notes"]}
+            self.assertEqual(anchors,{"signature-purpose-H05-5-d01-r2","signature-purpose-H05-5-d01-r3"})
 
     def test_replay_compares_scope_to_the_signed_file_before_returning_a_receipt(self):
         from config import PERFORMANCE

@@ -1,5 +1,13 @@
 # 本机审计接口
 
+## 同份 PDF 的多次签名
+
+从规则 `2026.11.28.28` 起，审计底稿中有多次签名的可核原文时，`policy.signature_purposes` 和同名图谱记录使用 `signed-pdf-purpose-v2`。每次签名的记录编号形如 `signature-purpose/d02/r2`，包含该次修订号 `revision`、签名域、证书指纹、原文、覆盖级别 `coverage`、修订的字节数 `ends_at` 和该文件修订的 SHA-256（`signed_sha256`）。`original_sha256` 指向整份提交件。仅有单签原文的底稿沿用 v1 字段与定位链接。[技术依据](../3rd/pdf-signature-review.md)
+
+逐次核对要求资料属于单一材料类型，整个文件有当前签名，各已填签名的签名域和修订可唯一识别。核查器从各自的完整修订中读取原文，核对该次签名及证书，并区分 `ENTIRE_REVISION` 与 `ENTIRE_FILE`。可完整转录的签名原因逐条进入专家输入。较早版之后另有未签修改、签名域归属不清、复合材料等情况由相应原件检查提示复核。[样本中的检查与期款](acceptance.md#一份验收报告的两次电子签认)
+
+`GET /api/cases/{id}/reports/{rev}/documents/{doc}/signed-revisions/{edition}` 提供所选底稿所引的 PDF 修订，企业接口使用同一工作区的 `/api/w/{wid}/cases/…` 前缀。服务端重新读取完整提交件，核对该次签名的文件修订、摘要和归档原文。下载的 ETag 是 `signed_sha256`。查不到该修订返回 404，证据不一致返回 409。走查定位在文件号后增加修订号，例如 `signature-purpose-H05-8-d02-r2`。[下载该次所签修订](http://127.0.0.1:8000/api/cases/c8c3820bcc794d2eb5cf96ca25a65594/reports/6/documents/d02/signed-revisions/2)
+
 ## PDF 签名所声明的范围
 
 `graph.signature_purposes` 和 `policy.signature_purposes` 使用 `signed-pdf-purpose-v1`。适用对象为能唯一识别为合同、验收报告或复验报告的独立 PDF。要求恰有一个已填写的签名，覆盖本次提交的全部字节，且签名域中有可完整读取的签名原因 `/Reason`（最多 512 个字符）。每条记录保留 `doc`、`role`、签名检查记录 `source`、原件 SHA-256、签名域、文件修订、证书指纹和原文 `reason`。[原件检查](../server/signature_purposes.py)
