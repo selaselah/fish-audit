@@ -218,7 +218,7 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
   const signingRefs=contractSigningSources(paper).filter(s=>s.doc.id===docId && s.page===pageNumber);
   const numberRefs=measurementNumberSources(paper).filter(s=>s.doc.id===docId && s.page===pageNumber && s.rawLine && s.rects.length);
   const equipmentRefs=InspectionCoverage.registerSources(paper).filter(s=>s.doc.id===docId && s.page===pageNumber && s.rawLine && s.rects.length);
-  const otherRefs = [...(printedSource?[printedSource]:[]), ...equipmentRefs, ...numberRefs, ...signingRefs, ...PaymentQuality.pageReferences(paper,docId,pageNumber), ...InstallmentCount.pageReferences(paper,docId,pageNumber), ...useRefs, ...registerRefs, ...boardRefs, ...repairRefs, ...PhaseEvidence.pageReferences(paper?.graph,docId,pageNumber,pageFacts,lineHint,paper?.calls.pages)];
+  const otherRefs = [...(printedSource?[printedSource]:[]), ...SignaturePurposes.reportLines(paper,docId,pageNumber), ...equipmentRefs, ...numberRefs, ...signingRefs, ...PaymentQuality.pageReferences(paper,docId,pageNumber), ...InstallmentCount.pageReferences(paper,docId,pageNumber), ...useRefs, ...registerRefs, ...boardRefs, ...repairRefs, ...PhaseEvidence.pageReferences(paper?.graph,docId,pageNumber,pageFacts,lineHint,paper?.calls.pages)];
   const timingRefs=timingRows.filter(s=>!otherRefs.some(r=>r.rawLine===s.rawLine));
   const contractRefs=[...ContractFolios.pageReferences(docId,pageNumber),...ContractCalendar.pageReferences(docId,pageNumber)];
   const preferred=[...contractRefs,...otherRefs].find(r=>r.ref===rawRef);
@@ -585,9 +585,9 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
     const label = {inspection_reference:'设备检验原行',contract_signing_reference:'合同签章原行',payment_release_reference:'放行依据原行',acceptance_opinion_reference:'付款意见原行',payment_amendment_reference:'付款变更所据原行',invoice_receipt_reference:'收票条件所据原行',repair_completion_reference:'整改记录原行',equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',approval_reference:'董事会审批记录原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
     const timingRow=timingRefs.find(r=>r.rawLine===gap.line);
     const raw = rawLines.find(source => source.rawLine === gap.line);
-    const heading=contractRefs.includes(raw) || ['acceptance_clock_source','signer_date_source','payment_execution_source','batch_stamp_source','advance_guarantee_source','warranty_date_source','inspection_use_source','installment_count_source','contract_form_source','measurement_number_source','delivery_register_source'].includes(raw?.quality)
+    const heading=contractRefs.includes(raw) || ['acceptance_clock_source','signer_date_source','payment_execution_source','batch_stamp_source','advance_guarantee_source','warranty_date_source','inspection_use_source','installment_count_source','contract_form_source','measurement_number_source','delivery_register_source','inspection_report_source'].includes(raw?.quality)
       ? raw.label : timingRow?.label || (gap.quality==='register_reference'?'复验附注':gap.quality==='measurement_precision'?'测量精度说明':label);
-    const quote=['batch_stamp_source','advance_guarantee_source','warranty_date_source','inspection_use_source','delivery_register_source'].includes(raw?.quality)?raw.quote:gap.quote;
+    const quote=['batch_stamp_source','advance_guarantee_source','warranty_date_source','inspection_use_source','delivery_register_source','inspection_report_source'].includes(raw?.quality)?raw.quote:gap.quote;
     const section = box('evidence-row',el('h4',heading+' · 第 '+gap.line+' 行'),el('blockquote',quote));
     if (raw?.quality==='installment_count_source') section.append(el('small','模型摘录（独立复读支持） · '+raw.modelQuote,'small'));
     section.dataset.gapLine = String(gap.line);
@@ -708,7 +708,7 @@ function citation(ref,finding) {
     return Team.paperLink(label,prior.case_id,'button ref',new URLSearchParams({rev:String(prior.rev),fact:prior.fact}));
   }
   const source = index?.nodes.get(ref);
-  if (source?.type==='pdf_signature_purpose')
+  if (['pdf_signature_purpose','signed_inspection_reference'].includes(source?.type))
     return SignaturePurposes.citation(state.bundle.report,finding,ref,state.bundle.rev) || el('span','签名原因与所属原件待核','small');
   if (['acceptance_signer_date','acceptance_clock_line'].includes(source?.type)) {
     const row=SignerEvidence.citedRow(state.bundle.report,ref,finding);
@@ -1776,7 +1776,7 @@ async function refresh() {
         if (doc && OriginalReader.pageNumbers(doc,graph).includes(page)) {
           state.openedCitation=location.hash;
           const raw=route.params.get('walkraw');
-          const ref=['inspection-use/','payment-approval/','payment-clock/','contract-approver/','approval-change/','installment-count/','measurement-note/','contract-signing-form/','measurement-number/','inspection-line/','execution/','signer-date/','joint-clock/'].some(prefix=>raw===prefix+doc.id+'/p'+page+'/l'+line) ? raw : undefined;
+          const ref=['inspection-use/','payment-approval/','payment-clock/','contract-approver/','approval-change/','installment-count/','measurement-note/','contract-signing-form/','measurement-number/','inspection-line/','inspection-report-line/','execution/','signer-date/','joint-clock/'].some(prefix=>raw===prefix+doc.id+'/p'+page+'/l'+line) ? raw : undefined;
           if (route.params.has('walkpoint') && state.bundle && route.params.get('rev')===String(state.bundle.rev) &&
               !route.params.has('walkline') && !raw) {
             OriginalReader.open(doc,page,{walkPoint:route.params.get('walkpoint')});

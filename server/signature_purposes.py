@@ -4,13 +4,16 @@ from hashlib import sha256
 from io import BytesIO
 from itertools import islice
 from unicodedata import normalize
+import inspection_reports
 
 
 KEY = "signature_purposes"
 FORMAT = "signed-pdf-purpose-v1"
 REVISION_FORMAT = "signed-pdf-purpose-v2"
+REFERENCE_FORMAT = "signed-pdf-purpose-v3"
 SINCE = (2026, 11, 28, 26)
 MULTIPLE_SINCE = (2026, 11, 28, 28)
+REFERENCE_SINCE = (2026, 11, 29, 1)
 ROLES = {"contract":"合同", "acceptance":"验收报告", "reinspection":"复验报告"}
 QUANTITY_ONLY = {
     "仅确认到货数量", "本次签署仅确认到货数量", "仅确认到货数量,不代表终验合格",
@@ -69,7 +72,11 @@ def signed_purposes(raw, proof):
 
 
 def ledger(rows):
-    fmt = REVISION_FORMAT if any("signed_sha256" in r for r in rows) else FORMAT
+    fmt = FORMAT
+    if any("signed_sha256" in row for row in rows):
+        fmt = REVISION_FORMAT
+    if any("report_reference" in row for row in rows):
+        fmt = REFERENCE_FORMAT
     return {"format":fmt,"rows":rows}
 
 
@@ -112,6 +119,10 @@ def sources(graph, read_original, *, multiple=True):
 def source_graph(rows):
     nodes = [{"id":r["id"],"type":"pdf_signature_purpose","label":r["reason"],"doc":r["doc"]} for r in rows]
     edges = [{"from":r["source"],"to":r["id"],"type":"declares_signature_purpose","evidence":[r["doc"],r["source"]]} for r in rows]
+    for row in rows:
+        if ref := row.get("report_reference"):
+            nodes.append({"id":ref["id"], "type":"signed_inspection_reference", "label":ref["kind"], "doc":row["doc"]})
+            edges.extend(inspection_reports.relations(row, ref))
     return nodes,edges
 
 
@@ -132,6 +143,14 @@ def apply(graph, findings):
         f[KEY] = [r["id"] for r in used]
         f["evidence"] = list(dict.fromkeys([*f["evidence"],*(ref for r in used for ref in (r["doc"],r["id"]))]))
         for r in used:
+            if ref := r.get("report_reference"):
+                f["evidence"] = list(dict.fromkeys([*f["evidence"], *inspection_reports.sources(ref)]))
+                label = ref["kind"] + (" " + ref["number"] if ref["number"] else "")
+                f["detail"] += f" 签名所引{label}。{inspection_reports.MESSAGES[ref['state']]}"
+                if f["rule"] == "H02" and ref["state"] in ("different", "other_contract") and f["status"] in ("ok","missing"):
+                    f["status"] = "risk"
+                elif f["status"] == "ok":
+                    f["status"] = "missing"
             if r["scope"]=="quantity_only":
                 action = "双方同意合同条款的签署依据" if r["role"]=="contract" else "性能、质量及终验范围的签认依据"
                 signed = f"修订 {r['revision']} 的签名" if "coverage" in r else "电子签名"
@@ -144,10 +163,16 @@ def apply(graph, findings):
 
 def verify(report, read_original, *, signing=False):
     graph, policy = report["graph"],report["policy"]
-    nodes = [n for n in graph["nodes"] if n["type"]=="pdf_signature_purpose"]
-    edges = [e for e in graph["edges"] if e["type"]=="declares_signature_purpose"]
+    nodes = [n for n in graph["nodes"] if n["type"] in ("pdf_signature_purpose","signed_inspection_reference")]
+    edges = [e for e in graph["edges"] if e["type"]=="declares_signature_purpose" or e["type"] in inspection_reports.EDGE_TYPES]
     used_here = any(KEY in f for f in report["findings"])
     version = tuple(map(int,policy.get("version","0").split(".")))
+    if signing and version < REFERENCE_SINCE:
+        positives = [f for f in report["findings"] if f["rule"] in ("H02","H04","H05") and f["status"]=="ok"]
+        if positives:
+            required = [r for r in sources(graph,read_original) if inspection_reports.requirement(r)]
+            if any(cited(f,required) for f in positives):
+                raise ValueError("验收签名明确引用检测或检验报告，本版相符结论尚未核对所指附件，请重新审计后签收。")
     if signing and version<MULTIPLE_SINCE:
         limited = [r for r in sources(graph,read_original) if r["scope"]=="quantity_only" and
                    ("coverage" in r or version<SINCE)]
@@ -158,6 +183,8 @@ def verify(report, read_original, *, signing=False):
             raise ValueError("旧版底稿出现未出具的签名原因判断")
         return
     rows = sources(graph,read_original,multiple=version>=MULTIPLE_SINCE)
+    if version >= REFERENCE_SINCE:
+        inspection_reports.attach(graph, rows, read_original)
     expected = ledger(rows) if rows else None
     if (graph.get(KEY)!=expected or policy.get(KEY)!=(expected["format"] if expected else None)
             or (nodes,edges)!=source_graph(rows)):
@@ -169,14 +196,25 @@ def verify(report, read_original, *, signing=False):
         return
     if "code_sha256" in policy and "signature_purposes.py" not in policy["code_sha256"]:
         raise ValueError("签名原因缺少出具时的规则源码")
+    if expected and expected["format"] == REFERENCE_FORMAT and "inspection_reports.py" not in policy.get("code_sha256", {}):
+        raise ValueError("签名所引检测报告缺少出具时的规则源码")
     if len(declared)!=sum(bool(cited(f,rows)) for f in report["findings"]):
         raise ValueError("专家输入含有多余或缺失的 PDF 签名原因")
     links = {(e["from"],e["to"]) for e in graph["edges"] if e["type"]=="supports_result" and e["evidence"]==[e["from"]]}
+    references = {r["report_reference"]["id"] for r in rows if "report_reference" in r}
     for f in report["findings"]:
         used = cited(f,rows)
+        if references.intersection(f["evidence"]) != {r["report_reference"]["id"] for r in used if "report_reference" in r}:
+            raise ValueError("签名所引检测报告与检查项范围不符")
         if f.get(KEY)!=([r["id"] for r in used] or None) or any(
                 ref not in f["evidence"] or (ref,"finding/"+f["id"]) not in links for r in used for ref in (r["id"],r["doc"],r["source"])):
             raise ValueError("审计程序引用的签名原因与签署文件不符")
+        for row in used:
+            if ref := row.get("report_reference"):
+                if (f["status"]=="ok" or inspection_reports.MESSAGES[ref["state"]] not in f["detail"] or any(
+                        source not in f["evidence"] or (source, "finding/"+f["id"]) not in links
+                        for source in inspection_reports.sources(ref))):
+                    raise ValueError("签名所引检测报告与审计发现的原件依据或结论不符")
         if used and (not expert.get("response_id") or not any(p.get("rule")==f["rule"] and p.get("status")==f["status"] and
                 p.get("observation")==f["detail"] and p.get("evidence")==f["evidence"] and p.get("stage")==f.get("stage")
                 and p.get(KEY)==used for p in declared)):

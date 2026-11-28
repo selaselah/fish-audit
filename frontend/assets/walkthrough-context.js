@@ -17,6 +17,10 @@ function fileLabel(name) {
 }
 export function originalLine(context, bundle) {
   const ref=context.params?.fact, report=bundle?.report;
+  if (context.raw_ref?.startsWith('inspection-report-line/') && report?.case_id===context.case_id && bundle.rev===context.rev) {
+    const source=SignaturePurposes.reportLines(report,context.doc,context.page).find(s=>s.ref===context.raw_ref && s.rawLine===context.line);
+    return source?{file:graphIndex(report.graph).documents.get(context.doc).name,text:source.quote}:null;
+  }
   if (context.anchor?.startsWith('signature-purpose-') && report?.case_id===context.case_id && bundle?.rev===context.rev) {
     const source=SignaturePurposes.locate(report,context.anchor);
     return source?{file:source.doc.name,text:source.row.reason,attribute:true}:null;
@@ -33,7 +37,7 @@ export function originalLine(context, bundle) {
 }
 function printedRef(context, ref) {
   const address=context.doc+'/p'+context.page+'/l'+context.line;
-  return context.rev && ['inspection-use/','payment-approval/','payment-clock/','contract-approver/','approval-change/','installment-count/','measurement-note/','contract-signing-form/','measurement-number/','inspection-line/','execution/','signer-date/','joint-clock/'].some(prefix=>ref===prefix+address);
+  return context.rev && ['inspection-use/','payment-approval/','payment-clock/','contract-approver/','approval-change/','installment-count/','measurement-note/','contract-signing-form/','measurement-number/','inspection-line/','inspection-report-line/','execution/','signer-date/','joint-clock/'].some(prefix=>ref===prefix+address);
 }
 function knownParams(search, keys) {
   const out = {};
@@ -182,6 +186,15 @@ export function captureContext(owner, element, pagePoint) {
     }
   }
   const bankSource=element?.closest('[data-bank-role-source]');
+  const reportLine=element?.closest('#performance-index[open] [data-inspection-line]');
+  const panel=reportLine?.closest('.purpose-report');
+  if (panel && panel.dataset.rev===String(context.rev) && panel.dataset.caseId===context.case_id &&
+      state.bundle?.rev===context.rev && state.bundle.report.case_id===context.case_id) {
+    const report=state.bundle.report, doc=reportLine.dataset.doc;
+    const source=SignaturePurposes.reportLines(report,doc,1).find(s=>s.ref===reportLine.dataset.inspectionLine);
+    if (source) return {screen:'case',case_id:context.case_id,rev:context.rev,tab:'report',dialog:'page-dialog',
+      doc,page:1,line:source.rawLine,raw_ref:source.ref,target:fileLabel(graphIndex(report.graph).documents.get(doc).name)};
+  }
   const purpose=element?.closest('#performance-index[open] [data-signature-purpose]');
   if (purpose && purpose.dataset.caseId===context.case_id && purpose.dataset.rev===String(context.rev) && state.bundle?.rev===context.rev) {
     const source=SignaturePurposes.locate(state.bundle.report,purpose.id);
@@ -233,7 +246,7 @@ export function describeContext(c) {
   const screen = c.screen==='case' ? screens.case+' '+c.case_id.slice(0,8) : screens[c.screen];
   const edition=c.params?.view==='revision-comparison' ? '履约对照 R'+c.params.prior+' / R'+c.rev : c.rev && 'R'+c.rev;
   const board=c.params?.view==='board-decision' && ({decision:'董事会决议原文',signing:'董事会签发版本',payments:'董事会决议关联期款'}[c.params.part] || '董事会审批原件');
-  const register=c.raw_ref?.startsWith('inspection-line/')?'设备编号原行':
+  const register=c.raw_ref?.startsWith('inspection-report-line/')?'签名所引报告原行':c.raw_ref?.startsWith('inspection-line/')?'设备编号原行':
     c.anchor?.startsWith('serial-H') && (c.anchor.endsWith('-order')?'设备代用批准日期':'设备编号清单');
   const signing=register || (c.raw_ref?.startsWith('measurement-number/')?'验收数值原行':c.anchor?.startsWith('number-H02-')?'验收数值核对':c.raw_ref?.startsWith('contract-signing-form/') ? '合同签署原行' : c.anchor?.startsWith('form-H02-') ? '验收签署条件' : c.params?.view==='contract-signing-form' && '合同签署条件');
   const receipt=c.params?.view==='signer-timing' && c.params.receipt?'签认与付款时序 '+c.params.receipt:

@@ -888,11 +888,12 @@ class Store:
                 originals = {units[unit] for finding in checks for unit in finding["scope"]}
                 use=graph.get(inspection_use.KEY,{})
                 approval_required = bool(use.get("approver_changes")) or any(r["kind"]=="approval" for r in use.get("rows",()))
-                if approval_required or any(f.get("advance_guarantee",{}).get("period") or f.get("warranty_difference") for f in checks):
+                report_required = graph.get(signature_purposes.KEY,{}).get("format") == signature_purposes.REFERENCE_FORMAT
+                if approval_required or report_required or any(f.get("advance_guarantee",{}).get("period") or f.get("warranty_difference") for f in checks):
                     # These comparisons also inspect the rest of the submission for qualifications.
                     submitted={r[0] for r in db.execute("SELECT id FROM docs WHERE case_id=?",(case_id,))}
                     if submitted!={d["id"] for d in graph["documents"]}:
-                        label="付款审批" if approval_required else "质保记载差异" if any(f.get("warranty_difference") for f in checks) else "保函期间"
+                        label="签名所引检测报告" if report_required else "付款审批" if approval_required else "质保记载差异" if any(f.get("warranty_difference") for f in checks) else "保函期间"
                         raise CaseError(label+"所据的完整提交资料与出具清单不符。",409)
                     originals.update(submitted)
                 originals.update(p["doc"] for p in packets)

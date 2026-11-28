@@ -492,7 +492,8 @@ def render_addendum_sources(bundle, report, nodes):
     selected.update(p["doc"] for p in graph.get("stage_payment_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("prior_installment_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get(advance_guarantee.KEY,{}).get("pages",[]))
-    if any(f.get("advance_guarantee",{}).get("period") or f.get("warranty_difference") for f in report["findings"]):
+    if (graph.get(signature_purposes.KEY,{}).get("format") == signature_purposes.REFERENCE_FORMAT
+            or any(f.get("advance_guarantee",{}).get("period") or f.get("warranty_difference") for f in report["findings"])):
         selected.update(d["id"] for d in graph["documents"])
     selected.update(p["doc"] for p in graph.get("contract_folio_sources",{}).get("pages",[]))
     selected.update(p["doc"] for p in graph.get("reinspection_wait_sources",{}).get("pages",[]))

@@ -1,5 +1,13 @@
 # 本机审计接口
 
+## 验收签名引用检测或检验报告
+
+规则 `2026.11.29.01` 对能够从所签修订中完整读出「终验质量结论以正式检测报告为准」等明确表述的验收或复验 PDF 出具 `signed-pdf-purpose-v3`。适用签名的 `report_reference` 保留所引种类、所引编号、所签验收单的合同号及字段位置、候选报告和核对状态。旧版仍使用各自出具时的记录。
+
+候选来自提交的独立单页文字 PDF，程序从原件重读可定位的标题、报告号、合同号和结论，记录页码、行号、原文、矩形及文件和页图摘要。可唯一定位且两个完整编号分别相同为 `matched`，同合同下报告号不同为 `different`，合同号不同为 `other_contract`。多份候选、所引编号不完整、归属待核和未定位到可核原页分别记为 `multiple`、`unidentified`、`uncertain` 和 `unlocated`。扫描件、Word、多页或带图形的报告由审计人员核对。各状态均保留终验人工校验。
+
+从签名节点沿 `requires_inspection_report` 可查这次引用。附件页通过 `inspection_attachment_page`、合同号字段通过 `inspection_contract_number` 指向同一条引用。每项使用该引用的发现保留 `supports_result` 关系及专家所见原文。走查意见的 `raw_ref` 形如 `inspection-report-line/d05/p1/l3`，须对应所选底稿版本实际引用、可定位的原文。[本机案例](acceptance.md#验收签名所引的检测报告)
+
 ## 同份 PDF 的多次签名
 
 从规则 `2026.11.28.28` 起，审计底稿中有多次签名的可核原文时，`policy.signature_purposes` 和同名图谱记录使用 `signed-pdf-purpose-v2`。每次签名的记录编号形如 `signature-purpose/d02/r2`，包含该次修订号 `revision`、签名域、证书指纹、原文、覆盖级别 `coverage`、修订的字节数 `ends_at` 和该文件修订的 SHA-256（`signed_sha256`）。`original_sha256` 指向整份提交件。仅有单签原文的底稿沿用 v1 字段与定位链接。[技术依据](../3rd/pdf-signature-review.md)

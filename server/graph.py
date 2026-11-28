@@ -24,6 +24,7 @@ import payment_acceptance
 import payment_execution
 import receipt_parties
 import signature_purposes
+import inspection_reports
 import advance_guarantee
 import contract_effect
 import pdf_execution
@@ -460,6 +461,7 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     graph["edges"].extend(edges)
     purposes = signature_purposes.sources(graph,read_original)
     if purposes:
+        inspection_reports.attach(graph, purposes, read_original)
         graph[signature_purposes.KEY] = signature_purposes.ledger(purposes)
         nodes, edges = signature_purposes.source_graph(purposes)
         graph["nodes"].extend(nodes)

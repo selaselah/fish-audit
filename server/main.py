@@ -548,7 +548,7 @@ def create_app(store, worker):
         ref = f"signature-purpose/{doc}/r{edition}"
         rows = [r for r in ledger.get("rows",[]) if r["id"]==ref and r["doc"]==doc and r["revision"]==edition]
         source = next((d for d in graph["documents"] if d["id"]==doc and d["ext"]==".pdf"),None)
-        if (not source or len(rows)!=1 or ledger.get("format")!=signature_purposes.REVISION_FORMAT
+        if (not source or len(rows)!=1 or ledger.get("format") not in (signature_purposes.REVISION_FORMAT, signature_purposes.REFERENCE_FORMAT)
                 or report["policy"].get(signature_purposes.KEY)!=ledger["format"]):
             raise CaseError("该版底稿没有引用这次 PDF 签名的文件修订。",404)
         row, = rows
@@ -558,7 +558,10 @@ def create_app(store, worker):
             verified = signature_purposes.sources({**graph,"documents":[source]},lambda _:raw)
         except (ValueError,KeyError,TypeError) as error:
             raise CaseError("签名修订与归档证据不符，无法下载。",409) from error
-        if row not in verified:
+        attributes = dict(row)
+        if ledger["format"] == signature_purposes.REFERENCE_FORMAT:
+            attributes.pop("report_reference",None)
+        if attributes not in verified:
             raise CaseError("签名修订与所引签名域、证书或原件摘要不符。",409)
         name = Path(source["name"]).stem+f"-修订{edition}.pdf"
         return send_file(BytesIO(raw[:row["ends_at"]]),download_name=name,mimetype="application/pdf",

@@ -49,7 +49,7 @@ def check_context(value):
         patterns["intake"] = r"contract|purchase|travel|payment"
     if screen == "case":
         patterns.update(case_id=r"[a-f0-9]{32}", tab=r"report|evidence|graph|activity", doc=r"d[0-9]{2,8}",
-                        raw_ref=r"(?:inspection-use|payment-approval|payment-clock|contract-approver|approval-change|installment-count|measurement-note|contract-signing-form|measurement-number|inspection-line|execution|signer-date|joint-clock)/d[0-9]{2,8}/p[1-9][0-9]{0,7}/l[1-9][0-9]{0,7}")
+                        raw_ref=r"(?:inspection-use|payment-approval|payment-clock|contract-approver|approval-change|installment-count|measurement-note|contract-signing-form|measurement-number|inspection-line|inspection-report-line|execution|signer-date|joint-clock)/d[0-9]{2,8}/p[1-9][0-9]{0,7}/l[1-9][0-9]{0,7}")
         if "case_id" not in value:
             raise CaseError("走查底稿编号缺失。", 400)
     result = {"screen": screen}
@@ -122,7 +122,7 @@ def check_context(value):
             raise CaseError("请选择该版原页中的主体核字位置。",400)
     if raw := result.get("raw_ref"):
         if (not result.get("rev") or raw.partition("/")[2] != f"{result.get('doc')}/p{result.get('page')}/l{result.get('line')}" or params
-                or raw.startswith(("contract-signing-form/","measurement-number/","inspection-line/","execution/","signer-date/","joint-clock/")) and result.get("dialog")!="page-dialog"):
+                or raw.startswith(("contract-signing-form/","measurement-number/","inspection-line/","inspection-report-line/","execution/","signer-date/","joint-clock/")) and result.get("dialog")!="page-dialog"):
             raise CaseError("请选择该版底稿所引的原件页和行。",400)
     if anchor.startswith(("proof-H","stage-proof-H")):
         pin = PAYMENT_PROOF_PIN.fullmatch(anchor)
@@ -311,6 +311,29 @@ def cited_mandate_date(paper, pin):
     return selected and (dates["signed_on"]==dates["granted_on"] if order["state"]=="same_day" else dates["signed_on"]<dates["granted_on"])
 
 
+def cited_inspection_line(source, context):
+    paper = json.loads(source["content"])
+    graph, line = paper["graph"], context["line"]
+    ledger = graph.get(signature_purposes.KEY,{})
+    text = source["text"].splitlines()
+    if (ledger.get("format") != signature_purposes.REFERENCE_FORMAT or paper["policy"].get(signature_purposes.KEY) != ledger["format"]
+            or not 1 <= line <= len(text)):
+        return False
+    for row in ledger["rows"]:
+        ref = row.get("report_reference")
+        if not ref or not any(row["id"] in f.get(signature_purposes.KEY,[]) and signature_purposes.cited(f,[row]) and
+                              ref["id"] in f["evidence"] for f in paper["findings"]):
+            continue
+        for doc in ref["candidates"]:
+            if (doc["doc"],doc["page"],doc["original_sha256"],doc["page_sha256"]) != (
+                    context["doc"],context["page"],source["original_hash"],source["page_hash"]):
+                continue
+            if any(r and r["line"]==line and r["quote"]==text[line-1] and r["rects"]
+                   for r in (doc[k] for k in ("title","number","contract","conclusion"))):
+                return True
+    return False
+
+
 def note_row(row):
     return {"id": row["id"], "created": row["created"], "text": row["note"], "context": json.loads(row["context"])}
 
@@ -372,10 +395,10 @@ def save_note(store, workspace, author, role, data):
             ref="signature-purpose/"+pin[2]+("/r"+pin[3] if pin[3] else "")
             finding=next((f for f in paper["findings"] if f["id"]==pin[1]),None)
             rows=[r for r in ledger.get("rows",[]) if r["doc"]==pin[2] and r["id"]==ref]
-            if (ledger.get("format") not in (signature_purposes.FORMAT,signature_purposes.REVISION_FORMAT)
+            if (ledger.get("format") not in (signature_purposes.FORMAT,signature_purposes.REVISION_FORMAT,signature_purposes.REFERENCE_FORMAT)
                     or paper["policy"].get(signature_purposes.KEY)!=ledger["format"]
                     or not finding or ref not in finding.get(signature_purposes.KEY,[]) or len(rows)!=1 or
-                    (pin[3] and (ledger["format"]!=signature_purposes.REVISION_FORMAT or rows[0]["revision"]!=int(pin[3]))) or
+                    (pin[3] and (ledger["format"]==signature_purposes.FORMAT or rows[0]["revision"]!=int(pin[3]))) or
                     not signature_purposes.cited(finding,rows)):
                 raise CaseError("该版检查未引用所选 PDF 的签名原因。",404)
         if pin:=MANDATE_DATE_PIN.fullmatch(anchor):
@@ -415,6 +438,13 @@ def save_note(store, workspace, author, role, data):
                 AND json_type(f.value,?)='object'""",(context["case_id"],context["rev"],position["receipt"],field)).fetchone()
             if not linked:
                 raise CaseError("这版底稿未收录所选付款检查项。",404)
+        elif context["screen"]=="case" and context.get("raw_ref","").startswith("inspection-report-line/"):
+            source=db.execute("""SELECT r.content,d.sha256 AS original_hash,p.sha256 AS page_hash,p.text FROM reports r
+                JOIN docs d ON d.case_id=r.case_id JOIN pages p ON p.case_id=d.case_id AND p.doc=d.id
+                WHERE r.case_id=? AND r.rev=? AND d.id=? AND p.number=?""",
+                (context["case_id"],context["rev"],context["doc"],context["page"])).fetchone()
+            if not source or not cited_inspection_line(source,context):
+                raise CaseError("这版验收签名未引用检测报告上的这条原文。",404)
         elif context["screen"]=="case" and (count_pin or count_raw):
             finding=count_pin[1] if count_pin else None
             raw=context.get("raw_ref")

@@ -37,6 +37,14 @@
 .purpose-attributes dd { margin:0; overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
 .purpose-fingerprint { font-family:var(--mono,ui-monospace,monospace); user-select:all; }
 .purpose-attributes a { display:inline-flex; align-items:center; min-height:44px; font-weight:600; }
+.purpose-report { padding:12px 14px; border-top:1px solid var(--line); }
+.purpose-report h5,.purpose-report p { margin:0 0 6px; font-size:.87rem; }
+.purpose-report-file { display:grid; gap:2px; min-width:0; }
+.purpose-report-file + .purpose-report-file { border-top:1px solid var(--line); margin-top:8px; padding-top:8px; }
+.purpose-report-line { display:grid; grid-template-columns:minmax(0,1fr) auto auto; align-items:center; gap:7px; min-height:44px; padding:5px 2px; text-align:start; color:var(--accent-hover); border:0; background:transparent; }
+.purpose-report-line span { overflow-wrap:anywhere; }
+.purpose-report-line:is(:hover,:focus-visible) { background:var(--accent-soft); }
+.signature-purpose .purpose-report-state { color:var(--attention); font-weight:600; }
 @media (max-width:420px) {
   .purpose-attributes dt:has(+ .purpose-fingerprint),.purpose-fingerprint { grid-column:1 / -1; }
 }
