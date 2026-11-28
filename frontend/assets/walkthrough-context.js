@@ -17,6 +17,10 @@ function fileLabel(name) {
 }
 export function originalLine(context, bundle) {
   const ref=context.params?.fact, report=bundle?.report;
+  if (context.anchor?.startsWith('signature-purpose-') && report?.case_id===context.case_id && bundle?.rev===context.rev) {
+    const source=SignaturePurposes.locate(report,context.anchor);
+    return source?{file:source.doc.name,text:source.row.reason,attribute:true}:null;
+  }
   if (context.dialog!=='page-dialog' || !context.line || !factID.test(ref || '') ||
       !report || report.case_id!==context.case_id || bundle.rev!==context.rev) return null;
   const {facts,documents,nodes}=graphIndex(report.graph);
@@ -178,6 +182,12 @@ export function captureContext(owner, element, pagePoint) {
     }
   }
   const bankSource=element?.closest('[data-bank-role-source]');
+  const purpose=element?.closest('#performance-index[open] [data-signature-purpose]');
+  if (purpose && purpose.dataset.caseId===context.case_id && purpose.dataset.rev===String(context.rev) && state.bundle?.rev===context.rev) {
+    const source=SignaturePurposes.locate(state.bundle.report,purpose.id);
+    if (source) return {screen:'case',case_id:context.case_id,rev:context.rev,tab:'report',anchor:purpose.id,
+      params:SignaturePurposes.params(source.finding),target:fileLabel(source.doc.name+' · 签名属性') || 'PDF 签名属性'};
+  }
   if (bankSource && context.rev && context.case_id===state.bundle?.report.case_id) {
     const selected=ReceiptParties.selection(bankSource,state.bundle.report,context.rev);
     if (selected) return {screen:'case',case_id:context.case_id,rev:context.rev,tab:'report',dialog:'page-dialog',

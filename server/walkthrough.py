@@ -4,6 +4,7 @@ import json
 import re
 
 import payment_execution
+import signature_purposes
 import signer_clock
 import signer_timing
 from advance_guarantee import rectangles
@@ -16,6 +17,7 @@ SCREENS = {"home", "desk", "case", "rules", "library", "team", "account"}
 HOME_PARAMS = {"scene", "slip", "copy", "edition", "batch", "record", "pdf", "carrier", "term", "agreement"}
 CASE_PARAMS = {"view", "stage", "instrument", "receipt", "ticket", "call", "agreement", "acceptance", "finding", "fact", "prior", "entry", "filing", "part"}
 READING_LOCATION = r"reading-d[0-9]{2,8}-p[1-9][0-9]{0,7}-l[1-9][0-9]{0,7}"
+PURPOSE_PIN = re.compile(r"signature-purpose-(H0[1245]-[1-9][0-9]{0,7})-(d[0-9]{2,8})")
 FORM_PIN = re.compile(r"form-(H0[1245]-[1-9][0-9]{0,7})-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7})")
 ACCEPTANCE_LINE_PIN = re.compile(r"(?:number|serial)-(H0[245]-[1-9][0-9]{0,7})-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7})")
 SUBSTITUTION_ORDER_PIN = re.compile(r"serial-(H0[245]-[1-9][0-9]{0,7})-order")
@@ -77,6 +79,15 @@ def check_context(value):
         raise CaseError("走查原页位置不完整。", 400)
     params = result.get("params", {})
     anchor = result.get("anchor", "")
+    if anchor.startswith("signature-purpose-"):
+        pin=PURPOSE_PIN.fullmatch(anchor)
+        if not pin or screen!="case" or not result.get("rev") or result.get("tab")!="report" or {"doc","dialog"}.intersection(result):
+            raise CaseError("请选择本版合同或验收 PDF 的签名原因。",400)
+        expected={"view":{"H01":"contract-checks","H02":"acceptance-checks"}.get(pin[1][:3],"payment-checks")}
+        if expected["view"]=="payment-checks":
+            expected["stage"]=pin[1]
+        if params!=expected:
+            raise CaseError("签名原因与所选检查项不符。",400)
     if anchor.startswith("mandate-date-"):
         pin=MANDATE_DATE_PIN.fullmatch(anchor)
         if (not pin or screen!="case" or not result.get("rev") or result.get("tab","report")!="report"
@@ -354,6 +365,17 @@ def save_note(store, workspace, author, role, data):
             if (len(facts)!=1 or "doc" in context and (facts[0][0],facts[0][1])!=(context["doc"],context["page"])
                     or "line" in context and not PARTY_PIN.fullmatch(anchor) and facts[0][2]!=context["line"]):
                 raise CaseError("这版引文与所选资料、页码或原行不符。",404)
+        if pin:=PURPOSE_PIN.fullmatch(anchor):
+            issued=db.execute("SELECT content FROM reports WHERE case_id=? AND rev=?",(context["case_id"],context["rev"])).fetchone()
+            paper=json.loads(issued[0])
+            ledger=paper["graph"].get(signature_purposes.KEY,{})
+            ref="signature-purpose/"+pin[2]
+            finding=next((f for f in paper["findings"] if f["id"]==pin[1]),None)
+            rows=[r for r in ledger.get("rows",[]) if r["doc"]==pin[2] and r["id"]==ref]
+            if (ledger.get("format")!=signature_purposes.FORMAT or paper["policy"].get(signature_purposes.KEY)!=signature_purposes.FORMAT
+                    or not finding or ref not in finding.get(signature_purposes.KEY,[]) or len(rows)!=1 or
+                    not signature_purposes.cited(finding,rows)):
+                raise CaseError("该版检查未引用所选 PDF 的签名原因。",404)
         if pin:=MANDATE_DATE_PIN.fullmatch(anchor):
             issued=db.execute("SELECT content FROM reports WHERE case_id=? AND rev=?",(context["case_id"],context["rev"])).fetchone()
             if not issued or not cited_mandate_date(json.loads(issued[0]),pin):

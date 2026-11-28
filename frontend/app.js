@@ -708,6 +708,8 @@ function citation(ref,finding) {
     return Team.paperLink(label,prior.case_id,'button ref',new URLSearchParams({rev:String(prior.rev),fact:prior.fact}));
   }
   const source = index?.nodes.get(ref);
+  if (source?.type==='pdf_signature_purpose')
+    return SignaturePurposes.citation(state.bundle.report,finding,ref,state.bundle.rev) || el('span','签名原因与所属原件待核','small');
   if (['acceptance_signer_date','acceptance_clock_line'].includes(source?.type)) {
     const row=SignerEvidence.citedRow(state.bundle.report,ref,finding);
     return row?action(row.quote,()=>SignerEvidence.openRow(row),'ref'):el('span','签认与付款时序原行待核','small');

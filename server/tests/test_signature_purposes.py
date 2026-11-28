@@ -1,6 +1,9 @@
 from copy import deepcopy
 from hashlib import sha256
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 import signature_purposes as purposes
 from pdf_execution import inspect_original
@@ -93,3 +96,70 @@ class SignaturePurposeTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError,"重新审计"):purposes.verify(report,read,signing=True)
             else:
                 purposes.verify(report,read,signing=True)
+
+    def test_replay_compares_scope_to_the_signed_file_before_returning_a_receipt(self):
+        from config import PERFORMANCE
+        from main import create_app
+        from storage import Store
+
+        paper,_=self.paper(self.limited,"contract")
+        doc=paper["graph"]["documents"][0]
+        doc.update(name="演练合同.pdf",size=len(self.limited))
+        cid="a"*32
+        with TemporaryDirectory() as temp:
+            store=Store(Path(temp))
+            store.create(cid,"签名范围复算",[doc],cid,cid,PERFORMANCE)
+            folder=store.files/cid/doc["id"]
+            folder.mkdir(parents=True)
+            client=create_app(store,None).test_client()
+            archive={"report":paper,"sha256":"0"*64}
+            with patch.object(store,"report",return_value=archive),patch("main.replay_from_git") as rules:
+                path=f"/api/cases/{cid}/reports/1/replay"
+                self.assertEqual(client.post(path,json={}).json["state"],"unavailable")
+                (folder/"original.pdf").write_bytes(self.limited)
+                paper["graph"].pop(purposes.KEY)
+                result=client.post(path,json={}).json
+                self.assertEqual(result["state"],"mismatch")
+                self.assertIn("签名原因",result["message"])
+                rules.assert_not_called()
+
+    def test_worker_checks_the_signed_contract_before_issuing_a_report(self):
+        from config import PERFORMANCE
+        from graph import build_graph
+        from jobs import Worker
+        from model import FIELDS
+        from storage import Store
+
+        template=material([CONTRACT,RECEIPT])
+        original=next(d for d in template["documents"] if d["id"]=="d01")
+        doc={**original,"name":"水印测试合同.pdf","ext":".pdf","size":len(self.limited),"sha256":sha256(self.limited).hexdigest()}
+        facts=[{k:f[k] for k in ("field","quote","value","region")} for f in template["facts"] if f["doc"]==doc["id"]]
+        def extract(path):
+            result={"quality":"readable","facts":facts}
+            inputs=[{"index":str(i),"field":FIELDS[f["field"]],"quote":f["quote"],"value":f["value"]} for i,f in enumerate(facts,1)]
+            check={"model":"fixture","response_id":"check","input":inputs,"output":{"checks":[{"index":i["index"],"support":"clear"} for i in inputs]}}
+            return result,{"model":"fixture","response_id":"read","output":result,"check":check}
+        def incomplete_graph(*args,**kwargs):
+            graph=build_graph(*args,**kwargs)
+            graph.pop(purposes.KEY,None)
+            graph["nodes"]=[n for n in graph["nodes"] if n["type"]!="pdf_signature_purpose"]
+            graph["edges"]=[e for e in graph["edges"] if e["type"]!="declares_signature_purpose"]
+            return graph
+        for omit in (True,False):
+            with self.subTest(omit=omit),TemporaryDirectory() as temp:
+                store=Store(Path(temp)); cid="b"*32
+                folder=store.files/cid/doc["id"];folder.mkdir(parents=True)
+                (folder/"original.pdf").write_bytes(self.limited)
+                store.create(cid,"签署范围演练",[doc],cid,cid,PERFORMANCE)
+                response={"followups":[]}
+                with patch("jobs.build_graph",incomplete_graph if omit else build_graph),patch("model.structured",return_value=(
+                        response,{"model":"fixture","response_id":"expert","output":response})):
+                    worker=Worker(store,extract)
+                    if omit:
+                        with self.assertRaisesRegex(ValueError,"签名原因"):worker.run(store.claim())
+                        self.assertEqual(store.detail(cid)["rev"],0)
+                    else:
+                        worker.run(store.claim())
+                        paper=store.report(cid,1)["report"]
+                        signer=next(f for f in paper["findings"] if f["rule"]=="H01")
+                        self.assertEqual((signer["status"],signer[purposes.KEY]),("risk",["signature-purpose/d01"]))

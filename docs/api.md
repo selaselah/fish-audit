@@ -1,5 +1,13 @@
 # 本机审计接口
 
+## PDF 签名所声明的范围
+
+`graph.signature_purposes` 和 `policy.signature_purposes` 使用 `signed-pdf-purpose-v1`。适用对象为能唯一识别为合同、验收报告或复验报告的独立 PDF。要求恰有一个已填写的签名，覆盖本次提交的全部字节，且签名域中有可完整读取的签名原因 `/Reason`（最多 512 个字符）。每条记录保留 `doc`、`role`、签名检查记录 `source`、原件 SHA-256、签名域、文件修订、证书指纹和原文 `reason`。[原件检查](../server/signature_purposes.py)
+
+完整原文符合已列举的到货数量限制时，`scope=quantity_only`。其余可读原文按 `as_stated` 转录。H01 核合同，H02 核验收，H04、H05 仅在本期直接引用该签名检查时使用上述记录。发现中的 `signature_purposes[]`、专家输入和图谱的 `declares_signature_purpose`、`supports_result` 可沿引用回到同一文件。签署人的权限、合同效力和实际验收范围仍需相应业务依据。[验收款样本](http://127.0.0.1:8000/workpaper/3cdebd4a79be4976aa89e1cd2c028a35?rev=8&view=payment-checks&stage=H05-8)
+
+自规则 `2026.11.28.27` 起，出具前重新读取签名原件并核对记录、图谱和专家输入。`POST /api/cases/{case_id}/reports/{rev}/replay` 会在校验通过后复算，返回 `verified`、`mismatch` 或 `unavailable`。在底稿控件留意见时以 `rev`、检查项和文档标识定位签名属性，例如 `view=payment-checks&stage=H05-8`、`anchor=signature-purpose-H05-8-d02`。这种位置属于文件属性，保存时校验该版所引文件及检查项，页码和行号留空。[两案归档记录](acceptance.md#签名只确认到货数量时的合同与验收款)
+
 ## 银行回单户名与模型分类
 
 自规则 `2026.11.28.24` 起，已出具底稿可包含 `policy.bank_party_readings = printed-bank-party-roles-v1`。`graph.bank_party_readings.rows[]` 记录本笔银行回单上的付款或收款户名。每条包括模型字段 `model_role`、实印栏名对应的 `printed_role`、原行及取值、原件和页图摘要、物理页行、行框和候选字段编号。当有唯一原生行、可核对的模型初读与独立复读、字段分类分歧，且实印栏名仍缺失时，状态为 `pending`。H05 的同名字段列出本笔引用的原行节点，专家输入保留比较依据。[核对程序](../server/receipt_parties.py)

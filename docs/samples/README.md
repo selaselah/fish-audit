@@ -331,7 +331,13 @@ server/.venv/bin/python docs/samples/delivery_batches.py --run --run-id local-ba
 
 ## 供货主体与 PDF 签署意见
 
-运行 `server/.venv/bin/python docs/samples/supplier_annotations.py --seed supplier-demo` 可生成三套带水印的合同、验收单和付款回单。分别模拟签后附注要求取得送货单、终验供货方与合同不同、签署人仅确认到货数量。`--case reason` 可单独生成第三案。加 `--run` 后会上传本机服务，在核实每份文件的摘要和水印后模拟字段核验，并检查 H01、H02 和各期付款结论。[本机演练结果](../acceptance.md#验收供货主体批注和签署原因)
+运行 `server/.venv/bin/python docs/samples/supplier_annotations.py --seed supplier-demo` 可生成四套带水印的资料，分别演练签后附注要求取得送货单、终验供货方与合同不同、合同签名仅确认到货数量、验收报告签名仅确认到货数量。[供货主体演练结果](../acceptance.md#验收供货主体批注和签署原因)
+
+以下命令会将两个签署范围案例上传至本机服务。脚本核对原件摘要和水印，模拟审计人员核对字段，再检查签名原因原文、所签文件与受影响的期款。生成的自签证书仅用于水印演练。[两个案例的预期差异](../acceptance.md#签名只确认到货数量时的合同与验收款)
+
+```bash
+server/.venv/bin/python docs/samples/supplier_annotations.py --seed quantity-review --case reason receipt_reason --run
+```
 
 ## 排印稿、电子签署版与签后修订版
 

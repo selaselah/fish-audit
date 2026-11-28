@@ -1,4 +1,4 @@
-"""Compare a contract signature widget, an actual supplier comment and different seller names."""
+"""Exercise supplier comments, mismatched seller names and the scope stated on a signed PDF."""
 
 import argparse
 from hashlib import sha256
@@ -14,6 +14,21 @@ THIRD = "山岚演练交付中心"
 REASON = "仅确认到货数量，实际供货单位及终验质量仍待核对。"
 CASES = {"comment": "签后批注要求核对实际供货方", "different": "签名控件与不同的终验供货方",
          "reason": "电子签名原因仅确认到货数量", "receipt_reason": "验收报告电子签名仅确认到货数量"}
+
+
+def check_quantity_scope(report, mode):
+    contract = mode == "reason"
+    row, = report["graph"]["signature_purposes"]["rows"]
+    doc = next(d for d in report["graph"]["documents"] if d["id"] == row["doc"])
+    assert (doc["name"], row["original_sha256"]) == ("采购合同.pdf" if contract else "验收报告.pdf", doc["sha256"])
+    assert (row["role"], row["scope"], row["reason"]) == ("contract" if contract else "acceptance", "quantity_only", REASON)
+    owner = "H01" if contract else "H02"
+    stages = {"第一期", "第二期", "第三期"} if contract else {"第二期", "第三期"}
+    cited = [f for f in report["findings"] if "signature_purposes" in f]
+    assert all(f["signature_purposes"] == [row["id"]] and row["id"] in f["evidence"] for f in cited)
+    assert [(f["rule"], f["status"]) for f in cited if f["rule"] in ("H01", "H02")] == [(owner, "risk")]
+    assert {f["stage"]["name"] for f in cited if f["rule"] == "H04"} == stages
+    assert [(f["stage"]["name"], f["status"]) for f in cited if f["rule"] == "H05"] == [("第二期", "missing")]
 
 
 def with_comment(raw, page=0):
@@ -95,6 +110,7 @@ def run(seed, upload, modes):
             assert page["state"] == "annotations" and REASON in [n.get("signing_reason") for n in page["annotations"]]
             assert page["role"] == ("receipt" if mode == "receipt_reason" else "contract")
             assert supplier["status"] == "missing"
+            check_quantity_scope(report, mode)
         else:
             assert page["state"] == "same_print" and THIRD in supplier["names"].values() and supplier["status"] == "risk"
         assert all(f["status"] != "ok" for f in report["findings"] if f["rule"] in ("H01", "H04", "H05"))

@@ -71,7 +71,7 @@ function showLocation() {
     quote.textContent=source.text;
     if ([...source.text].length>72) {
       const details=document.createElement('details'), summary=document.createElement('summary');
-      summary.textContent='查看原行全文';
+      summary.textContent=source.attribute?'查看签名原因全文':'查看原行全文';
       details.append(summary,quote); excerpt.append(details);
     } else excerpt.append(quote);
   }
@@ -235,7 +235,7 @@ function resetButton() {
 }
 function revealSelectedSource() {
   const el=selectedElement;
-  if (!dialog.open || !el?.closest('.revision-approval-sources,[data-proof-target],[data-timing-ref],[data-mandate-date],[data-bank-role-source]') || !matchMedia('(max-width:650px)').matches) return;
+  if (!dialog.open || !el?.closest('.revision-approval-sources,[data-proof-target],[data-timing-ref],[data-mandate-date],[data-bank-role-source],[data-signature-purpose]') || !matchMedia('(max-width:650px)').matches) return;
   const bottom=dialog.getBoundingClientRect().top-12;
   if (el.closest('#performance-index[open]') && matchMedia('(max-width:560px)').matches) {
     const scope=el.closest('#performance-index');

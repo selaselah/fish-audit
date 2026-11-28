@@ -251,6 +251,7 @@ class Worker:
             policy["measurement_numbers"] = measurement_spacing.FORMAT
         report = {"case_id": case_id, "policy": policy, "graph": graph, "findings": findings,
                   "result": result, "calls": calls}
+        signature_purposes.verify(report,read_original)
         supplement = store.supplement_record(report)
         if supplement:
             report["supplement"] = supplement

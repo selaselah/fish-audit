@@ -814,7 +814,7 @@ const PerformanceIndex = (() => {
       for (const row of checks.children) row.setAttribute('aria-pressed',String(row.dataset.check===selected));
       const heading=el('h3',checkLabel(item)); heading.id='scope-check-title';
       const complete=action('完整检查',()=>{
-        dialog.close(); revealPaperTarget(document.querySelector('[data-finding="'+CSS.escape(item.id)+'"]'));
+        dialog.close(); revealPaperTarget(document.querySelector('.finding[data-finding="'+CSS.escape(item.id)+'"]'));
       },'text-button');
       const jump=specialist(item);
       if (jump) jump.addEventListener('click',()=>dialog.close(),{capture:true});
@@ -834,6 +834,8 @@ const PerformanceIndex = (() => {
       detail.dataset.guarantee=String(Boolean(guarantee));
       detail.dataset.quality=String(Boolean(quality));
       detail.replaceChildren(box('scope-check-state',el('span',item.id,'mono'),tag(item.status)),heading);
+      const purpose=SignaturePurposes.panel(state.bundle.report,item,rev);
+      if (purpose) detail.append(purpose);
       if (item.acceptance_signing_requirements || item.stage && ['H04','H05'].includes(item.rule)) {
         for (const row of contractSigningSources(state.bundle.report,item)) detail.append(workpaperLineButton(row,item));
       }
@@ -916,10 +918,10 @@ const PerformanceIndex = (() => {
         if (detailText) detail.append(fold('本项检查结论',el('p',detailText,'scope-reason')));
       } else if (!paired && detailText) {
         const reason=el('p',detailText,'scope-reason');
-        detail.append(detailText.length<=100 && !receipts.length && !bankParties && !batch && !guarantee && !quality && !retest?reason:fold('阅读本项结论',reason));
+        detail.append(detailText.length<=100 && !purpose && !receipts.length && !bankParties && !batch && !guarantee && !quality && !retest?reason:fold('阅读本项结论',reason));
       }
       if (!paired && !eventDate) {
-        detail.append(register || roster || finalSignatures || mandateDates || bankParties || batch || guarantee || quality || retest || mandates.length || receipts.some(p=>p.record.kind)?lazyFold('其他字段引文',()=>[sources()]):sources());
+        detail.append(purpose || register || roster || finalSignatures || mandateDates || bankParties || batch || guarantee || quality || retest || mandates.length || receipts.some(p=>p.record.kind)?lazyFold('其他字段引文',()=>[sources()]):sources());
       }
       detail.append(actions);
       detail.scrollTop=0;

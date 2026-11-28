@@ -37,6 +37,7 @@ from payment_index import LegacyPartialTransfer
 from model import FIELDS
 from review import review_text
 from report_comparison import compare as compare_reports
+import signature_purposes
 from rule_replay import RulesUnavailable, replay_from_git
 from storage import Store, encode, stamp
 from walkthrough import list_notes, save_note
@@ -495,9 +496,16 @@ def create_app(store, worker):
         version = store.report(case_id,rev)
         paper = version["report"]
         try:
-            checked = replay_from_git(paper)
-        except RulesUnavailable as error:
-            checked = {"state":"unavailable","message":str(error)}
+            signature_purposes.verify(paper,lambda doc:(store.files/case_id/doc["id"]/("original"+doc["ext"])).read_bytes())
+        except OSError:
+            checked = {"state":"unavailable","message":"无法读取签名原因所据的 PDF 原件，请恢复本版所用文件后复算。"}
+        except (ValueError,KeyError,TypeError) as error:
+            checked = {"state":"mismatch","message":str(error) if isinstance(error,ValueError) else "签名原因与归档资料结构不一致。"}
+        else:
+            try:
+                checked = replay_from_git(paper)
+            except RulesUnavailable as error:
+                checked = {"state":"unavailable","message":str(error)}
         return jsonify(**checked,format="fish-audit-rule-replay/v1",case_id=case_id,rev=rev,report_sha256=version["sha256"],checked_at=stamp(),
                        rule_version=paper["policy"]["version"])
 

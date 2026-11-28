@@ -55,7 +55,7 @@ const ReceiptParties = (() => {
   function selection(button,report,rev) {
     const card=button.closest('#performance-index[open] [data-bank-party]');
     if (!card || card.dataset.caseId!==report.case_id || card.dataset.rev!==String(rev)) return null;
-    const proof=bind(report,report.findings.find(f=>f.id===card.dataset.finding),card.dataset.bankParty);
+    const proof=bind(report,report.findings.find(f=>f.id===card.dataset.findingKey),card.dataset.bankParty);
     return proof && [proof.bank,proof.peer].find(s=>s?.fact.id===button.dataset.bankRoleSource);
   }
   function panel(finding,report,rev) {
@@ -66,7 +66,7 @@ const ReceiptParties = (() => {
       if (!proof) continue;
       const {row,bank,peer,role}=proof, pending=row.state==='pending';
       const card=el('section','','bank-role-reading');
-      Object.assign(card.dataset,{bankParty:ref,caseId:report.case_id,rev:String(rev),finding:finding.id,state:row.state});
+      Object.assign(card.dataset,{bankParty:ref,caseId:report.case_id,rev:String(rev),findingKey:finding.id,state:row.state});
       const title=names[row.printed_role]+'核对';
       card.setAttribute('aria-label',title);
       card.append(box('bank-role-head',el('h4',title),el('span',pending?'分类待核':'已核图更正')));
