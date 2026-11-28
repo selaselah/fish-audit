@@ -61,6 +61,7 @@ import payment_quality
 import retest_reference
 import inspection_use
 import party_readings
+import receipt_parties
 import measurement_spacing
 import installment_counts
 import board_execution
@@ -852,6 +853,7 @@ class Store:
                 raise CaseError(f"签收前核对回单所据初验与复验失败。{error}",409) from error
             try:
                 party_readings.verify_originals(paper,read_original)
+                receipt_parties.verify_originals(paper,read_original)
             except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
                 raise CaseError(f"签收前核对主体原行失败。{error}",409) from error
             try:
@@ -1003,6 +1005,7 @@ class Store:
                 raise CaseError(f"签收前核对验收数值失败。{error}",409) from error
             try:
                 party_readings.verify(paper,page_text,signing=True,read_layout=page_layout)
+                receipt_parties.verify(paper,page_text,page_layout)
             except (KeyError,TypeError,ValueError) as error:
                 raise CaseError(f"签收前核对主体原行失败。{error}",409) from error
             try:

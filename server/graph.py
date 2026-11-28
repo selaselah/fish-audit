@@ -22,6 +22,7 @@ import equipment_exchanges
 import stage_payments
 import payment_acceptance
 import payment_execution
+import receipt_parties
 import advance_guarantee
 import contract_effect
 import pdf_execution
@@ -403,6 +404,12 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     if counts:
         graph[installment_counts.KEY] = {"format":installment_counts.FORMAT, "rows":counts}
         nodes, edges = installment_counts.source_graph(counts)
+        graph["nodes"].extend(nodes)
+        graph["edges"].extend(edges)
+    bank_roles = receipt_parties.sources(graph,lambda d,n:texts[d,n],calls,lambda d,n:layouts[d,n])
+    if bank_roles:
+        graph[receipt_parties.KEY] = {"format":receipt_parties.FORMAT,"rows":bank_roles}
+        nodes,edges = receipt_parties.source_graph(bank_roles)
         graph["nodes"].extend(nodes)
         graph["edges"].extend(edges)
     pairs = party_readings.sources(graph,lambda d,n:texts[d,n],lambda d,n:layouts[d,n],calls=calls)

@@ -57,6 +57,7 @@ import measurement_spacing
 import retest_reference
 import inspection_use
 import party_readings
+import receipt_parties
 import installment_counts
 import board_execution
 from invoice_conditions import verify as verify_invoice_conditions
@@ -318,6 +319,8 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
     inspection_use.verify(report,page_text)
     party_readings.verify(report,page_text)
     party_readings.verify_originals(report,read_original)
+    receipt_parties.verify(report,page_text)
+    receipt_parties.verify_originals(report,read_original)
     installment_counts.verify(report,page_text)
     installment_counts.verify_originals(report,read_original)
     board_execution.verify(report, read_original, page_text)

@@ -14,6 +14,7 @@ import stage_payments
 import advance_guarantee
 import payment_acceptance
 import payment_execution
+import receipt_parties
 import signer_timing
 import signer_clock
 import equipment_models
@@ -783,6 +784,7 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True, recheck_
         addendum_execution.flag_mismatches(graph,results)
         payment_quality.apply(graph,results)
         party_readings.attach(graph,results)
+        receipt_parties.attach(graph,results)
         approval_names.apply_conditions(graph,results)
         approval_changes.apply(graph,results)
         substitution_dates.apply(graph,results)
@@ -1284,8 +1286,12 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         if release_check and any(row["kind"]=="warranty" for row,_ in matching):
             linked=linked and warranty_terms.bank_identity(contract,bank)
         refs += contract.evidence("contract_id","buyer","seller")
+        bank_roles = [r for r in graph.get(receipt_parties.KEY,{}).get("rows",[]) if r["unit"]==bank.unit]
+        if any(r["state"]=="pending" for r in bank_roles):
+            linked = False
         if not linked or not paid or bank.single("transfer_status") not in {"交易成功","转账成功","成功","已完成"} or len(matching) != 1:
-            payment = result("H05","missing","需取得本合同关联的成功回单、付款日期及回单明列的对应期次。",refs,scope)
+            detail = "这张回单与合同期次的对应关系待核。" if bank_roles else "需取得本合同关联的成功回单、付款日期及回单明列的对应期次。"
+            payment = result("H05","missing",detail,refs,scope)
             if version in DATE_FORMATS and bank.date("paid_on") and not paid:
                 add_date_checks(payment,[date_check("payment","missing","请核对这笔款项实际支付日期的原始栏位及完整引文。",bank.evidence("paid_on"))])
             output.append(payment)
@@ -1430,6 +1436,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("acceptance_execution") != entry.get("acceptance_execution")
                 or saved.get("acceptance_originals") != entry.get("acceptance_originals")
                 or saved.get("acceptance_authority") != entry.get("acceptance_authority")
+                or saved.get(receipt_parties.KEY) != entry.get(receipt_parties.KEY)
                 or saved.get("acceptance_signing_requirements") != entry.get("acceptance_signing_requirements")
                 or saved.get("date_checks") != entry.get("date_checks")
                 or saved.get("batch_acceptance") != entry.get("batch_acceptance")
