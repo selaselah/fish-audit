@@ -1,11 +1,11 @@
 import copy
 import unittest
 
-from contract_effect import FORM_RECTS, LEGACY, SEAL_FORMAT, form_rows, signing_form, sources, verify
+from contract_effect import FORM_RECTS, LEGACY, SEAL_FORMAT, form_rows, shared_form, signing_form, sources, verify
 from controls import VERSION, execute
 from performance import BATCH_FORMAT, compute, verify_findings
 from test_performance import APPROVAL, BANK_DOC, CONTRACT, RECEIPT, WARRANTY, material
-from signing_parties import CALENDAR_FORMAT
+from signing_parties import CALENDAR_FORMAT, FORM_FORMAT
 
 
 RIDER="附加生效条件：本合同须取得主管机构书面批准后方可生效"
@@ -14,6 +14,76 @@ BOARD_NOTE="决议附注：仅批准谈判，签约须另行表决"
 
 
 class ContractEffectTests(unittest.TestCase):
+    def test_signing_subjects_and_choices_are_read_with_their_own_predicate(self):
+        groups = {
+            "joint": ("签署要求：本合同与验收报告均须由双方代表签字并盖章",
+                      "签署方式：验收报告及本合同均须加盖双方公章，并由双方代表签字",
+                      "本合同与验收单签署要求：双方法定代表人签字并加盖公章",
+                      "第十条 主合同、验收报告均由双方签字并盖章"),
+            "either": ("签署方式：本合同与验收报告均由双方签字或盖章","本合同和验收单均可盖章或者签字",
+                       "本合同及验收单双方可签字或盖章即可"),
+            "review": ("签署要求：本合同与验收报告均可不签字并盖章",
+                       "本合同与验收报告均须签字并盖章；验收报告经双方书面同意可以免章",
+                       "签署方式：验收单和本合同均由授权代表亲笔签字","废止条文：本合同及验收单均须签字并盖章"),
+            None: ("签署要求：本合同项下的验收报告须由双方代表签字并盖章",
+                   "签署方式：本合同与验收报告的复印件须签字并盖章",
+                   "本合同和验收单分别留存，验收单须由双方代表签字并盖章",
+                   "签署要求：付款申请及验收报告均由双方代表签字并盖章")
+        }
+        for expected, examples in groups.items():
+            for raw in examples:
+                with self.subTest(raw=raw):
+                    self.assertEqual(shared_form(raw),expected)
+
+    def test_shared_execution_reaches_both_findings_and_each_related_payment(self):
+        raw="签署方式：验收报告及本合同均须加盖双方公章，并由双方代表签字"
+        for name in ("第一期","第二期"):
+            for failed in (False,True):
+                def edit(index,field,label,value):
+                    if field=="payment_designation": return name
+                    return "不合格" if failed and field=="acceptance_result" else value
+                graph=material([CONTRACT,RECEIPT,WARRANTY,BANK_DOC],edit,omissions=[(1,raw)])
+                findings=compute(graph)
+                signed,accepted=findings[:2]
+                row,=form_rows(signed["effect_review"])
+                self.assertEqual(row["applies_to"],["contract","acceptance"])
+                self.assertEqual((row["quote"],signed["status"],accepted["status"]),(raw,"missing","issue" if failed else "missing"))
+                self.assertEqual(accepted["acceptance_signing_requirements"],[row["id"]])
+                self.assertEqual(next(n for n in graph["nodes"] if n["id"]==row["id"])["applies_to"],row["applies_to"])
+                self.assertIn(row["id"],accepted["evidence"])
+                self.assertIn("验收文件也须签字并盖章",accepted["detail"])
+                if failed: self.assertIn("不合格",accepted["detail"])
+                linked=[r for r in findings if r["rule"] in ("H04","H05") and r.get("stage",{}).get("name")==name]
+                self.assertEqual(len(linked),2)
+                for item in linked:
+                    self.assertIn(row["id"],item["evidence"])
+                    self.assertIn("第 17 行",item["detail"])
+                    self.assertNotEqual(item["status"],"ok")
+                self.assertIn("验收签署凭证" if name=="第二期" else "当时的签署依据",linked[-1]["detail"])
+
+    def test_shared_signing_rows_are_reconstructed_at_replay_and_signoff(self):
+        raw="签署要求：本合同及验收报告均须签字并盖章"
+        graph=material([CONTRACT,RECEIPT,BANK_DOC],omissions=[(1,raw)])
+        def read(doc,page):
+            lines=[f["quote"] for f in graph["facts"] if f["doc"]==doc]
+            return "\n".join([*lines,raw] if doc=="d01" else lines)
+        row,=form_rows(graph["contract_effect_sources"])
+        paper={"graph":graph,"policy":VERSION,"findings":compute(graph),
+               "calls":{"pages":[{"doc":"d01","page":1,"page_sha256":"page",FORM_RECTS:{str(row["line"]):[[0,.1,.9,.2]]}}]}}
+        verify(paper,read)
+        for field,value in (("acceptance_signing_requirements",[]),("status","ok"),("evidence",[])):
+            changed=copy.deepcopy(paper)
+            changed["findings"][1][field]=value
+            with self.assertRaisesRegex(ValueError,"共同签署"): verify(changed,read)
+        old=copy.deepcopy(graph)
+        old["contract_effect_sources"]=sources(old,read,FORM_FORMAT)
+        old["nodes"]=[n for n in old["nodes"] if n["type"]!="contract_signing_requirement"]
+        old["edges"]=[e for e in old["edges"] if e["type"]!="contract_signing_requirement_source"]
+        previous={"graph":old,"policy":{**VERSION,"version":"2026.11.28.12","contract_effect":FORM_FORMAT},"findings":compute(old)}
+        self.assertEqual(previous["findings"][0]["status"],"ok")
+        verify(previous,read)
+        with self.assertRaisesRegex(ValueError,"重审"): verify(previous,read,signing=True)
+
     def test_separate_contract_signature_and_seal_requirement_reaches_the_advance(self):
         rider="合同签署要求：本合同须经双方法定代表人签字并加盖公章"
         for board in (False,True):

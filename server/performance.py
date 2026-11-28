@@ -1100,6 +1100,11 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         if folios["whole"]:
             contract_folios.attach(signed, {**folios, "status": "missing",
                 "detail": "合同原页载有整份协议待确认或草拟的说明，请取得最终签署版本。"})
+    signing_rows = contract_effect.form_rows(signed.get("effect_review",{}))
+    shared_rows = [row for row in signing_rows if row.get("applies_to")==list(contract_effect.SHARED_DOCUMENTS)]
+    if shared_rows:
+        contract_effect.review_acceptance(accepted, shared_rows)
+        accepted_on = None
     output = [signed, accepted, plan]
     if approval_scope:
         for finding in (accepted,plan):
@@ -1140,11 +1145,10 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
     hold_refs = [ref for note in holds for ref in (f"{note['doc']}/p{note['page']}",*note["facts"])]
     stages = []
     prior_checks = {}
-    signing_rows = contract_effect.form_rows(signed.get("effect_review",{}))
-    signing_sources = ""
-    if signing_rows:
-        filenames = {doc["id"]:doc["name"] for doc in graph["documents"]}
-        signing_sources = "、".join(f"《{filenames[r['doc']]}》第 {r['page']} 页第 {r['line']} 行" for r in signing_rows)
+    filenames = {doc["id"]:doc["name"] for doc in graph["documents"]} if signing_rows else {}
+    def locations(records):
+        return "、".join(f"《{filenames[r['doc']]}》第 {r['page']} 页第 {r['line']} 行" for r in records)
+    signing_sources, acceptance_sources = locations(signing_rows), locations(shared_rows)
     for idx, row in enumerate(rows, 1):
         kind = row["kind"]
         fallback_label = f"第{idx}期" if version == FIRST_FORMAT else f"条款 {idx}"
@@ -1236,6 +1240,8 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
             payment_amendments.attach(check,scoped_change)
         if kind=="effect" and signing_sources:
             check["detail"] += f" 本期以合同生效为前提，{signing_sources}所列签署要求仍须核实。"
+        elif kind=="acceptance" and acceptance_sources:
+            check["detail"] += f" {acceptance_sources}同时约定了验收文件的签署方式，须核对本期验收凭证。"
         output.append(check)
         stages.append((row,check))
 
@@ -1347,6 +1353,8 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
                                   other_terms=bool(extra_units or changes or repairs or retests or pending_units or batch))
         if row["kind"]=="effect" and signing_sources:
             payment["detail"] += f" 回单列示付款日 {paid}，请对照{signing_sources}，补核当时的签署依据。"
+        elif row["kind"]=="acceptance" and acceptance_sources:
+            payment["detail"] += f" 回单列示付款日 {paid}，请按{acceptance_sources}核对付款时已有的验收签署凭证。"
         output.append(payment)
     return output
 
@@ -1384,6 +1392,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("acceptance_execution") != entry.get("acceptance_execution")
                 or saved.get("acceptance_originals") != entry.get("acceptance_originals")
                 or saved.get("acceptance_authority") != entry.get("acceptance_authority")
+                or saved.get("acceptance_signing_requirements") != entry.get("acceptance_signing_requirements")
                 or saved.get("date_checks") != entry.get("date_checks")
                 or saved.get("batch_acceptance") != entry.get("batch_acceptance")
                 or saved.get("effect_review") != entry.get("effect_review")
