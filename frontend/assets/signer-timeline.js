@@ -128,9 +128,12 @@ const SignerTimeline = (() => {
         (ordered && a.at && b.at?a.at.localeCompare(b.at):0));
       const controls = [];
       list.replaceChildren();
-      function select(index) {
+      function select(index,chosen=false) {
         const event = events[index];
-        controls.forEach((button,i) => button.setAttribute('aria-pressed',String(i===index)));
+        controls.forEach((button,i) => {
+          button.setAttribute('aria-pressed',String(i===index));
+          button.toggleAttribute('data-walk-selected',chosen && i===index && Boolean(button.dataset.timingRef));
+        });
         preview.replaceChildren();
         const source = event.source;
         if (source) {
@@ -147,6 +150,12 @@ const SignerTimeline = (() => {
       const dayGroups=new Map();
       for (const [i,event] of events.entries()) {
         const button = element('button','signer-event'); button.type = 'button';
+        const row=/^(signer-date|joint-clock)\/(d\d+)\/p(\d+)\/l(\d+)$/.exec(event.source?.ref || '');
+        if (id==='signer-timing' && row && event.source.rects?.length) {
+          button.id='timing-'+item.key+'-'+row[1]+'-'+row[2]+'-p'+row[3]+'-l'+row[4];
+          button.dataset.timingRef=event.source.ref;
+          button.dataset.originalLabel=event.source.file+' · '+event.source.place+' · '+event.source.quote;
+        }
         button.dataset.kind = event.kind;
         const stamp = element(event.day?'time':'span','signer-stamp',event.day?(year.length===1?event.day.slice(5):event.day).replaceAll('-','/'):'待核');
         if (event.day) stamp.dateTime = event.day;
@@ -157,12 +166,12 @@ const SignerTimeline = (() => {
           at.dateTime=event.day?event.day+'T'+event.at+(event.zone || ''):event.at;
           button.append(at);
         }
-        button.addEventListener('click',()=>select(i));
+        button.addEventListener('click',()=>select(i,true));
         button.addEventListener('keydown',e=>{
           const next = {ArrowDown:i+1,ArrowUp:i-1,Home:0,End:events.length-1}[e.key];
           if (next==null) return;
           e.preventDefault();
-          const j=Math.max(0,Math.min(next,events.length-1)); controls[j].focus(); select(j);
+          const j=Math.max(0,Math.min(next,events.length-1)); controls[j].focus(); select(j,true);
         });
         controls.push(button);
         const groupKey=event.day || '';
@@ -181,6 +190,12 @@ const SignerTimeline = (() => {
       basis.replaceChildren();
       for (const [source,label] of [[item.clause,'共同签认约定'],[item.term,'本期付款条款']]) {
         if (source) basis.append(original(source,label));
+      }
+      for (const group of item.joined || []) {
+        const details=element('details','signer-candidates');
+        details.append(element('summary','','模型合并抄录 · '+group.sources.length+' 行'),element('blockquote','signer-quote',group.quote));
+        for (const source of group.sources) details.append(original(source,source.quote));
+        basis.append(details);
       }
       if (item.candidates?.length) {
         const details=element('details','signer-candidates');

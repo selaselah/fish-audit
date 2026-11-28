@@ -60,7 +60,7 @@ const PhaseEvidence = (() => {
       if (row.doc!==doc || row.page!==page) continue;
       const fact=SignerEvidence.observation(graph,row);
       const title={signer:'具名签认时刻',debit:'实际扣款时刻',other:'回单所列时刻'}[row.kind] || '具名签认日期';
-      add(row,title,row.kind?'acceptance_clock_source':'signer_date_source',row.kind?'signer-clock-line/':'signer-date-line/',
+      add(row,title,row.kind?'acceptance_clock_source':'signer_date_source',(row.kind?'joint-clock/':'signer-date/')+row.doc+'/p'+row.page+'/l',
         Boolean(fact) && row.line!==lineHint,SignerEvidence.rectangles(graph,calls,row));
     }
     for (const row of PriorInstallment.sources(graph)) {

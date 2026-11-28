@@ -65,7 +65,8 @@ function showLocation() {
   const signing=context.raw_ref?.startsWith('contract-signing-form/') || context.anchor?.startsWith('form-H') || context.raw_ref?.startsWith('measurement-number/') || context.anchor?.startsWith('number-H') ||
     context.raw_ref?.startsWith('inspection-line/') || context.anchor?.startsWith('serial-H');
   const comparison=context.params?.view==='revision-comparison' && context.params.prior && context.anchor?.startsWith('revision-');
-  const compact=(docked || signing || comparison || /^(?:party-reading-|(?:stage-)?proof-)/.test(context.anchor || '')) && context.screen==='case' && context.rev && (context.target || context.page_point);
+  const timing=context.anchor?.startsWith('timing-H') || /^(?:signer-date|joint-clock)\//.test(context.raw_ref || '');
+  const compact=(docked || signing || timing || comparison || /^(?:party-reading-|(?:stage-)?proof-)/.test(context.anchor || '')) && context.screen==='case' && context.rev && (context.target || context.page_point);
   const editions=comparison?'R'+context.params.prior+' / R'+context.rev:'R'+context.rev;
   q('#walk-origin').textContent=compact?'底稿 '+context.case_id.slice(0,8)+' · '+editions:'记录位置';
   place.textContent=compact?[context.target || context.doc,context.doc && '第 '+context.page+' 页',context.line && '第 '+context.line+' 行',
@@ -213,7 +214,7 @@ function resetButton() {
 }
 function revealSelectedSource() {
   const el=selectedElement;
-  if (!dialog.open || !el?.closest('.revision-approval-sources,[data-proof-target]') || !matchMedia('(max-width:650px)').matches) return;
+  if (!dialog.open || !el?.closest('.revision-approval-sources,[data-proof-target],[data-timing-ref]') || !matchMedia('(max-width:650px)').matches) return;
   const bottom=dialog.getBoundingClientRect().top-12;
   if (el.closest('#performance-index[open]') && matchMedia('(max-width:560px)').matches) {
     const scope=el.closest('#performance-index');
@@ -385,6 +386,10 @@ export async function openRecorder(sourceDialog) {
   q('.walk-scope').textContent='';
   dialog.showModal(); text.focus();
   await connect();
+  const selected=context?.anchor && document.getElementById(context.anchor);
+  if (dialog.open && selected?.matches('.signer-event[data-walk-selected][aria-pressed=true]')) {
+    markSelection(selected); revealSelectedSource();
+  }
 }
 q('#walk-retry').onclick=connect;
 async function connect() {

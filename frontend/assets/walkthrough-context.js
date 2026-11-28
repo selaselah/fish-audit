@@ -12,7 +12,7 @@ const identifier = /^[a-zA-Z][a-zA-Z0-9_-]{0,95}$/;
 const factID = /^d\d{2}\/p[1-9]\d*\/(?:[ft][1-9]\d*|h[a-f0-9]{12})$/;
 function printedRef(context, ref) {
   const address=context.doc+'/p'+context.page+'/l'+context.line;
-  return context.rev && ['inspection-use/','payment-approval/','payment-clock/','contract-approver/','approval-change/','installment-count/','measurement-note/','contract-signing-form/','measurement-number/','inspection-line/','execution/'].some(prefix=>ref===prefix+address);
+  return context.rev && ['inspection-use/','payment-approval/','payment-clock/','contract-approver/','approval-change/','installment-count/','measurement-note/','contract-signing-form/','measurement-number/','inspection-line/','execution/','signer-date/','joint-clock/'].some(prefix=>ref===prefix+address);
 }
 function knownParams(search, keys) {
   const out = {};
@@ -101,6 +101,17 @@ export function captureContext(owner, element, pagePoint) {
             activeProof.dataset.outOfStage==='false' && activeProof.getClientRects().length && /^H05-[1-9]\d*$/.test(activeProof.dataset.selected)) {
           context.params={view:'payment-proof',receipt:activeProof.dataset.selected};
         }
+        const currentTiming=view==='signer-timing' || document.getElementById('walk-launch')?.closest('.signer-mobile-tools');
+        const timeline=element?element.closest('#signer-timing'):!owner?document.getElementById('signer-timing'):null;
+        if (timeline?.dataset.caseId===cid && timeline.dataset.rev===String(context.rev) &&
+            timeline.dataset.outOfStage!=='true' && timeline.getClientRects().length && /^H05-[1-9]\d*$/u.test(timeline.dataset.findingKey)) {
+          if (!element) {
+            const selected=timeline.querySelector('.signer-event[data-walk-selected][aria-pressed=true]');
+            const bounds=selected?.getBoundingClientRect();
+            if (bounds?.height && bounds.bottom>0 && bounds.top<innerHeight) element=selected;
+          }
+          if (element || currentTiming) context.params={view:'signer-timing',receipt:timeline.dataset.findingKey};
+        }
         const proof=element?.closest('[data-proof-target]');
         if (proof) {
           const link=document.getElementById(proof.dataset.proofTarget);
@@ -138,7 +149,8 @@ export function captureContext(owner, element, pagePoint) {
             }
           } else if (+row?.dataset.gapLine>0) {
             context.line=+row.dataset.gapLine;
-            if (printedRef(context,row.dataset.sourceRef)) context.raw_ref=row.dataset.sourceRef;
+            const raw=row.dataset.sourceRef;
+            if (printedRef(context,raw) && (!/^(signer-date|joint-clock)\//u.test(raw) || SignerEvidence.citedRow(state.bundle.report,raw))) context.raw_ref=raw;
           }
         }
       }
@@ -184,7 +196,8 @@ export function describeContext(c) {
   const register=c.raw_ref?.startsWith('inspection-line/')?'设备编号原行':
     c.anchor?.startsWith('serial-H') && (c.anchor.endsWith('-order')?'设备代用批准日期':'设备编号清单');
   const signing=register || (c.raw_ref?.startsWith('measurement-number/')?'验收数值原行':c.anchor?.startsWith('number-H02-')?'验收数值核对':c.raw_ref?.startsWith('contract-signing-form/') ? '合同签署原行' : c.anchor?.startsWith('form-H02-') ? '验收签署条件' : c.params?.view==='contract-signing-form' && '合同签署条件');
-  const receipt=c.params?.view==='payment-proof' && c.params.receipt?'扣款凭证 '+c.params.receipt:
+  const receipt=c.params?.view==='signer-timing' && c.params.receipt?'签认与付款时序 '+c.params.receipt:
+    c.params?.view==='payment-proof' && c.params.receipt?'扣款凭证 '+c.params.receipt:
     c.params?.view==='payment-checks' && (c.anchor?.startsWith('stage-proof-')?'扣款凭证 '+c.params.stage:c.anchor?.startsWith('payment-approval-')?'付款审批单 '+c.params.stage:
     c.anchor?.startsWith('form-H04-')?'期款条件 '+c.params.stage:
     c.anchor?.startsWith('form-H05-')?'实付回单 '+c.params.stage:

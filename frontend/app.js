@@ -708,6 +708,10 @@ function citation(ref,finding) {
     return Team.paperLink(label,prior.case_id,'button ref',new URLSearchParams({rev:String(prior.rev),fact:prior.fact}));
   }
   const source = index?.nodes.get(ref);
+  if (['acceptance_signer_date','acceptance_clock_line'].includes(source?.type)) {
+    const row=SignerEvidence.citedRow(state.bundle.report,ref,finding);
+    return row?action(row.quote,()=>SignerEvidence.openRow(row),'ref'):el('span','签认与付款时序原行待核','small');
+  }
   if (source?.type==='payment_execution_line') {
     return PaymentProof.citation(state.bundle.report,ref,finding) || el('span','扣款凭证原行待核','small');
   }
@@ -1766,7 +1770,7 @@ async function refresh() {
         if (doc && OriginalReader.pageNumbers(doc,graph).includes(page)) {
           state.openedCitation=location.hash;
           const raw=route.params.get('walkraw');
-          const ref=['inspection-use/','payment-approval/','payment-clock/','contract-approver/','approval-change/','installment-count/','measurement-note/','contract-signing-form/','measurement-number/','inspection-line/','execution/'].some(prefix=>raw===prefix+doc.id+'/p'+page+'/l'+line) ? raw : undefined;
+          const ref=['inspection-use/','payment-approval/','payment-clock/','contract-approver/','approval-change/','installment-count/','measurement-note/','contract-signing-form/','measurement-number/','inspection-line/','execution/','signer-date/','joint-clock/'].some(prefix=>raw===prefix+doc.id+'/p'+page+'/l'+line) ? raw : undefined;
           if (route.params.has('walkpoint') && state.bundle && route.params.get('rev')===String(state.bundle.rev) &&
               !route.params.has('walkline') && !raw) {
             OriginalReader.open(doc,page,{walkPoint:route.params.get('walkpoint')});

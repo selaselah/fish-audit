@@ -78,6 +78,58 @@ class AcceptanceAuthorityTests(unittest.TestCase):
             self.assertNotIn("printed_rows",term)
             self.assertFalse(edges)
 
+    def test_walkthrough_pins_require_the_issued_source_line_and_its_own_payment(self):
+        from graph import link_procedures
+        from walkthrough import cited_timing_line
+        native=[(2,"周宁签认日期：2026年9月20日"),(2,"林岚签认日期：2026年9月25日"),
+                (2,"林岚签认时间：2026年9月25日 15:20（北京时间）"),(4,"实际扣款时间：2026年9月25日 13:10（北京时间）"),
+                (4,"回单打印时间：2026年9月25日 17:00（北京时间）")]
+        graph=sample(JOINT,omissions=native,edit=lambda i,k,l,v:"2026年9月25日" if k=="paid_on" else v)
+        findings=execute(graph,graph["profile"])
+        paid=next(f for f in findings if f.get("signer_timing"))
+        ledger=graph["acceptance_authority_sources"]
+        rows=ledger["dates"]+ledger["clock_rows"]
+        self.assertCountEqual([r["quote"] for r in rows],[line for _,line in native])
+        calls={"pages":[{"doc":doc,"page":1,"model":"fixture","page_sha256":"page",
+                "signer_timing_rects":{str(r["line"]):[[0,.1,.9,.2]] for r in rows if r["doc"]==doc}}
+                for doc in ("d02","d04")],"expert":{"model":"fixture"}}
+        link_procedures(graph,findings,calls)
+        paper={"graph":graph,"findings":findings,"calls":calls,"policy":VERSION}
+        for row in rows:
+            ref=row["id"]
+            self.assertTrue(cited_timing_line(paper,ref,paid["id"]))
+            self.assertTrue(cited_timing_line(paper,ref,None))
+            self.assertFalse(cited_timing_line(paper,ref,"H05-99"))
+            for kind in ("geometry","source","finding"):
+                changed=copy.deepcopy(paper)
+                if kind=="geometry":
+                    page=next(p for p in changed["calls"]["pages"] if p["doc"]==row["doc"])
+                    page["signer_timing_rects"].pop(str(row["line"]))
+                elif kind=="source":
+                    changed["graph"]["edges"]=[e for e in changed["graph"]["edges"] if e["to"]!=ref]
+                else:
+                    changed["graph"]["edges"]=[e for e in changed["graph"]["edges"] if not
+                        (e["from"]==ref and e["to"]=="finding/"+paid["id"])]
+                self.assertFalse(cited_timing_line(changed,ref,paid["id"]),kind)
+
+    def test_v5_with_and_without_an_unresolved_third_name_replays_as_issued(self):
+        from acceptance_authority import page_evidence
+        from signer_clock import CLOCK_FORMAT
+        for names in (("周宁","林岚"),("周宁","林岚","陈和平")):
+            graph=sample("终验须由"+"、".join(names)+"共同签字确认",names)
+            def read(doc,page):
+                return "\n".join(f["quote"] for f in graph["facts"] if f["doc"]==doc)
+            graph["acceptance_authority_sources"]=page_evidence(graph,read,CLOCK_FORMAT)
+            checks=execute(graph,graph["profile"])
+            graph["edges"].extend(witness_edges(checks))
+            policy={**VERSION,"profile":graph["profile"],"version":"2026.11.28.20","acceptance_authority":CLOCK_FORMAT}
+            report={"graph":graph,"findings":checks,"policy":policy}
+            verify_sources(report,read)
+            if len(names)==3:
+                with self.assertRaisesRegex(ValueError,"会签名单.*重审"): verify_sources(report,read,signing=True)
+            else:
+                verify_sources(report,read,signing=True)
+
     def test_single_and_joint_require_exact_persons_on_independent_rows(self):
         for clause,names,mode in (("终验由周宁签字确认",("周宁",),"single"),(JOINT,("林岚","周宁"),"joint")):
             graph=sample(clause,names)

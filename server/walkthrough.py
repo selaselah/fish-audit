@@ -4,6 +4,8 @@ import json
 import re
 
 import payment_execution
+import signer_clock
+import signer_timing
 from advance_guarantee import rectangles
 from config import CaseError
 from payment_quality import FORMAT as QUALITY_FORMAT, OPEN_FORMAT
@@ -30,6 +32,7 @@ PARTY_PIN = re.compile(r"party-reading-(d[0-9]{2,8})-p1-(f[1-9][0-9]{0,7})")
 COUNT_PIN = re.compile(r"installment-count-(H0[3456]-[1-9][0-9]{0,7})")
 COMPARISON_DATE_PIN = re.compile(r"revision-((?:old|new)-H0[245]-[1-9][0-9]{0,7})-(earlier|later)-date-(condition|decision|event|check)")
 PAYMENT_PROOF_PIN = re.compile(r"(stage-)?proof-(H05-[1-9][0-9]{0,7})-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7})")
+SIGNER_PIN = re.compile(r"timing-(H05-[1-9][0-9]{0,7})-(signer-date|joint-clock)-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7})")
 
 
 def check_context(value):
@@ -43,7 +46,7 @@ def check_context(value):
         patterns["intake"] = r"contract|purchase|travel|payment"
     if screen == "case":
         patterns.update(case_id=r"[a-f0-9]{32}", tab=r"report|evidence|graph|activity", doc=r"d[0-9]{2,8}",
-                        raw_ref=r"(?:inspection-use|payment-approval|payment-clock|contract-approver|approval-change|installment-count|measurement-note|contract-signing-form|measurement-number|inspection-line|execution)/d[0-9]{2,8}/p[1-9][0-9]{0,7}/l[1-9][0-9]{0,7}")
+                        raw_ref=r"(?:inspection-use|payment-approval|payment-clock|contract-approver|approval-change|installment-count|measurement-note|contract-signing-form|measurement-number|inspection-line|execution|signer-date|joint-clock)/d[0-9]{2,8}/p[1-9][0-9]{0,7}/l[1-9][0-9]{0,7}")
         if "case_id" not in value:
             raise CaseError("走查底稿编号缺失。", 400)
     result = {"screen": screen}
@@ -102,16 +105,20 @@ def check_context(value):
             raise CaseError("请选择该版原页中的主体核字位置。",400)
     if raw := result.get("raw_ref"):
         if (not result.get("rev") or raw.partition("/")[2] != f"{result.get('doc')}/p{result.get('page')}/l{result.get('line')}" or params
-                or raw.startswith(("contract-signing-form/","measurement-number/","inspection-line/","execution/")) and result.get("dialog")!="page-dialog"):
+                or raw.startswith(("contract-signing-form/","measurement-number/","inspection-line/","execution/","signer-date/","joint-clock/")) and result.get("dialog")!="page-dialog"):
             raise CaseError("请选择该版底稿所引的原件页和行。",400)
     if anchor.startswith(("proof-H","stage-proof-H")):
         pin = PAYMENT_PROOF_PIN.fullmatch(anchor)
         if (not pin or screen!="case" or not result.get("rev") or result.get("doc") or
                 params!=({"view":"payment-checks","stage":pin[2]} if pin[1] else {"view":"payment-proof","receipt":pin[2]})):
             raise CaseError("请选择该版付款检查所引的扣款凭证。",400)
-    if screen=="case" and params.get("view")=="payment-proof" and (not result.get("rev") or set(params)-{"view","receipt"} or
+    if anchor.startswith("timing-H"):
+        pin = SIGNER_PIN.fullmatch(anchor)
+        if not pin or screen!="case" or not result.get("rev") or result.get("doc") or params!={"view":"signer-timing","receipt":pin[1]}:
+            raise CaseError("请选择这版底稿中与该期付款对应的签认时序。",400)
+    if screen=="case" and params.get("view") in ("payment-proof","signer-timing") and (not result.get("rev") or set(params)-{"view","receipt"} or
             "receipt" in params and not re.fullmatch(r"H05-[1-9][0-9]{0,7}",params["receipt"])):
-        raise CaseError("请选择该版底稿的扣款凭证。",400)
+        raise CaseError("请选择该版底稿所列的付款检查项。",400)
     if screen == "case" and anchor.startswith(("quality-H","retest-H","inspection-use-","payment-approval-","payment-clock-","contract-approver-","approver-change-","installment-count-")):
         pin = QUALITY_PIN.fullmatch(anchor) or RETEST_PIN.fullmatch(anchor) or USE_PIN.fullmatch(anchor) or CHANGE_PIN.fullmatch(anchor) or COUNT_PIN.fullmatch(anchor)
         if not pin or not result.get("rev") or params != {"view":"payment-checks", "stage":pin[1]}:
@@ -129,35 +136,43 @@ def check_context(value):
     return result
 
 
+def bound_source_line(paper,row,rect_key,node_type,edge_type):
+    graph = paper["graph"]
+    doc,page,line,ref = row["doc"],row["page"],row["line"],row["id"]
+    page_id = f"{doc}/p{page}"
+    call = next((p for p in paper.get("calls",{}).get("pages",()) if (p["doc"],p["page"])==(doc,page)),{})
+    nodes = {n["id"]:n for n in graph["nodes"] if n["id"] in (ref,page_id)}
+    facts = {f["id"]:f for f in graph["facts"] if f["id"] in row["facts"]}
+    if rect_key:
+        boxes = call.get(rect_key,{}).get(str(line))
+    else:
+        boxes = next(((f.get("source_line") or {}).get("rects") for f in facts.values() if f.get("source_line")),None)
+    source = nodes.get(ref,{})
+    if (not rectangles(boxes) or not call.get("page_sha256") or call["page_sha256"]!=nodes.get(page_id,{}).get("sha256") or
+            (source.get("type"),source.get("doc"),source.get("page"),source.get("line"),source.get("label")) !=
+            (node_type,doc,page,line,row["quote"]) or
+            {"from":page_id,"to":ref,"type":edge_type,"evidence":[page_id,*row["facts"]]} not in graph["edges"]):
+        return False
+    for fact_id in row["facts"]:
+        fact = facts.get(fact_id,{})
+        if (fact.get("doc"),fact.get("page"),fact.get("page_sha256"))!=(doc,page,call["page_sha256"]):
+            return False
+        loc = fact.get("source_line")
+        if loc and (loc.get("number"),loc.get("text"),loc.get("rects"))!=(line,row["quote"],boxes):
+            return False
+    return True
+
+
 def cited_payment_line(paper, doc, page, line, finding_id):
     graph = paper["graph"]
     ledger = graph.get(payment_execution.KEY,{})
     marker = paper["policy"].get("payment_execution")
     if marker not in (payment_execution.FIRST_FORMAT,payment_execution.FORMAT) or marker!=ledger.get("format"):
         return False
-    page_id = f"{doc}/p{page}"
-    ref = f"execution/{page_id}/l{line}"
+    ref = f"execution/{doc}/p{page}/l{line}"
     row = next((r for r in ledger["rows"] if r["id"]==ref and (r["doc"],r["page"],r["line"])==(doc,page,line)),None)
-    if not row:
+    if not row or not bound_source_line(paper,row,"payment_execution_rects","payment_execution_line","payment_execution_source"):
         return False
-    call = next((p for p in paper.get("calls",{}).get("pages",()) if (p["doc"],p["page"])==(doc,page)),{})
-    nodes = {n["id"]:n for n in graph["nodes"] if n["id"] in (ref,page_id)}
-    boxes = call.get("payment_execution_rects",{}).get(str(line))
-    source = nodes.get(ref,{})
-    if (not rectangles(boxes) or not call.get("page_sha256") or call["page_sha256"]!=nodes.get(page_id,{}).get("sha256") or
-            (source.get("type"),source.get("doc"),source.get("page"),source.get("line"),source.get("label")) !=
-            ("payment_execution_line",doc,page,line,row["quote"]) or
-            {"from":page_id,"to":ref,"type":"payment_execution_source","evidence":[page_id,*row["facts"]]} not in graph["edges"]):
-        return False
-    if row["facts"]:
-        facts = {f["id"]:f for f in graph["facts"] if f["id"] in row["facts"]}
-        for fact_id in row["facts"]:
-            fact = facts.get(fact_id,{})
-            if (fact.get("doc"),fact.get("page"),fact.get("page_sha256"))!=(doc,page,call["page_sha256"]):
-                return False
-            loc = fact.get("source_line")
-            if loc and (loc.get("number"),loc.get("text"),loc.get("rects"))!=(line,row["quote"],boxes):
-                return False
     for finding in paper["findings"]:
         if (finding_id and finding["id"]!=finding_id) or row["unit"] not in finding["scope"] or ref not in finding["evidence"]:
             continue
@@ -167,6 +182,32 @@ def cited_payment_line(paper, doc, page, line, finding_id):
         if installment or transfer:
             if {"from":ref,"to":"finding/"+finding["id"],"type":"supports_result","evidence":[ref]} in graph["edges"]:
                 return True
+    return False
+
+
+def cited_timing_line(paper, ref, finding_id):
+    graph = paper["graph"]
+    ledger = graph.get("acceptance_authority_sources",{})
+    marker = paper["policy"].get("acceptance_authority")
+    if marker not in signer_timing.FORMATS or marker!=ledger.get("format"):
+        return False
+    clock = ref.startswith("joint-clock/")
+    row = next((r for r in ledger.get("clock_rows" if clock else "dates",()) if r["id"]==ref),None)
+    if not row or ref.partition("/")[2]!=f"{row['doc']}/p{row['page']}/l{row['line']}":
+        return False
+    rect_key = "signer_timing_rects" if marker in signer_clock.FORMATS else None
+    if not bound_source_line(paper,row,rect_key,"acceptance_clock_line" if clock else "acceptance_signer_date",
+                             "acceptance_clock_source" if clock else "signer_date_source"):
+        return False
+    for finding in paper["findings"]:
+        timing = finding.get("signer_timing")
+        if not timing or timing["format"]!=marker or finding["rule"]!="H05" or (finding_id and finding["id"]!=finding_id):
+            continue
+        cited = timing.get("clock",{}).get("rows",()) if clock else timing["rows"]
+        unit = timing["bank"] if clock and row["kind"] in ("debit","other") else timing["receipt"]
+        if row["unit"]==unit and unit in finding["scope"] and ref in cited and ref in finding["evidence"] and {
+                "from":ref,"to":"finding/"+finding["id"],"type":"supports_result","evidence":[ref]} in graph["edges"]:
+            return True
     return False
 
 
@@ -230,17 +271,24 @@ def save_note(store, workspace, author, role, data):
         count_pin=COUNT_PIN.fullmatch(anchor)
         count_raw=context.get("raw_ref","").startswith("installment-count/")
         proof_pin = PAYMENT_PROOF_PIN.fullmatch(anchor)
-        if context["screen"]=="case" and (proof_pin or context.get("raw_ref","").startswith("execution/")):
+        timing_pin = SIGNER_PIN.fullmatch(anchor)
+        if context["screen"]=="case" and (timing_pin or context.get("raw_ref","").startswith(("signer-date/","joint-clock/"))):
+            ref = f"{timing_pin[2]}/{timing_pin[3]}/p{timing_pin[4]}/l{timing_pin[5]}" if timing_pin else context["raw_ref"]
+            row = db.execute("SELECT content FROM reports WHERE case_id=? AND rev=?",(context["case_id"],context["rev"])).fetchone()
+            if not row or not cited_timing_line(json.loads(row[0]),ref,timing_pin[1] if timing_pin else None):
+                raise CaseError("该版付款时序未引用这处签认或扣款原行。",404)
+        elif context["screen"]=="case" and (proof_pin or context.get("raw_ref","").startswith("execution/")):
             doc,page,line = proof_pin.groups()[2:] if proof_pin else (context["doc"],context["page"],context["line"])
             row = db.execute("SELECT content FROM reports WHERE case_id=? AND rev=?",(context["case_id"],context["rev"])).fetchone()
             if not row or not cited_payment_line(json.loads(row[0]),doc,int(page),int(line),proof_pin[2] if proof_pin else None):
                 raise CaseError("这版付款检查未引用所选扣款凭证原行。",404)
-        elif context["screen"]=="case" and position.get("view")=="payment-proof" and "receipt" in position:
+        elif context["screen"]=="case" and position.get("view") in ("payment-proof","signer-timing") and "receipt" in position:
+            field = "$.execution_basis" if position["view"]=="payment-proof" else "$.signer_timing"
             linked = db.execute("""SELECT 1 FROM reports,json_each(content,'$.findings') f WHERE case_id=? AND rev=?
                 AND json_extract(f.value,'$.id')=? AND json_extract(f.value,'$.rule')='H05'
-                AND json_type(f.value,'$.execution_basis')='object'""",(context["case_id"],context["rev"],position["receipt"])).fetchone()
+                AND json_type(f.value,?)='object'""",(context["case_id"],context["rev"],position["receipt"],field)).fetchone()
             if not linked:
-                raise CaseError("这版底稿未收录所选扣款凭证。",404)
+                raise CaseError("这版底稿未收录所选付款检查项。",404)
         elif context["screen"]=="case" and (count_pin or count_raw):
             finding=count_pin[1] if count_pin else None
             raw=context.get("raw_ref")

@@ -1,13 +1,14 @@
 const SignerEvidence = (() => {
-  const clockFormat='named-acceptance-signatures-v5';
-  const formats = ['named-acceptance-signatures-v2','named-acceptance-signatures-v3','named-acceptance-signatures-v4',clockFormat];
+  const rosterFormat='named-acceptance-signatures-v6';
+  const clockFormats=['named-acceptance-signatures-v5',rosterFormat];
+  const formats = ['named-acceptance-signatures-v2','named-acceptance-signatures-v3','named-acceptance-signatures-v4',...clockFormats];
   function datedRows(graph, clocks=false) {
     const ledger = graph?.acceptance_authority_sources;
     if (!formats.includes(ledger?.format)) return [];
     const index = graphIndex(graph);
     const type=clocks?'acceptance_clock_line':'acceptance_signer_date';
     const links = new Map(graph.edges.filter(e=>e.type===(clocks?'acceptance_clock_source':'signer_date_source')).map(e=>[e.to,e]));
-    const rows=clocks ? (ledger.format===clockFormat && ledger.clock_rows || []) : ledger.dates;
+    const rows=clocks ? (clockFormats.includes(ledger.format) && ledger.clock_rows || []) : ledger.dates;
     if (!Array.isArray(rows)) return [];
     return rows.filter(row=>{
       const pageId=row.doc+'/p'+row.page, pg=index.nodes.get(pageId), doc=index.documents.get(row.doc);
@@ -30,7 +31,7 @@ const SignerEvidence = (() => {
   }
   function rectangles(graph,calls,row) {
     const observed=observation(graph,row)?.source_line.rects;
-    if (graph.acceptance_authority_sources.format!==clockFormat) return observed || [];
+    if (!clockFormats.includes(graph.acceptance_authority_sources.format)) return observed || [];
     const pg=graphIndex(graph).nodes.get(row.doc+'/p'+row.page);
     const call=calls?.find(c=>c.doc===row.doc && c.page===row.page && c.page_sha256===pg?.sha256);
     const rects=call?.signer_timing_rects?.[row.line];
@@ -65,6 +66,48 @@ const SignerEvidence = (() => {
     const reading=printedClock(value);
     return reading && row.at===reading.at && row.day===reading.day && row.zone===reading.zone;
   }
+  function citedRow(report,ref,finding) {
+    const graph=report?.graph, clock=ref?.startsWith('joint-clock/');
+    if (!graph || report.policy.acceptance_authority!==graph.acceptance_authority_sources?.format) return null;
+    const row=datedRows(graph,clock).find(r=>r.id===ref);
+    const checks=finding && typeof finding==='object'?[finding]:report.findings;
+    if (!row || !checks.some(f=>{
+      const timing=f.signer_timing;
+      if (f.rule!=='H05' || timing?.format!==report.policy.acceptance_authority) return false;
+      const unit=clock && ['debit','other'].includes(row.kind)?timing.bank:timing.receipt;
+      return row.unit===unit && f.scope.includes(unit) && f.evidence.includes(ref) && traceReferences(graph,f).includes(ref) &&
+        (clock?timing.clock?.rows.includes(ref):timing.rows.includes(ref) || timing.transcriptions?.includes(ref));
+    })) return null;
+    if (row.line) return rectangles(graph,report.calls.pages,row).length?row:null;
+    return row.facts.length===1 && graphIndex(graph).facts.get(row.facts[0])?.quote===row.quote?row:null;
+  }
+  function openRow(row) {
+    return row.line?openPage(row.doc,row.page,undefined,row.line,undefined,row.id):openPage(row.doc,row.page,row.facts[0]);
+  }
+  function jointSources(report,finding,rows,readings,refs) {
+    const t=finding.signer_timing, joined=[];
+    if (t.format!==rosterFormat || t.required.length<=2 && !t.transcriptions?.length) return joined;
+    const graph=report.graph,index=graphIndex(graph),ledger=graph.acceptance_authority_sources;
+    const basis=report.calls.expert?.input?.procedures.find(p=>p.rule==='H05' && p.joint_acceptance_timing?.comparison.bank===t.bank &&
+      p.joint_acceptance_timing.comparison.stage_ref===t.stage_ref)?.joint_acceptance_timing;
+    const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+    const dates=rows.filter(r=>t.rows.includes(r.id) || t.transcriptions?.includes(r.id));
+    if (!basis || !same(basis.comparison,t) || !same(basis.dates,dates) || !same(basis.clocks,readings) ||
+        !same(basis.clause,ledger.clauses.filter(r=>r.fact && r.fact===t.clause_ref)) ||
+        !same(basis.signatures,ledger.signatures.filter(r=>r.unit===t.receipt))) return null;
+    for (const id of t.transcriptions || []) {
+      const item=dates.find(r=>r.id===id),fact=index.facts.get(item?.facts[0]);
+      if (!item || !refs.has(id) || item.unit!==t.receipt || item.line || item.disputed || item.facts.length!==1 ||
+          !refs.has(fact?.id) || !fact || fact.quote!==item.quote || !item.printed_rows?.length) return null;
+      const originals=item.printed_rows.map(ref=>dates.find(r=>r.id===ref));
+      if (originals.length<2 || !originals.every((r,i)=>r && refs.has(r.id) && t.rows.includes(r.id) && r.unit===item.unit &&
+          r.doc===item.doc && r.page===item.page && r.line>0 && r.line===originals[0].line+i && !r.disputed &&
+          rectangles(graph,report.calls.pages,r).length && graph.edges.some(e=>e.type==='transcribed_signer_date' &&
+          e.from===id && e.to===r.id && same(e.evidence,[fact.id,r.id]))) || originals.map(r=>r.quote).join('')!==item.quote) return null;
+      joined.push({quote:item.quote,originals});
+    }
+    return joined;
+  }
   function panel(report) {
     if (!formats.includes(report?.policy.acceptance_authority) || report.policy.acceptance_authority!==report.graph.acceptance_authority_sources?.format) return null;
     const graph=report.graph, index=graphIndex(graph), rows=datedRows(graph), clocks=datedRows(graph,true);
@@ -87,9 +130,10 @@ const SignerEvidence = (() => {
         return sourceFor(fact.doc,fact.page,fact.source_line.number,fact.source_line.text,()=>openPage(fact.doc,fact.page,id),fact.source_line.rects);
       }
       const candidates=rows.filter(r=>t.rows.includes(r.id) && refs.has(r.id) && r.unit===t.receipt);
-      const sourceRow=r=>sourceFor(r.doc,r.page,r.line,r.quote,()=>openPage(r.doc,r.page,undefined,r.line),rectangles(graph,report.calls.pages,r));
+      const sourceRow=r=>({...sourceFor(r.doc,r.page,r.line,r.quote,()=>openRow(r),rectangles(graph,report.calls.pages,r)),ref:r.id});
       const clock=t.clock, readings=clocks.filter(r=>clock?.rows.includes(r.id) && refs.has(r.id) && refs.has(r.doc+'/p'+r.page) && r.facts.every(id=>refs.has(id)) &&
         (r.kind==='signer'?r.unit===t.receipt:r.unit===t.bank));
+      const joined=jointSources(report,f,rows,readings,refs);
       const mapped=new Map(readings.map(r=>[r.id,r]));
       const sourceTime=r=>r && clockMatches(r) && rectangles(graph,report.calls.pages,r).length ? r : null;
       const contract=graph.documents_by_kind.contract?.[0];
@@ -116,8 +160,10 @@ const SignerEvidence = (() => {
       const last=events.map(e=>e.day || '').sort().at(-1);
       const delta=(Date.parse(paid)-Date.parse(last))/86400000;
       const direction=delta<0?'before':delta===0?'same_day':'after';
-      const verified=payment && paid===t.paid_on && clause && term && t.rows.length===candidates.length &&
-        events.every(e=>e.signature && e.day && e.source) && delta===t.days && last===t.latest_on && direction===t.state;
+      const verified=payment && paid===t.paid_on && clause && term && joined && t.rows.length===candidates.length &&
+        AcceptanceRoster.matchesClause(clause.quote,'joint',t.required,t.format) &&
+        events.every(e=>e.signature && e.day && e.source && (t.format!==rosterFormat || e.source.rects.length)) &&
+        delta===t.days && last===t.latest_on && direction===t.state;
       const rawDebit=sourceTime(mapped.get(clock?.debit));
       const debit=rawDebit?.kind==='debit' && (!rawDebit.day || rawDebit.day===paid)?rawDebit:null;
       let clockState=clock?.state;
@@ -145,11 +191,13 @@ const SignerEvidence = (() => {
       events.push(bankEvent);
       items.push({key:f.id,stage:f.stage.name,stageRef:t.stage_ref,choice:f.stage.name+' · '+(payment?.file || '回单')+' · '+(paid || '日期待核'),
         state:['before','same_day','after'].includes(t.state) && !verified ? 'unverified' : t.state,
-        clockState,pair,
+        clockState,pair,joined:joined?.map(x=>({quote:x.quote,sources:x.originals.map(sourceRow)})),
         days:t.days,events,clause,term,candidates:[...candidates,...readings].filter(r=>!used.has(r.id)).map(sourceRow)});
     }
     if (!items.length) return null;
     const card=SignerTimeline.render(items,'signer-timing');
+    card.dataset.caseId=report.case_id;
+    if (state.bundle?.report===report) card.dataset.rev=String(state.bundle.rev);
     const explanation=el('span');
     const back=action('',()=>selectPhase(),'text-button');
     const empty=box('signer-empty',explanation,back); empty.hidden=true; card.append(empty);
@@ -179,5 +227,5 @@ const SignerEvidence = (() => {
     b.setAttribute('aria-controls','signer-timing');
     return b;
   }
-  return {panel,jump,datedRows,observation,rectangles,printedClock,interval};
+  return {panel,jump,datedRows,observation,rectangles,printedClock,interval,citedRow,openRow};
 })();

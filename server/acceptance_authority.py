@@ -364,7 +364,7 @@ def verify_sources(report,read_text,*,signing=False,read_layout=None):
     if (marker not in signer_clock.FORMATS and (at_least(signer_clock.SINCE) or "signer_clock.py" in (code or {})) or
             marker in signer_clock.FORMATS and code is not None and "signer_clock.py" not in code):
         raise ValueError("底稿缺少具名签认与实际扣款时刻的核对程序")
-    if (marker not in (signer_timing.PRINTED_ROWS_FORMAT, FORMAT) and at_least(signer_timing.PRINTED_ROWS_SINCE) or
+    if (marker not in (signer_timing.PRINTED_ROWS_FORMAT, *signer_clock.FORMATS) and at_least(signer_timing.PRINTED_ROWS_SINCE) or
             marker not in signer_timing.FORMATS[1:] and at_least(signer_timing.INDEPENDENT_SINCE)):
         raise ValueError("底稿缺少逐人核对签认日期的程序")
     if marker not in signer_timing.FORMATS and (at_least(signer_timing.SINCE) or

@@ -14,8 +14,14 @@ export async function checkSignerTiming(ctx, id, revision) {
   const paper = id && (await get('/api/cases/'+id+'/reports/'+rev)).report;
   const f = paper && paper.findings.find(f=>f.signer_timing);
   const model = f?.signer_timing || sample.payment, state=model.state;
-  const expected = f ? paper.graph.acceptance_authority_sources.dates.filter(r=>f.signer_timing.rows.includes(r.id)).map(r=>r.quote) :
-    sample.documents.at(-1).lines.filter(r=>r.label.endsWith('签认日期')).map(r=>r.quote);
+  const sources = f && paper.graph.acceptance_authority_sources;
+  const expected = f ? model.required.flatMap(name=>{
+    const day=sources.dates.find(r=>model.rows.includes(r.id) && r.name===name);
+    const clock=sources.clock_rows?.find(r=>r.id===model.clock?.signers[name] && r.name===name && !r.disputed);
+    const row=clock && (!day || !clock.day || clock.day===day.day) ? clock : day;
+    return row ? [{name,quote:row.quote}] : [];
+  }) : sample.documents.at(-1).lines.filter(r=>r.label.endsWith('签认日期'))
+    .map(r=>({name:r.label.slice(0,-4),quote:r.quote}));
   const panel=id?'#signer-timing':'#public-signer-timing';
   if (sample) for (const doc of sample.documents) for (const [url,hash] of [[doc.pdf,doc.source_sha256],[doc.image,doc.page_sha256]]) {
     const res=await fetch(root+url);assert.ok(res.ok);
@@ -40,10 +46,46 @@ export async function checkSignerTiming(ctx, id, revision) {
   if (id && ['before','same_day','after'].includes(state)) {
     const forged=await evaluate(`(()=>{const r=structuredClone(state.bundle.report), f=r.findings.find(f=>f.signer_timing);r.graph.edges=r.graph.edges.filter(e=>!(e.type==='signer_date_source' && e.to===f.signer_timing.rows[0]));return SignerEvidence.panel(r).dataset.state})()`);
     assert.equal(forged,'unverified');
+    if (model.transcriptions?.length) {
+      for (const mutate of ["r.graph.edges=r.graph.edges.filter(e=>e.type!=='transcribed_signer_date')",
+        "r.calls.expert.input.procedures.find(p=>p.joint_acceptance_timing).joint_acceptance_timing.dates.pop()",
+        "t.required=t.required.slice(1)","r.calls.pages.find(p=>p.doc===t.receipt).signer_timing_rects={}"]) {
+        const changed=await evaluate('(()=>{const r=structuredClone(state.bundle.report),t=r.findings.find(f=>f.signer_timing).signer_timing;'+mutate+';return SignerEvidence.panel(r).dataset.state})()');
+        assert.equal(changed,'unverified');
+      }
+      const finalRow=paper.graph.acceptance_authority_sources.dates.find(r=>r.id===model.rows.at(-1));
+      const cited=await evaluate('(()=>{const r=state.bundle.report,b=citation('+JSON.stringify(finalRow.id)+',r.findings.find(f=>f.signer_timing));b.click();return b.textContent})()');
+      assert.equal(cited,finalRow.quote);
+      await wait(q('#page-dialog')+'.open && '+q('.evidence-row.located')+'?.dataset.sourceRef==='+JSON.stringify(finalRow.id),'third signer date raw citation');
+      await evaluate(q('#page-dialog [data-close]')+'.click()');
+      assert.equal(await evaluate('SignerEvidence.citedRow(state.bundle.report,'+JSON.stringify(finalRow.id)+',state.bundle.report.findings.find(f=>f.rule==="H01"))'),null);
+      const roster=await evaluate('(()=>{const r=state.bundle.report,h=r.findings.find(f=>f.rule==="H02");return AcceptanceRoster.bind(h,r)?.required})()');
+      assert.deepEqual(roster,model.required);
+      const details=panel+' .signer-candidates';
+      await evaluate(q(details+' summary')+'.click()');
+      const dates=paper.graph.acceptance_authority_sources.dates, joined=dates.find(r=>r.id===model.transcriptions[0]);
+      assert.equal(await evaluate(q(details+' blockquote')+'.textContent'),joined.quote);
+      assert.deepEqual(await evaluate(all(details+'[open] .signer-original')+'.map(b=>b.textContent)'),joined.printed_rows.map(ref=>dates.find(r=>r.id===ref).quote));
+      await evaluate(q(details+' summary')+'.click()');
+    }
   }
   for (const width of [1440,1024,768,390,360,320]) {
     await size(ctx,width);
-    assert.equal(await evaluate(all(panel+' .signer-event')+'.length'),3);
+    assert.equal(await evaluate(all(panel+' .signer-event')+'.length'),f?model.required.length+1:model.events.length);
+    const bar='.signer-mobile-tools:not([hidden])';
+    if (id && width<650) {
+      await evaluate('scrollTo({top:0,behavior:"instant"})');
+      await wait(q(bar)+'===null','walkthrough tools leave the other workpaper sections free');
+      const topBar=await evaluate('(()=>{const r='+q('body > #walk-launch')+'.getBoundingClientRect();return [r.left,r.right-innerWidth]})()');
+      assert.ok(topBar.every(n=>Math.abs(n)<=1));
+      await evaluate(q(panel)+'.scrollIntoView({block:"center",behavior:"instant"})');
+      await wait(q(bar+' > #walk-launch')+'!=null','mobile feedback and current original');
+      const edges=await evaluate('(()=>{const r='+q(bar)+'.getBoundingClientRect();return [r.left,r.right-innerWidth,r.bottom-innerHeight]})()');
+      assert.ok(edges.every(n=>Math.abs(n)<=1));
+      for (const s of [bar+' > :first-child',bar+' > #walk-launch']) {
+        assert.ok(await evaluate('(()=>{const el='+q(s)+',r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))})()'));
+      }
+    }
     await evaluate(q(panel+' [data-kind=payment]')+'.click()');
     const stamp=await evaluate(q(panel+' [aria-pressed=true] time')+'?.dateTime');
     assert.equal(stamp,f?model.paid_on:model.events.find(e=>e.kind==='payment').day);
@@ -59,11 +101,24 @@ export async function checkSignerTiming(ctx, id, revision) {
     await evaluate(signers+'.at(-1).focus()');
     await call('Input.dispatchKeyEvent',{type:'keyDown',key:'Home',code:'Home'});
     assert.ok(await evaluate('document.activeElement==='+q(panel+' .signer-event')));
-    for (const [i,quote] of expected.entries()) {
-      await evaluate(signers+'['+i+'].click()');
+    for (const [i,{name,quote}] of expected.entries()) {
+      await evaluate(signers+'.find(b=>b.querySelector(".signer-event-name").textContent==='+JSON.stringify(name+'签认')+').click()');
       assert.equal(await evaluate(q(panel+' .signer-quote')+'.textContent'),quote);
+      if (id) {
+        const chosen=q(panel+' [data-walk-selected]');
+        await evaluate(chosen+'.scrollIntoView({block:"center",behavior:"instant"})');
+        const pin=await evaluate('import("/assets/walkthrough-context.js").then(m=>m.captureContext(null))');
+        assert.equal(pin.anchor,await evaluate(chosen+'.id'));
+        assert.deepEqual(pin.params,{view:'signer-timing',receipt:f.id});
+      }
       await wait(q(panel+' .signer-strip :is(img,canvas)')+'!=null','printed personal date excerpt');
       const trigger=q(panel+' .signer-preview .signer-original');
+      if (id && width<650 && i===expected.length-1) {
+        await wait(q(bar+' > :first-child')+'?.textContent.includes('+JSON.stringify(name)+')','toolbar follows chosen signer');
+        await evaluate(q(bar+' > :first-child')+'.click()');
+        await wait(q('#page-dialog')+'.open && '+q('.evidence-row.located')+'?.textContent.includes('+JSON.stringify(quote)+')','mobile toolbar opens current date');
+        await evaluate(q('#page-dialog [data-close]')+'.click()');
+      }
       await evaluate(trigger+'.focus();'+trigger+'.click()');
       if (id) {
         await wait(q('#page-dialog')+'.open && '+q('.evidence-row.located')+'?.textContent.includes('+JSON.stringify(quote)+')','archived source line');
@@ -76,7 +131,7 @@ export async function checkSignerTiming(ctx, id, revision) {
       }
       await wait('document.activeElement==='+trigger,'focus returns to original opener');
     }
-    assert.equal(await evaluate(all(panel+' .signer-basis .signer-original')+'.length'),2);
+    assert.equal(await evaluate(all(panel+' .signer-basis > .signer-original')+'.length'),2);
   }
   if (sample) {
     const contract=await get('/assets/installment-originals.json');

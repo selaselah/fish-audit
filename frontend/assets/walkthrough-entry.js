@@ -11,8 +11,18 @@ let owner;
 const openModals = [];
 const narrow = matchMedia('(max-width:650px)');
 const comparison = document.getElementById('revision-comparison');
-let watchedProof;
-const proofVisibility = new IntersectionObserver(placeLauncher);
+const timingTools=document.createElement('div');
+timingTools.className='signer-mobile-tools'; timingTools.hidden=true;
+const openTiming=document.createElement('button'); openTiming.type='button';
+timingTools.append(openTiming); document.body.append(timingTools);
+let watchedProof,watchedTiming,timingAction;
+openTiming.addEventListener('click',()=>timingAction?.click());
+const panelVisibility = new IntersectionObserver(placeLauncher);
+function visiblePanel(panel) {
+  if (!panel || panel.dataset.outOfStage==='true') return false;
+  const r=panel.getBoundingClientRect();
+  return r.height>0 && r.bottom>0 && r.top<innerHeight;
+}
 function placeLauncher() {
   for (let i=openModals.length-1;i>=0;i--) {
     if (!openModals[i].open || !openModals[i].isConnected) openModals.splice(i,1);
@@ -20,14 +30,25 @@ function placeLauncher() {
   const top = openModals.at(-1);
   const bar = !top && narrow.matches && comparison && !comparison.closest('[hidden]') && comparison.querySelector('.revision-actions');
   const proof = narrow.matches ? document.getElementById('payment-proof') : null;
-  if (proof !== watchedProof) {
-    proofVisibility.disconnect();
-    if (proof) proofVisibility.observe(proof);
-    watchedProof=proof;
+  const timing = narrow.matches ? document.getElementById('signer-timing') : null;
+  if (proof!==watchedProof || timing!==watchedTiming) {
+    panelVisibility.disconnect();
+    if (proof) panelVisibility.observe(proof);
+    if (timing) panelVisibility.observe(timing);
+    watchedProof=proof; watchedTiming=timing;
   }
-  const bounds = !top && proof?.dataset.outOfStage==='false' && proof.getBoundingClientRect();
-  const tools = bounds && bounds.height>0 && bounds.bottom>0 && bounds.top<innerHeight && proof.querySelector('.debit-controls');
-  const host = top || bar || tools || document.body;
+  const tools = !top && visiblePanel(proof) && proof.querySelector('.debit-controls');
+  const inTiming = !top && !bar && !tools && visiblePanel(timing);
+  timingTools.hidden=!inTiming;
+  if (inTiming) {
+    const schedule=timing.querySelector('.signer-body:not([hidden])');
+    const name=schedule?.querySelector('.signer-event[aria-pressed=true] .signer-event-name')?.textContent;
+    timingAction=schedule?schedule.querySelector('.signer-preview .signer-original'):timing.querySelector('.signer-view-switch button');
+    openTiming.hidden=!timingAction;
+    const label=schedule?(name || '当前记录')+'原件':'返回签认时序';
+    if (openTiming.textContent!==label) openTiming.textContent=label;
+  } else timingAction=null;
+  const host = top || bar || tools || (inTiming?timingTools:document.body);
   if (top === owner && launcher.isConnected && (top ? top.contains(launcher) : launcher.parentElement === host)) return;
   owner = top;
   if (!top) host.append(launcher);
@@ -51,7 +72,8 @@ placeLauncher();
 // Navigation can remove an open workpaper dialog without dispatching its close or toggle event.
 const placement = new MutationObserver(records => {
   if (!launcher.isConnected || owner && !owner.isConnected ||
-      narrow.matches && (document.getElementById('payment-proof') || records.some(r=>r.target===comparison || r.type==='attributes'))) placeLauncher();
+      narrow.matches && (document.getElementById('payment-proof') || document.getElementById('signer-timing') ||
+        records.some(r=>r.target===comparison || r.type==='attributes'))) placeLauncher();
 });
 placement.observe(document.body,{childList:true,subtree:true});
 if (comparison) {
@@ -90,6 +112,7 @@ function returnToControl() {
   const receipt=params.get('view')==='payment-checks' && /^(?:quality|retest|inspection-use|payment-approval|payment-clock|contract-approver|approver-change|installment-count)-/.test(anchor);
   const party=anchor.startsWith('party-reading-');
   const proof=/^(stage-)?proof-(H05-[1-9]\d*)-d\d+-p[1-9]\d*-l[1-9]\d*$/.exec(anchor);
+  const timing=/^timing-(H05-[1-9]\d*)-(?:signer-date|joint-clock)-d\d+-p[1-9]\d*-l[1-9]\d*$/.exec(anchor);
   const limits=params.get('view')==='acceptance-limits' && anchor.startsWith('limits-H02-');
   const form=/^(?:form|number|serial)-(H0[1245]-[1-9][0-9]*)-d[0-9]+-p[1-9][0-9]*-l[1-9][0-9]*$/.exec(anchor) ||
     /^serial-(H0[245]-[1-9][0-9]*)-(?:order|dispute-d[0-9]+-p1-[a-zA-Z0-9_-]+)$/.exec(anchor);
@@ -114,6 +137,13 @@ function returnToControl() {
         comparison.dataset.rev!==params.get('rev') || comparison.dataset.prior!==params.get('prior') ||
         (params.has('entry') && comparison.dataset.entry!==params.get('entry')))) return false;
     const el = document.getElementById(anchor);
+    if (timing) {
+      const area=el?.closest('#signer-timing');
+      if (!area || url.hash!==location.hash || params.get('view')!=='signer-timing' || params.get('receipt')!==timing[1] ||
+          area.dataset.findingKey!==timing[1] || area.dataset.caseId!==path.split('/').at(-1) || area.dataset.rev!==params.get('rev') ||
+          area.dataset.outOfStage==='true') return false;
+      if (el.getAttribute('aria-pressed')!=='true') el.click();
+    }
     if (proof) {
       const area=proof[1]?el:el?.closest('#payment-proof[data-out-of-stage="false"]');
       if (!area || url.hash!==location.hash || area.dataset.caseId!==path.split('/').at(-1) || area.dataset.rev!==params.get('rev') ||
@@ -161,7 +191,7 @@ function returnToControl() {
     return true;
   }
   observer.observe(document.body, {subtree:true, childList:true, attributes:true, attributeFilter:['hidden','open']});
-  if (!locate() && !comparison && !board && !receipt && !party && !limits && !form && !proof)
+  if (!locate() && !comparison && !board && !receipt && !party && !limits && !form && !proof && !timing)
     fallbackTimer = setTimeout(release,6000);
 }
 addEventListener('hashchange', returnToControl);
