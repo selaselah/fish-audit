@@ -66,6 +66,7 @@
 .scope-pdf-receipt small { color:var(--secondary); }
 .scope-pdf-receipt .ui-glyph { color:var(--accent); }
 .scope-receipt-proof { margin:0 0 10px; border:1px solid var(--line); border-radius:8px; background:var(--surface); }
+.scope-receipt-label { display:block; margin:8px 0 4px; color:var(--secondary); font:600 .82rem/1.5 var(--font-ui); }
 .scope-receipt-proof .scope-pdf-receipt { display:grid; grid-template-columns:auto 1fr auto; width:100%; min-height:48px; margin:0; padding:9px 12px; gap:1px 9px; border:0; background:transparent; }
 .scope-receipt-proof .scope-pdf-receipt .ui-glyph { grid-row:1 / 3; font-size:1.05rem; }
 .scope-receipt-proof .scope-pdf-receipt .ui-glyph:last-child { grid-column:3; font-size:.85rem; }

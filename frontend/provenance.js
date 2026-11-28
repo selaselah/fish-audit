@@ -482,6 +482,55 @@ function phaseRemarks(finding, batches, graph) {
   return group;
 }
 
+function batchSignatureEvidence(report,finding) {
+  const graph=report.graph, format='contract-delivery-batches-v8';
+  if (report.policy.delivery_batches!==format || graph.delivery_batch_sources?.format!==format) return null;
+  const acceptance=report.findings.find(f=>f.rule==='H02' && f.batch_acceptance), entry=acceptance?.batch_acceptance;
+  const final=entry?.separate_final, other=final?.signatures_on_batches;
+  if (final?.records?.length!==1 || !Array.isArray(other) || !other.length || !Array.isArray(entry.records)) return null;
+  const receipt=entry.records.find(r=>r.unit===final.records[0]), signing=receipt?.signing;
+  if (receipt?.role!=='final' || !signing?.missing_names?.length || !Array.isArray(signing.signed)) return null;
+  const payment=finding.final_signature_condition, clause=final.signing_requirement?.clause_ref;
+  const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+  if (finding!==acceptance && (!payment || payment.receipt!==receipt.unit || payment.clause_ref!==clause ||
+      !same(payment.missing_names,signing.missing_names) || !same(payment.batch_signatures,other.map(o=>o.signature_ref)))) return null;
+  const expert=report.calls?.expert?.input?.procedures || [];
+  if (!expert.some(p=>p.rule==='H02' && same(p.batch_acceptance,entry)) ||
+      payment && !expert.some(p=>p.rule===finding.rule && p.stage?.clause_ref===finding.stage?.clause_ref &&
+          same(p.final_signature_condition,payment) && same(p.evidence,finding.evidence))) return null;
+  const {facts,documents,nodes}=graphIndex(graph), refs=new Set(traceReferences(graph,finding));
+  const sources=[['合同终验名单',clause],['终验单引用的批次',receipt.refs_ref],
+    ...signing.signed.map(s=>['终验签认 · '+s.name,s.fact])];
+  for (const o of other) {
+    const batch=entry.records.find(r=>r.unit===o.unit && r.index===o.batch_index);
+    const signed=batch?.signing?.signed?.find(s=>s.fact===o.signature_ref && s.name===o.name && s.native && s.confirmed);
+    const witnesses=[clause,receipt.scope_ref,receipt.refs_ref,o.clause_ref,o.scope_ref,o.number_ref,o.signature_ref];
+    const linked=graph.edges.some(e=>e.type==='final_name_on_batch_record' && e.from===clause && e.to===o.signature_ref &&
+      e.batch===o.batch_index && same(e.evidence,witnesses));
+    if (!signed || !linked || !signing.missing_names.includes(o.name) || !witnesses.every(ref=>refs.has(ref)) ||
+        !receipt.receipt_numbers?.includes(batch.number) || batch.scope_ref!==o.scope_ref || batch.number_ref!==o.number_ref) return null;
+    sources.push(['第 '+o.batch_index+' 批签认 · '+o.name,o.signature_ref]);
+  }
+  if (payment) sources.push(['合同质保起算条款',payment.term_ref]);
+  const panel=fold('终验缺签 · '+signing.missing_names.join('、'));
+  panel.className='batch-roster-proof'; panel.dataset.rosterFinding=finding.id;
+  const list=box('batch-roster-links');
+  for (const [label,ref] of sources) {
+    const fact=facts.get(ref), line=fact?.source_line, doc=documents.get(fact?.doc);
+    if (!line?.number || !line.rects?.length || !refs.has(ref) || !doc || fact.source_sha256!==doc.sha256 ||
+        fact.page_sha256!==nodes.get(fact.doc+'/p'+fact.page)?.sha256) return null;
+    const link=action('',()=>openPage(fact.doc,fact.page,ref),'batch-roster-link');
+    link.append(el('span',label),el('small','第 '+line.number+' 行'),
+      el('span',doc.name+'，第 '+fact.page+' 页','visually-hidden'));
+    link.dataset.batchRosterSource=ref;
+    link.setAttribute('aria-haspopup','dialog'); link.setAttribute('aria-controls','page-dialog');
+    link.title=[doc.name,'第 '+fact.page+' 页','第 '+line.number+' 行'].join(' · ');
+    list.append(link);
+  }
+  panel.append(list);
+  return panel;
+}
+
 function deliveryBatchPanel(finding, graph, phases, pages) {
   const entry=finding.batch_acceptance;
   const {facts,documents}=graphIndex(graph);
@@ -571,6 +620,8 @@ function deliveryBatchPanel(finding, graph, phases, pages) {
       section.append(group);
     }
     if (final.signing_requirement) section.append(signingPanel(final,'final','终验','合同约定的终验签认'));
+    const roster=batchSignatureEvidence(state.bundle.report,finding);
+    if (roster) section.append(roster);
     const issued=final.basis.filter(b=>b.number_ref);
     if (issued.length) {
       const list=el('ul','','final-originals');

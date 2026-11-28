@@ -786,6 +786,7 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True, recheck_
         approval_names.apply_conditions(graph,results)
         approval_changes.apply(graph,results)
         substitution_dates.apply(graph,results)
+        delivery_batches.link_warranty_signing(graph,results)
         for count in graph.get(installment_counts.KEY,{}).get("rows",()):
             installment_counts.attach(results,count)
     return results
@@ -900,7 +901,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         terms_pending=bool(signed["status"]!="ok" or extra_units or pending_units or authority or other_events)
         change_proof=None
         source=graph.get("delivery_batch_sources",{})
-        if change and source.get("format")==delivery_batches.FORMAT and source.get("signals"):
+        if change and source.get("format") in delivery_batches.STANDARD_FORMATS and source.get("signals"):
             change_proof=delivery_batches.change_basis(change,contract,amendments,receipts,
                 eligible=not (terms_pending or contract.fields["acceptance_signing_clause"] or "acceptance_signing_clause" in contract.uncertain))
             if change_proof["effective_on"]:
@@ -1143,7 +1144,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         if batch and (len(releases)!=1 or not same_contract(contract,releases[0]) or
                       not labelled_sources(releases[0],LINK_KEYS) or not delivery_batches.readable(graph["delivery_batch_sources"],releases[0].unit)):
             expiry=None
-    has_batch_notes=graph.get("delivery_batch_sources",{}).get("format") in (delivery_batches.REMARK_FORMAT,delivery_batches.FORMAT)
+    has_batch_notes=graph.get("delivery_batch_sources",{}).get("format") in delivery_batches.REMARK_FORMATS
     opinions={}
     if version==FORMAT and (not batch or has_batch_notes or recheck_payment_opinions):
         opinions=acceptance_payments.for_stages(graph,contract,[*receipts,*retests],rows,plan)
@@ -1452,6 +1453,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("approval_change") != entry.get("approval_change")
                 or saved.get("approval_change_scope") != entry.get("approval_change_scope")
                 or saved.get("signer_timing") != entry.get("signer_timing")
+                or saved.get("final_signature_condition") != entry.get("final_signature_condition")
                 or saved.get("execution_basis") != entry.get("execution_basis")
                 or saved.get("inspection_coverage") != entry.get("inspection_coverage")
                 or saved.get("delivery_register") != entry.get("delivery_register")

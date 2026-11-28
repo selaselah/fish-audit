@@ -248,6 +248,13 @@ textarea { width: 100%; resize: vertical; }
 .batch-signing { min-width:0; margin:9px 0; padding:8px 12px; background:var(--surface); border-inline-start:3px solid var(--accent); }
 .batch-signing:is([data-status="risk"],[data-status="missing"]) { background:var(--attention-soft); border-inline-start-color:var(--attention-line); }
 .batch-signing:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.batch-roster-proof { min-width:0; margin-block:8px; border:1px solid var(--line); border-radius:8px; background:var(--surface); }
+.batch-roster-proof > summary { padding:11px 14px; min-height:44px; box-sizing:border-box; color:var(--ink); font-weight:600; cursor:pointer; }
+.batch-roster-links { display:grid; padding:0 12px 6px; }
+.batch-roster-link { display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%; min-height:44px; padding:6px 2px; border:0; border-top:1px solid var(--line); border-radius:0; color:var(--accent-hover); background:var(--surface); font:inherit; text-align:start; cursor:pointer; }
+.batch-roster-link small { flex-shrink:0; color:var(--secondary); font-variant-numeric:tabular-nums; }
+.batch-roster-link:hover { background:var(--accent-soft); }
+.batch-roster-proof :is(summary,button):focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
 .batch-signing .signer-pending { margin:4px 0; color:var(--attention); font-weight:600; }
 .acceptance-authority { margin:14px 0; padding:14px; border-inline-start:3px solid var(--accent); background:var(--soft); }
 .acceptance-authority[data-authority-status="missing"],.acceptance-authority[data-authority-status="risk"] { border-inline-start-color:var(--attention-line); }

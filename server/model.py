@@ -345,6 +345,8 @@ def audit_graph(graph, controls):
     for procedure, finding in zip(procedures, controls):
         if timing := signer_timing.expert_basis(graph,finding):
             procedure["joint_acceptance_timing"] = timing
+        if requirement := finding.get("final_signature_condition"):
+            procedure["final_signature_condition"] = requirement
         for key in ("stage","execution_basis","reinspection","delegations","quality_change","acceptance_authority","acceptance_signing_requirements","equipment_models","delivery_register","substitution_dates","substitution_review","date_checks","batch_acceptance","invoice_receipt","payment_change"):
             if key in finding:
                 procedure[key] = finding[key]

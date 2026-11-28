@@ -1,4 +1,4 @@
-import {captureContext, describeContext, returnUrl} from './walkthrough-context.js';
+import {captureContext, describeContext, originalLine, returnUrl} from './walkthrough-context.js';
 import {notebook} from './walkthrough-store.js';
 import {pickPoint,pointLabel,pointPage,samePointPage,showDraftPoint} from './walkthrough-point.js';
 
@@ -12,7 +12,7 @@ const wide=matchMedia('(min-width:1280px)');
 const content=document.createElement('div');
 content.innerHTML = `<header class="walk-head"><h2 id="walk-title">产品走查</h2><button type="button" id="walk-dock" hidden>并排走查</button><button type="button" id="walk-close" aria-label="关闭走查"><i class="ui-glyph ic-x-lg" aria-hidden="true"></i></button></header>
   <nav class="walk-views" aria-label="走查视图"><button type="button" id="walk-compose" aria-pressed="true">写意见</button><button type="button" id="walk-saved" aria-pressed="false">已记录 <span></span></button></nav>
-  <form id="walk-form"><div class="walk-location"><div><small id="walk-origin">记录位置</small><p id="walk-location"></p></div><div class="walk-pick-actions"><button type="button" id="walk-pick">点选控件</button><button type="button" id="walk-point" hidden>标记原图</button></div></div>
+  <form id="walk-form"><div class="walk-location"><div><small id="walk-origin">记录位置</small><p id="walk-location"></p><div id="walk-excerpt" hidden></div></div><div class="walk-pick-actions"><button type="button" id="walk-pick">点选控件</button><button type="button" id="walk-point" hidden>标记原图</button></div></div>
     <label for="walk-text">修改意见</label><textarea id="walk-text" required maxlength="2000" rows="4" placeholder="你希望这里怎么改？"></textarea>
     <div class="walk-actions"><small class="walk-scope"></small><button type="submit" id="walk-save">保存意见</button></div></form>
   <section id="walk-history" aria-label="已记录的意见" hidden><ol></ol><div class="walk-export" hidden><button type="button" id="walk-copy">复制给 Codex</button><button type="button" id="walk-download">下载 Markdown</button></div></section>
@@ -62,14 +62,27 @@ function switchView(history) {
 }
 function showLocation() {
   const place=q('#walk-location'), full=describeContext(context);
+  const source=typeof state!=='undefined' && state.detail?.id===context.case_id ? originalLine(context,state.bundle) : null;
+  const excerpt=q('#walk-excerpt');
+  excerpt.hidden=!source;
+  excerpt.replaceChildren();
+  if (source) {
+    const quote=document.createElement('blockquote');
+    quote.textContent=source.text;
+    if ([...source.text].length>72) {
+      const details=document.createElement('details'), summary=document.createElement('summary');
+      summary.textContent='查看原行全文';
+      details.append(summary,quote); excerpt.append(details);
+    } else excerpt.append(quote);
+  }
   const signing=context.raw_ref?.startsWith('contract-signing-form/') || context.anchor?.startsWith('form-H') || context.raw_ref?.startsWith('measurement-number/') || context.anchor?.startsWith('number-H') ||
     context.raw_ref?.startsWith('inspection-line/') || context.anchor?.startsWith('serial-H');
   const comparison=context.params?.view==='revision-comparison' && context.params.prior && context.anchor?.startsWith('revision-');
   const timing=context.anchor?.startsWith('timing-H') || /^(?:signer-date|joint-clock)\//.test(context.raw_ref || '');
-  const compact=(docked || signing || timing || comparison || /^(?:party-reading-|(?:stage-)?proof-)/.test(context.anchor || '')) && context.screen==='case' && context.rev && (context.target || context.page_point);
+  const compact=source || (docked || signing || timing || comparison || /^(?:party-reading-|(?:stage-)?proof-)/.test(context.anchor || '')) && context.screen==='case' && context.rev && (context.target || context.page_point);
   const editions=comparison?'R'+context.params.prior+' / R'+context.rev:'R'+context.rev;
   q('#walk-origin').textContent=compact?'底稿 '+context.case_id.slice(0,8)+' · '+editions:'记录位置';
-  place.textContent=compact?[context.target || context.doc,context.doc && '第 '+context.page+' 页',context.line && '第 '+context.line+' 行',
+  place.textContent=compact?[context.target || source?.file || context.doc,context.doc && '第 '+context.page+' 页',context.line && '第 '+context.line+' 行',
     context.page_point && pointLabel(context.page_point)].filter(Boolean).join(' · '):full;
   place.title=full;
   updatePoint();
@@ -308,7 +321,12 @@ text.addEventListener('keydown',event=>{
     event.preventDefault();q('#walk-form').requestSubmit(saveButton);
   }
 });
-dialog.addEventListener('close',()=>{ if (!docked && !pick && !dialog.open) {markSelection(null); showDraftPoint(pointPage(owner),null); draft(); launcher.focus({preventScroll:true});} });
+dialog.addEventListener('close',()=>{
+  if (docked || pick || dialog.open) return;
+  markSelection(null); showDraftPoint(pointPage(owner),null); draft();
+  if ((!owner || owner.open) && launcher.closest('dialog[open]')===(owner || null))
+    launcher.focus({preventScroll:true});
+});
 content.addEventListener('keydown',e=>{
   if (e.key==='Escape') {
     e.stopPropagation();
@@ -361,6 +379,7 @@ function clearRecorder() {
   if (pick) endPick(null,false);
   closeRecorder(); draft(); draftKey=null; book=null; generation++; records=[]; text.value='';
   baseline=null; context=null; markSelection(null); q('#walk-location').textContent=''; q('#walk-location').title='';
+  q('#walk-excerpt').replaceChildren(); q('#walk-excerpt').hidden=true;
   q('#walk-origin').textContent='记录位置'; q('.walk-scope').textContent=''; status(''); renderHistory();
 }
 addEventListener('hashchange',()=>{

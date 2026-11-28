@@ -999,6 +999,10 @@ function finding(item) {
   }
   if (item.warranty_check) {
     node.append(warrantyPanel(item,state.bundle.report.graph));
+    if (item.final_signature_condition) {
+      const roster=batchSignatureEvidence(state.bundle.report,item);
+      if (roster) node.append(roster);
+    }
     const final=state.bundle.report.findings.find(f=>f.batch_acceptance?.separate_final)?.batch_acceptance.separate_final;
     if (final) {
       const links=box('flow',evidenceJump('核对质保起算的终验材料','batch-final-acceptance'));

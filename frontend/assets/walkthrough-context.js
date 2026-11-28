@@ -10,6 +10,18 @@ const homeKeys = ['scene','slip','copy','edition','batch','record','pdf','carrie
 const caseKeys = ['view','stage','instrument','receipt','ticket','call','agreement','acceptance','finding','fact','prior','entry','filing','part'];
 const identifier = /^[a-zA-Z][a-zA-Z0-9_-]{0,95}$/;
 const factID = /^d\d{2}\/p[1-9]\d*\/(?:[ft][1-9]\d*|h[a-f0-9]{12})$/;
+export function originalLine(context, bundle) {
+  const ref=context.params?.fact, report=bundle?.report;
+  if (context.dialog!=='page-dialog' || !context.line || !factID.test(ref || '') ||
+      !report || report.case_id!==context.case_id || bundle.rev!==context.rev) return null;
+  const {facts,documents,nodes}=graphIndex(report.graph);
+  const fact=facts.get(ref), file=documents.get(context.doc), page=nodes.get(context.doc+'/p'+context.page);
+  const line=fact?.source_line;
+  if (!file?.sha256 || !page?.sha256 || fact?.doc!==context.doc || fact.page!==context.page ||
+      fact.source_sha256!==file.sha256 || fact.page_sha256!==page.sha256 || line?.number!==context.line ||
+      !line.rects?.length || typeof line.text!=='string' || !line.text.trim()) return null;
+  return {file:file.name,text:line.text};
+}
 function printedRef(context, ref) {
   const address=context.doc+'/p'+context.page+'/l'+context.line;
   return context.rev && ['inspection-use/','payment-approval/','payment-clock/','contract-approver/','approval-change/','installment-count/','measurement-note/','contract-signing-form/','measurement-number/','inspection-line/','execution/','signer-date/','joint-clock/'].some(prefix=>ref===prefix+address);

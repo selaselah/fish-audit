@@ -29,7 +29,84 @@ def example(names=("郑敏","陈琪"),*,final_clause=JOINT,batch_clauses=NAMED,b
     return packet(agreement=agreement,batches=batches,finals=finals,**kwargs)
 
 
+def three_scoped(names=("郑敏","陈琪"),*,claimed="郑敏、陈琪、陈和平",**options):
+    second=["林岚","何平","陈和平"]
+    return example(names,final_clause="终验须由"+claimed+"共同签字确认",
+                   batch_clauses=["第一批验收须由周宁签字确认","第二批验收须由"+"、".join(second)+"共同签字确认"],
+                   batches=[named_receipt(1,["周宁"]),named_receipt(2,second)],**options)
+
+
 class FinalSignatoryTests(unittest.TestCase):
+    def test_three_people_on_a_batch_and_on_the_final_are_distinct_requirements(self):
+        for names,expected in ((["郑敏","陈琪"],"missing"),(["郑敏","陈琪","陈和平"],"ok"),(["郑敏","陈琪","何平"],"risk")):
+            graph=three_scoped(names)
+            h,phases,cash=states(graph)
+            entry=h["batch_acceptance"]
+            final=entry["separate_final"]
+            self.assertEqual([b["status"] for b in entry["batches"]],["ok","ok"])
+            self.assertEqual(final["signing_requirement"]["required"],["郑敏","陈琪","陈和平"])
+            self.assertEqual(final["status"],expected)
+            cross=[e for e in evidence_edges([h,*phases]) if e["type"]=="final_name_on_batch_record"]
+            self.assertEqual(len(cross),int(expected=="missing"))
+            if expected=="missing":
+                other,=final["signatures_on_batches"]
+                self.assertEqual((other["name"],other["batch_index"],other["unit"]),("陈和平",2,"d03"))
+                self.assertEqual((cross[0]["from"],cross[0]["to"]),(final["signing_requirement"]["clause_ref"],other["signature_ref"]))
+                self.assertFalse(any(e["type"]=="final_named_signature" for e in evidence_edges([h,*phases])))
+                self.assertIsNone(entry["completion_on"])
+                self.assertEqual([p["status"] for p in phases],["ok","ok","ok","missing"])
+                for payment in (phases[-1],cash):
+                    basis=payment["final_signature_condition"]
+                    self.assertEqual(basis["missing_names"],["陈和平"])
+                    self.assertEqual(basis["batch_signatures"],[other["signature_ref"]])
+                    self.assertTrue(set(basis["evidence"])<=set(payment["evidence"]))
+                self.assertFalse(any("final_signature_condition" in p for p in phases[:3]))
+            else:
+                self.assertNotIn("final_signature_condition",cash)
+        for names in ("郑敏、陈琪与陈和平","郑敏、陈琪和陈和平"):
+            self.assertEqual(states(three_scoped(claimed=names))[0]["batch_acceptance"]["separate_final"]["signing_requirement"]["required"],
+                             ["郑敏","陈琪","陈和平"])
+        for names in ("郑敏、陈琪或陈和平","郑敏、陈琪、采购部","郑敏、陈琪、陈琪"):
+            self.assertFalse(states(three_scoped(claimed=names))[0]["batch_acceptance"]["separate_final"].get("signing_requirement"))
+        foreign=sign(final_record(batch_receipt_refs="YS-10、YS-201"),"郑敏","陈琪")
+        h,_,cash=states(three_scoped(finals=[foreign]))
+        self.assertNotIn("signatures_on_batches",h["batch_acceptance"]["separate_final"])
+        self.assertNotIn("final_signature_condition",cash)
+
+    def test_scoped_roster_replay_checks_the_expert_input_and_archived_geometry(self):
+        from delivery_batches import STANDARD_FORMAT, verify_roster_evidence
+        from graph import link_procedures
+        from model import audit_graph
+        from unittest.mock import patch
+        g=three_scoped()
+        read=lambda doc,page:"\n".join(f["quote"] for f in g["facts"] if f["doc"]==doc)
+        fs=execute(g,g["profile"])
+        with patch("model.structured",return_value=({"followups":[]},{"model":"fixture"})):
+            _,expert=audit_graph(g,fs)
+        calls={"expert":expert,"pages":[]}
+        link_procedures(g,fs,calls)
+        policy={**VERSION,"profile":g["profile"]}
+        paper={"graph":g,"findings":fs,"policy":policy,"calls":calls}
+        verify_sources(paper,read)
+        verify_findings(paper)
+        verify_roster_evidence(paper)
+        with self.assertRaisesRegex(ValueError,"行框"):
+            verify_roster_evidence(paper,read_layout=lambda doc,page:{"lines":{}})
+        for field in ("batch_acceptance","final_signature_condition"):
+            changed=copy.deepcopy(paper)
+            proc=next(p for p in changed["calls"]["expert"]["input"]["procedures"] if field in p)
+            del proc[field]
+            with self.assertRaisesRegex(ValueError,"专家输入"): verify_roster_evidence(changed)
+        old=three_scoped()
+        old["delivery_batch_sources"]=page_sources(old,read,STANDARD_FORMAT)
+        old["gaps"]=[k for k in old["gaps"] if k["quality"]!="delivery_batch_clause"]+gaps(old["delivery_batch_sources"])
+        previous=execute(old,old["profile"])
+        old["edges"].extend(evidence_edges(previous))
+        historical={"graph":old,"findings":previous,"policy":{**policy,"version":"2026.11.28.22","delivery_batches":STANDARD_FORMAT}}
+        verify_sources(historical,read)
+        self.assertNotIn("signing_requirement",next(f["batch_acceptance"] for f in previous if f["rule"]=="H02")["separate_final"])
+        with self.assertRaisesRegex(ValueError,"会签名单.*重审"): verify_sources(historical,read,signing=True)
+
     def test_only_the_final_original_can_supply_final_signatures(self):
         for g,names,batch_edges in ((example(),["郑敏","陈琪"],3),(example(["郑敏"],final_clause=SINGLE,batch_clauses=[]),["郑敏"],0)):
             h,phases,cash=states(g)

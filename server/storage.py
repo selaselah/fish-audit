@@ -34,7 +34,7 @@ from acceptance_authority import verify_sources as verify_acceptance_authority
 from equipment_models import verify as verify_equipment_models
 from stage_payments import verify as verify_stage_payments
 from receipt_packets import verify_sources as verify_receipt_packets
-from delivery_batches import verify_sources as verify_delivery_batches
+from delivery_batches import verify_roster_evidence, verify_sources as verify_delivery_batches
 from contract_effect import verify as verify_contract_effect
 from pdf_execution import verify as verify_pdf_execution
 from acceptance_execution import verify as verify_acceptance_pdf
@@ -801,6 +801,7 @@ class Store:
             try:
                 reviews = verify_word_reviews(paper, read_original, read_text, signing=True)
                 verify_acceptance_originals(paper, read_original, read_text, signing=True, verified_reviews=reviews)
+                verify_roster_evidence(paper,read_original=read_original)
             except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
                 raise CaseError(f"签收前核对验收签认原件失败。{error}", 409) from error
             try:
@@ -1041,7 +1042,7 @@ class Store:
                     verify_receipt_packets(paper,page_text,signing=True)
                     verify_stage_payments(paper,page_text,signing=True)
                     verify_equipment_models(paper,page_text,signing=True)
-                    verify_delivery_batches(paper,page_text,signing=True)
+                    verify_delivery_batches(paper,page_text,signing=True,read_layout=page_layout)
                     verify_contract_effect(paper,page_text,signing=True,read_layout=page_layout)
                     verify_payment_windows(paper,page_text,signing=True)
                     verify_reservations(paper,page_text,signing=True)

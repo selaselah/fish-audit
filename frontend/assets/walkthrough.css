@@ -27,6 +27,11 @@
 .walk-location { background:var(--canvas); border:1px solid var(--line); border-radius:7px; padding:5px 8px 5px 11px; margin:0 0 13px; }
 .walk-location small,.walk-scope,#walk-history time { font:.74rem/1.4 var(--font-ui); color:var(--muted); }
 #walk-location { margin:1px 0; font:.84rem/1.5 var(--font-ui); overflow-wrap:anywhere; }
+.walk-location:has(#walk-excerpt:not([hidden])) { flex-wrap:wrap; }
+.walk-location:has(#walk-excerpt:not([hidden])) > div:first-child { flex:1 1 100%; min-width:0; }
+#walk-excerpt blockquote { margin:5px 0 2px; padding-inline-start:9px; border-inline-start:2px solid var(--accent-line); color:var(--ink); font:500 .9rem/1.55 var(--font-ui); white-space:pre-wrap; overflow-wrap:anywhere; }
+#walk-excerpt summary { min-height:44px; align-content:center; color:var(--accent-hover); font:.85rem/1.5 var(--font-ui); cursor:pointer; }
+#walk-excerpt summary:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
 :is(#walk-dialog,#walk-rail) #walk-pick { flex-shrink:0; background:transparent; border-color:transparent; }
 .walk-pick-actions { display:flex; gap:2px; flex:none; align-items:center; }
 .walk-location:has(#walk-point:not([hidden])) { flex-wrap:wrap; }

@@ -30,7 +30,7 @@ import advance_guarantee
 from equipment_models import REVIEW_SINCE as MODEL_REVIEW_SINCE, source_kind as model_source_kind, verify as verify_equipment_models
 from stage_payments import verify as verify_stage_payments
 from receipt_packets import verify_sources as verify_receipt_packets
-from delivery_batches import verify_sources as verify_delivery_batches
+from delivery_batches import verify_roster_evidence, verify_sources as verify_delivery_batches
 from contract_effect import verify as verify_contract_effect
 from pdf_execution import verify as verify_pdf_execution
 from acceptance_execution import verify as verify_acceptance_pdf
@@ -305,6 +305,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
     verify_payment_acceptance(report,page_text)
     payment_execution.verify(report,page_text)
     payment_execution.verify_return_originals(report,read_original)
+    verify_roster_evidence(report,read_original=read_original)
     advance_guarantee.verify(report,page_text)
     verify_prior_installment(report,page_text,submitted=submitted,signed=signed)
     verify_payment_releases(report,page_text,submitted=submitted,signed=signed)

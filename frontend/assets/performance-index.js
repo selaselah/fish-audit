@@ -823,6 +823,7 @@ const PerformanceIndex = (() => {
       const mandates=mandateEvidence(item,state.bundle.report);
       const paired=pairView(item,state.bundle.report,receipts);
       const roster=AcceptanceRoster.bind(item,state.bundle.report);
+      const finalSignatures=item.final_signature_condition && batchSignatureEvidence(state.bundle.report,item);
       const batch=BatchPhase.resolve(item,findings.find(f=>f.rule==='H02'),graph,state.bundle.report.calls?.pages);
       const guarantee=AdvanceGuarantee.panel(item,state.bundle.report);
       const quality=PaymentQuality.panel(item,state.bundle.report,rev);
@@ -846,6 +847,7 @@ const PerformanceIndex = (() => {
       if (eventDate) detail.append(lazyFold((eventDate.label || '回单付款日')+' '+eventDate.day,()=>[sources()]));
       for (const ref of item.party_readings || []) detail.append(PartyReadings.citation(state.bundle.report,ref,item));
       if (item.installment_count) detail.append(InstallmentCount.citation(state.bundle.report,item.installment_count,item,true));
+      if (finalSignatures) detail.append(finalSignatures);
       if (item.approval_change) detail.append(ApprovalChange.panel(item,state.bundle.report,rev));
       if (item.approval_change_scope) {
         const link=InspectionUse.citation(item.approval_change_scope.scope_ref,item,state.bundle.report);
@@ -889,16 +891,19 @@ const PerformanceIndex = (() => {
           showGroup(payments,phase); back.focus();
         });
       }
-      if (receipts.length>1 && receipts.some(p=>p.record.kind)) {
+      if (receipts.length>1 && (finalSignatures || receipts.some(p=>p.record.kind))) {
         const picker=el('select','','accept-proof-picker'),slot=box('accept-picked-proof');
+        const label=el('label','验收原件','scope-receipt-label');
+        picker.id='scope-receipt-picker-'+item.id; label.htmlFor=picker.id;
         picker.setAttribute('aria-label','选择本项所据验收原件');
         for (const p of receipts) picker.add(new Option(p.doc.name+' · 第 '+p.page+' 页',p.record.id));
-        const selectedProof=receipts.find(p=>p.record.id===shownReceipts.get(item.id)) || receipts.find(p=>p.record.kind);
+        const selectedProof=receipts.find(p=>p.record.id===shownReceipts.get(item.id)) ||
+          receipts.find(p=>p.doc.id===item.final_signature_condition?.receipt) || receipts.find(p=>p.record.kind) || receipts[0];
         function choose(id) {
           picker.value=id;shownReceipts.set(item.id,id);slot.replaceChildren(makeReceipt(receipts.find(p=>p.record.id===id)));
         }
         picker.addEventListener('change',()=>choose(picker.value));choose(selectedProof.record.id);
-        detail.append(picker,slot);
+        detail.append(label,picker,slot);
       } else {
         for (const receipt of receipts) detail.append(makeReceipt(receipt));
       }
@@ -910,7 +915,7 @@ const PerformanceIndex = (() => {
         detail.append(detailText.length<=100 && !receipts.length && !batch && !guarantee && !quality && !retest?reason:fold('阅读本项结论',reason));
       }
       if (!paired && !eventDate) {
-        detail.append(register || roster || batch || guarantee || quality || retest || mandates.length || receipts.some(p=>p.record.kind)?lazyFold('其他字段引文',()=>[sources()]):sources());
+        detail.append(register || roster || finalSignatures || batch || guarantee || quality || retest || mandates.length || receipts.some(p=>p.record.kind)?lazyFold('其他字段引文',()=>[sources()]):sources());
       }
       detail.append(actions);
       detail.scrollTop=0;

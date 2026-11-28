@@ -510,7 +510,9 @@ server/.venv/bin/python docs/samples/stage_transfers.py --run --run-id synthetic
 
 ## 分批验收人与终验签字人
 
-`server/.venv/bin/python docs/samples/final_signers.py` 生成八组带水印的虚构设备采购资料，覆盖分批与终验分别具名、同一人只签分批、换人签终验、合同仅指定终验人、缺少总单、全员签字且实测超限、代签影像和合同附加会签。用 `--run --run-id 本次演练编号` 可在本机完成上传、多模态解析、生成件原行核对与规则验收。脚本核对模型调用记录、每期条件、总单签字范围、图谱关系和质保起算，最终签收留给审计人员。
+`server/.venv/bin/python docs/samples/final_signers.py` 生成九组带水印的虚构设备采购资料，覆盖分批与终验分别具名、同一人只签分批、换人签终验、合同仅指定终验人、缺少总单、全员签字且实测超限、代签影像和合同附加会签。用 `--run --run-id 本次演练编号` 可在本机完成上传、多模态解析、生成件原行核对与规则验收。脚本核对模型调用记录、每期条件、总单签字范围、图谱关系和质保起算，最终签收留给审计人员。
+
+`server/.venv/bin/python docs/samples/final_signers.py --cases three_scoped` 仅生成三人名单的用例。第二批和全套终验各点名三人，陈和平只签了第二批。第四期质保金回单记载已付 1 万元。加 `--run --run-id 本次演练编号` 可运行上传及审计流程。[固定版原件与预期结果](../acceptance.md#分批签认与单独终验所据的质保期)
 
 ## 分批交付后的另行终验
 

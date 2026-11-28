@@ -37,6 +37,81 @@ function alteredBatch(id) {
   }
   return results;
 }
+async function checkScopedFinal(ctx,report,url) {
+  const {call,evaluate,wait}=ctx;
+  const cases=report.findings.filter(f=>f.final_signature_condition);
+  assert.ok(cases.some(f=>f.rule==='H04') && cases.some(f=>f.rule==='H05'));
+  const h=report.findings.find(f=>f.rule==='H02'), final=h.batch_acceptance.separate_final;
+  const proof=final.signatures_on_batches[0];
+  const fact=report.graph.facts.find(f=>f.id===proof.signature_ref);
+  const visited=new Set();
+  for (const f of cases) {
+    const panel='#performance-index [data-roster-finding="'+f.id+'"]';
+    await call('Page.navigate',{url:url+'&view=payment-checks&stage='+f.id});
+    await wait(q('#performance-index')+'?.open && '+q(panel)+'?.getClientRects().length','warranty condition in the selected installment');
+    assert.ok((await evaluate(q(panel+' summary')+'.textContent')).includes(proof.name));
+    const picker=q('#performance-index .accept-proof-picker');
+    const finalFile=report.graph.documents.find(d=>d.id===f.final_signature_condition.receipt);
+    assert.equal(await evaluate(picker+'.labels[0].textContent'),'验收原件');
+    assert.ok((await evaluate(picker+'.selectedOptions[0].textContent')).includes(finalFile.name));
+    const receipts=await evaluate('Array.from('+picker+'.options,o=>o.textContent)');
+    assert.ok(receipts.length>1);
+    for (const index of [1,0]) {
+      await evaluate(picker+'.selectedIndex='+index+';'+picker+'.dispatchEvent(new Event("change"))');
+      assert.equal(await evaluate(all('#performance-index .scope-receipt-proof')+'.length'),1);
+      assert.ok((await evaluate(q('#performance-index .scope-receipt-proof')+'.textContent')).includes(receipts[index].split(' · ')[0]));
+    }
+    for (const change of ["delete r.findings.find(p=>p.rule==='H02').batch_acceptance.separate_final.records",
+      "r.graph.edges=r.graph.edges.filter(e=>e.type!=='final_name_on_batch_record')",
+      "f.final_signature_condition.batch_signatures=[]","r.graph.facts.find(p=>p.id===ref).source_line.rects=[]",
+      "r.calls.expert.input.procedures.find(p=>p.rule==='H02').batch_acceptance.separate_final.signatures_on_batches=[]"]) {
+      const available=await evaluate('(()=>{const r=structuredClone(state.bundle.report),f=r.findings.find(x=>x.id==='+JSON.stringify(f.id)+'),ref='+JSON.stringify(proof.signature_ref)+';'+
+        change+';return Boolean(batchSignatureEvidence(r,f))})()');
+      assert.equal(available,false);
+    }
+    await evaluate(q(panel+' summary')+'.click()');
+    const links=await evaluate(all(panel+' button')+'.map(b=>b.dataset.batchRosterSource)');
+    assert.ok(links.includes(proof.signature_ref) && links.includes(final.signing_requirement.clause_ref) && links.includes(f.final_signature_condition.term_ref));
+    for (const width of [1440,1024,768,390,360,320]) {
+      await size(ctx,width);
+      await inspect(ctx,width,panel,'scoped-final-'+f.rule);
+      for (const ref of links) {
+        const key=f.rule+'/'+ref+'/'+(width<600?'phone':'desk');
+        if (visited.has(key)) continue;
+        const button=q(panel+' [data-batch-roster-source="'+ref+'"]');
+        await evaluate(button+'.focus();'+button+'.click()');
+        await wait(q('#page-dialog')+'.open && '+q('#page-content .evidence-row.located')+'?.dataset.fact==='+JSON.stringify(ref),'linked physical row');
+        await wait(q('.source-plane svg rect')+'!=null','line highlight');
+        if (ref===proof.signature_ref) {
+          assert.ok((await evaluate(q('#page-content .evidence-row.located')+'.textContent')).includes(fact.source_line.text));
+          if (f.rule==='H05') {
+            await evaluate(q('#page-dialog #walk-launch')+'.click()');
+            await wait(q('#walk-dialog')+'?.open && !'+q('#walk-excerpt')+'?.hidden','walkthrough at the original');
+            assert.equal(await evaluate(q('#walk-excerpt blockquote')+'.textContent'),fact.source_line.text);
+            assert.ok((await evaluate(q('#walk-origin')+'.textContent')).includes('R'+new URL(url).searchParams.get('rev')));
+            const binding=await evaluate('(async()=>{'+
+              'const {captureContext,originalLine}=await import("/assets/walkthrough-context.js");'+
+              'const c=captureContext(document.getElementById("page-dialog")), b=structuredClone(state.bundle);'+
+              'const invalid=[{rev:c.rev+1},{case_id:"other"},{line:c.line+1},{doc:"d99"}];'+
+              'const allMissing=invalid.every(v=>!originalLine({...c,...v},b));'+
+              'b.report.graph.facts.find(x=>x.id===c.params.fact).source_line.rects=[];'+
+              'return allMissing && !originalLine(c,b)})()');
+            assert.equal(binding,true);
+            await evaluate(q('#walk-close')+'.click()');
+          }
+        }
+        await evaluate(q('#page-dialog [data-close]')+'.click()');
+        await wait('document.activeElement==='+button,'return to source link');
+        visited.add(key);
+      }
+    }
+    const prior=report.findings.find(x=>x.rule==='H04' && x.stage?.batch_index && !x.final_signature_condition);
+    await evaluate(q('.scope-check-select')+'.value='+JSON.stringify(prior.id)+';'+q('.scope-check-select')+'.dispatchEvent(new Event("change"))');
+    await wait(q('#performance-index .batch-roster-proof')+'===null','independent batch installment');
+  }
+  console.log('PASS · 分批签认原行、另行终验缺签与质保金 · 两个付款入口、六种宽度');
+}
+
 export async function checkBatchPhase(ctx, id, revision) {
   const {root, call, wait, evaluate} = ctx, base = root + '/api/cases/' + id;
   const task = await (await fetch(base)).json();
@@ -44,6 +119,8 @@ export async function checkBatchPhase(ctx, id, revision) {
   const rev = Number(revision || task.rev);
   const {report} = await (await fetch(base + '/reports/' + rev)).json();
   const h2 = report.findings.find(f => f.rule === 'H02'), ledger = h2.batch_acceptance;
+  if (report.findings.some(f=>f.final_signature_condition))
+    return checkScopedFinal(ctx,report,root+'/workpaper/'+id+'?rev='+rev);
   const phases = report.findings.filter(f => f.rule === 'H04' && f.stage?.batch_index);
   const url = root + '/workpaper/' + id + '?rev=' + rev, scope = '#performance-index';
   const evidence = scope + ' .batch-phase-proof', facts = report.graph.facts;

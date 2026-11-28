@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## 分批签认、单独终验与质保金
+
+规则 `2026.11.28.23` 使用 `contract-delivery-batches-v8`。H02 的 `batch_acceptance.separate_final.signatures_on_batches[]` 记录应参加终验、且能在对应分批单找到签认的人员。每项含 `name`、`batch_index`、分批单 `unit`、合同分批名单 `clause_ref`、验收范围 `scope_ref`、批次单号 `number_ref` 和具名签认 `signature_ref`。终验单自身的签认结果见 `records[].signing.signed` 和 `missing_names`。
+
+图谱关系 `final_name_on_batch_record` 从合同终验名单指向分批单签认栏，保存批次和支持该归属的原行。以终验合格日起算且起点待核的质保期款，在 H04 和已有回单的 H05 上提供 `final_signature_condition`，含所据终验单 `receipt`、终验名单 `clause_ref`、起算条款 `term_ref`、`missing_names`、`batch_signatures` 和证据引用。专家输入、签收校验与离线重算使用当版记录。[R11 证据包](http://127.0.0.1:8000/api/cases/6113c3a65213496e99defd63d70e213a/reports/11/bundle)
+
 ## 代用批准文件的签署异议
 
 规则 `2026.11.28.19` 使用 `inspection-coverage-v6`。在本来可作日期核对的设备代用案中，如果对本份补充协议的状态、采购方或供应方签章仍有字段异议，相关 H02、验收期 H04 和成功实付 H05 改记 `substitution_review`。其中 `unit`、`condition` 和 `decision` 分别指向协议、合同前提和协议决定。每项 `objections[]` 的 `field` 是被质疑的栏位，`ref` 指向实际被标记为 `disputed` 的观察。模型把签章抄成用印名称或其他字段时，有准确行号和原文也能关联到该栏。无法定位的争议摘录可按本份协议的具名字段保留待核。
@@ -430,7 +436,7 @@ H02 的 `reinspection.steps` 中，`role = repair` 的步骤含 `completion`。�
 
 ## 每批验收所据的标准版本
 
-`policy.delivery_batches` 为 `contract-delivery-batches-v7` 的底稿支持逐批选用标准。H02 的 `quality_change.state = by_batch` 表示已有一份范围明确且按约生效的前瞻性质量协议。各次验收的判断分别在 `batch_acceptance.records[].standard` 中。
+`policy.delivery_batches` 为 `contract-delivery-batches-v7` 或 `contract-delivery-batches-v8` 的底稿支持逐批选用标准。H02 的 `quality_change.state = by_batch` 表示已有一份范围明确且按约生效的前瞻性质量协议。各次验收的判断分别在 `batch_acceptance.records[].standard` 中。
 
 | 字段 | 含义 |
 | --- | --- |

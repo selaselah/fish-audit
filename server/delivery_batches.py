@@ -10,7 +10,7 @@ import acceptance_execution
 import acceptance_originals
 import acceptance_comments
 import equipment_models
-from acceptance_authority import CLAUSE, LABELS as SIGNING_LABELS, covers, instruction, parts, required_names, signed_name
+from acceptance_authority import CLAUSE, LABELS as SIGNING_LABELS, covers, instruction, listed_names, parts, required_names, signed_name
 from calculations import normalized
 from contract_changes import labelled_sources
 from delegation import complete_id, covered_rows
@@ -24,8 +24,12 @@ FINAL_FORMAT = "contract-delivery-batches-v3"
 FINAL_SIGNING_FORMAT = "contract-delivery-batches-v4"
 PRINTED_SIGNERS = "contract-delivery-batches-v5"
 REMARK_FORMAT = "contract-delivery-batches-v6"
-FORMAT = "contract-delivery-batches-v7"
-PRINTED_SIGNER_FORMATS = (PRINTED_SIGNERS, REMARK_FORMAT, FORMAT)
+STANDARD_FORMAT = "contract-delivery-batches-v7"
+FORMAT = "contract-delivery-batches-v8"
+ROSTER_SINCE = "2026.11.28.23"
+STANDARD_FORMATS = (STANDARD_FORMAT, FORMAT)
+REMARK_FORMATS = (REMARK_FORMAT,*STANDARD_FORMATS)
+PRINTED_SIGNER_FORMATS = (PRINTED_SIGNERS,*REMARK_FORMATS)
 FINAL_SIGNING_FORMATS = (FINAL_SIGNING_FORMAT,*PRINTED_SIGNER_FORMATS)
 FINAL_FORMS = (FINAL_FORMAT,*FINAL_SIGNING_FORMATS)
 BATCH_SIGNING_FORMATS = (SIGNING_FORMAT,*FINAL_FORMS)
@@ -129,21 +133,22 @@ def quantity_text(count,unit):
     return str(count)+unit if count is not None else None
 
 
-def signing_clause(quote):
+def signing_clause(quote, *, listed=False):
     label,body=parts(quote)
     match=SIGNING.fullmatch(body.rstrip("。")) if label in SIGNING_LABELS[CLAUSE] else None
     if not match or re.search(r"任选|任一|之一|或|代为|代签|授权|另行|同上|同前|待定|待填",match[2]):
         return None
-    names=required_names(match[2],match[3].startswith("共同"))
+    joint=match[3].startswith("共同")
+    names=listed_names(match[2]) if listed and joint else required_names(match[2],joint)
     index=ordinal(match[1]) if match[1] else 0
     return (index,names) if index is not None and names else None
 
 
-def final_signers(quote):
+def final_signers(quote, *, listed=False):
     _,body=parts(quote)
     if not body.startswith(("终验","最终验收")) or re.search(r"任选|任一|之一|或|代为|代签|授权|同上|同前|待定|待填",body):
         return None
-    directive=instruction(quote)
+    directive=instruction(quote,listed=listed)
     return directive[2] if directive and directive[1]=="final" else None
 
 
@@ -234,7 +239,7 @@ def page_sources(graph,read_text,version=FORMAT):
                          "total","net","tax","currency","unit"}
         def contract_row(field,value,quote):
             if field==CLAUSE:
-                return bool(signing_clause(quote)) and covers(field,value,quote)
+                return bool(signing_clause(quote,listed=version==FORMAT)) and covers(field,value,quote)
             if field=="payment_deadline":
                 from payment_windows import scoped_row
                 return scoped_row(quote) and covers(field,value,quote)
@@ -256,7 +261,7 @@ def page_sources(graph,read_text,version=FORMAT):
                             and f.get("unit",f["doc"]) in contracts and separate_clause(f)}
         coverage=covered_rows(graph,read_text,contracts-separate_units,contract_fields,contract_row,"分批合同")
         def separate_row(field,value,quote):
-            return contract_row(field,value,quote) or field==CLAUSE and bool(final_signers(quote)) and covers(field,value,quote)
+            return contract_row(field,value,quote) or field==CLAUSE and bool(final_signers(quote,listed=version==FORMAT)) and covers(field,value,quote)
         coverage+=covered_rows(graph,read_text,separate_units,contract_fields,separate_row,"另行终验合同")
         receipt_fields=set(RECEIPT_FIELDS)
         if "equipment_model_sources" in graph:
@@ -295,7 +300,7 @@ def page_sources(graph,read_text,version=FORMAT):
         notes=[{"doc":f["doc"],"page":f["page"],"unit":f.get("unit",f["doc"]),"fact":f["id"],"quote":f["quote"]}
                for f in graph["facts"] if (f["doc"],f["page"]) in mixed and not (f.get("source_line") or {}).get("rects")]
     result = {"format":version,"signals":signals,"pages":coverage,"visual_notes":notes}
-    if version in (REMARK_FORMAT,FORMAT):
+    if version in REMARK_FORMATS:
         result["remarks"] = receipt_remarks(coverage,facts_by_page,contracts,read_text)
         units={p["unit"] for p in coverage}
         seen={(s["doc"],s["page"],s["line"]) for s in result["remarks"]}
@@ -404,18 +409,19 @@ def signing_plan(graph,contract):
     plan={}
     final=None
     separate=source["format"] in FINAL_SIGNING_FORMATS and separate_clause(one(contract,"batch_clause"))
+    listed=source["format"]==FORMAT
     for row in clauses:
         fact=facts.get(row["fact"])
         if not row["native"] or row["unit"]!=contract.unit or not fact or (fact.get("source_line") or {}).get("text")!=row["quote"]:
             return {}
-        names=final_signers(row["quote"]) if separate else None
+        names=final_signers(row["quote"],listed=listed) if separate else None
         if names:
-            if final or not literal_value(fact) or final_signers(fact["quote"])!=names:
+            if final or not literal_value(fact) or final_signers(fact["quote"],listed=listed)!=names:
                 return {}
             final={"required":names,"clause_ref":fact["id"]}
             continue
-        parsed=signing_clause(row["quote"])
-        if not parsed or signing_clause(fact["quote"])!=parsed or separate and not literal_value(fact):
+        parsed=signing_clause(row["quote"],listed=listed)
+        if not parsed or signing_clause(fact["quote"],listed=listed)!=parsed or (separate or listed) and not literal_value(fact):
             return {}
         batch,names=parsed
         for index in indices if batch==0 else [batch]:
@@ -445,6 +451,35 @@ def check_batch_signatures(requirement,rows,*,applicable,complete,scope="本批"
     else:
         status,detail="ok",scope+"指定的"+"、".join(required)+"均有独立签字栏及核图记录。"
     return {**requirement,"signed":rows,"missing_names":missing,"other_names":extra,"status":status,"detail":detail}
+
+
+def signatures_on_referenced_batches(finals,batches,records):
+    if len(finals)!=1:
+        return []
+    final=finals[0]
+    check=final.get("signing")
+    if (not check or not check["missing_names"] or final["scope_unclear"] or not final["refs_ref"] or
+            check["other_names"] or any(not s["confirmed"] for s in check["signed"]) or
+            len({s["name"] for s in check["signed"]})!=len(check["signed"])):
+        return []
+    by_unit={r["unit"]:r for r in records}
+    if not batches or any(len(b["records"])!=1 for b in batches):
+        return []
+    selected=[by_unit[b["records"][0]] for b in batches]
+    numbers=[r["number"] for r in selected]
+    listed=final["receipt_numbers"] or []
+    if (not all(numbers) or len(set(numbers))!=len(numbers) or len(listed)!=len(numbers) or set(listed)!=set(numbers)):
+        return []
+    observations=[]
+    for r in selected:
+        signing=r.get("signing")
+        if not signing or signing["status"]!="ok" or r["scope_unclear"] or not r["scope_ref"] or not r["number_ref"]:
+            continue
+        for s in signing["signed"]:
+            if s["name"] in check["missing_names"] and s["native"] and s["confirmed"] and s["line"] and s["fact"]:
+                observations.append({"name":s["name"],"batch_index":r["index"],"unit":r["unit"],"scope_ref":r["scope_ref"],
+                                     "number_ref":r["number_ref"],"clause_ref":signing["clause_ref"],"signature_ref":s["fact"]})
+    return observations
 
 
 def change_basis(change,contract,amendments,receipts,*,eligible):
@@ -761,6 +796,8 @@ def inspect(graph,contract,receipts,*,other_terms,native_spacing=False,requireme
                                 needs_final_authority=bool(requirements and not final_requirement)) if separate else None
     if final_check and final_requirement:
         final_check["signing_requirement"]=final_requirement
+        if source["format"]==FORMAT and (other:=signatures_on_referenced_batches(finals,results,records)):
+            final_check["signatures_on_batches"]=other
     outcomes=[*results,*unknown]+([final_check] if final_check else [])
     status=next((s for s in ("issue","risk","missing") if any(r["status"]==s for r in outcomes)),"ok")
     if status=="ok" and (not results or not (final or final_check) or plan_problem or other_terms or unknown):
@@ -798,6 +835,42 @@ def payment_index(row,contract):
     return ordinal(match[1])
 
 
+def link_warranty_signing(graph,findings):
+    if graph.get("delivery_batch_sources",{}).get("format")!=FORMAT:
+        return
+    from warranty_terms import parse_period
+    entry=next((f["batch_acceptance"] for f in findings if f.get("batch_acceptance")),{})
+    final=entry.get("separate_final") or {}
+    observations=final.get("signatures_on_batches")
+    if not observations or entry["completion_on"]:
+        return
+    receipt=next(r for r in entry["records"] if r["unit"]==final["records"][0])
+    facts={r["id"]:r for r in graph["facts"]}
+    names=list(dict.fromkeys(r["name"] for r in observations))
+    for finding in findings:
+        check=finding.get("warranty_check")
+        if finding["rule"] not in ("H04","H05") or not check or not finding.get("stage") or check["accepted_on"] or check["calendar_end"]:
+            continue
+        term=facts.get(check["term_ref"])
+        if not term or not literal_value(term):
+            continue
+        period=parse_period(*parts(term["source_line"]["text"]))
+        if not period or period["fixed"] or period!=check["period"]:
+            continue
+        clause=final["signing_requirement"]["clause_ref"]
+        refs=[finding["stage"]["clause_ref"],term["id"],clause,receipt["scope_ref"],receipt["refs_ref"],
+              *(s["fact"] for s in receipt["signing"]["signed"]),
+              *(row[k] for row in observations for k in ("clause_ref","scope_ref","number_ref","signature_ref"))]
+        finding["final_signature_condition"]={"receipt":receipt["unit"],"clause_ref":clause,"term_ref":term["id"],
+                "missing_names":receipt["signing"]["missing_names"],"batch_signatures":[r["signature_ref"] for r in observations],
+                "evidence":list(dict.fromkeys(refs))}
+        finding["evidence"]=list(dict.fromkeys([*finding["evidence"],*refs]))
+        finding["scope"]=list(dict.fromkeys([*finding["scope"],receipt["unit"],*(r["unit"] for r in observations)]))
+        if finding["status"]=="ok":
+            finding["status"]="missing"
+        finding["detail"]+=" 质保期从终验合格日起算。终验单尚缺"+"、".join(receipt["signing"]["missing_names"])+"的签认，本案可在分批单核对"+"、".join(names)+"的签认栏。"
+
+
 def evidence_edges(findings):
     result=[]
     entry=next((f["batch_acceptance"] for f in findings if f.get("batch_acceptance")),None)
@@ -833,6 +906,13 @@ def evidence_edges(findings):
                 if f"{note['doc']}/p{note['page']}" in item["evidence"]:
                     result.append(link_note("batch_payment_hold",item["stage"]["clause_ref"],note))
     final=entry.get("separate_final")
+    if final and final.get("signatures_on_batches"):
+        receipt=records[final["records"][0]]
+        clause=final["signing_requirement"]["clause_ref"]
+        for other in final["signatures_on_batches"]:
+            result.append({"type":"final_name_on_batch_record","from":clause,"to":other["signature_ref"],"batch":other["batch_index"],
+                           "evidence":[clause,receipt["scope_ref"],receipt["refs_ref"],other["clause_ref"],other["scope_ref"],
+                                       other["number_ref"],other["signature_ref"]]})
     if final and final["status"]=="ok":
         receipt=records[final["records"][0]]
         for batch in final["basis"]:
@@ -845,9 +925,68 @@ def evidence_edges(findings):
     return result
 
 
-def verify_sources(report,read_text,*,signing=False):
+def expanded_clauses(graph):
+    contracts=set(graph["documents_by_kind"].get("contract",()))
+    if not graph.get("delivery_batch_sources",{}).get("signals"):
+        return []
+    separate={f.get("unit",f["doc"]) for f in graph["facts"] if f["field"]=="batch_clause" and separate_clause(f)}
+    changes=[]
+    for row in graph.get("acceptance_authority_sources",{}).get("clauses",()):
+        if row["unit"] not in contracts or not row["native"] or not row["line"] or not row["fact"]:
+            continue
+        parsers=(signing_clause,final_signers) if row["unit"] in separate else (signing_clause,)
+        for parse in parsers:
+            current=parse(row["quote"],listed=True)
+            if current and current!=parse(row["quote"]):
+                changes.append(row)
+                break
+    return changes
+
+
+def verify_roster_evidence(report,*,read_layout=None,read_original=None):
+    graph=report["graph"]
+    if report["policy"].get("delivery_batches")!=FORMAT:
+        return
+    finding=next((f for f in report["findings"] if f["rule"]=="H02" and f.get("batch_acceptance")),None)
+    if not finding:
+        return
+    entry=finding["batch_acceptance"]
+    final=entry.get("separate_final") or {}
+    clauses={g["signing_requirement"]["clause_ref"] for g in [*entry["batches"],final] if g.get("signing_requirement")}
+    if not (final.get("signatures_on_batches") or clauses.intersection(r["fact"] for r in expanded_clauses(graph))):
+        return
+    expert=report["calls"]["expert"]["input"]["procedures"]
+    if [p.get("batch_acceptance") for p in expert if p["rule"]=="H02" and p["evidence"]==finding["evidence"]]!=[entry]:
+        raise ValueError("专家输入与逐批、终验签认的具名记录不符")
+    def payments(items):
+        return [(p["rule"],p["status"],p["evidence"],p.get("stage"),p.get("final_signature_condition"))
+                for p in items if p["rule"] in ("H04","H05")]
+    if payments(expert)!=payments(report["findings"]):
+        raise ValueError("专家输入与逐批、终验签认所涉期款的证据不符")
+    units={r["unit"] for r in entry["records"]} | set(graph["documents_by_kind"]["contract"])
+    if read_layout:
+        layout=cache(read_layout)
+        for fact in graph["facts"]:
+            loc=fact.get("source_line")
+            if loc and fact.get("unit",fact["doc"]) in units and layout(fact["doc"],fact["page"]).get("lines",{}).get(str(loc["number"]))!=loc["rects"]:
+                raise ValueError("分批与终验签认的原页行框已改变")
+    if read_original:
+        from original_records import verify_rendered
+        pages=[p for p in graph["delivery_batch_sources"]["pages"] if p["unit"] in units]
+        if {p["unit"] for p in pages}!=units:
+            raise ValueError("分批与终验签认缺少所引单据的原页")
+        nodes={n["id"]:n for n in graph["nodes"] if n["type"]=="page"}
+        files=[]
+        for p in pages:
+            ref=f"{p['doc']}/p{p['page']}"
+            files.append({"doc":p["doc"],"pages":[{"ref":ref,"sha256":nodes[ref]["sha256"],
+                         "layer":nodes[ref]["layer"],"text_only":p["text_only"]}]})
+        verify_rendered(graph,files,read_original,"分批与终验签认")
+
+
+def verify_sources(report,read_text,*,signing=False,read_layout=None):
     policy,graph=report["policy"],report["graph"]
-    if signing and policy.get("delivery_batches") not in (REMARK_FORMAT,FORMAT) and any(f["rule"] in ("H04","H05") and f["status"]=="ok" for f in report["findings"]):
+    if signing and policy.get("delivery_batches") not in REMARK_FORMATS and any(f["rule"] in ("H04","H05") and f["status"]=="ok" for f in report["findings"]):
         if any(r["kind"] in PAYMENT_REMARKS for r in page_sources(graph,read_text)["remarks"]):
             raise ValueError("旧版分期结论尚有待核的付款意见，请核实适用范围并按现行程序重审后签收。")
     if not policy.get("delivery_batches"):
@@ -857,7 +996,7 @@ def verify_sources(report,read_text,*,signing=False):
             raise ValueError("旧版终验尚未逐批核对，请按现行程序重审后签收。")
         return
     marker=policy["delivery_batches"]
-    if signing and marker!=FORMAT and any(f.get("quality_change") and any(
+    if signing and marker not in STANDARD_FORMATS and any(f.get("quality_change") and any(
             r["status"]=="issue" and "实测值超出约定限值" in r["detail"]
             for r in f.get("batch_acceptance",{}).get("records",[])) for f in report["findings"]):
         raise ValueError("此版分批超限结论尚未逐批核对补充协议的适用日期，请重审后签收。")
@@ -867,13 +1006,22 @@ def verify_sources(report,read_text,*,signing=False):
         "2026.11.25.08"<=version<"2026.11.25.09" and marker!=FINAL_FORMAT or
         "2026.11.25.09"<=version<"2026.11.25.11" and marker!=FINAL_SIGNING_FORMAT or
         "2026.11.25.11"<=version<"2026.11.25.18" and marker!=PRINTED_SIGNERS or
-        "2026.11.25.18"<=version<"2026.11.25.19" and marker!=REMARK_FORMAT or version>="2026.11.25.19" and marker!=FORMAT or
+        "2026.11.25.18"<=version<"2026.11.25.19" and marker!=REMARK_FORMAT or
+        "2026.11.25.19"<=version<ROSTER_SINCE and marker!=STANDARD_FORMAT or version>=ROSTER_SINCE and marker!=FORMAT or
         policy.get("performance_checks") not in BATCH_FORMATS or
         graph.get("delivery_batch_sources")!=source or gaps(source)!=[g for g in graph["gaps"] if g["quality"]=="delivery_batch_clause"]):
         raise ValueError("分批条款原文、资料归属或页内覆盖与归档不符")
-    edges=[e for e in graph["edges"] if e["type"] in ("delivery_batch_acceptance","batch_payment_basis","batch_named_signature","batch_final_basis","final_named_signature","batch_inspection_note","batch_payment_hold","batch_quality_comparison")]
+    edges=[e for e in graph["edges"] if e["type"] in ("delivery_batch_acceptance","batch_payment_basis","batch_named_signature","batch_final_basis","final_named_signature","final_name_on_batch_record","batch_inspection_note","batch_payment_hold","batch_quality_comparison")]
     if evidence_edges(report["findings"])!=edges:
         raise ValueError("分批验收或分期付款的证据关系不符")
+    if signing and marker!=FORMAT and (changed:=expanded_clauses(graph)):
+        from performance import Material
+        updated={**graph,"delivery_batch_sources":page_sources(graph,read_text)}
+        updated["gaps"]=[g for g in graph["gaps"] if g["quality"]!="delivery_batch_clause"]+gaps(updated["delivery_batch_sources"])
+        if any(signing_plan(updated,Material(updated,unit)) for unit in {r["unit"] for r in changed}):
+            raise ValueError("旧版尚未逐单核对分批与终验的具名会签名单，请重审后签收。")
+    if read_layout:
+        verify_roster_evidence(report,read_layout=read_layout)
     expected=sorted((f.get("unit",f["doc"]),f["id"],f["field"],(f["id"],)) for f in graph["facts"]
                     if f["field"] in LABELS and f["status"] in ("anchored","confirmed"))
     actual=sorted((e["from"],e["to"],e["type"],tuple(e["evidence"])) for e in graph["edges"] if e["type"] in LABELS)

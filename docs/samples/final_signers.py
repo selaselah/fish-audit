@@ -15,6 +15,7 @@ from warranty_release import check_training_watermark
 CASES={
     "joint":"分批验收人与终验共同签字人均相符", "borrowed":"陈琪只在第二批签字而未签终验",
     "substitute":"分批验收人在终验单替代合同指定人", "only_final":"合同只为另行终验指定一名验收人",
+    "three_scoped":"第三位共同终验人只在第二批签字，第四期质保金已付",
     "no_final":"只有指定终验人的条款和两份分批原件", "quality":"指定终验人均已签认而总单实测超限",
     "image":"终验签字页另有代签影像说明", "rider":"合同另约意见不一致时暂停各期付款",
 }
@@ -30,11 +31,14 @@ def signed_records(code,mode):
     clauses=records["采购合同"]
     if mode!="only_final":
         second=["林岚","陈琪" if mode=="borrowed" else "何平"]
+        if mode=="three_scoped":
+            second.append("陈和平")
         clauses.extend([("验收签认约定","第一批验收须由周宁签字确认"),
                         ("验收签认约定","第二批验收须由"+"、".join(second)+"共同签字确认")])
         set_signatures(records["第一批验收报告"],["周宁"])
         set_signatures(records["第二批验收报告"],second)
-    clauses.append(("终验签认约定","终验须由郑敏签字确认" if mode=="only_final" else "终验须由郑敏、陈琪共同签字确认"))
+    final_people="郑敏、陈琪、陈和平" if mode=="three_scoped" else "郑敏、陈琪"
+    clauses.append(("终验签认约定","终验须由郑敏签字确认" if mode=="only_final" else "终验须由"+final_people+"共同签字确认"))
     names=["郑敏"] if mode in ("only_final","borrowed") else ["郑敏","林岚" if mode=="substitute" else "陈琪"]
     set_signatures(records[FINAL],names)
     if mode=="rider":
@@ -78,6 +82,21 @@ def validate(report,mode):
     phases=[f for f in findings if f["rule"]=="H04"]
     acceptance=next(f for f in findings if f["rule"]=="H02")
     transfer=next(f for f in findings if f["rule"]=="H05")
+    if mode=="three_scoped":
+        batch=acceptance["batch_acceptance"]
+        final=batch["separate_final"]
+        record=next(r for r in batch["records"] if r["unit"] in final["records"])
+        observed,=final["signatures_on_batches"]
+        assert final["signing_requirement"]["required"]==["郑敏","陈琪","陈和平"]
+        assert record["signing"]["missing_names"]==["陈和平"] and observed["name"]=="陈和平" and observed["batch_index"]==2
+        assert observed["unit"]!=record["unit"] and not batch["completion_on"]
+        assert [f["stage"]["share"] for f in phases]==["20","35","35","10"]
+        assert all("final_signature_condition" not in f for f in phases[:3])
+        for f in (phases[-1],transfer):
+            assert f["stage"]["name"]=="第四期" and f["status"]=="missing" and not f["warranty_check"]["calendar_end"]
+            assert f["final_signature_condition"]["batch_signatures"]==[observed["signature_ref"]]
+        assert not any(e["type"]=="final_named_signature" for e in report["graph"]["edges"])
+        return
     status={"joint":"ok","only_final":"ok","quality":"issue","substitute":"risk"}.get(mode,"missing")
     expected_phases=["missing"]*4 if mode in ("rider","image") else ["ok"]*3+["risk" if status=="issue" else status]
     observed=(acceptance["status"],[f["status"] for f in phases],transfer["status"])
