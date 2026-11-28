@@ -6,6 +6,8 @@
 2. 要指出某个按钮或数字，点「点选控件」再选它。要指出原件上的字或印迹，打开已出具底稿的原页，点「标记原图」后点击相应位置。用键盘时，方向键可移动标记，Enter 确认，Esc 取消。[试走第二期会签案例](http://127.0.0.1:8000/workpaper/8debfd4a45424070a4fbedb915de1667?rev=10&view=payment-checks&stage=H05-8) · [窄屏上的两处姓名](approval-names-joint-mobile.webp)
 3. 写下希望怎么改，点「保存意见」。「已记录」可回到当时的底稿版本、控件、原行或图上标记。走完后在同机 Codex 说「按本机走查清单修改」，或点「复制给 Codex」贴进指定对话。[在合同原行旁写意见](approval-names-walkthrough.webp)
 
+周末可以先走一笔已付的 6 万元验收款。合同列的是 `FA-0104`，验收报告列的是 `FA-0109`。如果希望付款页能直接打开对应的设备铭牌，点「提意见 → 点选控件」，选中「实收设备序列号」后写下建议。若想标出验收报告上的具体位置，先点这行打开原件，再提意见。[从第二期实付开始](http://127.0.0.1:8000/workpaper/59291d68a1c34501a886c1cb063f063e?rev=3&view=payment-checks&stage=H05-8) · [手机走查](delivery-register-feedback-mobile.webp)
+
 在一笔 6 万元验收款的底稿中，可以直接看到原文「柜温1 2℃」和模型摘录「柜温12°C」。点「提意见 → 点选控件」，再点这条读数，就能把建议留在第二期实付检查。若想指出原件上的间距，先点读数打开验收报告第 12 行，再提意见。两种意见都可从「已记录」回到当时所看的位置。[试走第二期实付](http://127.0.0.1:8000/workpaper/9991314d0b1e447493df87bb49849c79?rev=7&view=payment-checks&stage=H05-8) · [桌面原文与摘录](measurement-spacing-payment.webp) · [手机点选控件写意见](measurement-spacing-feedback-mobile.webp)
 
 例如，要反馈「验收时想同时看到实际签字页」，可打开下方底稿，点「提意见 → 点选控件」，选中「采购合同.pdf · 第 1 页 · 第 19 行」再保存。从清单打开会回到当时的验收检查。若要指出约定里的某个字，先点该条款打开合同原页，再在原件上提意见。[试走 6 万元第二期的验收底稿](http://127.0.0.1:8000/workpaper/eb8396ed0fe34732935e25645f6ad430?rev=7&view=acceptance-checks) · [手机点选并写意见](shared-signing-feedback-mobile.webp)

@@ -53,13 +53,17 @@ launcher.addEventListener('click', async () => {
 });
 
 // A saved link can point to an element that is rendered after the workpaper loads.
-let jumpObserver, jumpTimer;
+let jumpObserver, jumpTimer, jumpRoute;
 function returnToControl() {
+  const url=new URL(location.href), anchor=url.searchParams.get('walkat');
+  const route=url.pathname+url.hash;
+  if (!anchor && jumpRoute===route) return;
   jumpObserver?.disconnect();
   clearTimeout(jumpTimer);
   for (const old of document.querySelectorAll('.walk-mark')) old.classList.remove('walk-mark');
-  const url=new URL(location.href), anchor=url.searchParams.get('walkat');
+  jumpRoute=null;
   if (!anchor || !/^[a-zA-Z][a-zA-Z0-9_-]{0,95}$/.test(anchor)) return;
+  jumpRoute=route;
   const [path,query]=url.hash.split('?'), params=new URLSearchParams(query);
   const comparison=anchor.startsWith('revision-') && params.get('view')==='revision-comparison'
     ? document.getElementById('revision-comparison') : null;
@@ -67,16 +71,17 @@ function returnToControl() {
   const receipt=params.get('view')==='payment-checks' && /^(?:quality|retest|inspection-use|payment-approval|payment-clock|contract-approver|approver-change|installment-count)-/.test(anchor);
   const party=anchor.startsWith('party-reading-');
   const limits=params.get('view')==='acceptance-limits' && anchor.startsWith('limits-H02-');
-  const form=/^(?:form|number)-(H0[1245]-[1-9][0-9]*)-d[0-9]+-p[1-9][0-9]*-l[1-9][0-9]*$/.exec(anchor);
+  const form=/^(?:form|number|serial)-(H0[1245]-[1-9][0-9]*)-d[0-9]+-p[1-9][0-9]*-l[1-9][0-9]*$/.exec(anchor);
   const formView=form && ({H01:'contract-signing-form',H02:'acceptance-checks'}[form[1].slice(0,3)] || 'payment-checks');
   url.searchParams.delete('walkat');
   history.replaceState(history.state,'',url);
+  let marked;
   function locate() {
     if (comparison && (url.hash!==location.hash || comparison.dataset.caseId!==path.split('/').at(-1) ||
         comparison.dataset.rev!==params.get('rev') || comparison.dataset.prior!==params.get('prior') ||
         (params.has('entry') && comparison.dataset.entry!==params.get('entry')))) return false;
     const el = document.getElementById(anchor);
-    if (form && (!el || url.hash!==location.hash || (el.dataset.formFinding || el.dataset.numberFinding)!==form[1] ||
+    if (form && (!el || url.hash!==location.hash || (el.dataset.formFinding || el.dataset.numberFinding || el.dataset.serialFinding)!==form[1] ||
         el.dataset.caseId!==path.split('/').at(-1) || el.dataset.rev!==params.get('rev') ||
         params.get('view')!==formView || formView!=='contract-signing-form' && !el.closest('#performance-index[open]') ||
         formView==='payment-checks' && params.get('stage')!==form[1])) return false;
@@ -99,22 +104,26 @@ function returnToControl() {
           (params.has('filing') && card.dataset.boardFiling!==params.get('filing')) ||
           (params.has('part') && card.dataset.boardPart!==params.get('part'))) return false;
     }
-    if (el?.closest('#revision-comparison:not([hidden]),#board-decision,[data-limit-finding],[data-quality-finding],[data-retest-finding],[data-use-finding],[data-count-finding],[data-form-finding]')) {
+    if (el?.closest('#revision-comparison:not([hidden]),#board-decision,[data-limit-finding],[data-quality-finding],[data-retest-finding],[data-use-finding],[data-count-finding],[data-form-finding],[data-number-finding],[data-serial-finding]')) {
       for (let parent=el.parentElement;parent && parent.id!=='revision-comparison';parent=parent.parentElement)
         if (parent.tagName==='DETAILS') parent.open=true;
     }
     if (!el?.getClientRects().length) return false;
+    if (marked===el) return true;
+    const focusTarget=!marked || document.activeElement===marked || document.activeElement===document.body;
+    marked?.classList.remove('walk-mark');
+    marked=el;
     el.scrollIntoView({block:'center'});
+    if (focusTarget && el.matches('button,a[href],input,select,textarea,summary,[tabindex]')) el.focus({preventScroll:true});
     el.classList.add('walk-mark');
-    setTimeout(() => el.classList.remove('walk-mark'), 2400);
-    jumpObserver?.disconnect();
+    clearTimeout(jumpTimer);
+    jumpTimer=setTimeout(()=>{el.classList.remove('walk-mark');jumpObserver.disconnect();},2400);
     return true;
   }
-  if (!locate()) {
-    jumpObserver = new MutationObserver(locate);
-    jumpObserver.observe(comparison || document.body, {subtree:true, childList:true, attributes:true, attributeFilter:['hidden','open']});
-    if (!comparison && !board && !receipt && !party && !limits && !form) jumpTimer = setTimeout(() => jumpObserver.disconnect(), 6000);
-  }
+  jumpObserver = new MutationObserver(locate);
+  jumpObserver.observe(document.body, {subtree:true, childList:true, attributes:true, attributeFilter:['hidden','open']});
+  if (!locate() && !comparison && !board && !receipt && !party && !limits && !form)
+    jumpTimer = setTimeout(() => jumpObserver.disconnect(), 6000);
 }
 addEventListener('hashchange', returnToControl);
 addEventListener('walkthrough-return', returnToControl);

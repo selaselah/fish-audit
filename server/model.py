@@ -12,6 +12,7 @@ from capacity import CURRENT_JOB, request_attempt
 from config import AUDITOR_MODEL, CaseError, MODEL, PROMPT_VERSION
 from contract_effect import expert_rows
 import measurement_spacing
+import inspection_coverage
 from performance import FIELD_NAMES as PERFORMANCE_FIELDS, compute as performance_checks
 from policy import MAPPING, SOURCES
 from protocol import canonical, response_request
@@ -340,7 +341,7 @@ def audit_graph(graph, controls):
     procedures = [{"rule": item["rule"], "status": item["status"], "observation": item["detail"],
                    "evidence": item["evidence"], "methods": MAPPING[item["rule"]]} for item in controls]
     for procedure, finding in zip(procedures, controls):
-        for key in ("stage","reinspection","delegations","quality_change","acceptance_authority","acceptance_signing_requirements","equipment_models","date_checks","batch_acceptance","invoice_receipt","payment_change"):
+        for key in ("stage","reinspection","delegations","quality_change","acceptance_authority","acceptance_signing_requirements","equipment_models","delivery_register","date_checks","batch_acceptance","invoice_receipt","payment_change"):
             if key in finding:
                 procedure[key] = finding[key]
         reservations = finding.get("acceptance_reservations")
@@ -407,6 +408,8 @@ def audit_graph(graph, controls):
         packet["contract_signing_requirements"] = signing
     if numbers := measurement_spacing.expert_rows(graph,controls):
         packet["measurement_number_sources"] = numbers
+    if rows := inspection_coverage.register_rows(graph):
+        packet["delivery_register_sources"] = rows
     result, trace = structured(AUDITOR_MODEL, AUDIT, [{"type": "input_text",
                                "text": canonical(packet)}], schema, "audit_followups")
     trace["input"] = packet

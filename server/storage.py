@@ -835,6 +835,8 @@ class Store:
             try:
                 payment_quality.verify(paper,read_text,read_original=read_original,signing=True)
                 measurement_spacing.verify(paper,read_text,read_original=read_original,signing=True)
+                if paper["graph"].get("inspection_coverage_sources",{}).get("purpose")=="delivery_register":
+                    verify_inspection(paper,read_text,read_original=read_original,signing=True)
             except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
                 raise CaseError(f"签收前核对验收款质量凭证失败。{error}",409) from error
             try:
@@ -1039,7 +1041,7 @@ class Store:
                     verify_contract_effect(paper,page_text,signing=True,read_layout=page_layout)
                     verify_payment_windows(paper,page_text,signing=True)
                     verify_reservations(paper,page_text,signing=True)
-                    verify_inspection(paper,page_text,signing=True)
+                    verify_inspection(paper,page_text,signing=True,read_layout=page_layout)
                     verify_payment_acceptance(paper,page_text,signing=True)
                     verify_prior_installment(paper,page_text,submitted=row["submitted"],signing=True)
                     verify_payment_releases(paper,page_text,submitted=row["submitted"])

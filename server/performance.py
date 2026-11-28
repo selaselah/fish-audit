@@ -1159,6 +1159,7 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
     def locations(records):
         return "、".join(f"《{filenames[r['doc']]}》第 {r['page']} 页第 {r['line']} 行" for r in records)
     signing_sources, acceptance_sources = locations(signing_rows), locations(shared_rows)
+    register = accepted.get("inspection_coverage", {})
     for idx, row in enumerate(rows, 1):
         kind = row["kind"]
         fallback_label = f"第{idx}期" if version == FIRST_FORMAT else f"条款 {idx}"
@@ -1254,6 +1255,12 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
             check["detail"] += f" {acceptance_sources}同时约定了验收文件的签署方式，须核对本期验收凭证。"
         if numeric_rows and kind in ("acceptance","warranty","batch"):
             measurement_spacing.attach(check,numeric_rows)
+        if register.get("mode")==inspection_coverage.REGISTER and kind in ("acceptance","warranty","batch"):
+            register_refs = register["register"]["rows"]
+            if register_refs and all(ref in check["evidence"] for ref in register_refs):
+                check["delivery_register"] = register_refs
+                if register["status"]!="ok":
+                    check["detail"] += " "+register["detail"]
         output.append(check)
         stages.append((row,check))
 
@@ -1369,6 +1376,13 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
             payment["detail"] += f" 回单列示付款日 {paid}，请按{acceptance_sources}核对付款时已有的验收签署凭证。"
         if check.get("measurement_numbers"):
             measurement_spacing.attach(payment,[r for r in numeric_rows if r["id"] in check["measurement_numbers"]],paid=paid)
+        if check.get("delivery_register") and all(ref in payment["evidence"] for ref in check["delivery_register"]):
+            payment["delivery_register"] = check["delivery_register"]
+            if register["status"]!="ok":
+                if register["state"] in ("register_duplicate","register_difference") and payment["status"] in ("missing","ok"):
+                    payment["status"] = "risk"
+                payment["detail"] += " "+register["detail"]
+                payment["detail"] += f" 回单列明 {paid} 实付，请核对付款当时所据的设备交付记录。"
         output.append(payment)
     return output
 
@@ -1435,6 +1449,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("signer_timing") != entry.get("signer_timing")
                 or saved.get("execution_basis") != entry.get("execution_basis")
                 or saved.get("inspection_coverage") != entry.get("inspection_coverage")
+                or saved.get("delivery_register") != entry.get("delivery_register")
                 or saved.get("equipment_models") != entry.get("equipment_models")
                 or saved.get("stage_payments") != entry.get("stage_payments")
                 or saved.get("payment_change") != entry.get("payment_change")

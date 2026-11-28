@@ -107,6 +107,6 @@
   font:550 .8rem/1.4 var(--font-ui); cursor:pointer;
 }
 .walk-launch:hover,.walk-launch:focus-visible { color:var(--accent-hover); border-color:var(--accent); }
-dialog button.walk-launch { position:static; display:inline-flex; width:auto; white-space:nowrap; margin-inline-start:auto; flex-shrink:0; box-shadow:none; }
+dialog button.walk-launch { position:static; display:inline-flex; width:auto; white-space:nowrap; margin-inline-start:auto; flex-shrink:0; border-color:var(--line); box-shadow:none; }
 .walk-mark,.walk-selected { outline:3px solid var(--accent)!important; outline-offset:2px; }
 .ic-eye::before { content: "\f341"; }

@@ -577,6 +577,14 @@ class EnterpriseFlow(unittest.TestCase):
         numeric_line=dict(doc="d01",page=1,line=12,raw_ref="measurement-number/d01/p1/l12")
         self.assertEqual(save({},**numeric_line).status_code,400)
         self.assertEqual(save({},dialog="page-dialog",**numeric_line).status_code,404)
+        for view,pin in ((payment,"serial-H05-8-d02-p1-l16"),(acceptance,"serial-H02-3-d02-p1-l16")):
+            self.assertEqual(save(view,anchor=pin).status_code,404)
+            self.assertEqual(save(form,anchor=pin).status_code,400)
+            self.assertEqual(save(view,anchor=pin,doc="d02",page=1).status_code,400)
+        self.assertEqual(save(payment,anchor="serial-H05-9-d02-p1-l16").status_code,400)
+        register_line=dict(doc="d02",page=1,line=16,raw_ref="inspection-line/d02/p1/l16")
+        self.assertEqual(save({},dialog="page-dialog",**register_line).status_code,404)
+        self.assertEqual(save({},dialog="page-dialog",**(register_line | {"line":17})).status_code,400)
         self.assertEqual(owner.get(url).json["notes"],[])
 
     def test_quality_walkthrough_requires_the_issued_installment_and_field(self):

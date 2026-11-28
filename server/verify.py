@@ -300,7 +300,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
     verify_warranty(report,page_text,submitted=submitted,signed=signed)
     verify_payment_windows(report,page_text)
     verify_reservations(report,page_text)
-    verify_inspection(report,page_text)
+    verify_inspection(report,page_text,read_original=read_original)
     verify_payment_acceptance(report,page_text)
     payment_execution.verify(report,page_text)
     advance_guarantee.verify(report,page_text)
@@ -541,6 +541,8 @@ def render_addendum_sources(bundle, report, nodes):
                 require(layout["lines"].get(line_number, []) == rects, "分期总述的行坐标未能从合同原件重现")
             for line_number, rects in trace.get(measurement_spacing.RECTS, {}).items():
                 require(layout["lines"].get(line_number, []) == rects, "验收数值的行坐标未能从原件重现")
+            for line_number, rects in trace.get("delivery_register_rects", {}).items():
+                require(layout["lines"].get(line_number, []) == rects, "设备编号清单的行坐标未能从原件重现")
             for line_number, rects in trace.get(advance_guarantee.RECTS, {}).items():
                 require(layout["lines"].get(line_number, []) == rects, "预付款保函的行坐标未能从原件重现")
             for line_number, rects in trace.get("signer_timing_rects", {}).items():

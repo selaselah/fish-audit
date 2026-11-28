@@ -1,7 +1,10 @@
 // Each selectable device and its readings belong to the originals cited by one H02 finding.
 const InspectionCoverage = (() => {
-  const legacy = 'inspection-coverage-v1', current = 'inspection-coverage-v2';
-  const formats = new Set([legacy,current]);
+  const legacy = 'inspection-coverage-v1', current = 'inspection-coverage-v3';
+  const formats = new Set([legacy,'inspection-coverage-v2',current]);
+  const registerStates={register_match:'两份清单的编号逐一相符',register_difference:'合同与终验编号不一致',
+    register_duplicate:'编号重复',register_spelling:'编码口径待核',register_incomplete:'完整编号待核',
+    register_scope:'适用范围待核',register_source:'原件待核'};
   const namedKind = 'inspection_required_serials';
   const labels = {
     covered:'检测范围相符', short:'检测台数不足', records:'单机记录待补', repeated:'同台重复',
@@ -92,7 +95,7 @@ const InspectionCoverage = (() => {
       counts.set(m.serial,(counts.get(m.serial) || 0)+1);
     }
     if (counts.size!==check.tested) return false;
-    if (check.format===current) {
+    if (check.format!==legacy) {
       const splitIds = row => value(row).split(/[、，,]/u).map(s=>s.trim());
       const ordered=contract.filter(r=>r.kind==='ordered_serials');
       const sameList = (a,b) => Array.isArray(b) && a.length===b.length && a.every((s,i)=>s===b[i]);
@@ -319,6 +322,66 @@ const InspectionCoverage = (() => {
     }
     return fold;
   }
+  function registerSources(report,finding=report?.findings.find(f=>f.rule==='H02')) {
+    const graph=report?.graph, ledger=graph?.inspection_coverage_sources;
+    const accepted=report?.findings.find(f=>f.rule==='H02'), check=accepted?.inspection_coverage;
+    if (!finding?.delivery_register || !['H02','H04','H05'].includes(finding.rule) || check?.mode!=='delivery_register' ||
+        ledger?.purpose!=='delivery_register' || ledger.format!==current || check.format!==current ||
+        report.policy.inspection_coverage!==current || !/^[a-f0-9]{64}$/u.test(report.policy.code_sha256?.['inspection_coverage.py'])) return [];
+    const same=(a,b)=>Array.isArray(a) && Array.isArray(b) && a.length===b.length && a.every((x,i)=>x===b[i]);
+    if (!same(check.register?.rows,accepted.delivery_register) || !same(finding.delivery_register,accepted.delivery_register)) return [];
+    const index=graphIndex(graph), all=sources(graph);
+    const checked=all.filter(r=>check.register.rows.includes(r.id) && ['ordered_serials','population'].includes(r.kind) &&
+      check.scope.includes(r.unit) && [accepted,finding].every(f=>f.scope.includes(r.unit) &&
+        [r.id,r.doc+'/p'+r.page,...r.facts].every(ref=>check.evidence.includes(ref) && f.evidence.includes(ref) &&
+          index.supports.get('finding/'+f.id)?.has(ref))));
+    if (checked.length!==check.register.rows.length) return [];
+    const codes=r=>value(r).split(/[、,，]/u).map(code=>code.trim());
+    const left=unique(checked,'ordered_serials'), right=unique(checked,'population');
+    const fromContract=left?codes(left):[], fromReceipt=right?codes(right):[];
+    const onlyLeft=fromContract.filter(code=>!fromReceipt.includes(code)), onlyRight=fromReceipt.filter(code=>!fromContract.includes(code));
+    const differences=check.state==='register_difference' && same(onlyLeft,check.register.contract_only) && same(onlyRight,check.register.receipt_only);
+    const compared=['register_match','register_difference','register_duplicate','register_spelling'].includes(check.state);
+    if (compared) {
+      const duplicate=[fromContract,fromReceipt].some(ids=>new Set(ids).size!==ids.length);
+      const quantity=kind=>value(unique(all,kind)).match(/^([1-9][0-9]*)\s*台$/u)?.[1];
+      if (!left || !right || ledger.pages.length!==2 || ledger.pages.some(p=>!p.native || !p.text_only) ||
+          all.length!==ledger.rows.length || all.some(r=>!r.line || r.disputed || r.kind==='serial_note') ||
+          Number(quantity('ordered'))!==fromContract.length || Number(quantity('received'))!==fromReceipt.length ||
+          fromContract.length!==fromReceipt.length || (check.state==='register_duplicate')!==duplicate ||
+          check.state==='register_match' && (onlyLeft.length || onlyRight.length) ||
+          check.state==='register_difference' && (!onlyLeft.length || !onlyRight.length || !differences)) return [];
+    }
+    const result=checked.map(row=>{
+      const page=row.doc+'/p'+row.page, physical=index.nodes.get(page);
+      const call=report.calls.pages.find(p=>p.doc===row.doc && p.page===row.page);
+      const rects=call?.delivery_register_rects?.[row.line];
+      const role=row.kind==='ordered_serials'?'contract':'acceptance';
+      if (!graph.documents_by_kind[role]?.includes(row.unit) || call?.page_sha256!==physical?.sha256 ||
+          row.line!=null && (!Array.isArray(rects) || !rects.every(b=>Array.isArray(b) && b.length===4 &&
+            b.every(n=>Number.isFinite(n) && n>=0 && n<=1) && b[0]<b[2] && b[1]<b[3]))) return null;
+      const label=role==='contract'?'合同约定编号':'终验实收编号';
+      const tokens=codes(row);
+      const marks=differences?(role==='contract'?onlyLeft:onlyRight):
+        check.state==='register_duplicate'?tokens.filter((code,i)=>tokens.indexOf(code)!==i):[];
+      return {ref:row.id,doc:index.documents.get(row.doc),page:row.page,rawLine:row.line,quote:row.quote,
+        rects:rects || [],fact:row.facts.length===1?row.facts[0]:null,label,marks,
+        quality:'delivery_register_source',option:label+(row.line?' · 第 '+row.line+' 行':' · 页图')};
+    });
+    return result.includes(null)?[]:result;
+  }
+  function registerControls(report,finding,pin=true) {
+    const lines=registerSources(report,finding);
+    if (!lines.length) return null;
+    const group=element('div',null,'delivery-register-lines');
+    group.setAttribute('role','group');group.setAttribute('aria-label','合同与终验设备编号');
+    if (pin) {
+      const check=report.findings.find(f=>f.rule==='H02').inspection_coverage;
+      group.append(element('strong',registerStates[check.state] || '设备清单待核','register-outcome'));
+    }
+    for (const line of lines) group.append(workpaperLineButton(line,finding,pin));
+    return group;
+  }
   function panel(finding,graph,findings=[]) {
     const check=finding?.inspection_coverage;
     if (finding?.rule!=='H02' || !formats.has(check?.format)) return null;
@@ -330,6 +393,16 @@ const InspectionCoverage = (() => {
     const bound=rows.length>0 && check.format===ledger?.format && rows.length===ledger.rows.length &&
       check.evidence.every(ref=>finding.evidence.includes(ref) && supports?.has(ref)) &&
       [...roles.keys()].every(unit=>finding.scope.includes(unit) && check.scope?.includes(unit));
+    if (check.mode==='delivery_register') {
+      const card=element('details',null,'inspection-panel');
+      card.id='inspection-coverage';card.tabIndex=-1;card.open=check.state!=='register_match';
+      const controls=bound && registerControls(state.bundle.report,finding,false);
+      const head=element('summary');
+      head.append(element('strong','合同与终验设备编号'),element('span',controls && registerStates[check.state] || '原件待核','inspection-state'));
+      card.append(head);
+      if (controls) {const body=element('div',null,'inspection-body');body.append(controls);card.append(body);}
+      return card;
+    }
     let display=check;
     if (!bound || check.state in statuses && (!quantities(check,rows,roles) || ledger.pages.some(p=>!p.native || !p.text_only))) {
       display={state:'unknown',mode:null,tested:null};
@@ -350,5 +423,5 @@ const InspectionCoverage = (() => {
     }
     return card;
   }
-  return {panel,sources,observation,open,deviceView,quantities};
+  return {panel,sources,observation,open,deviceView,quantities,registerSources,registerControls};
 })();

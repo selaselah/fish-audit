@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## 设备清单的原行及走查定位
+
+规则 `2026.11.28.16` 的 `policy.inspection_coverage` 为 `inspection-coverage-v3`。专项比对使用 `graph.inspection_coverage_sources.purpose=delivery_register`。H02 的 `inspection_coverage.register.rows` 保存合同约定及终验实收清单的引用。确认错号时，`contract_only` 与 `receipt_only` 分别列出两份原件各自独有的编号。H02 及引用该终验的 H04、H05 在 `delivery_register` 中列出所用的原行。专家收到的行在 `calls.expert.input.delivery_register_sources`，定位矩形在对应页的 `delivery_register_rects`。
+
+在 R3 第二期实付上选中实收清单，走查上下文为 `view=payment-checks&stage=H05-8` 和 `anchor=serial-H05-8-d02-p1-l16`。在验收报告原页反馈时用 `dialog=page-dialog`、文件、页、行及 `raw_ref=inspection-line/d02/p1/l16`。保存时校验该版是否实际引用此项证据。旧版按原规则复算，遗漏相关编号问题的底稿在签收通过前需要重新审计。[R3 第二期实付](http://127.0.0.1:8000/workpaper/59291d68a1c34501a886c1cb063f063e?rev=3&view=payment-checks&stage=H05-8)
+
 ## 验收数字原行和走查定位
 
 自规则 `2026.11.28.15` 起，若合同限值、检验依据或实测值的数字内部有歧义间距，`policy.measurement_numbers` 与 `graph.measurement_number_sources.format` 均为 `printed-measurement-spacing-v1`。每个 `rows[]` 项保存材料单元、文件、页、字段、引文及所引观察编号。可定位的原行使用 `measurement-number/d05/p1/l12` 这类编号，页记录的 `measurement_number_rects` 保存行框。只有抄录提供间距时，`origin=transcription` 并保留相应 `readings`。无可靠原行的抄录使用观察编号组成的引用，`line` 为空。

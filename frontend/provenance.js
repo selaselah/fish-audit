@@ -766,21 +766,27 @@ function measurementNumberSources(report, finding=report?.findings.find(f=>f.rul
   return cited;
 }
 
-function workpaperLineButton(source,finding) {
+function workpaperLineButton(source,finding,pin=true) {
   const {doc,page,rawLine,ref,label}=source;
-  const number=source.quality==='measurement_number_source';
+  const number=source.quality==='measurement_number_source', register=source.quality==='delivery_register_source';
   const place=doc.name+' · 第 '+page+' 页'+(rawLine?' · 第 '+rawLine+' 行':'');
   const open=()=>OriginalReader.open(doc,page,source.rects.length?{rawRef:ref,lineHint:rawLine}:{highlight:source.fact});
   if (!finding) return action(label+' · 第 '+page+' 页'+(rawLine?'第 '+rawLine+' 行':''),open,'ref');
   const button=action('',open,'signing-form-source'), field=doc.id+'-p'+page+'-l'+rawLine;
-  if (rawLine && source.rects.length) {
-    button.id=(number?'number-':'form-')+finding.id+'-'+field;
-    button.dataset[number?'numberFinding':'formFinding']=finding.id;
+  if (pin && rawLine && source.rects.length) {
+    const family=register?'serial':number?'number':'form';
+    button.id=family+'-'+finding.id+'-'+field;
+    button.dataset[family+'Finding']=finding.id;
   }
   Object.assign(button.dataset,{caseId:state.bundle.report.case_id,rev:String(state.bundle.rev)});
   button.dataset.originalLabel=label+' · '+place;
   button.setAttribute('aria-haspopup','dialog'); button.setAttribute('aria-controls','page-dialog');
-  button.append(el('small',number?label+' · '+place:place),el('strong',source.quote),glyph('arrows-angle-expand'));
+  const quote=el('strong',source.quote);
+  if (register) {
+    quote.replaceChildren(...source.quote.split(/([A-Za-z0-9._*＊?-]+)/u).map((word,i)=>
+      i%2===1?el(source.marks.includes(word)?'mark':'span',word,'register-code'):word));
+  }
+  button.append(el('small',number?label+' · '+place:place),quote,glyph('arrows-angle-expand'));
   if (number && source.copy) button.append(el('small',source.copy.label+' · '+source.copy.value,'number-copy'));
   return button;
 }

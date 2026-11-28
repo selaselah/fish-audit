@@ -168,7 +168,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
                         "signer_timing","date_checks","batch_acceptance","effect_review","warranty_check","warranty_payment","warranty_difference",
                         "payment_window","payment_quality","quality_comparison","reading_caveats","measurement_numbers","retest_reference","inspection_use","party_readings","installment_count","invoice_receipt","payment_change","payment_opinion","acceptance_reservations",
                         "acceptance_comments","contract_comments","stage_payments","payment_acceptance","execution_basis",
-                        "equipment_models","inspection_coverage","prior_installment","contract_folios","advance_guarantee"):
+                        "equipment_models","inspection_coverage","delivery_register","prior_installment","contract_folios","advance_guarantee"):
                 if key in item:
                     findings[-1][key] = item[key]
         return findings

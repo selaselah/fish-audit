@@ -18,6 +18,7 @@ import advance_guarantee
 import inspection_use
 import payment_quality
 import measurement_spacing
+import inspection_coverage
 import installment_counts
 from graph import PRINTED_TITLES, attach_prior_invoices, build_graph, compact, heading_candidates, invoice_number_edges, link_procedures
 from payment_releases import submission_day
@@ -197,9 +198,12 @@ class Worker:
         count_lines = contract_folios.line_numbers(graph.get(installment_counts.KEY, {}).get("rows", []))
         precision_lines = contract_folios.line_numbers(payment_quality.reading_notes(findings))
         number_lines = contract_folios.line_numbers(graph.get(measurement_spacing.KEY,{}).get("rows", ()))
+        register_lines = contract_folios.line_numbers(inspection_coverage.register_rows(graph))
         form_lines = contract_folios.line_numbers(contract_effect.form_rows(graph["contract_effect_sources"]))
         execution_lines = contract_folios.line_numbers(graph[payment_execution.KEY]["rows"])
         for page, call in zip(pages, traces):
+            if numbers := register_lines.get((page["doc"],page["number"])):
+                call[inspection_coverage.RECTS] = contract_folios.geometry(numbers,page["layer"])
             if numbers := number_lines.get((page["doc"],page["number"])):
                 call[measurement_spacing.RECTS] = contract_folios.geometry(numbers,page["layer"])
             if numbers := form_lines.get((page["doc"],page["number"])):

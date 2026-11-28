@@ -6,9 +6,13 @@ from collections import Counter, defaultdict
 from decimal import Decimal
 
 LEGACY = "inspection-coverage-v1"
-FORMAT = "inspection-coverage-v2"
+NAMED_FORMAT = "inspection-coverage-v2"
+FORMAT = "inspection-coverage-v3"
 SINCE = "2026.11.26.04"
 NAMED_SINCE = "2026.11.26.19"
+REGISTER_SINCE = "2026.11.28.16"
+REGISTER = "delivery_register"
+RECTS = "delivery_register_rects"
 NAMED = "inspection_required_serials"
 LABELS = {
     "inspection_requirement": ("性能检测要求", "测温抽检要求", "测温范围", "性能检测方式"),
@@ -23,6 +27,12 @@ AUXILIARY = {
     "约定设备编号":"ordered_serials", "合同设备编号":"ordered_serials",
     "约定验收标准":"limit", "合同验收标准":"limit", "检验依据":"basis", "验收依据":"basis",
 }
+SERIAL_LABELS = {"约定设备序列号":"ordered_serials", "合同设备序列号":"ordered_serials",
+                 "验收设备序列号":"population", "实收设备序列号":"population"}
+REGISTER_KINDS = {"ordered_serials","population","ordered","received","serial_note"}
+SERIAL_NOTE = re.compile(r"换货|换机|替换设备|替代设备|代用设备|调换|"
+                         r"(?:编号|序列号|机身号).{0,20}(?:另|以|按|调整|变更|仅|节选|尾号|续|见|准)|"
+                         r"(?:另行|变更|补充|只列|仅列|其余).{0,20}(?:编号|序列号|设备清单)")
 HINT = re.compile(r"逐台.{0,6}(?:测温|检测|检验)|(?:抽检|抽测|抽样检验|全数检验|全检).{0,15}(?:台|设备|测温|温度)|(?:设备|性能|测温).{0,12}(?:抽检|抽测|全检)|(?:按比例|按百分之[一二三四五六七八九十]+|按[0-9]+[%％])抽检")
 NAMED_HINT = re.compile(
     r"必检|必测|免检|免测|指定.{0,16}(?:抽检|抽测|测温|检验)|"
@@ -45,12 +55,18 @@ def split(quote):
 def classify(quote, field=None, *, version=FORMAT):
     label, _ = split(quote)
     kind = FIELDS.get(label) or AUXILIARY.get(label)
-    if kind and (kind != NAMED or version == FORMAT):
+    if kind and (kind != NAMED or version != LEGACY):
         return kind
+    if version == FORMAT and label in SERIAL_LABELS:
+        return SERIAL_LABELS[label]
     if (field in LABELS and field != NAMED) or HINT.search(quote):
         return "note"
-    if version == FORMAT and (field == NAMED or NAMED_HINT.search(quote)):
+    if version != LEGACY and (field == NAMED or NAMED_HINT.search(quote)):
         return "note"
+    if version == FORMAT:
+        from equipment_models import ALTERNATIVE
+        if SERIAL_NOTE.search(quote) or ALTERNATIVE.search(quote):
+            return "serial_note"
 
 
 def equivalent_quote(text):
@@ -98,17 +114,26 @@ def sources(graph, read_text, *, version=FORMAT):
                 rows.append({**place,"id":"inspection-line/"+fact["id"],"line":None,"kind":kind,
                              "quote":fact["quote"],"facts":[fact["id"]],"disputed":fact["status"]=="disputed"})
         following_named = False
+        following_register = False
         for number, raw in enumerate(lines,1):
             kind = classify(raw,version=version)
             if following_named and raw.strip() and not re.search("[:：]",raw):
                 kind = "note"
+            elif following_register and raw.strip() and not re.search("[:：]",raw):
+                kind = "serial_note"
             if raw.strip():
                 following_named = kind == NAMED or (following_named and kind == "note")
+                following_register = version == FORMAT and kind in ("ordered_serials","population","serial_note")
             if kind:
                 facts = located[number,raw]
                 rows.append({**place,"id":f"inspection-line/{doc}/p{page}/l{number}","line":number,"kind":kind,
                              "quote":raw,"facts":[f["id"] for f in facts],"disputed":any(f["status"]=="disputed" for f in facts)})
     triggered = any(r["kind"] in (*LABELS,"note") for r in rows)
+    assigned = any(r["kind"]=="ordered_serials" and roles[r["unit"]]=="contract" for r in rows)
+    if not triggered and version == FORMAT and assigned:
+        return {"format":version,"purpose":REGISTER,"rows":[r for r in rows if r["kind"] in REGISTER_KINDS],"pages":pages}
+    if version == FORMAT and not assigned:
+        rows = [r for r in rows if r["kind"]!="serial_note"]
     return {"format":version,"rows":rows if triggered else [],"pages":pages if triggered else []}
 
 
@@ -136,6 +161,59 @@ def population(value):
     return values if all(serial(s) for s in values) and len(set(values))==len(values) else None
 
 
+def register_rows(graph):
+    ledger = graph.get("inspection_coverage_sources", {})
+    return ledger["rows"] if ledger.get("purpose") == REGISTER else []
+
+
+def delivery_register(check, rows, pages, contract, receipts, complex_scope):
+    from performance import FINAL_SCOPES
+    from reinspection import LINK_KEYS
+    from warranty_terms import identity
+
+    ordered = [r for r in rows if r["unit"]==contract.unit and r["kind"]=="ordered_serials"]
+    received = [r for r in rows if r["unit"] in {m.unit for m in receipts} and r["kind"]=="population"]
+    check.update(mode=REGISTER, register={"rows":[r["id"] for r in [*ordered,*received]]})
+    def result(state, status, detail):
+        return {**check,"state":state,"status":status,"detail":detail}
+    if complex_scope or len(receipts)!=1 or set(check["scope"])!={contract.unit,receipts[0].unit}:
+        return result("register_scope","missing","需确定设备清单适用的合同版本、交付批次及最终验收单。")
+    receipt = receipts[0]
+    check["evidence"] = list(dict.fromkeys([*check["evidence"],*contract.evidence(*LINK_KEYS),*receipt.evidence(*LINK_KEYS)]))
+    if not identity(contract, receipt) or receipt.body("acceptance_scope") not in FINAL_SCOPES:
+        return result("register_scope","missing","须先核实双方、合同编号、标的和本次终验范围，再逐台对应设备编号。")
+    if (len(pages)!=2 or any(not p["native"] or not p["text_only"] for p in pages) or
+            any(g.get("quality") in ("partial","unreadable") for g in [*contract.gaps,*receipt.gaps]) or
+            any(r["line"] is None or r["disputed"] or r["kind"]=="serial_note" for r in rows) or
+            any(r["unit"]!=(contract.unit if r["kind"] in ("ordered","ordered_serials") else receipt.unit) for r in rows)):
+        return result("register_source","missing","设备清单有续页、附带条件、影像或待核抄录，请核对原件、铭牌及适用的交付约定。")
+    if len(ordered)!=1 or len(received)!=1:
+        return result("register_incomplete","missing","需取得唯一、完整的合同约定编号和本次终验实收编号清单。")
+    groups = {kind:[split(r["quote"])[1] for r in rows if r["kind"]==kind] for kind in ("ordered","received")}
+    def entries(row):
+        return [item.strip() for item in re.split("[、，,]",split(row["quote"])[1])]
+    left, right = entries(ordered[0]), entries(received[0])
+    if (any(not serial(item) for item in [*left,*right]) or
+            len(groups["ordered"])!=1 or len(groups["received"])!=1 or not count(groups["ordered"][0]) or
+            count(groups["ordered"][0])!=len(left) or count(groups["received"][0])!=len(right) or len(left)!=len(right)):
+        return result("register_incomplete","missing","至少一张清单的完整编号或与交付台数的对应关系待核，请核对逐台原始登记。")
+    repeated = list(dict.fromkeys(i for values in (left,right) for i,n in Counter(values).items() if n>1))
+    if repeated:
+        return result("register_duplicate","risk","设备清单重复列示编号 "+"、".join(repeated)+"，需核对送货单和铭牌，确认各台设备的实际编号。")
+    ordered_ids, received_ids = set(left), set(right)
+    missing = [i for i in left if i not in received_ids]
+    extra = [i for i in right if i not in ordered_ids]
+    if missing:
+        def codes(values):
+            return {re.sub("[-._]", "", i).casefold() for i in values}
+        if codes(missing)==codes(extra):
+            return result("register_spelling","missing","两张清单的编号大小写或分隔符有差别，需按铭牌核实编码口径。")
+        check["register"].update(contract_only=missing,receipt_only=extra)
+        return result("register_difference","issue","合同列有 "+"、".join(missing)+"，终验清单另列 "+"、".join(extra)+
+                      "，两份清单的设备编号不一致。请核对送货单、铭牌及可能的换货批准。")
+    return result("register_match","ok",f"合同与终验清单列出的 {len(left)} 个完整设备编号逐一相符。")
+
+
 def assess(graph, contract, receipts, *, complex_scope):
     ledger = graph.get("inspection_coverage_sources",{})
     rows = ledger.get("rows",[])
@@ -147,6 +225,8 @@ def assess(graph, contract, receipts, *, complex_scope):
     evidence.extend(ref for r in rows for ref in [r["id"],*r["facts"]])
     check = {"format":ledger["format"],"scope":scope,"evidence":list(dict.fromkeys(evidence)),"mode":None,"required":None,
              "declared":None,"equipment":[],"measurements":[],"tested":None,"limit":None}
+    if ledger.get("purpose")==REGISTER:
+        return delivery_register(check,rows,pages,contract,receipts,complex_scope)
     def result(state,status,detail):
         return {**check,"state":state,"status":status,"detail":detail}
     if complex_scope or len(receipts)!=1 or set(scope)!={contract.unit,receipts[0].unit}:
@@ -181,7 +261,7 @@ def assess(graph, contract, receipts, *, complex_scope):
         check.update(mode="sample",required=int(minimum[1] or minimum[2]))
     supported = {contract.unit:{"inspection_requirement","ordered","ordered_serials","limit"},
                  receipt.unit:{"received","population","basis","tested_quantity","unit_temperature"}}
-    if ledger["format"] == FORMAT:
+    if ledger["format"] != LEGACY:
         supported[contract.unit].add(NAMED)
     if not check["mode"] or any(r["kind"] not in supported[r["unit"]] for r in rows):
         return result("terms","missing","须核对检验方式、抽检数量及附加条件的完整原文。")
@@ -250,6 +330,8 @@ def apply(finding,check):
     finding["inspection_coverage"] = check
     finding["scope"] = list(dict.fromkeys([*finding["scope"],*check["scope"]]))
     finding["evidence"] = list(dict.fromkeys([*finding["evidence"],*check["evidence"]]))
+    if check.get("mode")==REGISTER:
+        finding[REGISTER] = check["register"]["rows"]
     if finding["status"]=="ok" and check["status"]!="ok":
         finding["detail"] = check["detail"]
     else:
@@ -296,7 +378,7 @@ def check_legacy_approval(report,read_text,archived=None):
             raise ValueError("旧版底稿尚未列明逐台或合同指定抽检范围的证据缺口，请按现行程序重新审计后签收。")
 
 
-def verify(report,read_text,*,signing=False):
+def verify(report,read_text,*,signing=False,read_original=None,read_layout=None):
     graph,policy = report["graph"],report["policy"]
     marker = policy.get("inspection_coverage")
     nodes = [n for n in graph["nodes"] if n["type"]=="inspection_line"]
@@ -308,7 +390,8 @@ def verify(report,read_text,*,signing=False):
         if signing:
             check_legacy_approval(report,read_text)
         return
-    expected = FORMAT if policy.get("version","") >= NAMED_SINCE else LEGACY
+    version = policy.get("version","")
+    expected = FORMAT if version >= REGISTER_SINCE else NAMED_FORMAT if version >= NAMED_SINCE else LEGACY
     if marker != expected:
         raise ValueError("逐台检验的程序版本标记与出具版本不符")
     ledger = sources(graph,read_text,version=marker)
@@ -316,3 +399,29 @@ def verify(report,read_text,*,signing=False):
         raise ValueError("逐台检验或抽检所据的原页、设备记录与归档不符")
     if signing and marker == LEGACY:
         check_legacy_approval(report,read_text,ledger)
+    if signing and marker != FORMAT and any(f["rule"]=="H02" for f in report["findings"]):
+        current = sources(graph,read_text)
+        if current.get("purpose")==REGISTER:
+            from performance import compute
+            rebuilt = compute({**graph,"inspection_coverage_sources":current})
+            review = next((f["inspection_coverage"] for f in rebuilt if f.get("inspection_coverage")),None)
+            if review and review["status"]!="ok":
+                raise ValueError("旧版验收未核实合同指定设备与终验编号清单，请重审后签收。")
+    rows = register_rows(graph)
+    if marker == FORMAT:
+        expert = report.get("calls",{}).get("expert",{})
+        if "input" in expert or expert.get("request_format"):
+            packet = expert.get("input")
+            issued = [(f["rule"],f[REGISTER]) for f in report["findings"] if REGISTER in f]
+            if (not isinstance(packet,dict) or packet.get("delivery_register_sources") != (rows or None) or
+                    [(f["rule"],f[REGISTER]) for f in packet.get("procedures",()) if REGISTER in f] != issued):
+                raise ValueError("专家输入未保留出具底稿所据的合同与验收设备清单")
+    calls = report.get("calls",{}).get("pages",())
+    if calls or policy.get("archived_methods"):
+        from contract_folios import line_numbers, verify_page_geometry
+        verify_page_geometry(calls,line_numbers(rows),{},RECTS,"合同与验收设备清单",read_layout)
+    if rows and read_original:
+        from payment_quality import verify_units
+        pages = {(p["doc"],p["page"]):p for p in calls}
+        located = [{**r,"rects":pages[r["doc"],r["page"]][RECTS][str(r["line"])]} for r in rows if r["line"]]
+        verify_units(graph,{p["unit"] for p in ledger["pages"]},read_original,"设备清单原件",extra_lines=located)

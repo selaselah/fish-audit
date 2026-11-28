@@ -193,7 +193,7 @@ const PerformanceIndex = (() => {
       [item.rule==='H01' && item.effect_review?.pdf_execution,'pdf-signatures','查看合同签署凭证'],
       [item.rule==='H01' && item.effect_review?.word_signatures,'word-signatures','核对 Word 签章区'],
       [item.acceptance_comments,'acceptance-comments','核对验收批注'],
-      [item.inspection_coverage,'inspection-coverage','核对验收范围'],
+      [item.inspection_coverage && !item.delivery_register,'inspection-coverage','核对验收范围'],
       [item.reinspection,'equipment-reinspection-trail','核对整改与复验'],
       [item.contract_comments,'contract-comments','核对付款批注'],
       [item.rule==='H03' && item.contract_folios,'contract-pages','核对分期条款原页'],
@@ -824,6 +824,8 @@ const PerformanceIndex = (() => {
         for (const row of contractSigningSources(state.bundle.report,item)) detail.append(workpaperLineButton(row,item));
       }
       for (const row of measurementNumberSources(state.bundle.report,item)) detail.append(workpaperLineButton(row,item));
+      const register=InspectionCoverage.registerControls(state.bundle.report,item);
+      if (register) detail.append(register);
       for (const ref of item.party_readings || []) detail.append(PartyReadings.citation(state.bundle.report,ref,item));
       if (item.installment_count) detail.append(InstallmentCount.citation(state.bundle.report,item.installment_count,item,true));
       if (item.approval_change) detail.append(ApprovalChange.panel(item,state.bundle.report,rev));
@@ -852,7 +854,7 @@ const PerformanceIndex = (() => {
       if (guarantee) detail.append(guarantee);
       if (batch) detail.append(BatchPhase.panel(batch,item.stage));
       if (paired) detail.append(paired);
-      else if (!guarantee && !retest && detailText && (receipts.length && ['issue','risk'].includes(item.status) || roster && item.status==='issue')) {
+      else if (!guarantee && !retest && !register && detailText && (receipts.length && ['issue','risk'].includes(item.status) || roster && item.status==='issue')) {
         const end=detailText.indexOf('。')+1 || detailText.length;
         detail.append(el('p',detailText.slice(0,end),'scope-reason')); detailText=detailText.slice(end).trimStart();
       }
@@ -891,7 +893,7 @@ const PerformanceIndex = (() => {
       }
       if (!paired) {
         const sources=()=>sourceView(item,graph,[...receipts,...mandates.flatMap(m=>m.proofs)]);
-        detail.append(roster || batch || guarantee || quality || retest || mandates.length || receipts.some(p=>p.record.kind)?lazyFold('其他字段引文',()=>[sources()]):sources());
+        detail.append(register || roster || batch || guarantee || quality || retest || mandates.length || receipts.some(p=>p.record.kind)?lazyFold('其他字段引文',()=>[sources()]):sources());
       }
       detail.append(actions);
       detail.scrollTop=0;

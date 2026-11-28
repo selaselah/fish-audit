@@ -20,6 +20,12 @@
 .inspection-panel[data-inspection-state=out_of_limit] .inspection-state { color: var(--issue); }
 .inspection-body { padding: 0 14px 12px; }
 .inspection-body:empty { display: none; }
+.delivery-register-lines { display:grid; gap:5px; margin:6px 0 10px; }
+.delivery-register-lines .signing-form-source { margin:0; }
+.delivery-register-lines .register-outcome { margin:0 0 2px; font-size:.88rem; color:var(--ink); }
+.delivery-register-lines strong { font-variant-numeric:tabular-nums; }
+.delivery-register-lines .register-code { display:inline-block; max-width:100%; vertical-align:bottom; overflow-wrap:anywhere; }
+.delivery-register-lines mark { background:var(--attention-soft); color:var(--ink); font-weight:700; text-decoration:underline dotted; text-underline-offset:3px; }
 .inspection-metric { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; color: var(--secondary); font-size: .82rem; }
 .inspection-metric > strong { color: var(--ink); font: 600 2rem/1.15 var(--font-number); font-variant-numeric: tabular-nums; }
 .inspection-required { margin-left: 5px; padding-left: 10px; border-left: 1px solid var(--field-line); }
