@@ -7,24 +7,32 @@ export async function checkDeliveryRegister(ctx,cid) {
   const click=s=>input.click(q(s));
   const get=async path=>{const r=await fetch(root+path);assert.equal(r.status,200);return r.json();};
   const task=await get(base);
-  assert.match(task.title,/^合成演练 · (同型冷藏柜|四台冷藏柜|同一批四台冷藏柜|冷藏柜验收清单|合同约定经书面批准可以代用|终验注明冷藏柜代用|末台冷藏柜另附待签|冷藏柜合同点名禁止|冷藏柜保养条款|终验前所记|验收款付款当天所记|验收款付款后所记|补充协议批准的是另一台|一份待签草案)/u);
+  assert.match(task.title,/^合成演练 · (同型冷藏柜|四台冷藏柜|同一批四台冷藏柜|冷藏柜验收清单|合同约定经书面批准可以代用|终验注明冷藏柜代用|末台冷藏柜另附待签|冷藏柜合同点名禁止|冷藏柜保养条款|终验前所记|验收款付款当天所记|验收款付款后所记|补充协议批准的是另一台|一份待签草案|第二期验收款所引补充协议)/u);
   const {report,rev}=await get(base+'/reports/'+(process.env.AUDIT_REGISTER_REV || task.rev));
   const accepted=report.findings.find(f=>f.rule==='H02'), paid=report.findings.find(f=>f.rule==='H05');
   const term=report.findings.find(f=>f.rule==='H04' && f.stage?.name===paid.stage.name);
   const register=accepted.inspection_coverage;
   const rows=(report.graph.inspection_coverage_sources?.rows || []).filter(r=>accepted.delivery_register?.includes(r.id));
-  const format=report.policy.inspection_coverage, expected=['inspection-coverage-v3','inspection-coverage-v4','inspection-coverage-v5'].includes(format);
-  const datedPacket=/所记的设备代用决定|补充协议批准的是另一台/u.test(task.title);
-  const later=task.title.includes('付款后所记'), same=task.title.includes('当天所记'), before=task.title.includes('终验前所记');
-  const compared=format==='inspection-coverage-v5' && (later || same || before);
+  const format=report.policy.inspection_coverage, supportsDates=['inspection-coverage-v5','inspection-coverage-v6'].includes(format);
+  const expected=supportsDates || ['inspection-coverage-v3','inspection-coverage-v4'].includes(format);
+  const sealCase=task.title.includes('第二期验收款所引补充协议'), disputed=sealCase && report.graph.facts.find(f=>
+    f.status==='disputed' && report.graph.documents_by_kind.contract_addendum.includes(f.doc) && f.source_line?.number===9);
+  const held=Boolean(disputed && format==='inspection-coverage-v6');
+  const datedPacket=sealCase || /所记的设备代用决定|补充协议批准的是另一台/u.test(task.title);
+  const later=sealCase || task.title.includes('付款后所记'), same=task.title.includes('当天所记'), before=task.title.includes('终验前所记');
+  const compared=supportsDates && !held && (later || same || before);
   const qualification=rows.find(r=>r.kind==='substitution' && report.graph.documents_by_kind.contract_addendum?.includes(r.unit)) || rows.find(r=>r.kind==='substitution');
-  if (['inspection-coverage-v4','inspection-coverage-v5'].includes(format)) {
+  if (supportsDates || format==='inspection-coverage-v4') {
     const noteCase=datedPacket || /约定经书面批准可以代用|终验注明冷藏柜代用|末台冷藏柜另附待签|点名禁止/u.test(task.title);
     assert.equal(Boolean(qualification),noteCase);
     if (noteCase) assert.equal(register.state,task.title.includes('点名禁止')?'register_prohibited':'register_substitution');
   }
   assert.equal(rows.filter(r=>r.line).length,expected?(datedPacket?4:qualification?3:2):0);
-  for (const f of [accepted,term,paid]) assert.equal(Boolean(f.substitution_dates),compared);
+  for (const f of [accepted,term,paid]) {
+    assert.equal(Boolean(f.substitution_dates),compared);
+    assert.equal(Boolean(f.substitution_review),held);
+  }
+  const objection=f=> '#serial-'+f.id+'-dispute-'+disputed.id.replaceAll('/','-');
   const pin=(f,r)=>'#serial-'+f.id+'-'+r.doc+'-p'+r.page+'-l'+r.line;
   async function open(f) {
     const view=f===accepted?'acceptance-checks':'payment-checks&stage='+f.id;
@@ -78,11 +86,27 @@ export async function checkDeliveryRegister(ctx,cid) {
           await input.key('Enter');await wait(q(group)+'.open','restore the source rows');
         }
       } else assert.equal(await evaluate(q(group)+'.dataset.dateRef || null'),null);
+      if (held) {
+        const sel=objection(f);
+        assert.equal(await evaluate(q(sel+' strong')+'.textContent'),disputed.source_line.text);
+        assert.equal(await evaluate(q(group+' .register-related')+'.open'),false);
+        assert.ok(await evaluate(q(sel)+'.getBoundingClientRect().height>=44'));
+        await click(sel);
+        await wait(q('#page-dialog')+'.open && '+q('#page-content .located')+'?.dataset.fact==='+JSON.stringify(disputed.id),'the disputed filing observation');
+        assert.equal(await evaluate(q('#reader-revision')+'.textContent'),'R'+rev);
+        const boxes=await evaluate('[...document.querySelectorAll("#page-content .source-plane svg rect")].map(r=>["x","y","width","height"].map(k=>Number(r.getAttribute(k))))');
+        assert.deepEqual(boxes,disputed.source_line.rects.map(([a,b,c,d])=>[a,b,c-a,d-b].map(n=>1000*n)));
+        await input.key('Escape');await wait('!'+q('#page-dialog')+'.open','back to the challenged filing');
+      }
       if (qualification && f===paid && width<=390) {
         const widths=await evaluate('[...document.querySelectorAll(".proof-checkpoints")].filter(g=>g.offsetWidth && g.childElementCount).map(g=>g.getBoundingClientRect().right-g.lastElementChild.getBoundingClientRect().right)');
         assert.ok(widths.length && widths.every(gap=>Math.abs(gap)<=1),'the last checkpoint fills its row');
       }
       await inspect(ctx,width,group,'delivery-register-'+f.rule);
+      if (held) {
+        await evaluate(q(group+' .register-related > summary')+'.focus()');await input.key('Enter');
+        await wait(q(group+' .register-related')+'.open','disclose the contract, acceptance and agreement sources');
+      }
       for (const row of rows.filter(r=>r.line)) {
         const target=pin(f,row);
         assert.equal(await evaluate(q(target+' strong')+'.textContent'),row.quote);
@@ -144,6 +168,18 @@ export async function checkDeliveryRegister(ctx,cid) {
       await wait(q('#addendum-signing')+'?.dataset.agreement==='+JSON.stringify(record)+' && document.activeElement==='+q('#addendum-signing'),'the signing evidence belongs to the same addendum');
     }
     await open(term);
+    if (held) {
+      assert.ok(await evaluate(q(objection(term))+'?.getClientRects().length'));
+      const guarded=await evaluate(`['edge','observation','finding','other'].map(fault=>{
+        const p=structuredClone(state.bundle.report), f=p.findings.find(x=>x.rule==='H05'), item=f.substitution_review.objections[0];
+        if(fault==='edge') p.graph.edges=p.graph.edges.filter(e=>e.type!=='disputes_substitution_filing');
+        if(fault==='observation') p.graph.facts.find(x=>x.id===item.ref).status='anchored';
+        if(fault==='finding') f.evidence=f.evidence.filter(ref=>ref!==item.ref);
+        if(fault==='other') item.field='seller_signature';
+        return Boolean(InspectionCoverage.registerControls(p,f)?.querySelector('[id*="-dispute-"]'));
+      })`);
+      assert.deepEqual(guarded,[false,false,false,false]);
+    }
     if (compared) {
       const summary='[...document.querySelectorAll("#performance-index summary")].find(s=>s.textContent==="终验日期 2026-09-20")';
       await input.click(summary);
@@ -167,6 +203,7 @@ export async function checkDeliveryRegister(ctx,cid) {
       assert.ok(guarded.every(ref=>ref===null));
     }
     const row=qualification || rows.find(r=>r.kind==='population');
+    if (held) await click('#performance-index .register-related > summary');
     await evaluate(q(pin(term,row))+'.focus()');await input.key('Enter');await original(row);
     const altered=await evaluate(`(()=>{
       return ['scope','quote','rect','edge','register'].map(fault=>{
@@ -188,6 +225,7 @@ export async function checkDeliveryRegister(ctx,cid) {
       if (target) {
         await click('#walk-pick');await wait(q('#walk-launch')+'.dataset.picking==="true"','select');
         await click(target);await wait(q(target)+'.classList.contains("walk-selected")','source control');
+        if (held && target===objection(paid)) assert.ok(await evaluate(q(target)+'.getBoundingClientRect().bottom<='+q('#walk-dialog')+'.getBoundingClientRect().top'),'selected seal remains above the mobile recorder');
         await inspect(ctx,390,'#walk-dialog',shot);
       }
     }
@@ -213,15 +251,16 @@ export async function checkDeliveryRegister(ctx,cid) {
       await compose(text);const context=await saveAndReopen(text);await original(row);assert.equal(context.raw_ref,row.id);
     }
     if (isolated || process.env.AUDIT_UI_SHOTS) {
-      const before=await get('/api/walkthrough'), text=compared?'希望在所记批准日旁补上当时收到原件的时间。':
+      const before=await get('/api/walkthrough'), text=held?'请在采购方签章异议旁显示签署原件的收件时间。':compared?'希望在所记批准日旁补上当时收到原件的时间。':
         qualification?'希望在这笔验收款旁看到批准人和当时生效的文件。':'希望从这笔验收款直接查看相应的设备铭牌。';
-      await size(ctx,390);await open(paid);await compose(text,pin(paid,row));
+      const targetPin=held?objection(paid):pin(paid,row);
+      await size(ctx,390);await open(paid);await compose(text,targetPin);
       if (isolated) {
         const context=await saveAndReopen(text);
-        assert.equal(context.anchor,pin(paid,row).slice(1));assert.deepEqual(context.params,{view:'payment-checks',stage:paid.id});
-        await wait(q(pin(paid,row))+'?.classList.contains("walk-mark")','restored payment control');
+        assert.equal(context.anchor,targetPin.slice(1));assert.deepEqual(context.params,{view:'payment-checks',stage:paid.id});
+        await wait(q(targetPin)+'?.classList.contains("walk-mark")','restored payment control');
         // A delayed refresh must still restore the control when the reviewer is reading.
-        const target=q(pin(paid,row));
+        const target=q(targetPin);
         await new Promise(resolve=>setTimeout(resolve,2700));
         await evaluate('(()=>{const old='+target+', fresh=old.cloneNode(true);fresh.classList.remove("walk-mark");'+
           'old.replaceWith(fresh);window.dispatchEvent(new HashChangeEvent("hashchange"));return true})()');

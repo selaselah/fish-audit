@@ -81,7 +81,7 @@ function returnToControl() {
   const party=anchor.startsWith('party-reading-');
   const limits=params.get('view')==='acceptance-limits' && anchor.startsWith('limits-H02-');
   const form=/^(?:form|number|serial)-(H0[1245]-[1-9][0-9]*)-d[0-9]+-p[1-9][0-9]*-l[1-9][0-9]*$/.exec(anchor) ||
-    /^serial-(H0[245]-[1-9][0-9]*)-order$/.exec(anchor);
+    /^serial-(H0[245]-[1-9][0-9]*)-(?:order|dispute-d[0-9]+-p1-[a-zA-Z0-9_-]+)$/.exec(anchor);
   const formView=form && ({H01:'contract-signing-form',H02:'acceptance-checks'}[form[1].slice(0,3)] || 'payment-checks');
   url.searchParams.delete('walkat');
   history.replaceState(history.state,'',url);

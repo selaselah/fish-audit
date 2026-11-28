@@ -43,8 +43,8 @@ def replace_refs(value, names):
     return names.get(value, value) if isinstance(value, str) else value
 
 
-def approval_bundle(revision, edition):
-    paper, read = dated()
+def approval_bundle(revision, edition, *, attestations=None):
+    paper, read = dated(attestations=attestations)
     g = paper["graph"]
     ledger = g["inspection_coverage_sources"] = inspection.sources(g, read, version=edition)
     findings = execute(g, PERFORMANCE)
@@ -61,6 +61,21 @@ def approval_bundle(revision, edition):
 
 
 class ContractRevisionComparison(unittest.TestCase):
+    def test_a_disputed_filing_in_the_new_edition_opens_its_own_field_and_preserves_the_old_date(self):
+        notes={"d05/p1/f8":{"decision":"dispute","note":"请核对采购方签章原件"}}
+        earlier=approval_bundle(4,substitution_dates.DATED_FORMAT,attestations=notes)
+        later=approval_bundle(5,substitution_dates.FORMAT,attestations=notes)
+        rows=compare(CID,earlier,later)["rows"]
+        affected=[r for r in rows if r["earlier"].get("approval_dates")]
+        self.assertEqual([r["later"]["rule"] for r in affected],["H02","H04","H05"])
+        for r in affected:
+            self.assertEqual((r["earlier"]["status"],r["later"]["status"]),("risk","missing"))
+            self.assertTrue(r["earlier"]["approval_dates"]["recorded"])
+            self.assertNotIn("shared_approval_lines",r)
+            self.assertNotIn("approval_dates",r["later"])
+            first=r["later"]["sources"][0]
+            self.assertEqual((first["ref"],first["status"]),("d05/p1/f8","disputed"))
+
     def setUp(self):
         self.graph = material([CONTRACT, RECEIPT, WARRANTY, BANK_DOC, BANK_DOC])
         self.findings = execute(self.graph, PERFORMANCE)

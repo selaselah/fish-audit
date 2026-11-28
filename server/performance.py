@@ -1456,6 +1456,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("inspection_coverage") != entry.get("inspection_coverage")
                 or saved.get("delivery_register") != entry.get("delivery_register")
                 or saved.get("substitution_dates") != entry.get("substitution_dates")
+                or saved.get("substitution_review") != entry.get("substitution_review")
                 or saved.get("equipment_models") != entry.get("equipment_models")
                 or saved.get("stage_payments") != entry.get("stage_payments")
                 or saved.get("payment_change") != entry.get("payment_change")

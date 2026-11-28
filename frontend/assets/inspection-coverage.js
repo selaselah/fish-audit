@@ -1,7 +1,8 @@
 // Each selectable device and its readings belong to the originals cited by one H02 finding.
 const InspectionCoverage = (() => {
-  const legacy = 'inspection-coverage-v1', current = 'inspection-coverage-v5';
-  const qualifiedFormats = new Set(['inspection-coverage-v4',current]);
+  const legacy = 'inspection-coverage-v1', current = 'inspection-coverage-v6';
+  const datedFormats = new Set(['inspection-coverage-v5',current]);
+  const qualifiedFormats = new Set(['inspection-coverage-v4',...datedFormats]);
   const registerFormats = new Set(['inspection-coverage-v3',...qualifiedFormats]);
   const formats = new Set([legacy,'inspection-coverage-v2',...registerFormats]);
   const registerStates={register_match:'两份清单的编号逐一相符',register_difference:'合同与终验编号不一致',
@@ -387,9 +388,52 @@ const InspectionCoverage = (() => {
     });
     return result.includes(null)?[]:result;
   }
+  const filingLabels={change_state:'协议状态',buyer_signature:'采购方签章',seller_signature:'供应方签章'};
+  function disputedFields(graph,unit,filed) {
+    const found=[];
+    for (const f of graph.facts) {
+      if (f.status!=='disputed' || f.doc!==unit || (f.unit || f.doc)!==unit || f.page!==1) continue;
+      const field=Object.keys(filingLabels).find(k=>{
+        const row=filed?.[k], line=f.source_line;
+        if (!row) return false;
+        if (line) return line.number===row.line && line.text===row.quote;
+        return f.field===k || f.field===k.replace('_signature','_seal_name') || f.quote.split(/[:：]/u)[0].trim()===row.quote.split(/[:：]/u)[0].trim();
+      });
+      if (field) found.push({field,fact:f});
+    }
+    return found;
+  }
+  function filingControls(report,finding,lines,pin) {
+    const review=finding.substitution_review, graph=report.graph, ledger=graph.inspection_coverage_sources;
+    if (!review || finding.substitution_dates || ledger?.format!==current || report.policy.inspection_coverage!==current ||
+        !Array.isArray(review.objections) || !lines.some(l=>l.ref===review.condition && graph.documents_by_kind.contract?.includes(l.doc.id)) ||
+        !lines.some(l=>l.ref===review.decision && l.doc.id===review.unit)) return [];
+    const page=ledger.pages.find(p=>p.role==='contract_addendum' && p.unit===review.unit && p.doc===p.unit && p.page===1);
+    const found=disputedFields(graph,review.unit,page?.substitution_decision), index=graphIndex(graph);
+    const buttons=[];
+    if (found.length!==review.objections.length) return [];
+    for (const [i,{field,fact}] of found.entries()) {
+      const ref=fact.id, match=review.objections[i], doc=index.documents.get(fact.doc), pageId=fact.doc+'/p1';
+      const refs=[ref,review.condition,review.decision];
+      if (match.ref!==ref || match.field!==field || !doc || fact.source_sha256!==doc.sha256 ||
+          index.nodes.get(pageId)?.sha256!==fact.page_sha256 || index.nodes.get(ref)?.status!=='disputed' ||
+          !refs.every(r=>finding.evidence.includes(r) && index.supports.get('finding/'+finding.id)?.has(r)) ||
+          !graph.edges.some(e=>e.type==='disputes_substitution_filing' && e.from===ref && e.to===review.decision &&
+            e.evidence.length===refs.length && refs.every((r,j)=>r===e.evidence[j]))) return [];
+      const line=fact.source_line, place=doc.name+' · 第 1 页'+(line?' · 第 '+line.number+' 行':'');
+      const label=filingLabels[field]+'有核字异议';
+      const button=action('',()=>openPage(fact.doc,fact.page,ref),'signing-form-source');
+      button.setAttribute('aria-haspopup','dialog'); button.setAttribute('aria-controls','page-dialog');
+      Object.assign(button.dataset,{filingObjection:ref,originalLabel:label+' · '+place,caseId:report.case_id,rev:String(state.bundle.rev)});
+      if (pin) {button.id='serial-'+finding.id+'-dispute-'+ref.replaceAll('/','-');button.dataset.serialFinding=finding.id;}
+      button.append(element('small',label+' · '+place),element('strong',line?.text || fact.quote),glyph('arrows-angle-expand'));
+      buttons.push(button);
+    }
+    return buttons;
+  }
   function datedDecision(report,finding,lines) {
     const c=finding.substitution_dates, graph=report.graph, ledger=graph.inspection_coverage_sources;
-    if (!c || ledger?.format!==current || !/^[a-f0-9]{64}$/u.test(report.policy.code_sha256?.['substitution_dates.py']) ||
+    if (!c || !datedFormats.has(ledger?.format) || !/^[a-f0-9]{64}$/u.test(report.policy.code_sha256?.['substitution_dates.py']) ||
         !Array.isArray(ledger.decision_fields) || lines.length!==4 || !c.original || !c.replacement) return null;
     const payment=finding.rule==='H05', event=payment?'payment':'acceptance', field=payment?'paid_on':'accepted_on';
     const kind=payment?'bank_receipt':'acceptance', units=graph.documents_by_kind[kind]?.filter(u=>finding.scope.includes(u));
@@ -399,6 +443,7 @@ const InspectionCoverage = (() => {
         !ledger.pages.every(p=>p.native && p.text_only && !p.substitution_qualification)) return null;
     const page=ledger.pages.find(p=>p.unit===c.unit && p.doc===decision.doc.id && p.page===decision.page && p.role==='contract_addendum');
     const filed=page?.substitution_decision;
+    if (ledger.format===current && (finding.substitution_review || disputedFields(graph,c.unit,filed).length)) return null;
     if (filed?.decision?.line!==decision.rawLine || filed.decision.quote!==decision.quote ||
         value(filed.change_state)!=='已签署') return null;
     for (const side of ['buyer','seller']) {
@@ -451,9 +496,17 @@ const InspectionCoverage = (() => {
       Object.assign(summary.dataset,{serialFinding:finding.id,caseId:report.case_id,rev:String(state.bundle.rev),originalLabel:dated.title});
       group.append(summary,originals);
     } else if (pin) group.append(element('strong',registerStates[check.state] || '设备清单待核','register-outcome'));
+    const disputed=filingControls(report,finding,lines,pin);
+    let equipment=originals;
+    if (disputed.length) {
+      const related=element('details',null,'register-related');
+      equipment=element('div',null,'register-originals');
+      related.append(element('summary','设备清单与代用条款 · '+lines.length+' 处'),equipment);
+      originals.append(...disputed,related);
+    }
     for (const line of lines) {
       const label=dated?.decision===line.ref?'协议所记批准日 '+dated.statedOn:line.label;
-      originals.append(workpaperLineButton({...line,label},finding,pin));
+      equipment.append(workpaperLineButton({...line,label},finding,pin));
     }
     return group;
   }

@@ -32,11 +32,13 @@ APPROVAL_DATES = {
     "decision_other": ("补充协议批准的是另一台冷藏柜", 22, "FA-0199", "FA-0101", "已签署"),
     "decision_draft": ("一份待签草案上所记的设备代用决定", 22, "FA-0109", "FA-0104", "待双方签署"),
 }
+DATED_FORMS = {**APPROVAL_DATES, "disputed_seal": (
+    "第二期验收款所引补充协议的采购方签章待核", *APPROVAL_DATES["decision_after"][1:])}
 
 
 def build(folder, key):
-    if key in APPROVAL_DATES:
-        title, day, replacement, original, state = APPROVAL_DATES[key]
+    if key in DATED_FORMS:
+        title, day, replacement, original, state = DATED_FORMS[key]
         received = (*ORDERED[:3], "FA-0109")
     elif key in SUBSTITUTIONS:
         title, file, label, wording = SUBSTITUTIONS[key]
@@ -47,7 +49,7 @@ def build(folder, key):
     records = documents(code, "complete")
     records["采购合同"].extend([("约定设备型号", "YL-C4"), ("约定设备序列号", "、".join(ORDERED))])
     records["验收报告"].extend([("实收设备型号", "YL-C4"), ("实收设备序列号", "、".join(received))])
-    if key in APPROVAL_DATES:
+    if key in DATED_FORMS:
         contract = records["采购合同"]
         contract.append(("供货约定","经采购方事先书面批准，可用FA-0109代替FA-0104。"))
         parties = dict(contract)
@@ -116,7 +118,7 @@ def check_fields(cid, title, files):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("folder", type=Path)
-    parser.add_argument("--case", choices=[*CASES,*SUBSTITUTIONS,*APPROVAL_DATES])
+    parser.add_argument("--case", choices=[*CASES,*SUBSTITUTIONS,*DATED_FORMS])
     parser.add_argument("--substitution", action="store_true", help="生成含代用条件、申请、补充协议、明文禁止或保养条款的五组演练")
     parser.add_argument("--approval-dates", action="store_true", help="生成代用决定日期、设备方向与验收款的五组演练")
     parser.add_argument("--run", action="store_true")

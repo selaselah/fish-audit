@@ -12,7 +12,9 @@ from reinspection import LINK_KEYS
 from stage_payments import SUCCESS
 
 
-FORMAT = "inspection-coverage-v5"
+DATED_FORMAT = "inspection-coverage-v5"
+FORMAT = "inspection-coverage-v6"
+DATED_FORMATS = (DATED_FORMAT, FORMAT)
 FORM_FIELDS = ("addendum_number","base_contract_ref","buyer","seller","subject","change_state","buyer_signature","seller_signature")
 DECISIONS = {"代用决定","设备代用决定","设备代用批准决定"}
 CLAUSES = {"供货约定","设备代用约定","交付约定"}
@@ -20,6 +22,8 @@ CODE = r"([A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*)"
 PRIOR = re.compile(r"经采购方事先书面批准[，,]\s*可(?:以)?(?:用|以)\s*"+CODE+r"\s*(?:代替|替代)\s*"+CODE+r"[。.]?")
 INDICATION = re.compile(r"(.+?)于(.+?)同意(?:以|用)\s*"+CODE+r"\s*(?:代替|替代)\s*"+CODE+r"[。.]?")
 RELATION = "dates_equipment_substitution"
+OBJECTION = "disputes_substitution_filing"
+FILING_LABELS = {"change_state":"协议状态","buyer_signature":"采购方签章","seller_signature":"供应方签章"}
 ROLES = {"contract":(*LINK_KEYS,"payment_stage"),"acceptance":(*LINK_KEYS,"accepted_on","acceptance_scope"),"bank_receipt":BANK}
 
 
@@ -131,7 +135,37 @@ def transfer_fields(graph,bank,rows):
     return readings(narrowed,bank,BANK),[old["id"],added["id"]]
 
 
-def compare(finding,record,source,event):
+def filing_objections(facts, unit, filed):
+    """Find active disputes about the one filed decision's status or either seal."""
+    from inspection_coverage import split
+
+    result = []
+    for fact in facts:
+        if fact["status"] != "disputed" or fact.get("unit", fact["doc"]) != unit or fact["doc"] != unit or fact["page"] != 1:
+            continue
+        line = fact.get("source_line")
+        for field in FILING_LABELS:
+            if line:
+                matches = (line["number"], line["text"]) == (filed[field]["line"], filed[field]["quote"])
+            else:
+                matches = (split(fact["quote"])[0] in PRINTED[field] or fact["field"] == field or
+                           field.endswith("_signature") and fact["field"] == field.replace("_signature", "_seal_name"))
+            if matches:
+                result.append({"field":field,"ref":fact["id"]})
+                break
+    return result
+
+
+def compare(finding,record,source,event,objections):
+    if objections:
+        finding["substitution_review"] = {k:record[k] for k in ("unit","condition","decision")}
+        finding["substitution_review"]["objections"] = objections
+        finding["evidence"] = list(dict.fromkeys([*finding["evidence"], *(o["ref"] for o in objections)]))
+        fields = "、".join(dict.fromkeys(FILING_LABELS[o["field"]] for o in objections))
+        finding["detail"] += f" 补充协议的{fields}有核字异议。请核对签署原件及收件记录，确认代用批准是否成立、何时取得。"
+        if finding["status"] == "ok":
+            finding["status"] = "missing"
+        return
     ref,day=source
     days=(date.fromisoformat(day)-date.fromisoformat(record["stated_on"])).days
     relation="before" if days<0 else "after" if days>0 else "same_day"
@@ -151,7 +185,7 @@ def apply(graph,findings):
     from performance import FINAL_SCOPES, Material, stage_terms
 
     ledger=graph.get("inspection_coverage_sources",{})
-    if ledger.get("format")!=FORMAT or not any(p.get("substitution_decision") for p in ledger["pages"]):
+    if ledger.get("format") not in DATED_FORMATS or not any(p.get("substitution_decision") for p in ledger["pages"]):
         return
     h02=next((f for f in findings if f["rule"]=="H02" and f.get("delivery_register")),None)
     kinds=graph["documents_by_kind"]
@@ -161,11 +195,13 @@ def apply(graph,findings):
     record=decision(graph,contract,receipt,h02["inspection_coverage"],ledger)
     if not record:
         return
+    filed=next(p["substitution_decision"] for p in ledger["pages"] if p["unit"]==record["unit"])
+    objections=filing_objections(graph["facts"],record["unit"],filed) if ledger["format"]==FORMAT else []
     obs=ledger["decision_fields"]
     acceptance=readings(obs,receipt,("accepted_on","acceptance_scope"))
     if not acceptance or acceptance["acceptance_scope"][1] not in FINAL_SCOPES:
         return
-    compare(h02,record,acceptance["accepted_on"],"acceptance")
+    compare(h02,record,acceptance["accepted_on"],"acceptance",objections)
     for f in findings:
         if f["rule"] not in ("H04","H05") or f.get("delivery_register")!=h02["delivery_register"] or not f.get("stage"):
             continue
@@ -174,7 +210,7 @@ def apply(graph,findings):
         if not term or term[0] not in f["evidence"] or term[1]!=stage["clause"] or stage_terms(term[1])[1]!="acceptance":
             continue
         if f["rule"]=="H04":
-            compare(f,record,acceptance["accepted_on"],"acceptance")
+            compare(f,record,acceptance["accepted_on"],"acceptance",objections)
             continue
         banks=set(kinds.get("bank_receipt",())).intersection(f["scope"])
         if len(banks)!=1:
@@ -187,12 +223,15 @@ def apply(graph,findings):
                 any(transfer[k][1]!=contract.body(c) for k,c in (("payer","buyer"),("payee","seller"),("contract_id","contract_id"))) or
                 any(v[0] not in f["evidence"] for v in transfer.values())):
             continue
-        compare(f,record,transfer["paid_on"],"payment")
-        if classified:
+        compare(f,record,transfer["paid_on"],"payment",objections)
+        if classified and not objections:
             f["substitution_dates"]["designation_refs"]=classified
             f["evidence"]=list(dict.fromkeys([*f["evidence"],*classified]))
 
 
 def edges(findings):
     cited=dict.fromkeys((c["condition"],c["decision"],c["date_ref"]) for f in findings if (c:=f.get("substitution_dates")))
-    return [{"type":RELATION,"from":decision,"to":event,"evidence":[condition,decision,event]} for condition,decision,event in cited]
+    disputed=dict.fromkeys((o["ref"],c["condition"],c["decision"]) for f in findings if (c:=f.get("substitution_review"))
+                           for o in c["objections"])
+    return ([{"type":RELATION,"from":decision,"to":event,"evidence":[condition,decision,event]} for condition,decision,event in cited]
+            + [{"type":OBJECTION,"from":ref,"to":decision,"evidence":[ref,condition,decision]} for ref,condition,decision in disputed])

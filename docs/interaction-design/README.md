@@ -6,6 +6,8 @@
 2. 要指出某个按钮或数字，点「点选控件」再选它。要指出原件上的字或印迹，打开已出具底稿的原页，点「标记原图」后点击相应位置。用键盘时，方向键可移动标记，Enter 确认，Esc 取消。[试走第二期会签案例](http://127.0.0.1:8000/workpaper/8debfd4a45424070a4fbedb915de1667?rev=10&view=payment-checks&stage=H05-8) · [窄屏上的两处姓名](approval-names-joint-mobile.webp)
 3. 写下希望怎么改，点「保存意见」。「已记录」可回到当时的底稿版本、控件、原行或图上标记。点回控件后，蓝框会保留到你再次点击或按键。走完后在同机 Codex 说「按本机走查清单修改」，或点「复制给 Codex」贴进指定对话。[在合同原行旁写意见](approval-names-walkthrough.webp)
 
+要反馈签章异议在付款页上怎么展示，可以打开水印案 R5。在「第二期 · 实付日期与合同前提」里点「提意见 → 点选控件」，再点「采购方签章有核字异议」。手机写意见时仍能看到选中的签章说明。从「已记录」重开会回到这笔付款。直接点签章说明可核对协议第 9 行。[试走第二期实付](http://127.0.0.1:8000/workpaper/c52a58afddba4bf180f5ea4b17bb2687?rev=5&view=payment-checks&stage=H05-8) · [手机走查](substitution-filing-feedback-mobile.webp)
+
 对照两版底稿时，展开「核对三处原文」。例如，想在 R3 的代用决定旁看到收件时间，就点「提意见 → 点选控件」，再点 R3 的「协议决定」。意见会记住 R2 / R3、选中的 R3 以及补充协议第 1 页第 11 行。桌面上两版原文并排展开。手机上可单独展开一版，底部有「收起对照」和「提意见」。[试走这笔 6 万元付款](http://127.0.0.1:8000/workpaper/f90afd53772c43028d74e6f831d1d4e0?rev=3&view=revision-comparison&prior=2&entry=new-H05-8) · [电脑对照原文](revision-approval-originals.webp) · [手机上给 R3 留意见](revision-approval-feedback-mobile.webp)
 
 周末可以从一笔第二期验收款开始。点「提意见 → 点选控件」，选中「实付比协议所记批准日早 1 天」，写下希望怎么改。例如「希望在这里看到当时收到批准文件的时间」。保存后从「已记录」回到 R3，可继续核对这条结论。如果想指出批准书的具体字句，打开补充协议第 11 行，再点原页上的「提意见」。[打开这笔 6 万元验收款](http://127.0.0.1:8000/workpaper/f90afd53772c43028d74e6f831d1d4e0?rev=3&view=payment-checks&stage=H05-8) · [手机上给结论提意见](substitution-approval-date-mobile.webp)

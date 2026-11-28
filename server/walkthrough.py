@@ -15,6 +15,7 @@ READING_LOCATION = r"reading-d[0-9]{2,8}-p[1-9][0-9]{0,7}-l[1-9][0-9]{0,7}"
 FORM_PIN = re.compile(r"form-(H0[1245]-[1-9][0-9]{0,7})-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7})")
 ACCEPTANCE_LINE_PIN = re.compile(r"(?:number|serial)-(H0[245]-[1-9][0-9]{0,7})-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7})")
 SUBSTITUTION_ORDER_PIN = re.compile(r"serial-(H0[245]-[1-9][0-9]{0,7})-order")
+FILING_OBJECTION_PIN = re.compile(r"serial-(H0[245]-[1-9][0-9]{0,7})-dispute-(d[0-9]{2,8})-p1-([a-zA-Z0-9_][a-zA-Z0-9_-]{0,39})")
 QUALITY_PIN = re.compile(r"quality-(H0[45]-[1-9][0-9]{0,7})(?:-(clause|acceptance_criteria|inspection_basis|measured_result|"
                          r"acceptance_scope|acceptance_result|accepted_on|payment_designation|transfer_status|paid_on|terms|order|"+READING_LOCATION+r"))?")
 LIMIT_PIN = re.compile(r"limits-(H02-[1-9][0-9]{0,7})(?:-(acceptance_criteria|inspection_basis|measured_result|acceptance_result|"+READING_LOCATION+r"))?")
@@ -77,7 +78,7 @@ def check_context(value):
     if params.get("view")=="contract-signing-form" and (not result.get("rev") or set(params)!={"view"}):
         raise CaseError("请选择一版合同签署底稿。",400)
     if anchor.startswith(("form-H","number-H","serial-H")):
-        pin = FORM_PIN.fullmatch(anchor) or ACCEPTANCE_LINE_PIN.fullmatch(anchor) or SUBSTITUTION_ORDER_PIN.fullmatch(anchor)
+        pin = FORM_PIN.fullmatch(anchor) or ACCEPTANCE_LINE_PIN.fullmatch(anchor) or SUBSTITUTION_ORDER_PIN.fullmatch(anchor) or FILING_OBJECTION_PIN.fullmatch(anchor)
         view = pin and {"H01":"contract-signing-form","H02":"acceptance-checks"}.get(pin[1][:3])
         if (not pin or screen!="case" or not result.get("rev") or result.get("tab","report")!="report"
                 or {"doc","dialog"}.intersection(result) or params != (
@@ -205,9 +206,18 @@ def save_note(store, workspace, author, role, data):
                  doc,page,f'$.contract_signing_form_rects."{line}"')).fetchone()
             if not linked:
                 raise CaseError("所选底稿没有引用这条合同签署要求。",404)
+        elif objection := FILING_OBJECTION_PIN.fullmatch(anchor):
+            paper = store.report(context["case_id"],context["rev"])["report"]
+            ref = f"{objection[2]}/p1/{objection[3]}"
+            finding = next((f for f in paper["findings"] if f["id"]==objection[1]), {})
+            record = finding.get("substitution_review") or {}
+            if (paper["policy"].get("inspection_coverage")!="inspection-coverage-v6" or record.get("unit")!=objection[2]
+                    or ref not in finding.get("evidence",()) or not any(o["ref"]==ref for o in record.get("objections",()))
+                    or not any(f["id"]==ref and f["status"]=="disputed" for f in paper["graph"]["facts"])):
+                raise CaseError("该版发现没有引用所选的协议核字异议。",404)
         elif order := SUBSTITUTION_ORDER_PIN.fullmatch(anchor):
             linked = db.execute("""SELECT 1 FROM reports, json_each(content,'$.findings') f, json_each(content,'$.graph.edges') e
-                WHERE case_id=? AND rev=? AND json_extract(content,'$.policy.inspection_coverage')='inspection-coverage-v5'
+                WHERE case_id=? AND rev=? AND json_extract(content,'$.policy.inspection_coverage') IN ('inspection-coverage-v5','inspection-coverage-v6')
                 AND json_extract(f.value,'$.id')=? AND json_extract(f.value,'$.substitution_dates.event')=?
                 AND json_extract(e.value,'$.type')='dates_equipment_substitution'
                 AND json_extract(e.value,'$.from')=json_extract(f.value,'$.substitution_dates.decision')
@@ -223,7 +233,7 @@ def save_note(store, workspace, author, role, data):
             serial = anchor.startswith("serial-") or context.get("raw_ref","").startswith("inspection-line/")
             if serial:
                 prefix, finding_key, ledger, marker, versions, rects = ("inspection-line","delivery_register",
-                    "inspection_coverage_sources","inspection_coverage",("inspection-coverage-v3","inspection-coverage-v4","inspection-coverage-v5"),"delivery_register_rects")
+                    "inspection_coverage_sources","inspection_coverage",("inspection-coverage-v3","inspection-coverage-v4","inspection-coverage-v5","inspection-coverage-v6"),"delivery_register_rects")
             else:
                 prefix, finding_key, ledger, marker, versions, rects = ("measurement-number","measurement_numbers",
                     "measurement_number_sources","measurement_numbers",("printed-measurement-spacing-v1",),"measurement_number_rects")

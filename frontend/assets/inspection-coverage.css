@@ -24,6 +24,7 @@
 .delivery-register-lines .signing-form-source { margin:0; }
 .delivery-register-lines .register-outcome { margin:0 0 2px; font-size:.88rem; color:var(--ink); }
 .delivery-register-lines .register-originals { display:grid; gap:5px; }
+.register-related > summary { min-height:44px; align-content:center; color:var(--accent-hover); cursor:pointer; }
 .delivery-register-lines > summary.register-outcome { min-height:44px; align-content:center; font-weight:650; cursor:pointer; }
 .delivery-register-lines > summary::marker { color:var(--secondary); }
 .delivery-register-lines > summary:focus-visible { outline:2px solid var(--focus); outline-offset:1px; }

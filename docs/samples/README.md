@@ -14,6 +14,8 @@ server/.venv/bin/python docs/samples/delivery_register.py /tmp/fish-delivery-reg
 
 加 `--approval-dates` 生成五组各 5 份水印 PDF，分别模拟终验前、付款当天、付款后所记的批准决定，以及决定点名其他设备、决定写在待签草案上的情形。若只需走查付款早于所记批准日的一组，用 `--case decision_after`。[五案结果和本机入口](../acceptance.md#设备代用批准记载日与验收款)
 
+加 `--case disputed_seal` 可重建签章异议案的五份原件。合同与回单分期一致，补充协议第 9 行是排印的采购方签章，第 11 行写有代用决定。在这份协议的第 9 行选择「字段或引文有异议」，填写依据后点「记录字段异议」。重审后的付款检查会保留这行供人工核验。[已记录异议的水印底稿](http://127.0.0.1:8000/workpaper/c52a58afddba4bf180f5ea4b17bb2687?rev=5&view=payment-checks&stage=H05-8)
+
 ## 重建验收数字间距用例
 
 先下载水印母本，再从仓库根目录运行下列命令。生成四组各 4 份 PDF 和 1 份 Word 合同审批单。四组分别改变实测值、合同上限、验收单所引上限或数字与单位间的空白。[母本证据包](http://127.0.0.1:8000/api/cases/64cd9e64345841bab358728a6730f3d8/reports/7/bundle)

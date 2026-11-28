@@ -1,5 +1,13 @@
 # 本机审计接口
 
+## 代用批准文件的签署异议
+
+规则 `2026.11.28.19` 使用 `inspection-coverage-v6`。在本来可作日期核对的设备代用案中，如果对本份补充协议的状态、采购方或供应方签章仍有字段异议，相关 H02、验收期 H04 和成功实付 H05 改记 `substitution_review`。其中 `unit`、`condition` 和 `decision` 分别指向协议、合同前提和协议决定。每项 `objections[]` 的 `field` 是被质疑的栏位，`ref` 指向实际被标记为 `disputed` 的观察。模型把签章抄成用印名称或其他字段时，有准确行号和原文也能关联到该栏。无法定位的争议摘录可按本份协议的具名字段保留待核。
+
+图谱关系 `disputes_substitution_filing` 从异议观察指向决定行，依据依次为观察、合同条款和决定。专家输入和可下载底稿都保留这条关系所据的发现与观察。该版的对照页优先展示异议字段，历史版仍可按出具时的规则复算。签收第 18 版规则生成的底稿时，如果原日期核对依赖该版已有异议的签章或协议状态，会要求重审。[R5 接口样本](http://127.0.0.1:8000/api/cases/c52a58afddba4bf180f5ea4b17bb2687/reports/5/comparison/4)
+
+走查位置如 `serial-H05-8-dispute-d05-p1-f8`，对应第二期实付所引协议的异议观察。保存时按工作区、底稿版本、所选程序和观察核验。原页可通过该版的 `fact=d05/p1/f8` 打开。[手机走查实例](interaction-design/verification.md#从验收款走查有异议的签章)
+
 ## 设备代用决定与履约日期
 
 规则 `2026.11.28.18` 使用 `inspection-coverage-v5`。有原件支持时，H02、相关 H04 与 H05 的 `substitution_dates` 记录原约定和决定行引用 `condition`、`decision`，批准文件 `unit`、具名方 `issuer`、设备 `original` 与 `replacement`、决定记载日 `stated_on`。被比较的事件为 `event=acceptance|payment`，所据字段为 `date_ref`，其日期为 `event_on`。`days` 等于事件日减记载日，`order` 为 `before|same_day|after`。由核字记录归类的回单用途另有 `designation_refs`，保留原摘录及人工字段两处引用。

@@ -9,13 +9,13 @@ from advance_guarantee import rectangles
 from inspection_coverage import split
 from installment_approval import printed_date
 from performance import DATE_LABELS
-from substitution_dates import CLAUSES, DECISIONS, INDICATION, PRIOR, RELATION
+from substitution_dates import CLAUSES, DECISIONS, INDICATION, PRIOR, RELATION, filing_objections
 from warranty_dates import RECEIPT, read_date
 
 
 RULES = {"H01", "H02", "H03", "H04", "H05", "H06", "H07"}
 SHA256 = re.compile(r"[a-f0-9]{64}")
-DATED_REGISTER = "inspection-coverage-v5"
+DATED_REGISTERS = ("inspection-coverage-v5","inspection-coverage-v6")
 PRIORITY = {
     "H01": ("effect_clause", "buyer_signature", "seller_signature", "effect_on"),
     "H02": ("acceptance_result", "measured_result", "acceptance_signer", "accepted_on"),
@@ -128,8 +128,8 @@ class IssuedFindings:
     def approval_evidence(self, finding, originals):
         edition = self.policy.get("inspection_coverage")
         methods = self.policy.get("code_sha256") or {}
-        if (finding["rule"] not in ("H02", "H04", "H05") or not finding.get("delivery_register")
-                or edition not in ("inspection-coverage-v4", DATED_REGISTER) or self.register.get("format") != edition
+        if (finding["rule"] not in ("H02", "H04", "H05") or not finding.get("delivery_register") or finding.get("substitution_review")
+                or edition not in ("inspection-coverage-v4", *DATED_REGISTERS) or self.register.get("format") != edition
                 or self.register.get("purpose") != "delivery_register" or not SHA256.fullmatch(methods.get("inspection_coverage.py") or "")):
             return None
         lines, keys = {}, {}
@@ -146,6 +146,11 @@ class IssuedFindings:
             keys[slot], lines[slot] = source
         if lines.keys() != {"condition","decision"}:
             return None
+        if edition=="inspection-coverage-v6":
+            unit = lines["decision"]["doc"]
+            filed = [p["substitution_decision"] for p in self.register.get("pages",()) if p["unit"]==unit and p.get("substitution_decision")]
+            if len(filed)!=1 or filing_objections(self.facts.values(),unit,filed[0]):
+                return None
         units = set(finding["scope"]).intersection(self.kinds.get(role, ()))
         dates = [f for ref in dict.fromkeys(finding["evidence"]) if (f := self.facts.get(ref)) and f["field"] == field
                  and f.get("unit", f["doc"]) in units]
@@ -166,7 +171,7 @@ class IssuedFindings:
             heading, decision = split(lines["decision"]["text"])
             prior, stated = PRIOR.fullmatch(condition), INDICATION.fullmatch(decision)
             refs = tuple(lines[k]["ref"] for k in ("condition","decision","event"))
-            if (edition != DATED_REGISTER or not SHA256.fullmatch(methods.get("substitution_dates.py") or "") or not prior or not stated
+            if (edition not in DATED_REGISTERS or not SHA256.fullmatch(methods.get("substitution_dates.py") or "") or not prior or not stated
                     or label not in CLAUSES or heading not in DECISIONS
                     or record.get("event") != event or record.get("event_on") != business_day["iso"]
                     or (record.get("condition"),record.get("decision"),record.get("date_ref")) != refs
@@ -272,11 +277,14 @@ def side(item, other):
     stage = f.get("stage") or {}
     comparison = (f.get("warranty_payment") or {}).get("comparison") or {}
     preferred = [ref for ref in (comparison.get("stated_ref"), (comparison.get("bank") or {}).get("ref"), stage.get("clause_ref")) if ref]
+    filing = f.get("substitution_review") or {}
     fields = PRIORITY[f["rule"]]
     board = f.get("effect_review", {}).get("board_decision")
     quality = f.get("payment_quality", {}).get("fields", {})
     retest = f.get("retest_reference", {}).get("fields", {})
-    if retest:
+    if filing:
+        preferred = [o["ref"] for o in filing["objections"] if o["ref"] in item["originals"] and item["originals"][o["ref"]][1]["status"]=="disputed"] + preferred
+    elif retest:
         preferred = [retest[k] for k in ("citation","original_acceptance_number","final_acceptance_number","paid_on","clause") if k in retest]
     elif quality:
         preferred = [quality[key] for key in ("acceptance_criteria","measured_result","accepted_on","paid_on","clause") if key in quality]

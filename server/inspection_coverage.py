@@ -11,13 +11,14 @@ NAMED_FORMAT = "inspection-coverage-v2"
 REGISTER_FORMAT = "inspection-coverage-v3"
 SUBSTITUTION_FORMAT = "inspection-coverage-v4"
 FORMAT = substitution_dates.FORMAT
-QUALIFIED_FORMATS = (SUBSTITUTION_FORMAT, FORMAT)
+QUALIFIED_FORMATS = (SUBSTITUTION_FORMAT, *substitution_dates.DATED_FORMATS)
 REGISTER_FORMATS = (REGISTER_FORMAT, *QUALIFIED_FORMATS)
 SINCE = "2026.11.26.04"
 NAMED_SINCE = "2026.11.26.19"
 REGISTER_SINCE = "2026.11.28.16"
 SUBSTITUTION_SINCE = "2026.11.28.17"
 DECISION_SINCE = "2026.11.28.18"
+REVIEW_SINCE = "2026.11.28.19"
 REGISTER = "delivery_register"
 RECTS = "delivery_register_rects"
 NAMED = "inspection_required_serials"
@@ -126,9 +127,9 @@ def sources(graph, read_text, *, version=FORMAT):
             if not isinstance(text,str) or hashlib.sha256(text.encode()).hexdigest()!=node.get("text_sha256"):
                 raise ValueError("逐台检验所据的原页文字摘要不符")
             lines = text.splitlines()
-            if version==FORMAT and roles[unit]=="contract_addendum" and (filed:=substitution_dates.form(lines)):
+            if version in substitution_dates.DATED_FORMATS and roles[unit]=="contract_addendum" and (filed:=substitution_dates.form(lines)):
                 pages[-1]["substitution_decision"] = filed
-            if version==FORMAT and any(re.search(r"追溯|追认|豁免|免予|事后补批|撤销|无需.{0,8}批准",s) for s in lines):
+            if version in substitution_dates.DATED_FORMATS and any(re.search(r"追溯|追认|豁免|免予|事后补批|撤销|无需.{0,8}批准",s) for s in lines):
                 pages[-1]["substitution_qualification"] = True
         printed = set(lines)
         located = defaultdict(list)
@@ -141,7 +142,7 @@ def sources(graph, read_text, *, version=FORMAT):
                 located[source["number"],source["text"]].append(fact)
             kind = classify(fact["quote"],fact["field"],version=version)
             rendered = same_line and (equivalent_quote(raw_source)==equivalent_quote(fact["quote"]) or
-                                      version==FORMAT and kind in ("ordered_serials","population") and same_serial_list(raw_source,fact["quote"]))
+                                      version in substitution_dates.DATED_FORMATS and kind in ("ordered_serials","population") and same_serial_list(raw_source,fact["quote"]))
             if kind and ((fact["quote"] not in printed and not rendered) or not classify(fact["quote"],version=version) or
                          (fact["status"]=="disputed" and not same_line)):
                 rows.append({**place,"id":"inspection-line/"+fact["id"],"line":None,"kind":kind,
@@ -481,23 +482,42 @@ def verify(report,read_text,*,signing=False,read_original=None,read_layout=None)
     if not marker:
         if (policy.get("version","")>=SINCE or "inspection_coverage.py" in policy.get("code_sha256",{}) or
                 "inspection_coverage_sources" in graph or nodes or edges or any(
-                    "inspection_coverage" in f or "substitution_dates" in f for f in report["findings"])):
+                    "inspection_coverage" in f or "substitution_dates" in f or "substitution_review" in f for f in report["findings"])):
             raise ValueError("逐台检验依据的程序标记缺失")
         if signing:
             check_legacy_approval(report,read_text)
         return
     version = policy.get("version","")
-    expected = FORMAT if version >= DECISION_SINCE else SUBSTITUTION_FORMAT if version >= SUBSTITUTION_SINCE else REGISTER_FORMAT if version >= REGISTER_SINCE else NAMED_FORMAT if version >= NAMED_SINCE else LEGACY
+    releases = ((REVIEW_SINCE, FORMAT), (DECISION_SINCE, substitution_dates.DATED_FORMAT), (SUBSTITUTION_SINCE, SUBSTITUTION_FORMAT),
+                (REGISTER_SINCE, REGISTER_FORMAT), (NAMED_SINCE, NAMED_FORMAT))
+    expected = next((fmt for since,fmt in releases if version>=since), LEGACY)
     if marker != expected:
         raise ValueError("逐台检验的程序版本标记与出具版本不符")
-    if ("code_sha256" in policy and marker==FORMAT and "substitution_dates.py" not in policy["code_sha256"] or
-            marker!=FORMAT and any(f.get("substitution_dates") for f in report["findings"])):
+    if ("code_sha256" in policy and marker in substitution_dates.DATED_FORMATS and "substitution_dates.py" not in policy["code_sha256"] or
+            marker not in substitution_dates.DATED_FORMATS and any(f.get("substitution_dates") for f in report["findings"]) or
+            marker!=FORMAT and any("substitution_review" in f for f in report["findings"])):
         raise ValueError("代用批准日期程序与出具版本不符")
     ledger = sources(graph,read_text,version=marker)
     if graph.get("inspection_coverage_sources")!=ledger or (nodes,edges)!=source_graph(ledger):
         raise ValueError("逐台检验或抽检所据的原页、设备记录与归档不符")
-    if [e for e in graph["edges"] if e["type"]==substitution_dates.RELATION]!=substitution_dates.edges(report["findings"]):
+    if [e for e in graph["edges"] if e["type"] in (substitution_dates.RELATION,substitution_dates.OBJECTION)]!=substitution_dates.edges(report["findings"]):
         raise ValueError("代用决定与验收、回单日期的引证关系不符")
+    filings = {p["unit"]:p["substitution_decision"] for p in ledger["pages"] if p.get("substitution_decision")}
+    challenged_refs = set()
+    for f in report["findings"]:
+        dated, review = f.get("substitution_dates"), f.get("substitution_review")
+        if not (dated or review):
+            continue
+        form = (dated or review)["unit"]
+        objections = substitution_dates.filing_objections(graph["facts"], form, filings[form]) if form in filings else []
+        if marker==substitution_dates.DATED_FORMAT and signing and objections:
+            raise ValueError("旧版日期核对所据的补充协议状态或签章已有核字异议，请重审后签收。")
+        if marker==FORMAT:
+            refs = {o["ref"] for o in objections}
+            if (form not in filings or review and (not refs or review.get("objections")!=objections or not refs.issubset(f["evidence"]))
+                    or dated and objections or dated and review):
+                raise ValueError("代用批准所据的状态、签章及当版核字异议不符")
+            challenged_refs.update(refs)
     if signing and marker == LEGACY:
         check_legacy_approval(report,read_text,ledger)
     if signing and marker != FORMAT and any(f["rule"]=="H02" for f in report["findings"]):
@@ -517,9 +537,10 @@ def verify(report,read_text,*,signing=False,read_original=None,read_layout=None)
                 raise ValueError("旧版验收未核实合同指定设备与终验编号清单，请重审后签收。")
     rows = register_rows(graph)
     dated = [f for f in report["findings"] if f.get("substitution_dates")]
-    if dated and read_layout:
+    if (dated or challenged_refs) and read_layout:
         from retest_reference import verify_positions
-        verify_positions(graph,[{"evidence":[f["substitution_dates"]["date_ref"]]} for f in dated],read_layout,"设备代用决定与日期")
+        refs = [f["substitution_dates"]["date_ref"] for f in dated]
+        verify_positions(graph,[{"evidence":[*refs,*challenged_refs]}],read_layout,"设备代用决定、签章异议与日期")
     if marker in REGISTER_FORMATS:
         expert = report.get("calls",{}).get("expert",{})
         if "input" in expert or expert.get("request_format"):
@@ -531,6 +552,9 @@ def verify(report,read_text,*,signing=False,read_original=None,read_layout=None)
             if [(f["rule"],f["substitution_dates"]) for f in packet.get("procedures",()) if "substitution_dates" in f] != [
                     (f["rule"],f["substitution_dates"]) for f in report["findings"] if "substitution_dates" in f]:
                 raise ValueError("专家输入未保留所记代用批准日与验收或回单日期的依据")
+            if [(f["rule"],f["substitution_review"]) for f in packet.get("procedures",()) if "substitution_review" in f] != [
+                    (f["rule"],f["substitution_review"]) for f in report["findings"] if "substitution_review" in f]:
+                raise ValueError("专家输入未保留代用批准所据的签章异议")
     calls = report.get("calls",{}).get("pages",())
     if calls or policy.get("archived_methods"):
         from contract_folios import line_numbers, verify_page_geometry

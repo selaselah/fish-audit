@@ -49,16 +49,76 @@ def summary(paper):
     return acceptance,phases,next(f for f in findings if f["rule"]=="H05")
 
 
-def dated(day=22, *, decision=None, state="已签署", more=(), edit=None, order="QC-002、QC-009", contract_note=None):
+def dated(day=22, *, decision=None, state="已签署", more=(), edit=None, order="QC-002、QC-009", contract_note=None, attestations=None):
     permit=contract_note or "供货约定：经采购方事先书面批准，可用QC-009代替QC-001。"
     filed=decision or f"演练甲于2026年9月{day}日同意以QC-009代替QC-001。"
     change=[("contract_addendum","","采购合同补充协议"),("base_contract_ref","原合同编号","YL-121"),
             ("addendum_number","补充协议编号","BC-121"),*CONTRACT[2:5],("change_state","补充协议状态",state),
             *CONTRACT[8:10],("other","代用决定",filed)]
-    return example(order,extra=[(1,permit),*more],supplement=change,edit=edit)
+    return example(order,extra=[(1,permit),*more],supplement=change,edit=edit,attestations=attestations)
 
 
 class DeliveryRegisterTests(unittest.TestCase):
+    def test_objections_to_the_filed_status_or_seals_hold_only_the_affected_installment(self):
+        baseline,_=dated()
+        fields = {f["field"]:f["id"] for f in baseline["graph"]["facts"] if f["doc"]=="d05"}
+        for names in (("change_state",),("buyer_signature",),("seller_signature",),("buyer_signature","seller_signature")):
+            with self.subTest(names=names):
+                challenged = {fields[k]:{"decision":"dispute","note":"请核签署原件"} for k in names}
+                paper,read = dated(attestations=challenged)
+                acceptance, stages, paid = summary(paper)
+                expected = [{"field":k,"ref":fields[k]} for k in names]
+                for f in (acceptance,stages[1],paid):
+                    self.assertEqual(f["substitution_review"]["objections"],expected)
+                    self.assertNotIn("substitution_dates",f)
+                    self.assertEqual(f["status"],"missing")
+                    self.assertTrue(set(challenged).issubset(f["evidence"]))
+                self.assertFalse(any("substitution_review" in f for f in (stages[0],stages[2])))
+                edges = substitution_dates.edges(paper["findings"])
+                self.assertEqual([(e["type"],e["from"]) for e in edges],[(substitution_dates.OBJECTION,ref) for ref in challenged])
+                paper["graph"]["edges"].extend(edges)
+                inspection.verify(paper,read,signing=True)
+                verify_findings(paper)
+                with patch("model.structured",return_value=({"followups":[]},{})):
+                    _,expert=audit_graph(paper["graph"],paper["findings"])
+                paper["calls"]={"expert":expert}
+                inspection.verify(paper,read)
+                next(p for p in expert["input"]["procedures"] if p.get("substitution_review")).pop("substitution_review")
+                with self.assertRaisesRegex(ValueError,"专家输入"): inspection.verify(paper,read)
+        # A challenge on the contract's seal is a separate signing issue on H01.
+        paper,_=dated(attestations={"d01/p1/f9":{"decision":"dispute"}})
+        self.assertIn("substitution_dates",summary(paper)[2])
+
+    def test_the_physical_filing_line_identifies_a_dispute_even_if_the_model_used_another_field(self):
+        p,_=dated()
+        graph=p["graph"]
+        filed=next(page["substitution_decision"] for page in graph["inspection_coverage_sources"]["pages"] if page.get("substitution_decision"))
+        buyer=next(f for f in graph["facts"] if f["doc"]=="d05" and f["field"]=="buyer_signature")
+        disputed={**buyer,"status":"disputed"}
+        expected=[{"field":"buyer_signature","ref":buyer["id"]}]
+        for f in ({**disputed,"field":"other"},{**disputed,"field":"buyer_seal_name"},
+                  {**disputed,"field":"buyer_seal_name","quote":"采购方用印待核","source_line":None}):
+            self.assertEqual(substitution_dates.filing_objections([f],"d05",filed),expected)
+        for f in (buyer,{**disputed,"doc":"d01"},{**disputed,"page":2},
+                  {**disputed,"source_line":{"number":7,"text":"采购标的：冷藏柜"}}):
+            self.assertEqual(substitution_dates.filing_objections([f],"d05",filed),[])
+
+    def test_historical_dated_review_remains_replayable_but_affected_signoff_requires_reaudit(self):
+        for challenged in (True,False):
+            paper,read=dated(attestations={"d05/p1/f8":{"decision":"dispute"}} if challenged else None)
+            graph=paper["graph"]
+            marker=substitution_dates.DATED_FORMAT
+            graph["inspection_coverage_sources"]=inspection.sources(graph,read,version=marker)
+            paper["policy"].update(version=inspection.DECISION_SINCE,inspection_coverage=marker)
+            paper["findings"]=execute(graph,PERFORMANCE)
+            graph["edges"].extend(substitution_dates.edges(paper["findings"]))
+            self.assertIn("substitution_dates",summary(paper)[2])
+            inspection.verify(paper,read)
+            if challenged:
+                with self.assertRaisesRegex(ValueError,"核字异议.*重审"): inspection.verify(paper,read,signing=True)
+            else:
+                inspection.verify(paper,read,signing=True)
+
     def test_filed_decision_dates_attach_to_the_actual_acceptance_installment(self):
         for day,days in ((19,(1,2)),(20,(0,1)),(21,(-1,0)),(22,(-2,-1))):
             paper,read=dated(day)
