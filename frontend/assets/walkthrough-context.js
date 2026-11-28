@@ -12,7 +12,7 @@ const identifier = /^[a-zA-Z][a-zA-Z0-9_-]{0,95}$/;
 const factID = /^d\d{2}\/p[1-9]\d*\/(?:[ft][1-9]\d*|h[a-f0-9]{12})$/;
 function printedRef(context, ref) {
   const address=context.doc+'/p'+context.page+'/l'+context.line;
-  return context.rev && ['inspection-use/','payment-approval/','payment-clock/','contract-approver/','approval-change/','installment-count/','measurement-note/'].some(prefix=>ref===prefix+address);
+  return context.rev && ['inspection-use/','payment-approval/','payment-clock/','contract-approver/','approval-change/','installment-count/','measurement-note/','contract-signing-form/'].some(prefix=>ref===prefix+address);
 }
 function knownParams(search, keys) {
   const out = {};
@@ -75,7 +75,7 @@ export function captureContext(owner, element, pagePoint) {
         if (stage && /^H04-[1-9]\d*$/.test(stage)) context.params = {view:'payment-release',stage};
         const instrument=element?.closest('[data-release-set] [data-instrument]');
         if (instrument) context.params={view:'payment-release',stage:instrument.parentElement.dataset.releaseSet,instrument:instrument.dataset.instrument};
-        const receiptSelector='[data-quality-finding],[data-retest-finding],[data-use-finding]';
+        const receiptSelector='[data-quality-finding],[data-retest-finding],[data-use-finding],#performance-index [data-form-finding]';
         const receiptCard=element?.closest(receiptSelector+',[data-count-finding]') || (!element && owner?.id==='performance-index' &&
           (owner.querySelector(receiptSelector) || owner.querySelector('[data-count-finding]')));
         const certificate=element?.closest('.warranty-certificate')?.closest('[data-phase-finding]')?.dataset.phaseFinding;
@@ -90,9 +90,10 @@ export function captureContext(owner, element, pagePoint) {
         if (comparison && !comparison.hidden && comparison.dataset.entry)
           context.params={view:'revision-comparison',prior:comparison.dataset.prior,entry:comparison.dataset.entry};
         if (receiptCard) {
-          context.params={view:'payment-checks',stage:receiptCard.dataset.countFinding || receiptCard.dataset.useFinding || receiptCard.dataset.qualityFinding || receiptCard.dataset.retestFinding};
+          context.params={view:'payment-checks',stage:receiptCard.dataset.countFinding || receiptCard.dataset.useFinding || receiptCard.dataset.qualityFinding || receiptCard.dataset.retestFinding || receiptCard.dataset.formFinding};
           if (!element) {context.anchor=receiptCard.id;context.target=receiptCard.getAttribute('aria-label') || receiptCard.dataset.originalLabel;}
         }
+        if (element?.closest('[data-form-finding^="H01-"]')) context.params={view:'contract-signing-form'};
       }
       if (owner?.id === 'page-dialog') {
         const page = document.querySelector('#page-content .page-view');
@@ -162,7 +163,10 @@ export function describeContext(c) {
   const screen = c.screen==='case' ? screens.case+' '+c.case_id.slice(0,8) : screens[c.screen];
   const edition=c.params?.view==='revision-comparison' ? '履约对照 R'+c.params.prior+' / R'+c.rev : c.rev && 'R'+c.rev;
   const board=c.params?.view==='board-decision' && ({decision:'董事会决议原文',signing:'董事会签发版本',payments:'董事会决议关联期款'}[c.params.part] || '董事会审批原件');
+  const signing=c.raw_ref?.startsWith('contract-signing-form/') ? '合同签署原行' : c.params?.view==='contract-signing-form' && '合同签署条件';
   const receipt=c.params?.view==='payment-checks' && (c.anchor?.startsWith('payment-approval-')?'付款审批单 '+c.params.stage:
+    c.anchor?.startsWith('form-H04-')?'期款条件 '+c.params.stage:
+    c.anchor?.startsWith('form-H05-')?'实付回单 '+c.params.stage:
     c.anchor?.startsWith('contract-approver-')?'合同签批人 '+c.params.stage:
     c.anchor?.startsWith('installment-count-')?'合同分期总述 '+c.params.stage:
     c.anchor?.startsWith('payment-clock-')?'银行回单时刻 '+c.params.stage:
@@ -170,7 +174,7 @@ export function describeContext(c) {
     c.anchor?.startsWith('retest-')?'复验回单核对 '+c.params.stage:
     c.anchor?.startsWith('quality-') && '验收款核对 '+c.params.stage);
   const limits=c.params?.view==='acceptance-limits' && '验收限值对照';
-  return [screen, c.example || sections[c.section], edition, caseTabs[c.tab], board, receipt, limits, dialogs[c.dialog],
+  return [screen, c.example || sections[c.section], edition, caseTabs[c.tab], board, receipt, signing, limits, dialogs[c.dialog],
     c.doc && (c.doc+' · 第 '+c.page+' 页'), c.line && '第 '+c.line+' 行', c.target, c.page_point && pointLabel(c.page_point)].filter(Boolean).join(' › ');
 }
 export function returnUrl(c, workspace) {

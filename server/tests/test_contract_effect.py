@@ -1,10 +1,11 @@
 import copy
 import unittest
 
-from contract_effect import LEGACY, SEAL_FORMAT, sources, verify
+from contract_effect import FORM_RECTS, LEGACY, SEAL_FORMAT, form_rows, signing_form, sources, verify
 from controls import VERSION, execute
 from performance import BATCH_FORMAT, compute, verify_findings
 from test_performance import APPROVAL, BANK_DOC, CONTRACT, RECEIPT, WARRANTY, material
+from signing_parties import CALENDAR_FORMAT
 
 
 RIDER="附加生效条件：本合同须取得主管机构书面批准后方可生效"
@@ -13,6 +14,86 @@ BOARD_NOTE="决议附注：仅批准谈判，签约须另行表决"
 
 
 class ContractEffectTests(unittest.TestCase):
+    def test_separate_contract_signature_and_seal_requirement_reaches_the_advance(self):
+        rider="合同签署要求：本合同须经双方法定代表人签字并加盖公章"
+        for board in (False,True):
+            for transcribed in (False,True):
+                contract=CONTRACT+[("other",*rider.split("：",1))] if transcribed else CONTRACT
+                docs=[contract,*([APPROVAL] if board else []),RECEIPT,WARRANTY,BANK_DOC]
+                def edit(i,field,label,value):
+                    if field=="effect_clause" and board: return BOARD_CLAUSE
+                    return "第一期" if field=="payment_designation" else value
+                graph=material(docs,edit,omissions=[] if transcribed else [(1,rider)])
+                findings=compute(graph)
+                h01,h02,h03=findings[:3]
+                row,=form_rows(h01["effect_review"])
+                self.assertEqual((row["form"],row["quote"],row["doc"],row["page"],row["line"]),("joint",rider,"d01",1,len(CONTRACT)+1))
+                self.assertEqual(bool(row["facts"]),transcribed)
+                self.assertEqual((h01["status"],h02["status"],h03["status"]),("missing","ok","ok"))
+                phases=[f for f in findings if f["rule"] in ("H04","H05")]
+                self.assertTrue(all(f["status"]=="missing" and row["id"] in f["evidence"] for f in phases))
+                advance=[f for f in phases if f["stage"]["name"]=="第一期"]
+                self.assertEqual(len(advance),2)
+                self.assertTrue(all("第 1 页第 17 行" in f["detail"] for f in advance))
+                edge,=(e for e in graph["edges"] if e["type"]=="contract_signing_requirement_source")
+                self.assertEqual((edge["from"],edge["to"],edge["evidence"]),("d01/p1",row["id"],["d01/p1",*row["facts"]]))
+                if board:
+                    self.assertIn("d02/p1",h01["evidence"])
+        failure=compute(material([CONTRACT,RECEIPT,WARRANTY,BANK_DOC],
+            lambda i,k,l,v:"未通过" if k=="acceptance_result" else v,omissions=[(1,rider)]))
+        self.assertEqual((failure[0]["status"],failure[1]["status"]),("missing","issue"))
+
+    def test_execution_form_respects_alternatives_other_documents_and_exceptions(self):
+        for raw in ("合同签署要求：本合同由双方签字或盖章","生效条款：本合同自双方签字或盖章后生效",
+                    "验收单签署要求：验收单须经双方代表签字并加盖公章",
+                    "签署要求：付款申请须经双方代表签字并加盖公章","甲方签章：演练甲（已盖章）"):
+            self.assertIsNone(signing_form(raw),raw)
+            self.assertEqual(compute(material([CONTRACT,RECEIPT,BANK_DOC],omissions=[(1,raw)]))[0]["effect_review"]["conditions"],
+                             [] if "生效条款" not in raw else [{"unit":"d01","doc":"d01","page":1,"line":len(CONTRACT)+1,"quote":raw,"facts":[]}])
+        for raw in ("签署方式：本合同须加盖双方公章，并由双方法定代表人签字",
+                    "合同签署要求：甲方法定代表人须签字并盖章，验收单另行会签",
+                    "第十二条 本合同须经双方代表签字并盖章","甲方签署要求：法定代表人亲笔签字并加盖公章"):
+            self.assertEqual(signing_form(raw),"joint",raw)
+        for raw in ("签署方式：本合同可不由法定代表人签字并盖章","签署要求：须签字并盖章；经双方同意可免予盖章",
+                    "签署方式：由授权代表亲笔签字","合同签署要求：本合同由法定代表人签字或盖章"):
+            self.assertEqual(signing_form(raw),"review",raw)
+        graph=material([CONTRACT,RECEIPT,BANK_DOC],omissions=[(2,"签署要求：本合同须经双方签字并盖章")])
+        self.assertFalse(form_rows(graph["contract_effect_sources"]))
+
+    def test_form_rows_replay_and_signoff_bind_the_issued_line(self):
+        rider="签署方式：本合同须加盖双方公章，并由双方法定代表人签字"
+        graph=material([CONTRACT,RECEIPT,BANK_DOC],omissions=[(1,rider)])
+        def read(doc,page):
+            lines=[f["quote"] for f in graph["facts"] if f["doc"]==doc]
+            return "\n".join([*lines,rider] if doc=="d01" else lines)
+        row,=form_rows(graph["contract_effect_sources"])
+        line=str(row["line"])
+        box=[[0,.1,.9,.2]]
+        paper={"graph":graph,"policy":VERSION,"findings":execute(graph,graph["profile"]),
+               "calls":{"pages":[{"doc":"d01","page":1,"page_sha256":"page",FORM_RECTS:{line:box}}]}}
+        verify(paper,read,signing=True,read_layout=lambda d,p:{"lines":{line:box}})
+        with self.assertRaisesRegex(ValueError,"定位"):
+            verify(paper,read,signing=True,read_layout=lambda d,p:{"lines":{line:[[.2,.2,.8,.8]]}})
+        for mutation in ("edge","row","finding","trace"):
+            changed=copy.deepcopy(paper)
+            if mutation=="edge":
+                next(e for e in changed["graph"]["edges"] if e["type"]=="contract_signing_requirement_source")["from"]="d02/p1"
+            elif mutation=="row":
+                form_rows(changed["graph"]["contract_effect_sources"])[0]["line"]+=1
+            elif mutation=="finding":
+                next(f for f in changed["findings"] if f["rule"]=="H01")["status"]="ok"
+            else:
+                changed["calls"]["pages"][0].pop(FORM_RECTS)
+            with self.assertRaises(ValueError): verify(changed,read)
+        graph["contract_effect_sources"]=sources(graph,read,CALENDAR_FORMAT)
+        graph["nodes"]=[n for n in graph["nodes"] if n["type"]!="contract_signing_requirement"]
+        graph["edges"]=[e for e in graph["edges"] if e["type"]!="contract_signing_requirement_source"]
+        old={"graph":graph,"policy":{**VERSION,"version":"2026.11.28.11","contract_effect":CALENDAR_FORMAT},
+             "findings":compute(graph)}
+        self.assertEqual(old["findings"][0]["status"],"ok")
+        verify(old,read)
+        with self.assertRaisesRegex(ValueError,"重审"): verify(old,read,signing=True)
+
     def test_board_rider_with_and_without_extracted_fact_holds_each_installment(self):
         for extracted in (True,False):
             approval=[*APPROVAL,("other","决议附注","仅批准谈判，签约须另行表决")] if extracted else APPROVAL

@@ -1,5 +1,13 @@
 # 本机审计接口
 
+## 合同另列的签署条件
+
+规则 `2026.11.28.12` 使用 `policy.contract_effect = contract-effect-sources-v8`。H01 的 `effect_review.conditions[]` 在可核原页上记录 `kind=signing_form`。每行包含 `unit`、`doc`、`page`、`line`、`quote`、`facts` 和 `id`。明确同时要求签字和盖章时 `form=joint`，含例外、特定签字人等仍待解释的行使用 `form=review`。模型漏提取某行时，原文取自该版原页，`facts` 可为空。
+
+图节点 `contract-signing-form/d03/p1/l19` 是一个例子。物理页通过 `contract_signing_requirement_source` 指向该节点，`calls.pages[].contract_signing_form_rects` 按行号保存坐标。H01 和实际引用该条款的 H04、H05 在 `evidence` 中列出节点编号。签收和离线校验会从归档原件重现所引页，并核对页文、行框及图谱关系。
+
+固定版入口 `/workpaper/{case}?rev={rev}&view=contract-signing-form` 在合同签署条件处打开底稿。产品走查可绑定 H01 的签署控件、H04/H05 所选期款的控件，或资料原页的 `raw_ref`。保存时核对案件、版本、所引行和期款。企业地址沿用 `/w/{wid}/workpaper/{case}`。[站内走查操作](interaction-design/README.md#在页面上记录走查意见)
+
 ## 含端点限值所引的精度说明
 
 规则 `2026.11.28.11` 使用 `policy.payment_quality = acceptance-quality-payment-v4`。合同或验收原页上适用的取整、允差等说明可使含端点限值的 `result` 成为 `reading_required`。相同限值也可产生这项对照。此时 `observed` 保存文件登记的读数，每侧保留原限值和比较符。偏离量仅在能够确定越界时出具。

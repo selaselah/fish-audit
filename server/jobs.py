@@ -11,6 +11,7 @@ from delivery_batches import HINT as BATCH_HINT
 from contract_changes import LABELS as ADDENDUM_FIELDS, SIGNAL as CHANGE_MENTION
 from documents import digest, prepare
 import contract_folios
+import contract_effect
 import signer_clock
 import payment_execution
 import advance_guarantee
@@ -194,8 +195,11 @@ class Worker:
         use_lines = contract_folios.line_numbers(inspection_use.all_rows(graph[inspection_use.KEY]))
         count_lines = contract_folios.line_numbers(graph.get(installment_counts.KEY, {}).get("rows", []))
         precision_lines = contract_folios.line_numbers(payment_quality.reading_notes(findings))
+        form_lines = contract_folios.line_numbers(contract_effect.form_rows(graph["contract_effect_sources"]))
         execution_lines = contract_folios.line_numbers(graph[payment_execution.KEY]["rows"])
         for page, call in zip(pages, traces):
+            if numbers := form_lines.get((page["doc"],page["number"])):
+                call[contract_effect.FORM_RECTS] = contract_folios.geometry(numbers,page["layer"])
             if numbers := precision_lines.get((page["doc"],page["number"])):
                 call[payment_quality.RECTS] = contract_folios.geometry(numbers,page["layer"])
             if numbers := count_lines.get((page["doc"],page["number"])):

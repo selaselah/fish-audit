@@ -77,7 +77,7 @@ const ContractCalendar = (() => {
     if (!report) return [];
     if (!papers.has(report)) {
       const h01=report.findings.find(f=>f.rule==='H01');
-      const groups=h01?.effect_review?.calendar && report.graph.contract_effect_sources?.format==='contract-effect-sources-v7'
+      const groups=h01?.effect_review?.calendar && ['contract-effect-sources-v7','contract-effect-sources-v8'].includes(report.graph.contract_effect_sources?.format)
         ? resolve(h01,report.graph,report.calls.pages) : null;
       papers.set(report,(groups || []).flatMap(g=>g.readings));
     }
@@ -98,7 +98,7 @@ const ContractCalendar = (() => {
   }
 
   function panel(finding,graph,findings,calls) {
-    if (!finding?.effect_review?.calendar?.length || graph.contract_effect_sources?.format!=='contract-effect-sources-v7') return null;
+    if (!finding?.effect_review?.calendar?.length || !['contract-effect-sources-v7','contract-effect-sources-v8'].includes(graph.contract_effect_sources?.format)) return null;
     const groups=resolve(finding,graph,calls);
     if (!groups) return el('p','合同日期依据待核','small');
     const index=graphIndex(graph);

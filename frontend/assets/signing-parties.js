@@ -2,7 +2,7 @@
 const SigningParties = (() => {
   const sides = {buyer:'甲方', seller:'乙方', unspecified:'归属待核'};
   const roles = {party:'约定主体', signature:'签章栏', imprint:'印章单位'};
-  const imageFormats = new Set(['contract-effect-sources-v5','contract-effect-sources-v6','contract-effect-sources-v7']);
+  const imageFormats = new Set(['contract-effect-sources-v5','contract-effect-sources-v6','contract-effect-sources-v7','contract-effect-sources-v8']);
   const formats = new Set(['contract-effect-sources-v4',...imageFormats]);
   const pending = {
     multiple:'同一方有多处记载', partial:'单位名称不完整', side:'印章归属待核',

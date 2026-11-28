@@ -215,7 +215,8 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
   const registerRefs=ReinspectionTrail.pageReferences(paper?.findings.find(f=>f.rule==='H02'),paper?.graph,docId,pageNumber);
   const timingRows=ReinspectionTiming.pageReferences(paper?.findings.find(f=>f.rule==='H02'),paper?.graph,docId,pageNumber);
   const useRefs=InspectionUse.pageReferences(paper,docId,pageNumber);
-  const otherRefs = [...(printedSource?[printedSource]:[]), ...PaymentQuality.pageReferences(paper,docId,pageNumber), ...InstallmentCount.pageReferences(paper,docId,pageNumber), ...useRefs, ...registerRefs, ...boardRefs, ...repairRefs, ...PhaseEvidence.pageReferences(paper?.graph,docId,pageNumber,pageFacts,lineHint,paper?.calls.pages)];
+  const signingRefs=contractSigningSources(paper).filter(s=>s.doc.id===docId && s.page===pageNumber);
+  const otherRefs = [...(printedSource?[printedSource]:[]), ...signingRefs, ...PaymentQuality.pageReferences(paper,docId,pageNumber), ...InstallmentCount.pageReferences(paper,docId,pageNumber), ...useRefs, ...registerRefs, ...boardRefs, ...repairRefs, ...PhaseEvidence.pageReferences(paper?.graph,docId,pageNumber,pageFacts,lineHint,paper?.calls.pages)];
   const timingRefs=timingRows.filter(s=>!otherRefs.some(r=>r.rawLine===s.rawLine));
   const contractRefs=[...ContractFolios.pageReferences(docId,pageNumber),...ContractCalendar.pageReferences(docId,pageNumber)];
   const preferred=[...contractRefs,...otherRefs].find(r=>r.ref===rawRef);
@@ -582,7 +583,7 @@ function renderOriginalPage(item, pageNumber, {highlight,lineHint,registerPair,r
     const label = {inspection_reference:'设备检验原行',contract_signing_reference:'合同签章原行',payment_release_reference:'放行依据原行',acceptance_opinion_reference:'付款意见原行',payment_amendment_reference:'付款变更所据原行',invoice_receipt_reference:'收票条件所据原行',repair_completion_reference:'整改记录原行',equipment_model_reference:'设备型号核对原行',stage_transfer_reference:'分笔付款所据原行',receipt_page_reference:'验收合订件原行',addendum_reference:'补充协议所据原文',quantity_reference:'交付数量核对原文',signer_reference:'验收签认所据原文',delivery_batch_clause:'分批交付待核原文',effect_reference:'合同生效所据原文',approval_reference:'董事会审批记录原文',warranty_reference:'质保金所据原文',payment_window_reference:'付款时限所据原文',reservation_reference:'验收附注原文',supplier_reference:'供应方核对原文'}[gap.quality] || '待核的原文字层';
     const timingRow=timingRefs.find(r=>r.rawLine===gap.line);
     const raw = rawLines.find(source => source.rawLine === gap.line);
-    const heading=contractRefs.includes(raw) || ['acceptance_clock_source','signer_date_source','payment_execution_source','batch_stamp_source','advance_guarantee_source','warranty_date_source','inspection_use_source','installment_count_source'].includes(raw?.quality)
+    const heading=contractRefs.includes(raw) || ['acceptance_clock_source','signer_date_source','payment_execution_source','batch_stamp_source','advance_guarantee_source','warranty_date_source','inspection_use_source','installment_count_source','contract_form_source'].includes(raw?.quality)
       ? raw.label : timingRow?.label || (gap.quality==='register_reference'?'复验附注':gap.quality==='measurement_precision'?'测量精度说明':label);
     const quote=['batch_stamp_source','advance_guarantee_source','warranty_date_source','inspection_use_source'].includes(raw?.quality)?raw.quote:gap.quote;
     const section = box('evidence-row',el('h4',heading+' · 第 '+gap.line+' 行'),el('blockquote',quote));
@@ -705,6 +706,10 @@ function citation(ref,finding) {
     return Team.paperLink(label,prior.case_id,'button ref',new URLSearchParams({rev:String(prior.rev),fact:prior.fact}));
   }
   const source = index?.nodes.get(ref);
+  if (source?.type==='contract_signing_requirement') {
+    const row=contractSigningSources(state.bundle?.report,finding).find(s=>s.ref===ref);
+    return row?contractSigningButton(row):el('span','合同签署要求原行待核','small');
+  }
   if (ref.startsWith('party-line/') && state.bundle) return PartyReadings.citation(state.bundle.report,ref,finding);
   if (ref.startsWith('installment-count/') && state.bundle) return InstallmentCount.citation(state.bundle.report,ref,finding);
   if (ref.startsWith('acceptance-original/') && state.bundle) return PerformanceIndex.nativeReceiptCitation(state.bundle.report,ref,finding);
@@ -1625,6 +1630,12 @@ async function refresh() {
         state.tab=traced?'graph':'report'; focusFinding=traced?'#trace-select':'[data-finding="'+requestedFinding+'"]';
       } else if (requestedScope && state.openedCitation!==location.hash) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='[data-audit-scope="'+requestedScope.id+'"]';
+      } else if (requestedView==='contract-signing-form' && state.openedCitation!==location.hash && state.bundle) {
+        const signed=bundle.report.findings.find(f=>f.rule==='H01');
+        const controls=contractSigningSources(bundle.report,signed).map(s=>'form-'+signed.id+'-'+s.doc.id+'-p'+s.page+'-l'+s.rawLine);
+        const saved=new URLSearchParams(location.search).get('walkat');
+        state.openedCitation=location.hash; state.tab='report';
+        focusFinding=controls.length?'#'+(controls.includes(saved)?saved:controls[0]):signed?'[data-finding="'+signed.id+'"]':null;
       } else if (requestedView==='acceptance-limits' && state.openedCitation!==location.hash && state.bundle) {
         state.openedCitation=location.hash; state.tab='report'; focusFinding='[data-limit-finding]';
       } else if (requestedView==='revision-comparison' && state.openedCitation!==location.hash && state.bundle) {
@@ -1729,7 +1740,7 @@ async function refresh() {
           target.open=true;
           $('#trail-tab-final')?.click();
           revealPaperTarget($('#reinspection-wait'));
-        } else if (target?.dataset.finding || ['equipment-reinspection-trail','inspection-coverage','case-entity-browser','contract-pages','word-signatures','pdf-signatures','contract-calendar','supplier-pages','acceptance-comments','contract-comments','payment-acceptance'].includes(target?.id)) revealPaperTarget(target);
+        } else if (target?.dataset.finding || target?.dataset.formFinding || ['equipment-reinspection-trail','inspection-coverage','case-entity-browser','contract-pages','word-signatures','pdf-signatures','contract-calendar','supplier-pages','acceptance-comments','contract-comments','payment-acceptance'].includes(target?.id)) revealPaperTarget(target);
         else target?.focus();
       }
       const target = route.params.get('fact');
@@ -1744,7 +1755,7 @@ async function refresh() {
         if (doc && OriginalReader.pageNumbers(doc,graph).includes(page)) {
           state.openedCitation=location.hash;
           const raw=route.params.get('walkraw');
-          const ref=['inspection-use/','payment-approval/','payment-clock/','contract-approver/','approval-change/','installment-count/','measurement-note/'].some(prefix=>raw===prefix+doc.id+'/p'+page+'/l'+line) ? raw : undefined;
+          const ref=['inspection-use/','payment-approval/','payment-clock/','contract-approver/','approval-change/','installment-count/','measurement-note/','contract-signing-form/'].some(prefix=>raw===prefix+doc.id+'/p'+page+'/l'+line) ? raw : undefined;
           if (route.params.has('walkpoint') && state.bundle && route.params.get('rev')===String(state.bundle.rev) &&
               !route.params.has('walkline') && !raw) {
             OriginalReader.open(doc,page,{walkPoint:route.params.get('walkpoint')});

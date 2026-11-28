@@ -700,6 +700,47 @@ function repairPageReferences(graph, doc, page, facts) {
   return [...refs.values()];
 }
 
+function contractSigningSources(report, finding) {
+  const ledger=report?.graph.contract_effect_sources, signed=report?.findings.find(f=>f.rule==='H01');
+  if (ledger?.format!=='contract-effect-sources-v8' || report.policy.contract_effect!==ledger.format ||
+      !signed?.effect_review || signed.status==='ok') return [];
+  const {nodes,documents}=graphIndex(report.graph);
+  const accepted=[];
+  for (const row of signed.effect_review.conditions.filter(r=>r.kind==='signing_form')) {
+    const page=row.doc+'/p'+row.page, ref='contract-signing-form/'+page+'/l'+row.line;
+    const doc=documents.get(row.doc), source=nodes.get(ref), pg=nodes.get(page);
+    const call=report.calls.pages.find(c=>c.doc===row.doc && c.page===row.page);
+    const rects=call?.contract_signing_form_rects?.[row.line];
+    if (!doc || !['joint','review'].includes(row.form) || row.id!==ref || !Number.isInteger(row.line) || row.line<1 ||
+        !signed.scope.includes(row.unit) || !report.graph.documents_by_kind.contract?.includes(row.unit) ||
+        !signed.evidence.includes(ref) || !signed.evidence.includes(page) || finding && !finding.evidence.includes(ref) ||
+        source?.type!=='contract_signing_requirement' || source.label!==row.quote || source.doc!==row.doc ||
+        source.page!==row.page || source.line!==row.line || pg?.type!=='page' || pg.layer!=='text' ||
+        call?.page_sha256!==pg.sha256 || !rects?.length ||
+        !ledger.conditions.some(r=>r.id===ref && r.unit===row.unit && r.form===row.form && r.quote===row.quote) ||
+        !report.graph.edges.some(e=>e.type==='contract_signing_requirement_source' && e.from===page && e.to===ref &&
+          e.evidence.length===row.facts.length+1 && e.evidence[0]===page && row.facts.every((f,i)=>e.evidence[i+1]===f))) continue;
+    const label=row.form==='joint'?'合同签字及盖章要求':'合同签署要求';
+    accepted.push({ref,label,doc,page:row.page,rawLine:row.line,rects,quote:row.quote,
+      quality:'contract_form_source',option:label+' · 第 '+row.line+' 行'});
+  }
+  return accepted;
+}
+
+function contractSigningButton(source,finding) {
+  const {doc,page,rawLine,ref,label}=source;
+  const place=doc.name+' · 第 '+page+' 页 · 第 '+rawLine+' 行';
+  const open=()=>OriginalReader.open(doc,page,{rawRef:ref,lineHint:rawLine});
+  if (!finding) return action(label+' · 第 '+page+' 页第 '+rawLine+' 行',open,'ref');
+  const button=action('',open,'signing-form-source'), field=doc.id+'-p'+page+'-l'+rawLine;
+  button.id='form-'+finding.id+'-'+field;
+  Object.assign(button.dataset,{formFinding:finding.id,caseId:state.bundle.report.case_id,rev:String(state.bundle.rev)});
+  button.dataset.originalLabel=label+' · '+place;
+  button.setAttribute('aria-haspopup','dialog'); button.setAttribute('aria-controls','page-dialog');
+  button.append(el('small',place),el('strong',source.quote),glyph('arrows-angle-expand'));
+  return button;
+}
+
 function contractEffectPanel(finding,graph) {
   const {conditions,mixed_pages,approval_pages=[]}=finding.effect_review;
   const decisionCard=finding.effect_review.board_decision && BoardDecision.panel(finding,state.bundle.report);
@@ -738,7 +779,10 @@ function contractEffectPanel(finding,graph) {
     if ((fact?.field==='effect_clause' || seals && fact?.field==='effect_on') && !cited.has(ref))
       panel.append(box('batch-source',el('q',fact.source_line?.text || fact.quote),citation(ref)));
   }
+  const signingSources=contractSigningSources(state.bundle.report,finding);
   for (const item of conditions) {
+    const signing=signingSources.find(s=>s.ref===item.id);
+    if (signing) { panel.append(contractSigningButton(signing,finding)); continue; }
     const fact=item.facts.map(id=>facts.get(id)).find(f=>f?.quote===item.quote);
     const button=action((documents.get(item.doc)?.name || '合同')+' · 第 '+item.page+' 页',
       ()=>openPage(item.doc,item.page,fact?.id,fact?null:item.line),'ref');

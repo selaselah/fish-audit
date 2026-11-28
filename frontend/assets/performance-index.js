@@ -99,7 +99,6 @@ const PerformanceIndex = (() => {
     const rows=originals(item,graph);
     if (!rows.length) return el('p','本版没有可从此项直接打开的字段引文。','scope-empty');
     const pick=el('select'), fileGroups=new Map();
-    pick.setAttribute('aria-label','选择此项检查所引的字段');
     for (const [i,row] of rows.entries()) {
       if (!fileGroups.has(row.doc.id)) {
         const group=el('optgroup'); group.label=row.doc.name; fileGroups.set(row.doc.id,group); pick.append(group);
@@ -162,7 +161,13 @@ const PerformanceIndex = (() => {
     }
     draw(); pick.addEventListener('change',draw);
     const field=rows.length===1?el('span',rows[0].fact.label,'small'):pick;
-    return box('scope-source',box('scope-source-head',el('h4','字段引文'),field),box('scope-excerpt-head',quality,mode),crop,quote,
+    const heading=el('h4','字段引文');
+    if (field===pick) {
+      pick.id='scope-source-field-'+item.id;
+      const label=el('label','字段引文'); label.htmlFor=pick.id;
+      heading.replaceChildren(label);
+    }
+    return box('scope-source',box('scope-source-head',heading,field),box('scope-excerpt-head',quality,mode),crop,quote,
       box('scope-source-footer',place,open));
   }
   function specialist(item) {
@@ -815,6 +820,9 @@ const PerformanceIndex = (() => {
       detail.dataset.guarantee=String(Boolean(guarantee));
       detail.dataset.quality=String(Boolean(quality));
       detail.replaceChildren(box('scope-check-state',el('span',item.id,'mono'),tag(item.status)),heading);
+      if (item.stage && ['H04','H05'].includes(item.rule)) {
+        for (const row of contractSigningSources(state.bundle.report,item)) detail.append(contractSigningButton(row,item));
+      }
       for (const ref of item.party_readings || []) detail.append(PartyReadings.citation(state.bundle.report,ref,item));
       if (item.installment_count) detail.append(InstallmentCount.citation(state.bundle.report,item.installment_count,item,true));
       if (item.approval_change) detail.append(ApprovalChange.panel(item,state.bundle.report,rev));

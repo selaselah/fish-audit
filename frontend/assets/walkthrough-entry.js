@@ -67,6 +67,7 @@ function returnToControl() {
   const receipt=params.get('view')==='payment-checks' && /^(?:quality|retest|inspection-use|payment-approval|payment-clock|contract-approver|approver-change|installment-count)-/.test(anchor);
   const party=anchor.startsWith('party-reading-');
   const limits=params.get('view')==='acceptance-limits' && anchor.startsWith('limits-H02-');
+  const form=/^form-(H0[145]-[1-9][0-9]*)-d[0-9]+-p[1-9][0-9]*-l[1-9][0-9]*$/.exec(anchor);
   url.searchParams.delete('walkat');
   history.replaceState(history.state,'',url);
   function locate() {
@@ -74,6 +75,10 @@ function returnToControl() {
         comparison.dataset.rev!==params.get('rev') || comparison.dataset.prior!==params.get('prior') ||
         (params.has('entry') && comparison.dataset.entry!==params.get('entry')))) return false;
     const el = document.getElementById(anchor);
+    if (form && (!el || url.hash!==location.hash || el.dataset.formFinding!==form[1] ||
+        el.dataset.caseId!==path.split('/').at(-1) || el.dataset.rev!==params.get('rev') ||
+        (form[1].startsWith('H01-') ? params.get('view')!=='contract-signing-form' :
+          !el.closest('#performance-index[open]') || params.get('view')!=='payment-checks' || params.get('stage')!==form[1]))) return false;
     if (limits) {
       const card=el?.closest('[data-limit-finding]');
       if (!card || url.hash!==location.hash || card.dataset.caseId!==path.split('/').at(-1) ||
@@ -93,7 +98,7 @@ function returnToControl() {
           (params.has('filing') && card.dataset.boardFiling!==params.get('filing')) ||
           (params.has('part') && card.dataset.boardPart!==params.get('part'))) return false;
     }
-    if (el?.closest('#revision-comparison:not([hidden]),#board-decision,[data-limit-finding],[data-quality-finding],[data-retest-finding],[data-use-finding],[data-count-finding]')) {
+    if (el?.closest('#revision-comparison:not([hidden]),#board-decision,[data-limit-finding],[data-quality-finding],[data-retest-finding],[data-use-finding],[data-count-finding],[data-form-finding]')) {
       for (let parent=el.parentElement;parent && parent.id!=='revision-comparison';parent=parent.parentElement)
         if (parent.tagName==='DETAILS') parent.open=true;
     }
@@ -107,7 +112,7 @@ function returnToControl() {
   if (!locate()) {
     jumpObserver = new MutationObserver(locate);
     jumpObserver.observe(comparison || document.body, {subtree:true, childList:true, attributes:true, attributeFilter:['hidden','open']});
-    if (!comparison && !board && !receipt && !party && !limits) jumpTimer = setTimeout(() => jumpObserver.disconnect(), 6000);
+    if (!comparison && !board && !receipt && !party && !limits && !form) jumpTimer = setTimeout(() => jumpObserver.disconnect(), 6000);
   }
 }
 addEventListener('hashchange', returnToControl);

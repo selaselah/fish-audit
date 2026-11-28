@@ -61,7 +61,8 @@ function switchView(history) {
 }
 function showLocation() {
   const place=q('#walk-location'), full=describeContext(context);
-  const compact=(docked || context.anchor?.startsWith('party-reading-')) && context.screen==='case' && context.rev && (context.target || context.page_point);
+  const signing=context.raw_ref?.startsWith('contract-signing-form/') || context.anchor?.startsWith('form-H');
+  const compact=(docked || signing || context.anchor?.startsWith('party-reading-')) && context.screen==='case' && context.rev && (context.target || context.page_point);
   q('#walk-origin').textContent=compact?'底稿 '+context.case_id.slice(0,8)+' · R'+context.rev:'记录位置';
   place.textContent=compact?[context.target || context.doc,context.doc && '第 '+context.page+' 页',context.line && '第 '+context.line+' 行',
     context.page_point && pointLabel(context.page_point)].filter(Boolean).join(' · '):full;

@@ -38,6 +38,7 @@ import {checkInstallmentCount} from './installment-counts.mjs';
 import {checkPartyReadings} from './party-readings.mjs';
 import {checkRetestReference} from './retest-reference.mjs';
 import {checkPaymentQuality} from './payment-quality.mjs';
+import {checkContractSigningForm} from './contract-signing-form.mjs';
 import {checkBoardDecision} from './board-decisions.mjs';
 import {checkWarrantyTickets} from './warranty-tickets.mjs';
 import {checkPrivateWarrantyRegister, checkPublicWarrantyRegister} from './warranty-register.mjs';
@@ -132,6 +133,7 @@ const partyCase = caseArgument('--party-reading');
 const retestCase = caseArgument('--retest-reference');
 const pointCase = caseArgument('--walkthrough-point-case');
 const qualityCase = caseArgument('--payment-quality');
+const formCase = caseArgument('--contract-signing-form');
 const boardCase = caseArgument('--board-decision');
 const ticketCase = caseArgument('--ticket-case');
 const photoCase = caseArgument('--warranty-photo-case');
@@ -178,10 +180,10 @@ const acceptanceRoster=process.argv.includes('--acceptance-roster'), publicRoste
 const receiptPdf=caseArgument('--acceptance-pdf-case');
 const publicTest=publicRelease || publicAcceptanceOriginals || publicOriginals || publicAddendum || publicWarrantyRegister || publicPeriod || publicStandards || publicPurchase || publicRoster || publicProof || publicClock || publicTiming || publicBank || product || ruleCatalog || publicInspection || publicContractComments || publicWordComments || publicSuppliers || publicPdf || publicFolios;
 const scopeCase=caseArgument('--scope-case'), publicTopics=process.argv.includes('--public-audit-topics');
-const seeded = [partyCase,useCase,retestCase,qualityCase,boardCase,revisionCase,privateAcceptanceOriginals,privateWarrantyRegister,traceCase,periodCase,advanceGuaranteeCase,batchStandardCase,mandateOriginalCase,mandatePdfCase,batchCase,receiptPdf,acceptanceRoster,publicTopics,scopeCase,publicTest,proofCase,signerClock,signerTiming,originalCase,citedOriginal,bankAcceptance,previewQueue,contractCommentCase,commentCase,supplierCase,pdfCase,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
+const seeded = [formCase,partyCase,useCase,retestCase,qualityCase,boardCase,revisionCase,privateAcceptanceOriginals,privateWarrantyRegister,traceCase,periodCase,advanceGuaranteeCase,batchStandardCase,mandateOriginalCase,mandatePdfCase,batchCase,receiptPdf,acceptanceRoster,publicTopics,scopeCase,publicTest,proofCase,signerClock,signerTiming,originalCase,citedOriginal,bankAcceptance,previewQueue,contractCommentCase,commentCase,supplierCase,pdfCase,calendarCase,wordCase,folioCase,priorCase,trailCase,timingCase,trialCase,intakeScopes,entityCase,navCase,designCase,compareCase,mandateCase,mandateCalendarCase,warrantyCase,ticketCase,photoCase,signingCase,inspectionCase,phaseEvidenceCase,paymentChangeCase,paymentOpinionCase,releaseCase,sampleDesk,paymentCase,supplementCase,peerCase,fieldCase,installmentCase,replayCase,recoveringCase,
                 privateOriginals,privateAddendum,reviewDecisionCase,invoiceConflict,invoiceSource,invoiceApproval,claimPairCase,invoiceCodeHistory,maskedInvoice,legacyMask,legacyTransfer,partialTransfer,visibilityCase,accountReview,performanceCase,qualityImageCase,reinspectionGap,brokenPayment,waitingCase,pointCase].some(Boolean);
 const legacyCase = legacyMask || legacyTransfer;
-const isolatedPaperOrigin=(partyCase && process.env.AUDIT_ISOLATED_PARTY_ORIGIN) || (useCase && process.env.AUDIT_ISOLATED_USE_ORIGIN) || (retestCase && process.env.AUDIT_ISOLATED_RETEST_ORIGIN) || (qualityCase && process.env.AUDIT_ISOLATED_QUALITY_ORIGIN) || (warrantyCase && process.env.AUDIT_ISOLATED_WARRANTY_ORIGIN) || (revisionCase && process.env.AUDIT_ISOLATED_COMPARISON_ORIGIN) || (boardCase && process.env.AUDIT_ISOLATED_BOARD_ORIGIN);
+const isolatedPaperOrigin=(formCase && process.env.AUDIT_ISOLATED_FORM_ORIGIN) || (partyCase && process.env.AUDIT_ISOLATED_PARTY_ORIGIN) || (useCase && process.env.AUDIT_ISOLATED_USE_ORIGIN) || (retestCase && process.env.AUDIT_ISOLATED_RETEST_ORIGIN) || (qualityCase && process.env.AUDIT_ISOLATED_QUALITY_ORIGIN) || (warrantyCase && process.env.AUDIT_ISOLATED_WARRANTY_ORIGIN) || (revisionCase && process.env.AUDIT_ISOLATED_COMPARISON_ORIGIN) || (boardCase && process.env.AUDIT_ISOLATED_BOARD_ORIGIN);
 if (isolatedPaperOrigin) {
   assert.match(isolatedPaperOrigin,/^http:\/\/127\.0\.0\.1:\d+$/);
   assert.ok(!['8000','8010'].includes(new URL(isolatedPaperOrigin).port));
@@ -403,6 +405,8 @@ try {
     else await checkInspectionUse({root,call,evaluate,wait},useCase);
   } else if (retestCase) {
     await checkRetestReference({root,call,evaluate,wait},retestCase);
+  } else if (formCase) {
+    await checkContractSigningForm({root,call,evaluate,wait},formCase);
   } else if (qualityCase) {
     await checkPaymentQuality({root,call,evaluate,wait},qualityCase);
   } else if (boardCase) {

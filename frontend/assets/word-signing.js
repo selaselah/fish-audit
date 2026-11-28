@@ -8,7 +8,7 @@ const WordSigning = (() => {
 
   function resolve(finding,graph,calls) {
     const check=finding?.effect_review?.word_signatures, ledger=graph?.contract_effect_sources;
-    if (!check || !['contract-effect-sources-v6','contract-effect-sources-v7'].includes(ledger?.format) || !graph.documents_by_kind?.contract?.includes(check.unit) ||
+    if (!check || !['contract-effect-sources-v6','contract-effect-sources-v7','contract-effect-sources-v8'].includes(ledger?.format) || !graph.documents_by_kind?.contract?.includes(check.unit) ||
         !finding.scope.includes(check.unit) || finding.status==='ok' || !Array.isArray(check.pages) ||
         !check.pages.length || !Array.isArray(check.rows)) return null;
     const index=graphIndex(graph), cited=new Set(traceReferences(graph,finding));

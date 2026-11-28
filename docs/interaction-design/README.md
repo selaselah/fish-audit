@@ -6,6 +6,8 @@
 2. 要指出某个按钮或数字，点「点选控件」再选它。要指出原件上的字或印迹，打开已出具底稿的原页，点「标记原图」后点击相应位置。用键盘时，方向键可移动标记，Enter 确认，Esc 取消。[试走第二期会签案例](http://127.0.0.1:8000/workpaper/8debfd4a45424070a4fbedb915de1667?rev=10&view=payment-checks&stage=H05-8) · [窄屏上的两处姓名](approval-names-joint-mobile.webp)
 3. 写下希望怎么改，点「保存意见」。「已记录」可回到当时的底稿版本、控件、原行或图上标记。走完后在同机 Codex 说「按本机走查清单修改」，或点「复制给 Codex」贴进指定对话。[在合同原行旁写意见](approval-names-walkthrough.webp)
 
+例如首期回单已经付款，但合同第 19 行还要求双方代表签字。想调整回单上的呈现，就点「点选控件」并选中签署条款。想指出合同上的某个字，就先打开原页再提意见。桌面侧栏可以边看回单边写，手机浮窗只列底稿版本、文件名和页行。已保存的两种意见分别回到原控件和原文。[走查这笔 3 万元回单](http://127.0.0.1:8000/workpaper/fe3e11f28208499bb9a19238bbf5439c?rev=6&view=payment-checks&stage=H05-8) · [桌面并排走查](signing-form-sidebar.webp) · [手机原行意见](signing-form-feedback-mobile.webp)
+
 合同第 19 行要求核对仪器允差时，可以在第二期付款里点「起草补件意见」。人工验收表会带入合同和验收单各自的页行，审计人员可以修改文字，确定后点「确认退回补件」。如果走查时想建议改进这个按钮，点「提意见 → 点选控件」再选它。正式退回之后，从走查清单仍能回到这版所引的精度说明。[打开第二期付款](http://127.0.0.1:8000/workpaper/57abf85981374ed39f5cd9cae5175f2c?rev=8&view=payment-checks&stage=H05-8) · [桌面上的合同与读数](inclusive-precision-payment.webp) · [手机上的补件草稿](measurement-return-mobile.webp) · [验收范围待确认](measurement-scope-mobile.webp)
 
 **试着在验收原件上留一条意见。** 打开 R8 的取整案例，点「测量精度说明」就能看到验收报告第 15 行。保持原页打开，点「提意见」，写「请在这里加一个补原始检测记录的入口」，再点「保存意见」。从「已记录」点回时会打开当时的版次，并重新标出这一行。也可以从第二期付款检查进入，查看同一读数为什么影响付款。[打开 R8 验收底稿](http://127.0.0.1:8000/workpaper/801a3b8b9ddb4c20ad477d377ed473b9?rev=8&view=acceptance-limits) · [手机原件定位](precision-original-mobile.webp) · [在手机上写意见](precision-feedback-mobile.webp) · [第二期付款的边界对照](strict-acceptance-payment.webp)

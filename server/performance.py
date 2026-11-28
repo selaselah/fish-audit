@@ -1140,6 +1140,11 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
     hold_refs = [ref for note in holds for ref in (f"{note['doc']}/p{note['page']}",*note["facts"])]
     stages = []
     prior_checks = {}
+    signing_rows = contract_effect.form_rows(signed.get("effect_review",{}))
+    signing_sources = ""
+    if signing_rows:
+        filenames = {doc["id"]:doc["name"] for doc in graph["documents"]}
+        signing_sources = "、".join(f"《{filenames[r['doc']]}》第 {r['page']} 页第 {r['line']} 行" for r in signing_rows)
     for idx, row in enumerate(rows, 1):
         kind = row["kind"]
         fallback_label = f"第{idx}期" if version == FIRST_FORMAT else f"条款 {idx}"
@@ -1229,6 +1234,8 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
             invoice_conditions.attach(check, entry)
         if row["ref"] in prior_checks:
             payment_amendments.attach(check,scoped_change)
+        if kind=="effect" and signing_sources:
+            check["detail"] += f" 本期以合同生效为前提，{signing_sources}所列签署要求仍须核实。"
         output.append(check)
         stages.append((row,check))
 
@@ -1338,6 +1345,8 @@ def performance_findings(graph, version, *, include_unassigned_receipts,recheck_
         if version == FORMAT and row["kind"] == "acceptance":
             signer_timing.compare(payment, graph, contract, bank, paid, authority, receipts,
                                   other_terms=bool(extra_units or changes or repairs or retests or pending_units or batch))
+        if row["kind"]=="effect" and signing_sources:
+            payment["detail"] += f" 回单列示付款日 {paid}，请对照{signing_sources}，补核当时的签署依据。"
         output.append(payment)
     return output
 

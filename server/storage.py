@@ -792,6 +792,11 @@ class Store:
                 page_row = db.execute("SELECT text FROM pages WHERE case_id=? AND doc=? AND number=?",
                                       (case_id, doc, page)).fetchone()
                 return page_row[0] if page_row else None
+            if any(r.get("kind")=="signing_form" for r in graph.get("contract_effect_sources",{}).get("conditions",())):
+                try:
+                    verify_contract_effect(paper,read_text,read_original=read_original,signing=True)
+                except (ValueError, OSError, KeyError, TypeError) as error:
+                    raise CaseError(f"签收前核对合同签署原件失败。{error}",409) from error
             try:
                 reviews = verify_word_reviews(paper, read_original, read_text, signing=True)
                 verify_acceptance_originals(paper, read_original, read_text, signing=True, verified_reviews=reviews)
@@ -1025,7 +1030,7 @@ class Store:
                     verify_stage_payments(paper,page_text,signing=True)
                     verify_equipment_models(paper,page_text,signing=True)
                     verify_delivery_batches(paper,page_text,signing=True)
-                    verify_contract_effect(paper,page_text,signing=True)
+                    verify_contract_effect(paper,page_text,signing=True,read_layout=page_layout)
                     verify_payment_windows(paper,page_text,signing=True)
                     verify_reservations(paper,page_text,signing=True)
                     verify_inspection(paper,page_text,signing=True)

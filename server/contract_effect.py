@@ -18,7 +18,7 @@ APPROVAL_FORMAT = "contract-effect-sources-v3"
 SIGNING_FORMAT = signing_parties.NATIVE_FORMAT
 IMAGE_FORMAT = signing_parties.IMAGE_FORMAT
 WORD_FORMAT = signing_parties.WORD_FORMAT
-FORMAT = signing_parties.CALENDAR_FORMAT
+FORMAT = signing_parties.FORM_FORMAT
 SIGNING_FORMATS = (SIGNING_FORMAT, *signing_parties.IMAGE_FORMATS)
 BOARD_FORMATS = (APPROVAL_FORMAT, *SIGNING_FORMATS)
 APPROVAL_SINCE = "2026.11.25.17"
@@ -26,6 +26,8 @@ PARTY_SINCE = "2026.11.26.02"
 IMAGE_SINCE = "2026.11.26.03"
 WORD_SINCE = "2026.11.26.12"
 CALENDAR_SINCE = "2026.11.26.13"
+FORM_SINCE = (2026, 11, 28, 12)
+FORM_RECTS = "contract_signing_form_rects"
 APPROVAL_FIELDS = {"contract_approval","contract_id","buyer","seller","approval_authority",
                    "approval_result","approved_on","approval_signer"}
 SEAL_FIELDS = {"甲方盖章日期":"buyer_sealed_on","乙方盖章日期":"seller_sealed_on"}
@@ -36,6 +38,60 @@ APPROVAL = re.compile(r"批准|审批|核准|许可|备案|公证|登记")
 QUALIFIER = re.compile(r"附加条件|生效要件|效力|特别约定|附注|备注")
 STATE = re.compile(r"(?:本合同|原合同|本协议|合同|协议).{0,12}(?:已(?:经)?(?:解除|终止|撤销|作废|失效|到期)|无效|效力待定|暂停履行)")
 PAYMENT_LABEL = re.compile(r"第[一二两三四五六七八九十0-9]{1,3}期|付款条款|结算条款|付款期次|预付款|首付款")
+FORM_LABEL = re.compile(r"(?:(?:本|主|采购)?合同|协议)?(?:甲方|乙方|采购方|供应方)?(?:签署|签约|签订|签字|签章|用印)(?:方式|要求|约定|条件)")
+MAIN_SUBJECT = re.compile(r"^(?:第[一二三四五六七八九十百0-9]+条[、.：:]?)?(?:本合同|本协议|主合同|本采购合同|签订本合同|签署本合同)")
+OTHER_FORM = re.compile(r"补充协议|验收[单表书]|验收报告|付款申请|付款审批|审批单|委托书|确认单|结算单|保函|回单|发票|送货单")
+SIGN = r"签(?:字|名)"
+SEAL = r"(?:加盖(?:双方|各自|本单位|单位|公司)?(?:公章|印章|合同专用章)|盖章|用印)"
+JOIN = r"[,、]?(?:并且|并|且|同时|及|和|后再)"
+JOINT_FORM = re.compile(SIGN + r"(?:确认)?" + JOIN + r"(?:须|应|需)?(?:再)?" + SEAL +
+                        r"|(?:公章|印章|合同专用章|盖章|用印)" + JOIN +
+                        r"(?:须|应|需)?(?:由|经)?(?:甲乙双方|双方|甲方|乙方|各方)?(?:的)?(?:法定代表人|授权代表|代表)?(?:亲自|亲笔)?" + SIGN)
+SIMPLE_EITHER = re.compile(r"(?:本合同|本协议)?(?:须|应|需)?(?:经|由|自)?(?:甲乙双方|双方|各方)"
+                           r"(?:" + SIGN + r"(?:或|或者)" + SEAL + r"|" + SEAL + r"(?:或|或者)" + SIGN + r")(?:即可)?")
+
+
+def signing_form(raw):
+    label, body = parts(raw)
+    headed = bool(body and FORM_LABEL.fullmatch(label))
+    primary = label in ("生效条款","合同生效条件","生效条件","合同生效条款")
+    text = normalized(body or raw)
+    qualified = re.search(r"无需|无须|不必|不得|不需|不要求|可不|免予|若|如果|仅在|除非|除外|但|可选",text)
+    found = None
+    for piece in re.split(r"[;。]|,(?=本合同|本协议|主合同|验收单|验收报告|付款申请|委托书|补充协议)",text):
+        if not piece or not (headed or primary or MAIN_SUBJECT.match(piece)):
+            continue
+        # Signing an acceptance, a mandate or a payment request does not establish who signs this contract.
+        if OTHER_FORM.search(piece) or SIMPLE_EITHER.fullmatch(piece):
+            continue
+        signature, seal = re.search(SIGN,piece), re.search(r"盖章|公章|印章|合同专用章|用印",piece)
+        if signature and seal:
+            if JOINT_FORM.search(piece):
+                if qualified or re.search(r"或(?:者)?(?:加盖|盖章|用印)",piece):
+                    return "review"
+                found = "joint"
+                continue
+            # The base effectiveness checker already handles an unqualified choice expressed in the main clause.
+            from performance import BOARD_CONDITION, EFFECT
+            if not (EFFECT.fullmatch(piece) or BOARD_CONDITION.fullmatch(piece)):
+                return "review"
+        elif (signature or seal) and (headed or MAIN_SUBJECT.match(piece)) and re.search(r"代表人|授权代表|亲笔|专用章",piece):
+            return "review"
+    return found
+
+
+def form_rows(ledger):
+    return [row for row in ledger.get("conditions", ()) if row.get("kind") == "signing_form"]
+
+
+def form_graph(ledger):
+    nodes, edges = [], []
+    for row in form_rows(ledger):
+        page = f"{row['doc']}/p{row['page']}"
+        nodes.append({"id":row["id"], "type":"contract_signing_requirement", "label":row["quote"],
+                      "doc":row["doc"], "page":row["page"], "line":row["line"]})
+        edges.append({"from":page, "to":row["id"], "type":"contract_signing_requirement_source", "evidence":[page,*row["facts"]]})
+    return nodes, edges
 
 
 def relevant(raw):
@@ -155,14 +211,15 @@ def sources(graph,read_text,format=FORMAT,*,calls=None):
                 matches=by_line[number,raw]
                 if (doc,page,number,raw) in guarantees:
                     continue
-                if format == FORMAT and not board:
+                form = signing_form(raw) if format == FORMAT and not board else None
+                if format in signing_parties.CALENDAR_FORMATS and not board:
                     date_row = contract_calendar.row(place,raw,number,matches,graph,node.get("sha256"),
                                                      original_hashes.get(doc),(calls or {}).get((doc,page),{}))
                     if date_row:
                         date_rows.append(date_row)
                         # Further stipulations on the same line still need a separate review.
                         _, body = parts(raw)
-                        if not (relevant(body) or APPROVAL.search(body) or QUALIFIER.search(body)):
+                        if not (form or relevant(body) or APPROVAL.search(body) or QUALIFIER.search(body)):
                             continue
                 if format in SIGNING_FORMATS and not board:
                     signature=signing_parties.row(place,raw,number,matches)
@@ -173,14 +230,17 @@ def sources(graph,read_text,format=FORMAT,*,calls=None):
                             and f["source_line"].get("rects") and approval_field(raw,f) for f in matches):
                         continue
                     conditions.append({**place,"line":number,"quote":raw,"facts":[f["id"] for f in matches],"kind":"approval_note"})
-                elif format!=LEGACY and SEAL_LABEL.search(normalized(raw)):
+                elif form:
+                    conditions.append({**place, "line":number, "quote":raw, "facts":[f["id"] for f in matches],
+                                       "kind":"signing_form", "form":form, "id":f"contract-signing-form/{doc}/p{page}/l{number}"})
+                if not board and format!=LEGACY and SEAL_LABEL.search(normalized(raw)):
                     conditions.append({**place,"line":number,"quote":raw,"facts":[f["id"] for f in matches],"kind":"seal_date"})
-                elif effect_signal(raw) and not recognized(raw,matches):
+                elif not board and not form and effect_signal(raw) and not recognized(raw,matches):
                     conditions.append({**place,"line":number,"quote":raw,"facts":[f["id"] for f in matches]})
     ledger={"format":format,"pages":pages,"conditions":conditions}
     if format in SIGNING_FORMATS:
         ledger["signing_rows"]=signing_rows
-    if format == FORMAT:
+    if format in signing_parties.CALENDAR_FORMATS:
         ledger["date_rows"] = date_rows
     return ledger
 
@@ -221,6 +281,7 @@ def review(finding,ledger,contract,graph):
         finding["effect_review"]["approval_pages"]=board_pages
     refs=[f"{p['doc']}/p{p['page']}" for p in pages]
     refs.extend(ref for s in conditions for ref in s["facts"])
+    refs.extend(s["id"] for s in form_rows(ledger) if s["unit"] == unit)
     finding["evidence"]=list(dict.fromkeys(finding["evidence"]+refs))
     seals=[s for s in conditions if s.get("kind")=="seal_date"]
     conditions=[s for s in conditions if s.get("kind")!="seal_date"]
@@ -236,7 +297,7 @@ def review(finding,ledger,contract,graph):
         signing_parties.review(finding,ledger,contract,graph)
     if ledger.get("format") in signing_parties.WORD_FORMATS:
         signing_parties.review_word(finding,ledger,contract,graph)
-    if ledger.get("format") == FORMAT:
+    if ledger.get("format") in signing_parties.CALENDAR_FORMATS:
         contract_calendar.review(finding, contract)
     if not conditions and not mixed and pages:
         return
@@ -244,7 +305,12 @@ def review(finding,ledger,contract,graph):
         finding.update(status="missing",detail="双方签署栏有据，合同生效条件仍待核实。")
     if any(s.get("kind")=="approval_note" for s in conditions):
         finding["detail"]+=" 董事会审批记录另有待核原文，请核对批准范围、附加条件及后续决议。"
-    if any(s.get("kind")!="approval_note" for s in conditions):
+    forms = [s for s in conditions if s.get("kind")=="signing_form"]
+    if forms:
+        joint = any(s["form"]=="joint" for s in forms)
+        finding["detail"] += (" 合同另列签字及盖章要求，请核对签署原件上两项记录、签字人身份及权限。" if joint else
+                              " 合同另列签署方式或签字人要求，请核对所引原行、签署原件及相应权限。")
+    if any(s.get("kind") not in ("approval_note","signing_form") for s in conditions):
         finding["detail"]+=" 请核对另列的生效约定或状态记载，以及所需批准、证明或确认的日期。"
     if any(p.get("kind")=="board_approval" for p in mixed):
         finding["detail"]+=" 须核对审批记录整页的影像及批注。"
@@ -252,12 +318,22 @@ def review(finding,ledger,contract,graph):
         finding["detail"]+=" 需通读合同原页的影像、批注和附加条件。"
 
 
-def verify(report,read_text,*,signing=False):
+def verify(report,read_text,*,signing=False,read_layout=None,read_original=None):
     graph,policy=report["graph"],report["policy"]
     marker=policy.get("contract_effect")
     version=policy.get("version","")
     positive=[f for f in report["findings"] if f["rule"]=="H01" and f["status"]=="ok"]
     calls={(p["doc"],p["page"]):p for p in report.get("calls",{}).get("pages",[])}
+    if marker != FORMAT and (any(FORM_RECTS in call for call in calls.values()) or
+            any(n["type"]=="contract_signing_requirement" for n in graph["nodes"]) or
+            any(e["type"]=="contract_signing_requirement_source" for e in graph["edges"])):
+        raise ValueError("旧版底稿含未出具的合同签署条款定位")
+    if signing and marker != FORMAT and any(f["rule"]=="H01" and (f.get("effect_review") or f["status"]=="ok") for f in report["findings"]):
+        current = form_rows(sources(graph,read_text,calls=calls))
+        for finding in (f for f in report["findings"] if f["rule"]=="H01"):
+            issued = {(s["doc"],s["page"],s["line"],s["quote"]) for s in finding.get("effect_review",{}).get("conditions",())}
+            if any(r["unit"] in finding["scope"] and (r["doc"],r["page"],r["line"],r["quote"]) not in issued for r in current):
+                raise ValueError("旧版底稿漏列合同原件所载的签字盖章要求，请重审后签收。")
     if signing and marker not in BOARD_FORMATS and positive and graph["documents_by_kind"].get("contract_approval"):
         scope={unit for finding in positive for unit in finding["scope"]}
         current=sources(graph,read_text)
@@ -277,7 +353,7 @@ def verify(report,read_text,*,signing=False):
         if any(signing_parties.word_signatures(current, graph, unit)
                for unit in graph["documents_by_kind"].get("contract", []) if unit in scope):
             raise ValueError("旧版以 Word 文字栏支持了合同签署，请核对签署凭证并重新审计后签收。")
-    if signing and marker != FORMAT and positive:
+    if signing and marker not in signing_parties.CALENDAR_FORMATS and positive:
         from performance import Material
         scope = {unit for finding in positive for unit in finding["scope"]}
         current = sources(graph, read_text, calls=calls)
@@ -315,7 +391,9 @@ def verify(report,read_text,*,signing=False):
             seals=[s for s in ledger["conditions"] if s["unit"]==unit and s.get("kind")=="seal_date"]
             if seals and seal_check(Material(graph,unit),seals,True)[1]!="ok":
                 raise ValueError("旧版未核清双方实际盖章日，请按现行规则重审后签收。")
-    if (marker not in (*BOARD_FORMATS,SEAL_FORMAT,LEGACY) or version>=CALENDAR_SINCE and marker!=FORMAT or
+    if (marker not in (*BOARD_FORMATS,SEAL_FORMAT,LEGACY) or
+            (tuple(map(int,version.split(".")))>=FORM_SINCE) != (marker==FORMAT) or
+            version>=CALENDAR_SINCE and marker not in signing_parties.CALENDAR_FORMATS or
             version>=WORD_SINCE and marker not in signing_parties.WORD_FORMATS or
             version>=IMAGE_SINCE and marker not in signing_parties.IMAGE_FORMATS or
             version>=PARTY_SINCE and marker not in SIGNING_FORMATS or version>=APPROVAL_SINCE and marker not in BOARD_FORMATS or
@@ -328,8 +406,37 @@ def verify(report,read_text,*,signing=False):
                 [e for e in graph["edges"] if e["type"]=="contract_signing_source"]!=edges or
                 [e for e in graph["edges"] if e["type"]=="contract_seal_name_comparison"]!=signing_parties.comparisons(report["findings"])):
             raise ValueError("签章主体比较的图谱关系与原行或审计结果不符")
-    if marker == FORMAT:
+    if marker in signing_parties.CALENDAR_FORMATS:
         nodes, edges = contract_calendar.source_graph(graph["contract_effect_sources"])
         if ([n for n in graph["nodes"] if n["type"]=="contract_date_line"] != nodes or
                 [e for e in graph["edges"] if e["type"]=="contract_date_source"] != edges):
             raise ValueError("合同日期的原行与证据图谱不符")
+    if marker == FORMAT:
+        ledger = graph["contract_effect_sources"]
+        nodes, edges = form_graph(ledger)
+        if ([n for n in graph["nodes"] if n["type"]=="contract_signing_requirement"] != nodes or
+                [e for e in graph["edges"] if e["type"]=="contract_signing_requirement_source"] != edges):
+            raise ValueError("合同签署要求的原行与证据图谱不符")
+        rows = form_rows(ledger)
+        for finding in (f for f in report["findings"] if f["rule"]=="H01" and
+                        (f.get("effect_review") or len(graph["documents_by_kind"].get("contract",()))==1)):
+            cited = [r for r in rows if r["unit"] in finding["scope"]]
+            if form_rows(finding.get("effect_review",{})) != cited or (cited and (finding["status"]=="ok" or
+                    any(r["id"] not in finding["evidence"] for r in cited))):
+                raise ValueError("合同签署发现漏列原件上的签署要求")
+        if calls or policy.get("archived_methods"):
+            from contract_folios import line_numbers, verify_page_geometry
+            verify_page_geometry(calls.values(),line_numbers(rows),{},FORM_RECTS,"合同签署要求",read_layout)
+            pages = {n["id"]:n for n in graph["nodes"] if n["type"]=="page"}
+            originals, located = [], []
+            for r in rows:
+                node = pages[f"{r['doc']}/p{r['page']}"]
+                call = calls[r["doc"],r["page"]]
+                if call.get("page_sha256")!=node["sha256"]:
+                    raise ValueError("合同签署要求所据的页图与底稿不符")
+                originals.append({"doc":r["doc"],"pages":[{"ref":node["id"],"sha256":node["sha256"],
+                    "layer":node["layer"],"text_only":node.get("clause_text_only") is True}]})
+                located.append({**r,"rects":call[FORM_RECTS][str(r["line"])]})
+            if originals and read_original:
+                from original_records import verify_rendered
+                verify_rendered(graph,originals,read_original,"合同签署要求",extra_lines=located)

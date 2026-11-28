@@ -279,10 +279,10 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
     verify_stage_payments(report,page_text)
     verify_equipment_models(report,page_text)
     verify_delivery_batches(report,page_text)
-    verify_contract_effect(report,page_text)
     def read_original(doc):
         path = originals[doc["id"]] if originals is not None else "originals/" + doc["id"] + doc["ext"]
         return bundle.read(path)
+    verify_contract_effect(report,page_text,read_original=read_original)
     try:
         verify_pdf_execution(report, read_original)
         verify_acceptance_pdf(report, read_original)

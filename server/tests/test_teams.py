@@ -538,6 +538,34 @@ class EnterpriseFlow(unittest.TestCase):
         self.assertEqual(save({"view":"board-decision"}).status_code,201)
         self.assertEqual(owner.get(f"/api/w/{wid}/walkthrough").json["notes"][0]["context"]["params"],{"view":"board-decision"})
 
+    def test_signature_requirement_pins_belong_to_one_issued_view(self):
+        owner,wid,headers=self.register("form-walkthrough")
+        case=self.submit(owner,wid,headers)
+        self.worker.run(self.store.claim())
+        path=f"/w/{wid}/workpaper/{case}?rev=1&view=contract-signing-form"
+        self.assertEqual(owner.get(path).location,f"/app#w/{wid}/case/{case}?rev=1&view=contract-signing-form")
+        for suffix in ("&rev=2","&view=execution","&stage=H05-8","&unused=1"):
+            self.assertEqual(owner.get(path+suffix).status_code,400)
+        url=f"/api/w/{wid}/walkthrough"
+        place={"screen":"case","case_id":case,"rev":1,"tab":"report"}
+        def save(params,**target):
+            return owner.post(url,headers=headers,json={"id":"f"*32,"text":"签署条件所引原行",
+                "context":{**place,"params":params,**target}})
+        form={"view":"contract-signing-form"}
+        payment={"view":"payment-checks","stage":"H05-8"}
+        primary="form-H01-2-d01-p1-l19"
+        paid="form-H05-8-d01-p1-l19"
+        for params,pin in ((form,primary),(payment,paid)):
+            self.assertEqual(save(params,anchor=pin).status_code,404)
+            self.assertEqual(save(params,anchor=pin,doc="d01",page=1).status_code,400)
+        self.assertEqual(save(form,anchor=paid).status_code,400)
+        self.assertEqual(save(payment,anchor=primary).status_code,400)
+        self.assertEqual(save({**form,"stage":"H05-8"}).status_code,400)
+        original=dict(doc="d01",page=1,line=19,raw_ref="contract-signing-form/d01/p1/l19")
+        self.assertEqual(save({},**original).status_code,400)
+        self.assertEqual(save({},dialog="page-dialog",**original).status_code,404)
+        self.assertEqual(owner.get(url).json["notes"],[])
+
     def test_quality_walkthrough_requires_the_issued_installment_and_field(self):
         owner,wid,headers=self.register("quality-walkthrough")
         cid=self.submit(owner,wid,headers)
