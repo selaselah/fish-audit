@@ -5,9 +5,10 @@ from unittest.mock import patch
 from config import BANK, PERFORMANCE
 from controls import VERSION, conclusion, execute
 from delegation import LEGACY_FORMAT, NAME_FORMAT, NATIVE_NAME_FORMAT, TERMS_FORMAT, coverage_gaps, rows_for_grants, unresolved_agents, verify_sources
-from graph import build_graph
+from graph import build_graph, link_procedures
 from performance import DELEGATION_FORMAT, IDENTITY_FORMAT, REINSPECTION_FORMAT, compute, verify_findings
 from test_performance import BANK_DOC, CONTRACT, RECEIPT, WARRANTY, material, rows
+from walkthrough import MANDATE_DATE_PIN, cited_mandate_date
 
 
 CONTRACT_BY_AGENT = [
@@ -68,6 +69,35 @@ class DelegationTests(unittest.TestCase):
             entry,=rows(graph,"H01")[0]["delegations"]
             self.assertEqual(entry["status"],"risk")
             self.assertIn(reason,entry["detail"]); self.assertIn("同一日期",entry["detail"])
+
+    def test_walkthrough_installment_dates_require_both_issued_originals(self):
+        graph=sample(lambda i,f,l,v:"2026-09-02" if f=="granted_on" else v)
+        findings=execute(graph,PERFORMANCE)
+        procedures=[{k:copy.deepcopy(f[k]) for k in ("rule","status","evidence","stage","delegations") if k in f} for f in findings]
+        pages=[{"doc":d["id"],"page":1,"page_sha256":"page","model":"fixture","response_id":"read-"+d["id"],
+                "check":{"model":"fixture","response_id":"check-"+d["id"]}} for d in graph["documents"]]
+        calls={"expert":{"model":"fixture","response_id":"review","input":{"procedures":procedures}},"pages":pages}
+        link_procedures(graph,findings,calls)
+        paper={"graph":graph,"findings":findings,"calls":calls,"policy":VERSION.copy()}
+        signing=next(f for f in findings if f["rule"]=="H01")
+        order=signing["delegations"][0]["issuance_order"]
+        for payment in (f for f in findings if f["rule"] in ("H04","H05")):
+            for role,key in (("signed_on","signed_refs"),("granted_on","issued_refs")):
+                fact=next(f for f in graph["facts"] if f["id"]==order[key][0])
+                target=f"mandate-date-{payment['id']}-buyer-{role}-{fact['doc']}-p1-l{fact['source_line']['number']}"
+                self.assertTrue(cited_mandate_date(paper,MANDATE_DATE_PIN.fullmatch(target)),target)
+                for wrong in (target.replace("-buyer-","-seller-"),target+"0"):
+                    self.assertFalse(cited_mandate_date(paper,MANDATE_DATE_PIN.fullmatch(wrong)),wrong)
+        pin=MANDATE_DATE_PIN.fullmatch(target)
+        doc,page=pages[0],pages[1]
+        for replacement in ([doc,{**page,"check":None}], [doc,{**page,"check":{"response_id":page["response_id"]}}],
+                            [doc,{**page,"page_sha256":"another-page"}],[doc,page,page]):
+            with self.subTest(readings=replacement):
+                self.assertFalse(cited_mandate_date({**paper,"calls":{**calls,"pages":replacement}},pin))
+        self.assertFalse(cited_mandate_date({**paper,"policy":{"delegation_checks":TERMS_FORMAT}},pin))
+        grant_ref=order["issued_refs"][0]
+        graph["edges"]=[e for e in graph["edges"] if not (e["type"]=="records" and e["to"]==grant_ref)]
+        self.assertFalse(cited_mandate_date(paper,pin))
 
     def test_mismatched_instruments_and_unread_dates_do_not_acquire_an_issuance_order(self):
         for graph in (sample(grants=[GRANT,GRANT]),sample(lambda i,f,l,v:"另一个单位" if f=="grant_principal" else v),

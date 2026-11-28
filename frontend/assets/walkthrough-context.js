@@ -107,6 +107,9 @@ export function captureContext(owner, element, pagePoint) {
           if (!element) {context.anchor=receiptCard.id;context.target=receiptCard.getAttribute('aria-label') || receiptCard.dataset.originalLabel;}
         }
         if (element?.closest('[data-form-finding^="H01-"]')) context.params={view:'contract-signing-form'};
+        const mandate=element?element.closest('[data-mandate-payment]'):owner?.id==='performance-index' && owner.querySelector('[data-mandate-payment]');
+        if (mandate?.dataset?.caseId===cid && mandate.dataset.rev===String(context.rev) && mandate.closest('#performance-index[open]'))
+          context.params={view:'payment-checks',stage:mandate.dataset.mandatePayment};
         const activeProof=element?element.closest('#payment-proof'):owner?null:
           (view==='payment-proof'?document.getElementById('payment-proof'):document.getElementById('walk-launch')?.closest('#payment-proof'));
         if (activeProof?.dataset.caseId===cid && activeProof.dataset.rev===String(context.rev) &&
@@ -213,6 +216,7 @@ export function describeContext(c) {
     c.params?.view==='payment-checks' && (c.anchor?.startsWith('stage-proof-')?'扣款凭证 '+c.params.stage:c.anchor?.startsWith('payment-approval-')?'付款审批单 '+c.params.stage:
     c.anchor?.startsWith('form-H04-')?'期款条件 '+c.params.stage:
     c.anchor?.startsWith('form-H05-')?'实付回单 '+c.params.stage:
+    c.anchor?.startsWith('mandate-date-')?'签约授权 '+c.params.stage:
     c.anchor?.startsWith('contract-approver-')?'合同签批人 '+c.params.stage:
     c.anchor?.startsWith('installment-count-')?'合同分期总述 '+c.params.stage:
     c.anchor?.startsWith('payment-clock-')?'银行回单时刻 '+c.params.stage:

@@ -33,6 +33,7 @@ COUNT_PIN = re.compile(r"installment-count-(H0[3456]-[1-9][0-9]{0,7})")
 COMPARISON_DATE_PIN = re.compile(r"revision-((?:old|new)-H0[245]-[1-9][0-9]{0,7})-(earlier|later)-date-(condition|decision|event|check)")
 PAYMENT_PROOF_PIN = re.compile(r"(stage-)?proof-(H05-[1-9][0-9]{0,7})-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7})")
 SIGNER_PIN = re.compile(r"timing-(H05-[1-9][0-9]{0,7})-(signer-date|joint-clock)-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7})")
+MANDATE_DATE_PIN = re.compile(r"mandate-date-(H0[45]-[1-9][0-9]{0,7})-(buyer|seller)-(signed_on|granted_on)-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7})")
 
 
 def check_context(value):
@@ -76,6 +77,11 @@ def check_context(value):
         raise CaseError("走查原页位置不完整。", 400)
     params = result.get("params", {})
     anchor = result.get("anchor", "")
+    if anchor.startswith("mandate-date-"):
+        pin=MANDATE_DATE_PIN.fullmatch(anchor)
+        if (not pin or screen!="case" or not result.get("rev") or result.get("tab","report")!="report"
+                or {"doc","dialog"}.intersection(result) or params!={"view":"payment-checks","stage":pin[1]}):
+            raise CaseError("请选择这版期款检查中的代理签约或委托书出具日期。",400)
     if anchor.startswith("revision-") and "-date-" in anchor:
         if (not COMPARISON_DATE_PIN.fullmatch(anchor) or screen!="case" or not result.get("rev")
                 or result.get("tab","report")!="report" or {"doc","dialog"}.intersection(result)
@@ -211,6 +217,89 @@ def cited_timing_line(paper, ref, finding_id):
     return False
 
 
+def cited_mandate_date(paper, pin):
+    from delegation import PRINTED_SIGNER, complete_id
+    from performance import Material, printed_day
+
+    finding_id,side,field,doc,page,line=pin.groups()
+    graph=paper["graph"]
+    if (paper["policy"].get("delegation_checks")!="written-contract-mandate-v5" or
+            graph.get("delegation_coverage",{}).get("format")!=paper["policy"]["delegation_checks"]):
+        return False
+    payment=next((f for f in paper["findings"] if f["id"]==finding_id and f["rule"]==finding_id[:3]),None)
+    signing=next((f for f in paper["findings"] if f["rule"]=="H01"),None)
+    if not payment or not payment.get("stage") or not signing or "ok" in (signing["status"],payment["status"]):
+        return False
+    nodes={n["id"]:n for n in graph["nodes"]}
+    if any(nodes.get("finding/"+f["id"],{}).get(k)!=f[k] for f in (payment,signing) for k in ("status","detail")):
+        return False
+    expert=paper.get("calls",{}).get("expert") or {}
+    procedures=expert.get("input",{}).get("procedures",[])
+    def issued(f):
+        return next((p for p in procedures if all(p.get(k)==f.get(k) for k in ("rule","status","stage","evidence"))),{})
+    def cited(f,ref):
+        return ref in f["evidence"] and {"from":ref,"to":"finding/"+f["id"],"type":"supports_result","evidence":[ref]} in graph["edges"]
+    entries=[e for e in signing.get("delegations",[]) if e["side"]==side]
+    if (len(entries)!=1 or not expert.get("response_id") or entries[0] not in issued(signing).get("delegations",[]) or
+            not issued(payment) or not cited(payment,payment["stage"].get("clause_ref"))):
+        return False
+    entry,=entries
+    order=entry.get("issuance_order") or {}
+    contracts=set(graph["documents_by_kind"].get("contract",[])).intersection(signing["scope"])
+    grants=entry["units"]
+    if (len(contracts)!=1 or len(grants)!=1 or grants[0] not in graph["documents_by_kind"].get("power_of_attorney",[]) or
+            order.get("state") not in ("same_day","before") or entry.get("agent_kind")!="named" or entry["status"] not in ("risk","missing")):
+        return False
+    contract=Material(graph,contracts.pop())
+    grant=Material(graph,grants[0])
+    if grant.unit not in signing["scope"] or not grant.mandate_pages or any(not p["native"] or not p.get("text_only") for p in grant.mandate_pages):
+        return False
+    other="seller" if side=="buyer" else "buyer"
+    pairs=[("contract_id","contract_id"),("subject","subject"),(side,"grant_principal"),(other,"grant_counterparty")]
+    reference=side+"_grant_ref"
+    if contract.fields[reference]:
+        pairs.append((reference,"grant_number"))
+    signer=PRINTED_SIGNER.fullmatch(contract.body(entry["signature_field"]))
+    if (not signer or not signer[1]==entry.get("agent")==grant.body("grant_agent") or
+            not complete_id(contract.body("contract_id")) or contract.fields[reference] and not complete_id(contract.body(reference)) or
+            any(not contract.body(k) or contract.body(k)!=grant.body(v) for k,v in pairs)):
+        return False
+    dates={}
+    selected=False
+    for material,key,refs,recorded in ((contract,"signed_on","signed_refs","signed_on"),(grant,"granted_on","issued_refs","issued_on")):
+        facts=material.fields[key]
+        day=printed_day(material,key)
+        if len(facts)!=1 or not day or day.isoformat()!=entry.get(recorded) or material.unit not in payment["scope"]:
+            return False
+        fact,=facts
+        ref=fact["id"]
+        if order.get(refs)!=[ref] or ref not in entry["evidence"] or not all(cited(f,ref) for f in (payment,signing)):
+            return False
+        source=fact.get("source_line") or {}
+        fid,num=fact["doc"],fact["page"]
+        page_id=f"{fid}/p{num}"
+        file=next((f for f in graph["documents"] if f["id"]==fid),{})
+        node=nodes.get(page_id,{})
+        calls=[c for c in paper["calls"].get("pages",[]) if (c["doc"],c["page"])==(fid,num)]
+        if len(calls)!=1:
+            return False
+        call,=calls
+        check=(call.get("check") or {}).get("response_id")
+        if (type(source.get("number")) is not int or source["number"]<=0 or not rectangles(source.get("rects")) or
+                nodes.get(ref,{}).get("status")!=fact["status"] or
+                not file.get("sha256") or not nodes.get(fid,{}).get("sha256")==file["sha256"]==fact.get("source_sha256") or
+                node.get("type")!="page" or node.get("layer")!="text" or not node.get("sha256") or
+                not node["sha256"]==fact.get("page_sha256")==call.get("page_sha256") or not call.get("response_id") or
+                not check or check==call["response_id"] or
+                {"from":fid,"to":page_id,"type":"contains","evidence":[page_id]} not in graph["edges"] or
+                {"from":page_id,"to":ref,"type":"records","evidence":[ref]} not in graph["edges"]):
+            return False
+        dates[key]=day
+        if (key,fid,num,source["number"])==(field,doc,int(page),int(line)):
+            selected=True
+    return selected and (dates["signed_on"]==dates["granted_on"] if order["state"]=="same_day" else dates["signed_on"]<dates["granted_on"])
+
+
 def note_row(row):
     return {"id": row["id"], "created": row["created"], "text": row["note"], "context": json.loads(row["context"])}
 
@@ -256,6 +345,19 @@ def save_note(store, workspace, author, role, data):
                 raise CaseError("原图标记与这版底稿的页图摘要不符。", 409)
         position = context.get("params",{})
         anchor = context.get("anchor","")
+        if fact_ref:=position.get("fact"):
+            if "rev" not in context:
+                raise CaseError("请选择引文所在的底稿版本。",400)
+            facts=db.execute("""SELECT json_extract(f.value,'$.doc'),json_extract(f.value,'$.page'),json_extract(f.value,'$.source_line.number')
+                       FROM reports,json_each(content,'$.graph.facts') f WHERE case_id=? AND rev=? AND json_extract(f.value,'$.id')=?""",
+                       (context["case_id"],context["rev"],fact_ref)).fetchall()
+            if (len(facts)!=1 or "doc" in context and (facts[0][0],facts[0][1])!=(context["doc"],context["page"])
+                    or "line" in context and not PARTY_PIN.fullmatch(anchor) and facts[0][2]!=context["line"]):
+                raise CaseError("这版引文与所选资料、页码或原行不符。",404)
+        if pin:=MANDATE_DATE_PIN.fullmatch(anchor):
+            issued=db.execute("SELECT content FROM reports WHERE case_id=? AND rev=?",(context["case_id"],context["rev"])).fetchone()
+            if not issued or not cited_mandate_date(json.loads(issued[0]),pin):
+                raise CaseError("该版期款检查未引用这处代理签约或授权出具日期。",404)
         if PARTY_PIN.fullmatch(anchor):
             linked = db.execute("""SELECT 1 FROM reports, json_each(content,'$.graph.reviewed_party_lines.rows') AS r
                     WHERE case_id=? AND rev=? AND json_extract(content,'$.policy.party_readings')='reviewed-party-line-v1'

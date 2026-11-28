@@ -1,6 +1,63 @@
 import assert from 'node:assert/strict';
 import {writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
+import {browserInput,inspect,size} from './review-screen.mjs';
+
+async function checkPaymentDates(ctx,report,url) {
+  const {call,evaluate,wait}=ctx, q=s=>'document.querySelector('+JSON.stringify(s)+')';
+  const effect=report.findings.find(f=>f.rule==='H01'), [entry]=effect.delegations;
+  const order=entry.issuance_order;
+  for (const payment of report.findings.filter(f=>['H04','H05'].includes(f.rule))) {
+    await call('Page.navigate',{url:url+'&view=payment-checks&stage='+payment.id});
+    const pane='#performance-index[open]', card=pane+' [data-mandate-payment="'+payment.id+'"]';
+    await wait(q(pane+' .scope-check[aria-pressed=true]')+'?.dataset.check==='+JSON.stringify(payment.id),'selected installment');
+    const available=payment.stage && ['same_day','before'].includes(order?.state) &&
+      [...order.issued_refs,...order.signed_refs].every(ref=>payment.evidence.includes(ref));
+    if (!available) {assert.equal(await evaluate(q(card)+'===null'),true);continue;}
+    await wait(q(card)+'?.getClientRects().length','two issued dates on the payment');
+    const sources=await evaluate('[...'+q(card)+'.querySelectorAll("[data-mandate-date]")].map(b=>b.dataset.fact)');
+    assert.deepEqual(sources,[...order.signed_refs,...order.issued_refs]);
+    const gap=Math.round((Date.parse(entry.issued_on)-Date.parse(entry.signed_on))/86400000);
+    assert.equal(await evaluate(q(card+' .mandate-payment-head span')+'.textContent'),gap?'签约早于出具 '+gap+' 天':'同日 · 时分待核');
+    if (payment.rule==='H04' && payment.stage.name!=='第一期') continue;
+    for (const width of [1440,1024,768,390,360,320]) {
+      await size(ctx,width);
+      assert.ok(await evaluate(q(card)+'.scrollWidth<='+q(card)+'.clientWidth+1'),'authority dates fit at '+width);
+      if (payment.rule==='H05') await inspect(ctx,width,card,'mandate-payment-'+order.state);
+      if (![390,1440].includes(width)) continue;
+      for (const ref of sources) {
+        const button=q(card+' [data-fact="'+ref+'"]');
+        await evaluate(button+'.focus();'+button+'.click()');
+        await wait(q('#page-dialog')+'.open && '+q('#page-content .located')+'?.dataset.fact==='+JSON.stringify(ref),'correct physical date row');
+        await wait(q('.source-plane svg rect')+'!=null','marked original');
+        await evaluate(q('#page-dialog [data-close]')+'.click()');
+        await wait('document.activeElement==='+button,'focus on the payment date source');
+      }
+    }
+    for (const change of ["f.evidence=f.evidence.filter(id=>id!==ref)","r.graph.edges=r.graph.edges.filter(e=>!(e.from===ref && e.to==='finding/'+f.id))",
+      "r.graph.facts.find(x=>x.id===ref).source_line.rects=[]","r.graph.edges=r.graph.edges.filter(e=>!(e.type==='records' && e.to===ref))",
+      "r.calls.pages.find(p=>p.doc===ref.split('/')[0]).check=null",
+      "const p=r.calls.pages.find(p=>p.doc===ref.split('/')[0]);p.check.response_id=p.response_id",
+      "r.calls.pages.push(r.calls.pages.find(p=>p.doc===ref.split('/')[0]))",
+      "r.calls.expert.input.procedures.find(p=>p.rule==='H01').delegations=[]"]) {
+      assert.equal(await evaluate('(()=>{const r=structuredClone(state.bundle.report),f=r.findings.find(x=>x.id==='+JSON.stringify(payment.id)+'),ref='+JSON.stringify(sources[1])+';'+change+';return Boolean(MandateCalendar.paymentPanel(f,r,state.bundle.rev))})()'),false);
+    }
+    if (payment.rule==='H05') {
+      const field=q(card+' [data-mandate-date=granted_on]'), {click}=browserInput(ctx);
+      await click(q('#walk-launch'));
+      await wait(q('#walk-dialog')+'?.open && !'+q('#walk-save')+'?.disabled','recorder on this payment');
+      await click(q('#walk-pick'));
+      await click(field);
+      assert.equal(await evaluate(q('#walk-location')+'.textContent'),await evaluate(field+'.dataset.originalLabel'));
+      const link=await evaluate(`(async()=>{
+        const {captureContext,returnUrl}=await import('/assets/walkthrough-context.js');
+        return returnUrl(captureContext(document.getElementById('performance-index'),${field}),null);
+      })()`);
+      await call('Page.navigate',{url:new URL(link,ctx.root).href});
+      await wait(field+'?.classList.contains("walk-mark")','return to the selected source within the saved edition and installment');
+    }
+  }
+}
 
 export async function checkMandateCalendar({root,call,evaluate,wait},cid,revision) {
   const api=root+'/api/cases/'+cid, task=await (await fetch(api)).json();
@@ -155,4 +212,8 @@ export async function checkMandateCalendar({root,call,evaluate,wait},cid,revisio
     await wait(part('.mandate-ink[data-preview=image] canvas'),'original date excerpt recovered');
   }
   console.log('PASS · R'+rev+' · '+expected.get(title)+' · calendar, four cited rows, keyboard, original comparison and six widths');
+  if (['签约次日才出具委托书','出具委托书与代理签约同日'].includes(title)) {
+    await checkPaymentDates({root,call,evaluate,wait},report,url);
+    console.log('PASS · 第一期、第二期、第三期及回单逐项核对授权日期证据');
+  }
 }

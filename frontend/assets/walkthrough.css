@@ -27,6 +27,7 @@
 .walk-location { background:var(--canvas); border:1px solid var(--line); border-radius:7px; padding:5px 8px 5px 11px; margin:0 0 13px; }
 .walk-location small,.walk-scope,#walk-history time { font:.74rem/1.4 var(--font-ui); color:var(--muted); }
 #walk-location { margin:1px 0; font:.84rem/1.5 var(--font-ui); overflow-wrap:anywhere; }
+#walk-location time { white-space:nowrap; font-variant-numeric:tabular-nums; }
 .walk-location:has(#walk-excerpt:not([hidden])) { flex-wrap:wrap; }
 .walk-location:has(#walk-excerpt:not([hidden])) > div:first-child { flex:1 1 100%; min-width:0; }
 #walk-excerpt blockquote { margin:5px 0 2px; padding-inline-start:9px; border-inline-start:2px solid var(--accent-line); color:var(--ink); font:500 .9rem/1.55 var(--font-ui); white-space:pre-wrap; overflow-wrap:anywhere; }
@@ -76,10 +77,10 @@
 #walk-rail #walk-text { min-height:9rem; max-height:42dvh; }
 #walk-rail #walk-history ol { max-height:calc(100dvh - 245px); }
 @media(max-width:560px) {
-  body:has(#walk-dialog[open]) #performance-index:has(:is([data-filing-objection],[data-proof-target]).walk-selected) {
+  body:has(#walk-dialog[open]) #performance-index:has(:is([data-filing-objection],[data-proof-target],[data-mandate-date]).walk-selected) {
     inset-block:max(8px,env(safe-area-inset-top)) auto; margin-block:0;
   }
-  body:has(#walk-dialog[open]) #performance-index:has([data-proof-target].walk-selected) { max-height:var(--walk-source-height,45dvh); }
+  body:has(#walk-dialog[open]) #performance-index:has(:is([data-proof-target],[data-mandate-date]).walk-selected) { max-height:var(--walk-source-height,45dvh); }
   #walk-dialog { inset:auto 6px max(6px,env(safe-area-inset-bottom)); width:auto; max-height:84dvh; }
   #walk-text { font-size:16px; }
 }

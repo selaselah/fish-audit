@@ -72,8 +72,8 @@ const MandateCalendar = (() => {
         order.issued_refs?.length===1 && order.issued_refs[0]===issued.fact.id;
     }
     const grantName=value(grant,'grant_agent'), signature=value(contract,entry.signature_field);
-    const named=bound && entry.agent_kind==='named' && grantName===plain(entry.agent) &&
-      [grantName+'(已签字)',grantName+'(已签名)'].includes(signature)?entry.agent:'';
+    const signer=signature?.match(/^(?:(?:委托代理人|授权代理人|代理人):?)?(.{1,100})\((?:已签字|已签名)\)$/u);
+    const named=bound && entry.agent_kind==='named' && grantName===plain(entry.agent) && signer?.[1]===grantName?entry.agent:'';
     const image=(graph.delegation_coverage?.pages || []).some(p=>entry.units.includes(p.unit) && (!p.native || p.text_only===false));
     return {rows,bound,named,image,scope:record(grant,'grant_scope')};
   }
@@ -227,5 +227,60 @@ const MandateCalendar = (() => {
     if (root.open) requestAnimationFrame(()=>{if (root.isConnected && root.open) build();});
     return root;
   }
-  return {panel,evidence,printed};
+  function paymentPanel(finding,report,rev) {
+    if (!['H04','H05'].includes(finding.rule) || !finding.stage?.clause_ref || finding.status==='ok' ||
+        report.policy.delegation_checks!=='written-contract-mandate-v5' || report.graph.delegation_coverage?.format!==report.policy.delegation_checks) return null;
+    const {graph}=report, signing=report.findings.find(f=>f.rule==='H01');
+    if (!signing?.delegations?.length || signing.status==='ok') return null;
+    const {supports}=graphIndex(graph), cited=supports.get('finding/'+finding.id);
+    const expert=report.calls?.expert, same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
+    const procedures=expert?.input?.procedures || [];
+    const issued=f=>procedures.find(p=>p.rule===f.rule && p.status===f.status && same(p.stage,f.stage) && same(p.evidence,f.evidence));
+    const authority=issued(signing);
+    if (!expert?.response_id || !authority || !issued(finding) || !cited?.has(finding.stage.clause_ref) ||
+        !finding.evidence.includes(finding.stage.clause_ref)) return null;
+    const originals=new Map(PerformanceIndex.originals(finding,graph).filter(s=>s.line).map(s=>[s.fact.id,s]));
+    const signed=new Set(PerformanceIndex.originals(signing,graph).filter(s=>s.line).map(s=>s.fact.id));
+    const group=document.createDocumentFragment();
+    for (const entry of signing.delegations) {
+      const order=entry.issuance_order;
+      if (!['same_day','before'].includes(order?.state) || !['risk','missing'].includes(entry.status) ||
+          signing.delegations.filter(e=>e.side===entry.side).length!==1 || !authority.delegations?.some(e=>same(e,entry)) ||
+          !entry.units.every(u=>finding.scope.includes(u))) continue;
+      const pages=graph.delegation_coverage.pages?.filter(p=>entry.units.includes(p.unit));
+      if (!pages?.length || !pages.every(p=>p.native && p.text_only)) continue;
+      const proof=evidence(signing,entry,graph), rows=proof.rows.slice(0,2);
+      if (!proof.bound || !proof.named || proof.image || rows.some(({day,fact})=>{
+        if (!day || !fact || !signed.has(fact.id) || !finding.evidence.includes(fact.id) || !finding.scope.includes(fact.unit || fact.doc)) return true;
+        const source=originals.get(fact.id), calls=report.calls.pages?.filter(p=>p.doc===fact.doc && p.page===fact.page);
+        if (!source || calls?.length!==1) return true;
+        const [call]=calls;
+        return !call.response_id || !call.check?.response_id || call.response_id===call.check.response_id ||
+          call.page_sha256!==fact.page_sha256 || issuedPageDocument(graph,call)!==source.doc;
+      })) continue;
+      const card=el('section','','mandate-payment');
+      card.dataset.mandatePayment=finding.id; card.dataset.side=entry.side; card.dataset.caseId=report.case_id; card.dataset.rev=String(rev);
+      const side=entry.side==='buyer'?'甲方':'乙方', title=side+'签约授权';
+      const difference=Math.round((Date.parse(rows[1].day)-Date.parse(rows[0].day))/86400000);
+      const reason=order.state==='same_day'?'同日 · 时分待核':'签约早于出具 '+difference+' 天';
+      card.setAttribute('aria-label',title+'，'+reason);
+      card.append(box('mandate-payment-head',el('h4',title),el('span',reason)));
+      const sources=box('mandate-payment-sources');
+      for (const row of rows) {
+        const f=row.fact, {doc:file,line}=originals.get(f.id), place='第 '+f.page+' 页 · 第 '+line+' 行';
+        const label=row.field==='signed_on'?'代理签约':row.label;
+        const button=action('',()=>openPage(f.doc,f.page,f.id),'mandate-payment-source');
+        button.id=['mandate-date',finding.id,entry.side,row.field,f.doc,'p'+f.page,'l'+f.source_line.number].join('-');
+        button.dataset.mandateDate=row.field; button.dataset.fact=f.id;
+        button.dataset.originalLabel=finding.stage.name+' · '+label+' '+row.day+' · '+file.name+' · '+place;
+        button.setAttribute('aria-haspopup','dialog'); button.setAttribute('aria-controls','page-dialog');
+        const when=el('time',row.day); when.dateTime=row.day;
+        button.append(el('span',label),when,el('small',file.name),el('small',place));
+        sources.append(button);
+      }
+      card.append(sources); group.append(card);
+    }
+    return group.childElementCount?group:null;
+  }
+  return {panel,evidence,printed,paymentPanel};
 })();

@@ -79,11 +79,19 @@ function showLocation() {
     context.raw_ref?.startsWith('inspection-line/') || context.anchor?.startsWith('serial-H');
   const comparison=context.params?.view==='revision-comparison' && context.params.prior && context.anchor?.startsWith('revision-');
   const timing=context.anchor?.startsWith('timing-H') || /^(?:signer-date|joint-clock)\//.test(context.raw_ref || '');
-  const compact=source || (docked || signing || timing || comparison || /^(?:party-reading-|(?:stage-)?proof-)/.test(context.anchor || '')) && context.screen==='case' && context.rev && (context.target || context.page_point);
+  const compact=source || (docked || signing || timing || comparison || /^(?:party-reading-|mandate-date-|(?:stage-)?proof-)/.test(context.anchor || '')) && context.screen==='case' && context.rev && (context.target || context.page_point);
   const editions=comparison?'R'+context.params.prior+' / R'+context.rev:'R'+context.rev;
   q('#walk-origin').textContent=compact?'底稿 '+context.case_id.slice(0,8)+' · '+editions:'记录位置';
   place.textContent=compact?[context.target || source?.file || context.doc,context.doc && '第 '+context.page+' 页',context.line && '第 '+context.line+' 行',
     context.page_point && pointLabel(context.page_point)].filter(Boolean).join(' · '):full;
+  if (context.anchor?.startsWith('mandate-date-')) {
+    const label=place.textContent, day=/\b\d{4}-\d{2}-\d{2}\b/u.exec(label);
+    if (day) {
+      const time=document.createElement('time');
+      time.dateTime=day[0]; time.textContent=day[0];
+      place.replaceChildren(label.slice(0,day.index),time,label.slice(day.index+day[0].length));
+    }
+  }
   place.title=full;
   updatePoint();
 }
@@ -227,7 +235,7 @@ function resetButton() {
 }
 function revealSelectedSource() {
   const el=selectedElement;
-  if (!dialog.open || !el?.closest('.revision-approval-sources,[data-proof-target],[data-timing-ref]') || !matchMedia('(max-width:650px)').matches) return;
+  if (!dialog.open || !el?.closest('.revision-approval-sources,[data-proof-target],[data-timing-ref],[data-mandate-date]') || !matchMedia('(max-width:650px)').matches) return;
   const bottom=dialog.getBoundingClientRect().top-12;
   if (el.closest('#performance-index[open]') && matchMedia('(max-width:560px)').matches) {
     const scope=el.closest('#performance-index');

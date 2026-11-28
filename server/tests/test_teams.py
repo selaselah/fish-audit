@@ -15,7 +15,7 @@ from documents import prepare
 from invoice_proof import source_record
 from jobs import Worker
 from main import create_app
-from storage import Store
+from storage import Store, encode
 from verify import verify
 
 
@@ -101,6 +101,28 @@ class EnterpriseFlow(unittest.TestCase):
             restarted = create_app(Store(self.store.root),self.worker).test_client()
             self.assertEqual(restarted.get(url).json["notes"][0]["context"],note["context"])
             self.assertEqual(restarted.get("/api/cases").json["cases"],[])
+
+    def test_walkthrough_fact_belongs_to_the_selected_revision_page_and_printed_line(self):
+        auditor,wid,headers=self.register("fact-reviewer")
+        case=self.checked_invoice(auditor,wid,headers,"walkthrough-fact-photo")
+        endpoint=f"/api/w/{wid}/walkthrough"
+        position={"screen":"case","case_id":case,"rev":1,"doc":"d01","page":1,"params":{"fact":"d01/p1/f1"}}
+        def save(context):
+            return auditor.post(endpoint,headers=headers,json={"id":"c"*32,"text":"希望放大这条票号。","context":context})
+        legacy={k:v for k,v in position.items() if k!="rev"}
+        self.assertEqual(save(legacy).status_code,400)
+        for changes in ({"doc":"d02"},{"page":2},{"line":1},{"params":{"fact":"d01/p1/f90"}}):
+            with self.subTest(changes=changes):
+                self.assertEqual(save({**position,**changes}).status_code,404)
+        self.assertEqual(auditor.get(endpoint).json["notes"],[])
+        self.assertEqual(save(position).status_code,201)
+        self.assertEqual(save(position).status_code,200)
+        stored,=auditor.get(endpoint).json["notes"]
+        self.assertEqual(stored["context"],position)
+        self.assertEqual(self.store.detail(case)["rev"],2)
+        with self.store.connect(write=True) as db:
+            db.execute("UPDATE walkthrough_notes SET context=? WHERE workspace=? AND id=?",(encode(legacy),wid,stored["id"]))
+        self.assertEqual(save(legacy).status_code,200)
 
     def test_walkthrough_point_is_bound_to_its_issued_page(self):
         admin,wid,headers = self.register("point-reviewer")

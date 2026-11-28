@@ -109,7 +109,7 @@ function returnToControl() {
   const comparison=anchor.startsWith('revision-') && params.get('view')==='revision-comparison'
     ? document.getElementById('revision-comparison') : null;
   const board=params.get('view')==='board-decision' && anchor.startsWith('board-');
-  const receipt=params.get('view')==='payment-checks' && /^(?:quality|retest|inspection-use|payment-approval|payment-clock|contract-approver|approver-change|installment-count)-/.test(anchor);
+  const receipt=params.get('view')==='payment-checks' && /^(?:quality|retest|inspection-use|payment-approval|payment-clock|contract-approver|approver-change|installment-count|mandate-date)-/.test(anchor);
   const party=anchor.startsWith('party-reading-');
   const proof=/^(stage-)?proof-(H05-[1-9]\d*)-d\d+-p[1-9]\d*-l[1-9]\d*$/.exec(anchor);
   const timing=/^timing-(H05-[1-9]\d*)-(?:signer-date|joint-clock)-d\d+-p[1-9]\d*-l[1-9]\d*$/.exec(anchor);
@@ -165,9 +165,9 @@ function returnToControl() {
         el.dataset.caseId!==path.split('/').at(-1) || el.dataset.rev!==params.get('rev') ||
         el.closest('.evidence-row')?.dataset.fact!==params.get('fact'))) return false;
     if (receipt) {
-      const card=el?.closest('#performance-index[open] :is([data-quality-finding],[data-retest-finding],[data-use-finding],[data-count-finding])');
+      const card=el?.closest('#performance-index[open] :is([data-quality-finding],[data-retest-finding],[data-use-finding],[data-count-finding],[data-mandate-payment])');
       if (!card || url.hash!==location.hash || card.dataset.caseId!==path.split('/').at(-1) ||
-          card.dataset.rev!==params.get('rev') || (card.dataset.countFinding || card.dataset.useFinding || card.dataset.qualityFinding || card.dataset.retestFinding)!==params.get('stage')) return false;
+          card.dataset.rev!==params.get('rev') || (card.dataset.countFinding || card.dataset.useFinding || card.dataset.qualityFinding || card.dataset.retestFinding || card.dataset.mandatePayment)!==params.get('stage')) return false;
     }
     if (board) {
       const card=el?.closest('#board-decision,#board-unavailable');

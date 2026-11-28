@@ -152,6 +152,10 @@ H05 还列有对应的成功回单、款项用途、交易状态及日期字段�
 
 ## 产品走查意见
 
+在分期条件或实付检查中点选签约授权日期，`context.params` 固定为 `{"view":"payment-checks","stage":"H05-8"}` 这样的检查位置，`context.anchor` 例如 `mandate-date-H05-8-buyer-granted_on-d01-p1-l11`。新建意见时，服务端核对该版签约与期款两项发现、专家输入、两张原件的日期、页图摘要、独立读取记录和原行位置。位置与检查项冲突返回 400，该版没有引用所选日期返回 404。[本机第二期实付](http://127.0.0.1:8000/workpaper/492beb22cb764562a9a1464cea1658ac?rev=5&view=payment-checks&stage=H05-8)
+
+从原件保存字段意见时，`context.params.fact` 必须属于指定案件的 `rev`。一并提交的文件、页码和印刷行须与该版记录一致。单独核对的主体原行按该版模型字段和核字行的对应关系校验。照片没有印刷行号时可按字段定到原页。已存意见按原编号和内容重试仍返回原记录。
+
 独立付款审批单上的控件可用 `payment-approval-H05-8-d07-p1-l10` 定位。原件意见的 `raw_ref` 如 `payment-approval/d07/p1/l10`。保存时核对指定版次的付款发现、引用原行和归档行框。浏览器可以据此重开同版的审批单第 10 行。[水印案例 R7](http://127.0.0.1:8000/workpaper/7fd2600efdb14666834148f59684cf51?rev=7&view=payment-checks&stage=H05-8)
 
 对付款用途附注点选意见时，控件 `anchor` 形如 `inspection-use-H05-8-d01-p1-l21`。在 PDF 原页上填写时，`context.raw_ref` 形如 `inspection-use/d01/p1/l21`，须与同一底稿版本的文档、页、行及付款发现相符，并具有该版归档的行框。旧版没有这行用途依据时，写入会返回 404。[试用复验单第 21 行](http://127.0.0.1:8000/workpaper/66fa88c60aed4799a64ab73c0eb92495?rev=11&view=payment-checks&stage=H05-8)
