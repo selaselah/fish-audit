@@ -1981,7 +1981,13 @@ async function openAmend(doc, page, fact, printed) {
     const issued=state.bundle;
     state.fields ||= (await api('/api/controls')).fields;
     const current = state.detail;
-    let counterpart;
+    let counterpart, bankProof;
+    if (printed?.bankParty) {
+      bankProof=ReceiptParties.bind(issued.report,issued.report.findings.find(f=>f.id===printed.finding),printed.bankParty);
+      if (state.bundle!==issued || !canReviewCurrentPaper() || !bankProof || bankProof.bank.fact!==fact ||
+          bankProof.row.doc!==doc || bankProof.row.page!==page || bankProof.row.state!=='pending') return;
+      printed={quote:bankProof.row.quote,field:bankProof.row.printed_role};
+    }
     if (printed?.partyLine) {
       const proof=PartyReadings.bind(state.bundle?.report,printed.partyLine);
       if (state.bundle!==issued || !canReviewCurrentPaper() || !proof || proof.model!==fact ||
@@ -2002,15 +2008,18 @@ async function openAmend(doc, page, fact, printed) {
     const item = current.documents.find(item => item.id === doc);
     const line=counterpart?.source_line || (fact?.doc===doc && fact.page===page && (!printed || printed.quote===fact.source_line?.text) ? fact.source_line : null);
     const marks=$('#amend-marks'), pane=$('#amend-original');
+    pane.querySelector('.bank-role-preview')?.remove(); delete pane.dataset.bankView;
+    $('#amend-dialog').classList.toggle('bank-role-editing',Boolean(bankProof));
     markPageRects(marks,line?.rects || []);
     image.alt=item.name+' 第 '+page+' 页';
-    $('#amend-context').textContent = item.name + ' · 第 ' + page + ' 页' + (marks.childElementCount?' · 第 '+line.number+' 行':'') + ' · 底稿 R' + state.bundle.rev;
+    $('#amend-context').textContent = item.name + ' · 第 ' + page + ' 页' + (marks.childElementCount?' · 第 '+line.number+' 行':'') + ' · 底稿 R' + state.bundle.rev +
+      (bankProof?' · 原模型字段 '+ReceiptParties.names[bankProof.row.model_role]:'');
     pane.setAttribute('aria-label',$('#amend-context').textContent+'，更正所据原页');
     const select = $('#amend-field'); select.replaceChildren(new Option('请选择字段', ''));
     for (const [key, label] of Object.entries(state.fields)) select.add(new Option(label, key));
     select.value = printed?.field || fact?.field || '';
     $('#amend-quote').value = printed?.quote || fact?.quote || '';
-    $('#amend-value').value = counterpart?.value || (printed ? '' : (fact?.value || ''));
+    $('#amend-value').value = bankProof?.printedValue || counterpart?.value || (printed ? '' : (fact?.value || ''));
     $('#amend-region').value = counterpart?.region || fact?.region || 'top';
     $('#page-dialog').close();
     $('#amend-dialog').showModal();
@@ -2021,6 +2030,7 @@ async function openAmend(doc, page, fact, printed) {
         const mark=marks.firstElementChild?.getBoundingClientRect(), area=pane.getBoundingClientRect();
         if (mark && pane.scrollHeight>pane.clientHeight)
           pane.scrollTop+=(mark.top+mark.bottom-area.top-area.bottom)/2;
+        if (bankProof) ReceiptParties.amendPreview(bankProof,image,issued.report.graph).catch(()=>{});
       }
     } catch {
       if (image.isConnected) $('#amend-error').textContent = '原页加载失败，请重新打开并核对原图。';

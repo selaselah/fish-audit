@@ -825,6 +825,7 @@ const PerformanceIndex = (() => {
       const roster=AcceptanceRoster.bind(item,state.bundle.report);
       const finalSignatures=item.final_signature_condition && batchSignatureEvidence(state.bundle.report,item);
       const mandateDates=MandateCalendar.paymentPanel(item,state.bundle.report,rev);
+      const bankParties=ReceiptParties.panel(item,state.bundle.report,rev);
       const batch=BatchPhase.resolve(item,findings.find(f=>f.rule==='H02'),graph,state.bundle.report.calls?.pages);
       const guarantee=AdvanceGuarantee.panel(item,state.bundle.report);
       const quality=PaymentQuality.panel(item,state.bundle.report,rev);
@@ -849,6 +850,7 @@ const PerformanceIndex = (() => {
       for (const ref of item.party_readings || []) detail.append(PartyReadings.citation(state.bundle.report,ref,item));
       if (item.installment_count) detail.append(InstallmentCount.citation(state.bundle.report,item.installment_count,item,true));
       if (finalSignatures) detail.append(finalSignatures);
+      if (bankParties) detail.append(bankParties);
       if (mandateDates) detail.append(mandateDates);
       if (item.approval_change) detail.append(ApprovalChange.panel(item,state.bundle.report,rev));
       if (item.approval_change_scope) {
@@ -914,10 +916,10 @@ const PerformanceIndex = (() => {
         if (detailText) detail.append(fold('本项检查结论',el('p',detailText,'scope-reason')));
       } else if (!paired && detailText) {
         const reason=el('p',detailText,'scope-reason');
-        detail.append(detailText.length<=100 && !receipts.length && !batch && !guarantee && !quality && !retest?reason:fold('阅读本项结论',reason));
+        detail.append(detailText.length<=100 && !receipts.length && !bankParties && !batch && !guarantee && !quality && !retest?reason:fold('阅读本项结论',reason));
       }
       if (!paired && !eventDate) {
-        detail.append(register || roster || finalSignatures || mandateDates || batch || guarantee || quality || retest || mandates.length || receipts.some(p=>p.record.kind)?lazyFold('其他字段引文',()=>[sources()]):sources());
+        detail.append(register || roster || finalSignatures || mandateDates || bankParties || batch || guarantee || quality || retest || mandates.length || receipts.some(p=>p.record.kind)?lazyFold('其他字段引文',()=>[sources()]):sources());
       }
       detail.append(actions);
       detail.scrollTop=0;

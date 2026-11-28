@@ -1,9 +1,11 @@
 from copy import deepcopy
 from hashlib import sha256
+from pathlib import Path
+from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
-from config import PERFORMANCE
+from config import CaseError, PERFORMANCE
 from controls import VERSION, execute
 from graph import build_graph, link_procedures
 from model import FIELDS
@@ -58,6 +60,53 @@ def example(changes, *, correct=(), extra=(), banks=1):
 
 
 class ReceiptPartyTests(unittest.TestCase):
+    def test_pending_payer_original_is_guarded_until_the_signature_is_written(self):
+        from jobs import Worker
+        from storage import Store
+        from test_acceptance_execution import printed
+
+        original_graph = material([CONTRACT, RECEIPT, WARRANTY, BANK_DOC])
+        def extract(path):
+            unit = path.parent.name
+            facts = [{k:f[k] for k in ("field","value","quote","region")}
+                     for f in original_graph["facts"] if f["doc"]==unit]
+            for fact in facts:
+                if fact["field"]=="payer":
+                    fact["field"]="buyer"
+            output = {"quality":"readable","facts":facts}
+            inputs = [{"index":str(i),"field":FIELDS[f["field"]],"quote":f["quote"],"value":f["value"]}
+                      for i,f in enumerate(facts,1)]
+            check = {"model":"fixture","response_id":"check-"+unit,"input":inputs,
+                     "output":{"checks":[{"index":i["index"],"support":"clear"} for i in inputs]}}
+            return output, {"model":"fixture","response_id":"read-"+unit,"output":output,"check":check}
+
+        with TemporaryDirectory() as temp:
+            store = Store(Path(temp))
+            case_id = "c"*32
+            docs = []
+            for doc in original_graph["documents"]:
+                unit = doc["id"]
+                raw = printed(original_graph,unit)
+                folder = store.files/case_id/unit
+                folder.mkdir(parents=True)
+                (folder/"original.pdf").write_bytes(raw)
+                docs.append({"id":unit,"name":doc["name"]+".pdf","ext":".pdf","size":len(raw),"sha256":sha256(raw).hexdigest()})
+            store.create(case_id,"合成户名核对",docs,case_id,case_id,PERFORMANCE)
+            expert = {"followups":[]}
+            with patch("model.structured",return_value=(expert,{"model":"fixture","response_id":"expert","output":expert})):
+                Worker(store,extract).run(store.claim())
+            report = store.report(case_id,1)["report"]
+            [row] = report["graph"][roles.KEY]["rows"]
+            self.assertEqual((row["state"],row["printed_role"]),("pending","payer"))
+            source = store.files/case_id/row["doc"]/"original.pdf"
+            pinned = store.approval_sources(case_id,1,None)
+            self.assertIn(source,pinned[0][0].files)
+            with store.connect(True) as db:
+                store.recheck_approval(db,case_id,1,{},payment_sources=pinned)
+            source.write_bytes(source.read_bytes()+b"\n% changed after preflight")
+            with self.assertRaises(CaseError),store.connect(True) as db:
+                store.recheck_approval(db,case_id,1,{},payment_sources=pinned)
+
     def test_model_roles_do_not_assign_an_installment_until_the_originals_are_corrected(self):
         for current,expected_stage in [((),"pending"),(("payer","payee"),"corrected")]:
             paper,read,layout=example({"payer":"payee","payee":"payer"},correct=current,banks=2)

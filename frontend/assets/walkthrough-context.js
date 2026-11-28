@@ -10,6 +10,11 @@ const homeKeys = ['scene','slip','copy','edition','batch','record','pdf','carrie
 const caseKeys = ['view','stage','instrument','receipt','ticket','call','agreement','acceptance','finding','fact','prior','entry','filing','part'];
 const identifier = /^[a-zA-Z][a-zA-Z0-9_-]{0,95}$/;
 const factID = /^d\d{2}\/p[1-9]\d*\/(?:[ft][1-9]\d*|h[a-f0-9]{12})$/;
+function fileLabel(name) {
+  if (!name || /[\p{C}\p{Z}]/u.test(name.replaceAll(' ',''))) return undefined;
+  const chars=[...name];
+  return chars.length<=96?name:chars.slice(0,65).join('')+'…'+chars.slice(-30).join('');
+}
 export function originalLine(context, bundle) {
   const ref=context.params?.fact, report=bundle?.report;
   if (context.dialog!=='page-dialog' || !context.line || !factID.test(ref || '') ||
@@ -110,6 +115,10 @@ export function captureContext(owner, element, pagePoint) {
         const mandate=element?element.closest('[data-mandate-payment]'):owner?.id==='performance-index' && owner.querySelector('[data-mandate-payment]');
         if (mandate?.dataset?.caseId===cid && mandate.dataset.rev===String(context.rev) && mandate.closest('#performance-index[open]'))
           context.params={view:'payment-checks',stage:mandate.dataset.mandatePayment};
+        const bankCard=!element && owner?.matches('#performance-index[open]') && owner.querySelector('[data-bank-party]');
+        if (bankCard?.dataset?.caseId===cid && bankCard.dataset.rev===String(context.rev) &&
+            owner.querySelector('.scope-check[aria-pressed=true]')?.dataset.check===bankCard.dataset.finding)
+          context.params={view:'payment-checks',stage:bankCard.dataset.finding};
         const activeProof=element?element.closest('#payment-proof'):owner?null:
           (view==='payment-proof'?document.getElementById('payment-proof'):document.getElementById('walk-launch')?.closest('#payment-proof'));
         if (activeProof?.dataset.caseId===cid && activeProof.dataset.rev===String(context.rev) &&
@@ -145,11 +154,8 @@ export function captureContext(owner, element, pagePoint) {
           context.doc = page.dataset.doc; context.page = +page.dataset.page;
           delete context.params;
           const files=context.rev?state.bundle.report.graph.documents:state.detail.documents;
-          const name=files?.find(file=>file.id===context.doc)?.name;
-          if (!element && name && !/[\p{C}\p{Z}]/u.test(name.replaceAll(' ',''))) {
-            const chars=[...name];
-            context.target=chars.length<=96?name:chars.slice(0,65).join('')+'…'+chars.slice(-30).join('');
-          }
+          const name=fileLabel(files?.find(file=>file.id===context.doc)?.name);
+          if (!element && name) context.target=name;
           if (pagePoint) context.page_point=pagePoint;
           const row=pagePoint ? null : element?.closest('.evidence-row') || owner.querySelector('.evidence-row.located');
           const cited=row?.dataset.fact;
@@ -170,6 +176,12 @@ export function captureContext(owner, element, pagePoint) {
         }
       }
     }
+  }
+  const bankSource=element?.closest('[data-bank-role-source]');
+  if (bankSource && context.rev && context.case_id===state.bundle?.report.case_id) {
+    const selected=ReceiptParties.selection(bankSource,state.bundle.report,context.rev);
+    if (selected) return {screen:'case',case_id:context.case_id,rev:context.rev,tab:'report',dialog:'page-dialog',
+      doc:selected.fact.doc,page:selected.fact.page,line:selected.line,params:{fact:selected.fact.id},target:fileLabel(selected.doc.name)};
   }
   if (Object.hasOwn(dialogs, owner?.id)) context.dialog = owner.id;
   if (element) {

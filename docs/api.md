@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## 银行回单户名与模型分类
+
+自规则 `2026.11.28.24` 起，已出具底稿可包含 `policy.bank_party_readings = printed-bank-party-roles-v1`。`graph.bank_party_readings.rows[]` 记录本笔银行回单上的付款或收款户名。每条包括模型字段 `model_role`、实印栏名对应的 `printed_role`、原行及取值、原件和页图摘要、物理页行、行框和候选字段编号。当有唯一原生行、可核对的模型初读与独立复读、字段分类分歧，且实印栏名仍缺失时，状态为 `pending`。H05 的同名字段列出本笔引用的原行节点，专家输入保留比较依据。[核对程序](../server/receipt_parties.py)
+
+审计员在当前待验收版可从这项检查打开原行并提交字段更正。归档确认来自本案、该页的同一条候选记录后，新版可列为 `corrected`，并按更正后的材料重算期次。归期结果在 H05 的 `stage`，合同与验收等前提另见该项 `status` 和 `evidence`。走查意见沿用所选原件的 `case_id`、`rev`、`doc`、`page`、`line` 和 `params.fact`。本机演练中回单与合同分别链接 `d04/p1/f3` 和 `d03/p1/f3`。[从两张原件分别记录意见](interaction-design/README.md#在页面上记录走查意见)
+
 ## 分批签认、单独终验与质保金
 
 规则 `2026.11.28.23` 使用 `contract-delivery-batches-v8`。H02 的 `batch_acceptance.separate_final.signatures_on_batches[]` 记录应参加终验、且能在对应分批单找到签认的人员。每项含 `name`、`batch_index`、分批单 `unit`、合同分批名单 `clause_ref`、验收范围 `scope_ref`、批次单号 `number_ref` 和具名签认 `signature_ref`。终验单自身的签认结果见 `records[].signing.signed` 和 `missing_names`。

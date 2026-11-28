@@ -88,6 +88,7 @@ FULL_PAGE_EVIDENCE = (
     "contract_comments", "stage_payments", "invoice_receipt", "payment_change", "payment_opinion",
     "equipment_models", "inspection_coverage", "payment_acceptance", "execution_basis", "contract_folios",
     "prior_installment", "advance_guarantee", "payment_quality", "retest_reference", "inspection_use", "party_readings","approval_change","approval_change_scope","installment_count",
+    receipt_parties.KEY,
 )
 
 
@@ -1103,18 +1104,21 @@ class Store:
         guarantee_checked = any(f.get("advance_guarantee") for f in paper["findings"])
         model_checked = any(f.get("equipment_models") for f in paper["findings"])
         execution_checked = any(f.get("execution_basis") for f in paper["findings"])
-        bank_acceptance_checked = any(f.get("payment_acceptance") or f.get("retest_reference") for f in paper["findings"])
+        bank_roles = any(f.get(receipt_parties.KEY) for f in paper["findings"])
+        bank_sources_checked = bank_roles or any(f.get("payment_acceptance") or f.get("retest_reference") for f in paper["findings"])
         inspection_checked = any(f.get("inspection_coverage") for f in paper["findings"])
         folios_checked = any(f.get("contract_folios") or f.get("installment_count") for f in paper["findings"])
         multi_transfers = any(f.get("stage_payments") for f in paper["findings"])
         packets_checked = bool(graph.get("receipt_packet_sources",{}).get("packets")) and any(f["rule"]=="H02" for f in paper["findings"])
-        if graph.get("profile")!=BANK and (contract_comments_checked or comments_checked or folios_checked or changed or named_acceptance or chronology or batches or packets_checked or multi_transfers or invoice_terms_checked or guarantee_checked or model_checked or inspection_checked or bank_acceptance_checked or execution_checked or effect_checked or warranty_checked or windows_checked or reservations_checked or any(f.get("delegations") for f in paper["findings"])):
+        if graph.get("profile")!=BANK and (contract_comments_checked or comments_checked or folios_checked or changed or named_acceptance or chronology or batches or packets_checked or multi_transfers or invoice_terms_checked or guarantee_checked or model_checked or inspection_checked or bank_sources_checked or execution_checked or effect_checked or warranty_checked or windows_checked or reservations_checked or any(f.get("delegations") for f in paper["findings"])):
             if not payment_sources or len(payment_sources)!=1:
                 raise CaseError("签收前需重新核对合同及所据履约附件原件。",409)
             source = payment_sources[0][0]
             if (source.case_id,source.revision,source.report_hash)!=(case_id,revision,row["hash"]):
                 raise CaseError("履约原件所据的签收版已变化。",409)
             source.guard(db)
+            if bank_roles:
+                event(db,case_id,"bank_party_sources",f"签收前核对 R{revision} 的回单户名、模型字段分类及所引原件和页图。")
             if execution_checked:
                 event(db,case_id,"payment_execution_sources",f"签收前核对 R{revision} 的付款凭证原件、页图和说明所据原行。")
             if guarantee_checked:
@@ -1149,7 +1153,7 @@ class Store:
                 event(db,case_id,"acceptance_signature_sources",f"签收前核对 R{revision} 的具名条款、验收签字及相关页图，共 {len(source.files)} 个文件。")
             if changed:
                 event(db,case_id,"addendum_sources",f"签收前核对 R{revision} 合同、补充协议、验收原件和相关页图，共 {len(source.files)} 个文件。")
-            elif not contract_comments_checked and not comments_checked and not folios_checked and not named_acceptance and not chronology and not batches and not packets_checked and not multi_transfers and not execution_checked and not effect_checked and not warranty_checked and not windows_checked and not reservations_checked and not invoice_terms_checked and not guarantee_checked:
+            elif not bank_roles and not contract_comments_checked and not comments_checked and not folios_checked and not named_acceptance and not chronology and not batches and not packets_checked and not multi_transfers and not execution_checked and not effect_checked and not warranty_checked and not windows_checked and not reservations_checked and not invoice_terms_checked and not guarantee_checked:
                 event(db,case_id,"mandate_sources",f"签收前核对 R{revision} 的合同签字、委托书及相关页图，共 {len(source.files)} 个文件。")
         if graph.get("profile") == PERFORMANCE:
             return None

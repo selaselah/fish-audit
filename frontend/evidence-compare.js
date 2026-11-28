@@ -321,10 +321,10 @@ const EvidenceCompare = (() => {
     return pages.get(url);
   }
 
-  async function lineExcerpt(fact,index) {
+  async function lineExcerpt(fact,index,loadedPage) {
     const rects=rectangles(fact);
     if (!rects.length) return null;
-    return drawExcerpt(await pageImage(fact,index),rects,true);
+    return drawExcerpt(loadedPage || await pageImage(fact,index),rects,true);
   }
 
   async function pageThumbnail(fact,index) {
