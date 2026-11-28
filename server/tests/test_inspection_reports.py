@@ -11,6 +11,7 @@ from reportlab.pdfgen import canvas
 
 import config
 from documents import render
+import inspection_report_scope
 import inspection_reports as inspection
 from pdf_execution import inspect_original
 import signature_purposes as purposes
@@ -73,11 +74,12 @@ class InspectionReportTests(unittest.TestCase):
                            "source_line":{"number":3,"text":"合同编号：HT-100","rects":self.pages["receipt"]["layer"]["lines"]["3"]}}]
         read = lambda d: originals[d["id"]]
         rows = purposes.sources(graph,read)
-        if tuple(map(int,version.split("."))) >= purposes.REFERENCE_SINCE:
-            inspection.attach(graph,rows,read)
+        edition = tuple(map(int,version.split(".")))
+        if edition >= purposes.REFERENCE_SINCE:
+            inspection.attach(graph,rows,read,compare_scope=edition>=inspection_report_scope.SINCE)
         graph[purposes.KEY] = purposes.ledger(rows)
         policy = {"version":version, purposes.KEY:graph[purposes.KEY]["format"],
-                  "code_sha256":{"signature_purposes.py":"a"*64,"inspection_reports.py":"b"*64}}
+                  "code_sha256":{"signature_purposes.py":"a"*64,"inspection_reports.py":"b"*64,"inspection_report_scope.py":"c"*64}}
         nodes, edges = purposes.source_graph(rows)
         graph["nodes"].extend(nodes)
         graph["edges"].extend(edges)
@@ -115,6 +117,9 @@ class InspectionReportTests(unittest.TestCase):
                     original, = ref["candidates"]
                     self.assertEqual(original["conclusion"]["quote"],"检测结论：仅送检样品合格")
                     self.assertEqual(original["number"]["rects"],self.pages["matched"]["layer"]["lines"]["3"])
+                    self.assertEqual((ref["coverage"]["state"],ref["coverage"]["reported"]),("sample",None))
+                else:
+                    self.assertNotIn("coverage",ref)
         moved, read = self.paper(["matched"], value="HT-999")
         purposes.verify(moved,read)
         self.assertEqual(moved["graph"][purposes.KEY]["rows"][0]["report_reference"]["state"],"uncertain")
@@ -133,8 +138,11 @@ class InspectionReportTests(unittest.TestCase):
         purposes.verify(prior,read)
         with self.assertRaisesRegex(ValueError,"重新审计"):
             purposes.verify(prior,read,signing=True)
+        same,read = self.paper(["matched"],version="2026.11.29.01")
+        self.assertNotIn("coverage",same["graph"][purposes.KEY]["rows"][0]["report_reference"])
+        purposes.verify(same,read,signing=True)
         current,read = self.paper(["matched"])
-        for target in ("page","edges","scope","expert","status","geometry"):
+        for target in ("page","edges","scope","expert","status","geometry","tested","method","expert_scope"):
             paper = deepcopy(current)
             ref = paper["graph"][purposes.KEY]["rows"][0]["report_reference"]
             if target=="page":
@@ -147,6 +155,12 @@ class InspectionReportTests(unittest.TestCase):
                 paper["calls"]["expert"]["input"]["procedures"][0][purposes.KEY][0].pop("report_reference")
             elif target=="status":
                 ref["state"]="different"
+            elif target=="tested":
+                ref["coverage"]["reported"]=1
+            elif target=="method":
+                del paper["policy"]["code_sha256"]["inspection_report_scope.py"]
+            elif target=="expert_scope":
+                del paper["calls"]["expert"]["input"]["procedures"][0][purposes.KEY][0]["report_reference"]["coverage"]
             else:
                 ref["candidates"][0]["number"]["rects"]=[]
             with self.subTest(target=target), self.assertRaises(ValueError):

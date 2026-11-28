@@ -186,6 +186,15 @@ export function captureContext(owner, element, pagePoint) {
     }
   }
   const bankSource=element?.closest('[data-bank-role-source]');
+  const basis=element?.closest('#performance-index[open] [data-inspection-basis]');
+  if (basis && context.case_id===state.bundle?.report.case_id && context.rev===state.bundle.rev) {
+    const report=state.bundle.report, panel=basis.closest('.purpose-report'), mark=basis.closest('.signature-purpose')?.querySelector('summary');
+    const proof=panel?.dataset.caseId===report.case_id && panel.dataset.rev===String(context.rev) && SignaturePurposes.locate(report,mark?.id);
+    const id=basis.dataset.inspectionBasis, fact=graphIndex(report.graph).facts.get(id);
+    if (fact && Object.values(proof?.row?.report_reference?.coverage?.basis || {}).some(line=>line.fact===id))
+      return {screen:'case',case_id:report.case_id,rev:context.rev,tab:'report',dialog:'page-dialog',doc:fact.doc,page:fact.page,
+        line:fact.source_line.number,params:{fact:id},target:fileLabel(fact.name)};
+  }
   const reportLine=element?.closest('#performance-index[open] [data-inspection-line]');
   const panel=reportLine?.closest('.purpose-report');
   if (panel && panel.dataset.rev===String(context.rev) && panel.dataset.caseId===context.case_id &&

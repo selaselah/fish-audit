@@ -4,6 +4,8 @@ const SignaturePurposes = (() => {
   const states={unlocated:'待查报告原件',unidentified:'所引编号待核',multiple:'有多份报告',uncertain:'编号归属待核',
     other_contract:'合同编号不同',different:'报告编号不同',matched:'已定位报告 · 终验待核'};
   const fields={title:'报告标题',number:'报告编号',contract:'合同编号',conclusion:'报告所载结论'};
+  const scopeFields={metric:'检测项目',scope:'报告检测范围',count:'报告所载台数'};
+  const scopeStates={sample:'样机台数待核',review:'检测口径待核',short:'报告台数不足',count_only:'台数相符 · 逐台记录待核'};
   const sum=value=>typeof value==='string' && /^[a-f0-9]{64}$/u.test(value);
   const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
   const anchor=(finding,row)=>'signature-purpose-'+finding.id+'-'+row.doc+(row.coverage?'-r'+row.revision:'');
@@ -64,19 +66,45 @@ const SignaturePurposes = (() => {
           fact.source_line.text!==contract.quote || fact.value!==contract.value || !cited(contract.fact) ||
           !edge(contract.fact,ref.id,'inspection_contract_number',[contract.fact])) return false;
     }
+    if (ref.coverage && !validScope(report,ref,index,cited,edge)) return false;
     return ref.candidates.every(c=>{
       const doc=index.documents.get(c.doc), pid=c.doc+'/p1', page=index.nodes.get(pid);
       return c.page===1 && c.kind===ref.kind && doc?.ext==='.pdf' && doc.pages===1 && sum(doc.sha256) && doc.sha256===c.original_sha256 &&
         index.nodes.get(doc.id)?.sha256===doc.sha256 && page?.type==='page' && page.layer==='text' && page.clause_text_only &&
         sum(page.sha256) && page.sha256===c.page_sha256 && edge(doc.id,pid,'contains',[pid]) &&
         edge(pid,ref.id,'inspection_attachment_page',[doc.id,pid]) && cited(doc.id) && cited(pid) &&
-        c.title && Object.keys(fields).every(key=>!c[key] || (Number.isSafeInteger(c[key].line) && c[key].line>0 &&
-          typeof c[key].quote==='string' && c[key].rects?.length && c[key].rects.every(b=>Array.isArray(b) && b.length===4 &&
-          b.every(x=>Number.isFinite(x) && x>=0 && x<=1) && b[2]>b[0] && b[3]>b[1])));
+        c.title && Object.keys(fields).every(key=>!c[key] || located(c[key]));
     });
   }
-  function printed(candidate,key) {
-    const r=candidate[key], label=fields[key];
+  function located(r) {
+    return Number.isSafeInteger(r?.line) && r.line>0 && typeof r.quote==='string' && r.rects?.length &&
+      r.rects.every(b=>Array.isArray(b) && b.length===4 && b.every(x=>Number.isFinite(x) && x>=0 && x<=1) && b[2]>b[0] && b[3]>b[1]);
+  }
+  function validScope(report,ref,index,cited,edge) {
+    const c=ref.coverage;
+    if (!sum(report.policy.code_sha256?.['inspection_report_scope.py']) || ref.state!=='matched' || ref.candidates.length!==1 ||
+        c.format!=='inspection-report-scope-v1' || !Object.hasOwn(scopeStates,c.state) || !c.basis || !c.report_rows) return false;
+    for (const [key,item] of Object.entries(c.report_rows)) {
+      if (!Object.hasOwn(scopeFields,key) || !located(item) || typeof item.value!=='string') return false;
+    }
+    for (const line of Object.values(c.basis)) {
+      const f=index.facts.get(line.fact);
+      if (!f || !['anchored','confirmed'].includes(f.status) || f.page!==1 || f.source_line?.number!==line.line ||
+          f.source_line.text!==line.quote || f.quote!==line.quote || ![line.value,line.quote].includes(f.value) ||
+          !cited(f.id) || !edge(f.id,ref.id,'inspection_scope_basis',[f.id])) return false;
+    }
+    const count=v=>{const m=/^(0|[1-9][0-9]{0,5})\s*台$/u.exec(v || '');return m ? Number(m[1]) : null;};
+    if (count(c.report_rows.count?.value)!==c.reported || count(c.basis.accepted?.value)!==c.received ||
+        count(c.basis.ordered?.value)!==c.ordered) return false;
+    if (c.state==='short' || c.state==='count_only') {
+      return c.basis.clause && c.basis.acceptance_scope && c.ordered>0 && c.ordered===c.received &&
+        Number.isSafeInteger(c.required) && c.required>0 && c.required<=c.ordered && Number.isSafeInteger(c.reported) &&
+        c.reported<=c.ordered && c.difference===Math.max(0,c.required-c.reported) && (c.state==='short')===(c.difference>0);
+    }
+    return c.difference===null;
+  }
+  function printed(candidate,key,r=candidate[key]) {
+    const label=fields[key] || scopeFields[key];
     return {ref:'inspection-report-line/'+candidate.doc+'/p1/l'+r.line,doc:candidate.doc,page:1,rawLine:r.line,quote:r.quote,
       rects:r.rects,label,option:label+' · 第 '+r.line+' 行',quality:'inspection_report_source'};
   }
@@ -92,8 +120,50 @@ const SignaturePurposes = (() => {
       for (const key of Object.keys(fields)) {
         if (candidate[key]) {const source=printed(candidate,key);lines.set(source.ref,source);}
       }
+      for (const [key,item] of Object.entries(row.report_reference.coverage?.report_rows || {})) {
+        const source=printed(candidate,key,item);lines.set(source.ref,source);
+      }
     }
     return [...lines.values()];
+  }
+  function reportButton(report,file,source,label,cls='purpose-report-line') {
+    const b=action('',()=>{
+      if (state.bundle?.report===report) OriginalReader.open(file,1,{lineHint:source.rawLine,rawRef:source.ref,printedSource:source});
+    },cls);
+    Object.assign(b.dataset,{inspectionLine:source.ref,doc:file.id});
+    b.setAttribute('aria-haspopup','dialog'); b.setAttribute('aria-controls','page-dialog'); b.title=source.quote;
+    if (label) b.append(label);
+    return b;
+  }
+  function scopePanel(report,ref,file) {
+    const c=ref.coverage, candidate=ref.candidates[0], facts=graphIndex(report.graph).facts;
+    const block=el('section','','report-scope'); block.setAttribute('aria-label','检测范围对照');
+    const heading=el('h6',c.required==null?'验收与检测范围':'合同应检下限 '+c.required+' 台');
+    if (c.state==='short') heading.textContent='报告台数比合同下限少 '+c.difference+' 台';
+    function basisControl(key,label,cls) {
+      const line=c.basis[key], fact=line && facts.get(line.fact);
+      if (!fact) return null;
+      const b=action('',()=>{if (state.bundle?.report===report) openPage(fact.doc,1,fact.id);},cls);
+      b.dataset.inspectionBasis=fact.id; b.title=line.quote;
+      b.setAttribute('aria-haspopup','dialog');b.setAttribute('aria-controls','page-dialog');b.append(label);
+      return b;
+    }
+    const tile=(label,value)=>box('report-scope-value',el('small',label),el('strong',value));
+    const count=n=>n==null?'待核':n+' 台';
+    const received=tile('验收单实收',count(c.received)), tested=tile('报告检测',count(c.reported));
+    const compare=box('report-scope-counts',basisControl('accepted',received,'report-scope-tile') || received);
+    const measured=c.report_rows.count;
+    if (measured) compare.append(reportButton(report,file,printed(candidate,'count',measured),tested,'report-scope-tile'));
+    else compare.append(tested);
+    block.append(heading,compare);
+    const origins=el('div','','report-scope-basis');
+    for (const [key,label] of [['clause',c.basis.clause?.value],['ordered',c.ordered==null?'合同交付数量':'合同交付 '+c.ordered+' 台'],
+      ['acceptance_scope',c.basis.acceptance_scope?.value]]) {
+      const control=basisControl(key,el('span',label || ''),'scope-open-original');
+      if (control) origins.append(control);
+    }
+    if (origins.childElementCount) block.append(origins);
+    return block;
   }
   function attachmentPanel(report,ref,rev) {
     const section=el('section','','purpose-report');
@@ -107,16 +177,12 @@ const SignaturePurposes = (() => {
     for (const candidate of ref.candidates) {
       const file=docs.get(candidate.doc), block=el('div','','purpose-report-file');
       block.append(el('small',file.name+' · 第 1 页'));
-      const keys=candidate.number || candidate.contract || candidate.conclusion ? ['number','contract','conclusion'] : ['title'];
+      if (ref.coverage) block.append(scopePanel(report,ref,file));
+      const keys=candidate.number || candidate.contract || candidate.conclusion ? ['number','contract','scope','conclusion'] : ['title'];
       for (const key of keys) {
-        if (!candidate[key]) continue;
-        const source=printed(candidate,key);
-        const button=action('',()=>{
-          if (state.bundle?.report===report) OriginalReader.open(file,1,{lineHint:source.rawLine,rawRef:source.ref,printedSource:source});
-        },'purpose-report-line');
-        button.dataset.inspectionLine=source.ref;
-        button.dataset.doc=candidate.doc;
-        button.setAttribute('aria-haspopup','dialog'); button.setAttribute('aria-controls','page-dialog');
+        const item=candidate[key] || ref.coverage?.report_rows[key];
+        if (!item) continue;
+        const source=printed(candidate,key,item), button=reportButton(report,file,source);
         button.append(el('span',source.quote),el('small','第 '+source.rawLine+' 行'),glyph('arrows-angle-expand'));
         block.append(button);
       }
@@ -144,7 +210,10 @@ const SignaturePurposes = (() => {
       const title=row.coverage?box('purpose-edition',el('strong',edition),el('small',older?'较早签名':'覆盖提交件')):
         el('strong',labels[row.role]+'签名原因');
       summary.append(box('purpose-title',title,glyph('chevron-down')),el('q',row.reason));
-      if (row.report_reference) summary.append(el('small',states[row.report_reference.state],'purpose-report-state'));
+      if (row.report_reference) {
+        const ref=row.report_reference;
+        summary.append(el('small',ref.coverage?'已定位报告 · '+scopeStates[ref.coverage.state]:states[ref.state],'purpose-report-state'));
+      }
       if (!row.coverage) summary.append(el('small',doc.name+' · PDF 签名属性'));
       const source=row.coverage?link('下载'+edition,base()+'/reports/'+rev+'/documents/'+doc.id+'/signed-revisions/'+row.revision,'scope-open-original'):
         link('下载所签原件',workpaperSource(doc.id,'original'),'scope-open-original');

@@ -5,6 +5,7 @@ from io import BytesIO
 from itertools import islice
 from unicodedata import normalize
 import inspection_reports
+import inspection_report_scope
 
 
 KEY = "signature_purposes"
@@ -147,6 +148,10 @@ def apply(graph, findings):
                 f["evidence"] = list(dict.fromkeys([*f["evidence"], *inspection_reports.sources(ref)]))
                 label = ref["kind"] + (" " + ref["number"] if ref["number"] else "")
                 f["detail"] += f" 签名所引{label}。{inspection_reports.MESSAGES[ref['state']]}"
+                if coverage := ref.get("coverage"):
+                    f["detail"] += " " + inspection_report_scope.detail(coverage)
+                    if coverage["state"]=="short" and f["status"] in ("ok","missing"):
+                        f["status"] = "risk"
                 if f["rule"] == "H02" and ref["state"] in ("different", "other_contract") and f["status"] in ("ok","missing"):
                     f["status"] = "risk"
                 elif f["status"] == "ok":
@@ -184,7 +189,7 @@ def verify(report, read_original, *, signing=False):
         return
     rows = sources(graph,read_original,multiple=version>=MULTIPLE_SINCE)
     if version >= REFERENCE_SINCE:
-        inspection_reports.attach(graph, rows, read_original)
+        inspection_reports.attach(graph, rows, read_original, compare_scope=version>=inspection_report_scope.SINCE)
     expected = ledger(rows) if rows else None
     if (graph.get(KEY)!=expected or policy.get(KEY)!=(expected["format"] if expected else None)
             or (nodes,edges)!=source_graph(rows)):
@@ -211,6 +216,11 @@ def verify(report, read_original, *, signing=False):
             raise ValueError("审计程序引用的签名原因与签署文件不符")
         for row in used:
             if ref := row.get("report_reference"):
+                if coverage := ref.get("coverage"):
+                    if ("inspection_report_scope.py" not in policy.get("code_sha256",{}) or
+                            inspection_report_scope.detail(coverage) not in f["detail"] or
+                            coverage["state"]=="short" and f["status"] not in ("risk","issue")):
+                        raise ValueError("检测台数、适用范围或专家所据的范围检查程序与出具结果不符")
                 if (f["status"]=="ok" or inspection_reports.MESSAGES[ref["state"]] not in f["detail"] or any(
                         source not in f["evidence"] or (source, "finding/"+f["id"]) not in links
                         for source in inspection_reports.sources(ref))):
@@ -219,3 +229,10 @@ def verify(report, read_original, *, signing=False):
                 p.get("observation")==f["detail"] and p.get("evidence")==f["evidence"] and p.get("stage")==f.get("stage")
                 and p.get(KEY)==used for p in declared)):
             raise ValueError("专家检查与本项所据的签名原因不符")
+    if signing and REFERENCE_SINCE <= version < inspection_report_scope.SINCE and any(
+            r.get("report_reference",{}).get("state")=="matched" for r in rows):
+        checked = [dict(r) for r in rows]
+        inspection_reports.attach(graph,checked,read_original)
+        short = [r for r in checked if r.get("report_reference",{}).get("coverage",{}).get("state")=="short"]
+        if any(cited(f,short) for f in report["findings"]):
+            raise ValueError("所引检测报告明确列出的台数低于合同条款下限，本版尚未列明这项差额，请重新审计后签收。")

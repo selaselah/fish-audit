@@ -21,7 +21,7 @@ MESSAGES = {
     "different":"同一合同下，报告原页编号与签名所引编号不同，请核实所指报告。",
     "matched":"已定位到报告号、合同号一致的原页，请核实检测范围和终验结论。",
 }
-EDGE_TYPES = {"requires_inspection_report", "inspection_attachment_page", "inspection_contract_number"}
+EDGE_TYPES = {"requires_inspection_report", "inspection_attachment_page", "inspection_contract_number", "inspection_scope_basis"}
 
 
 def full_number(value):
@@ -38,9 +38,10 @@ def requirement(row):
     return None
 
 
-def native_page(raw, node=None, *, report=False):
+def native_page(raw, node=None, *, report=False, basis=False):
     import pypdfium2 as pdfium
     from documents import MAX_EDGE, clause_text_only, layer_type, text_geometry
+    from inspection_report_scope import plain_signed_body
     from pdf_execution import PDFIUM_LOCK
 
     with PDFIUM_LOCK:
@@ -58,7 +59,7 @@ def native_page(raw, node=None, *, report=False):
                     text = text_page.get_text_bounded()
                     lines = text.splitlines()
                     locations = {}
-                    if report and typeset and any(line.strip() in TITLES for line in lines[:4]):
+                    if (basis and layer=="text") or (report and typeset and any(line.strip() in TITLES for line in lines[:4])):
                         picture = page.render(scale=min(2.6, MAX_EDGE / max(page.get_size())))
                         try:
                             locations = text_geometry(text_page, text, picture, page)
@@ -66,12 +67,13 @@ def native_page(raw, node=None, *, report=False):
                             picture.close()
                 finally:
                     text_page.close()
+                plain_basis = typeset or (basis and layer=="text" and plain_signed_body(page))
             finally:
                 page.close()
     if node is not None and (node.get("text_sha256") != sha256(text.encode()).hexdigest()
             or node.get("layer") != layer or node.get("clause_text_only") is not typeset):
         raise ValueError("检测报告核对所据的原页文字或版式与原件不符")
-    return (lines, typeset, locations) if layer == "text" else None
+    return (lines, typeset, locations, plain_basis) if layer == "text" else None
 
 
 def one_field(lines, labels, *, identifier=False):
@@ -143,13 +145,18 @@ def classify(number, contract, candidates):
     return "matched" if report["number"]["value"] == number else "different"
 
 
-def attach(graph, rows, read_original):
+def attach(graph, rows, read_original, *, compare_scope=True):
+    from inspection_report_scope import comparison
+
     required = [(row, req) for row in rows if (req := requirement(row))]
     if not required:
         return
     nodes = {n["id"]:n for n in graph["nodes"] if n["type"] == "page"}
     owners = {row["doc"] for row, _ in required}
-    receipts, candidates = {}, []
+    contract_ids = graph["documents_by_kind"].get("contract",[])
+    contract_id = contract_ids[0] if compare_scope and len(contract_ids)==1 else None
+    receipts, candidates, pages = {}, [], {}
+    contract_source = None
     for doc in graph["documents"]:
         if doc["ext"] != ".pdf" or doc.get("pages") != 1:
             continue
@@ -157,27 +164,38 @@ def attach(graph, rows, read_original):
         raw = read_original(doc)
         if sha256(raw).hexdigest() != doc["sha256"]:
             raise ValueError("检测报告核对所据的提交件摘要不符")
-        page = native_page(raw, node, report=doc["id"] not in owners)
+        page = native_page(raw, node, report=doc["id"] not in owners, basis=compare_scope and (doc["id"] in owners or doc["id"]==contract_id))
+        if doc["id"] == contract_id:
+            contract_source = doc,page
         if doc["id"] in owners:
-            receipts[doc["id"]] = (raw, page)
+            receipts[doc["id"]] = (doc,raw,page)
         elif candidate := attachment(doc, node, page):
             candidates.append(candidate)
+            pages[doc["id"]] = page
     for row, (kind, number) in required:
-        raw, signed_page = receipts.get(row["doc"], (None, None))
+        doc, raw, signed_page = receipts.get(row["doc"], (None,None,None))
         if raw and row.get("coverage") == "ENTIRE_REVISION":
-            signed_page = native_page(raw[:row["ends_at"]])
+            signed_page = native_page(raw[:row["ends_at"]],basis=compare_scope)
         contract = signed_contract(graph, row, signed_page)
         reports = [c for c in candidates if c["kind"] == kind]
-        row["report_reference"] = {
+        ref = {
             "id":"inspection-report/" + row["id"].split("/", 1)[1], "kind":kind, "number":number,
             "signed_contract":contract, "candidates":reports, "state":classify(number, contract, reports),
         }
+        if compare_scope and ref["state"]=="matched":
+            coverage = comparison(graph,row,ref,(doc,signed_page),contract_source,pages[reports[0]["doc"]])
+            if coverage:
+                ref["coverage"] = coverage
+        row["report_reference"] = ref
 
 
 def sources(ref):
     yield ref["id"]
     if ref["signed_contract"]:
         yield ref["signed_contract"]["fact"]
+    basis = ref.get("coverage",{}).get("basis",{})
+    for key in sorted(basis):
+        yield basis[key]["fact"]
     for doc in ref["candidates"]:
         yield doc["doc"]
         yield doc["doc"] + "/p1"
@@ -187,6 +205,10 @@ def relations(row, ref):
     yield {"from":row["id"], "to":ref["id"], "type":"requires_inspection_report", "evidence":[row["id"]]}
     if contract := ref["signed_contract"]:
         yield {"from":contract["fact"], "to":ref["id"], "type":"inspection_contract_number", "evidence":[contract["fact"]]}
+    basis = ref.get("coverage",{}).get("basis",{})
+    for key in sorted(basis):
+        fact = basis[key]["fact"]
+        yield {"from":fact, "to":ref["id"], "type":"inspection_scope_basis", "evidence":[fact]}
     for doc in ref["candidates"]:
         page = doc["doc"] + "/p1"
         yield {"from":page, "to":ref["id"], "type":"inspection_attachment_page", "evidence":[doc["doc"],page]}

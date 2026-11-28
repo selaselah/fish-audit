@@ -235,7 +235,7 @@ function resetButton() {
 }
 function revealSelectedSource() {
   const el=selectedElement;
-  if (!dialog.open || !el?.closest('.revision-approval-sources,[data-proof-target],[data-timing-ref],[data-mandate-date],[data-bank-role-source],[data-signature-purpose],[data-inspection-line]') || !matchMedia('(max-width:650px)').matches) return;
+  if (!dialog.open || !el?.closest('.revision-approval-sources,[data-proof-target],[data-timing-ref],[data-mandate-date],[data-bank-role-source],[data-signature-purpose],[data-inspection-line],[data-inspection-basis]') || !matchMedia('(max-width:650px)').matches) return;
   const bottom=dialog.getBoundingClientRect().top-12;
   if (el.closest('#performance-index[open]') && matchMedia('(max-width:560px)').matches) {
     const scope=el.closest('#performance-index');

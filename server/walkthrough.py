@@ -328,8 +328,10 @@ def cited_inspection_line(source, context):
             if (doc["doc"],doc["page"],doc["original_sha256"],doc["page_sha256"]) != (
                     context["doc"],context["page"],source["original_hash"],source["page_hash"]):
                 continue
-            if any(r and r["line"]==line and r["quote"]==text[line-1] and r["rects"]
-                   for r in (doc[k] for k in ("title","number","contract","conclusion"))):
+            rows = [doc[k] for k in ("title","number","contract","conclusion")]
+            if ref["state"]=="matched":
+                rows.extend(ref.get("coverage",{}).get("report_rows",{}).values())
+            if any(r and r["line"]==line and r["quote"]==text[line-1] and r["rects"] for r in rows):
                 return True
     return False
 

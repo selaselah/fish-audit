@@ -65,7 +65,9 @@ async function checkReportReference(ctx,report,path) {
   const {call,evaluate,wait}=ctx, {click,key}=browserInput(ctx);
   const q=s=>'document.querySelector('+JSON.stringify(s)+')';
   const row=report.graph.signature_purposes.rows.find(r=>r.report_reference), ref=row.report_reference;
-  const label={unlocated:'待查报告原件',different:'报告编号不同',matched:'已定位报告 · 终验待核'}[ref.state];
+  const scope=ref.coverage, scopeLabels={sample:'样机台数待核',short:'报告台数不足',count_only:'台数相符 · 逐台记录待核',review:'检测口径待核'};
+  const label=scope?'已定位报告 · '+scopeLabels[scope.state]
+    : {unlocated:'待查报告原件',different:'报告编号不同',matched:'已定位报告 · 终验待核'}[ref.state];
   assert.ok(label);
   for (const f of report.findings.filter(f=>['H01','H02','H04','H05'].includes(f.rule))) {
     const view=f.rule==='H01'?'contract-checks':f.rule==='H02'?'acceptance-checks':'payment-checks&stage='+f.id;
@@ -78,25 +80,30 @@ async function checkReportReference(ctx,report,path) {
     if (f.rule!=='H05') continue;
     const detail=q(summary)+'.parentElement';
     await evaluate(q(summary)+'.focus()'); await key('Enter'); await wait(detail+'.open','report disclosure');
+    const values=await evaluate('[...document.querySelectorAll(".report-scope-value strong")].map(n=>n.textContent)');
+    const count=n=>n==null?'待核':n+' 台';
+    assert.deepEqual(values,scope?[count(scope.received),count(scope.reported)]:[]);
     for (const width of [1440,1024,768,390,360,320]) {
       await size(ctx,width);
       assert.ok(await evaluate(detail+'.scrollWidth<='+detail+'.clientWidth+1'));
-      await inspect(ctx,width,'.purpose-report','inspection-'+ref.state);
+      await inspect(ctx,width,scope?'.report-scope':'.purpose-report','inspection-'+(scope?.state || ref.state));
     }
     for (const candidate of ref.candidates) {
       const pdf=await fetch(await evaluate(q('.purpose-report-file a')+'.href'));
       assert.ok(pdf.ok);
       assert.equal(Buffer.from(await crypto.subtle.digest('SHA-256',await pdf.arrayBuffer())).toString('hex'),candidate.original_sha256);
       await size(ctx,1440);
-      const numberSource='inspection-report-line/'+candidate.doc+'/p1/l'+candidate.number.line;
-      await evaluate(q('[data-inspection-line="'+numberSource+'"]')+'.focus()');await key('Enter');
-      await wait(q('#page-dialog[open] .located[data-source-ref="'+numberSource+'"] blockquote')+
-        '?.textContent==='+JSON.stringify(candidate.number.quote),'keyboard opens the printed report number');
-      await key('Escape');await wait('!'+q('#page-dialog')+'.open','keyboard returns to installment');
-      for (const item of [candidate.number,candidate.conclusion]) {
+      for (const item of [candidate.number,scope?.report_rows.count].filter(Boolean)) {
+        const source='inspection-report-line/'+candidate.doc+'/p1/l'+item.line;
+        await evaluate(q('[data-inspection-line="'+source+'"]')+'.focus()');await key('Enter');
+        await wait(q('#page-dialog[open] .located[data-source-ref="'+source+'"] blockquote')+
+          '?.textContent==='+JSON.stringify(item.quote),'keyboard opens the printed report row');
+        await key('Escape');await wait('!'+q('#page-dialog')+'.open','keyboard returns to installment');
+      }
+      for (const item of [candidate.number,candidate.conclusion,scope?.report_rows.count].filter(Boolean)) {
         await size(ctx,390);
         const source='inspection-report-line/'+candidate.doc+'/p1/l'+item.line, control=q('[data-inspection-line="'+source+'"]');
-        assert.ok((await evaluate(control+'.textContent')).includes(item.quote));
+        assert.equal(await evaluate(control+'.title'),item.quote);
         await wait(q('#performance-index[open] #walk-launch')+'?.getClientRects().length','recorder returned to payment check');
         await click(q('#walk-launch'));await wait(q('#walk-dialog[open]')+' && !'+q('#walk-save')+'.disabled','recorder ready');
         await click(q('#walk-pick'));await click(control);
@@ -111,8 +118,22 @@ async function checkReportReference(ctx,report,path) {
         await click(q('#walk-close'));await click(q('#page-dialog [data-close]'));
       }
     }
+    for (const field of ['clause','ordered','accepted','acceptance_scope']) {
+      const basis=scope?.basis[field];
+      if (!basis) continue;
+      const control=q('[data-inspection-basis="'+basis.fact+'"]');
+      await wait(q('#performance-index[open] #walk-launch')+'?.getClientRects().length','back at installment');
+      await click(q('#walk-launch'));await wait(q('#walk-dialog[open]')+' && !'+q('#walk-save')+'.disabled','recorder ready');
+      await click(q('#walk-pick'));await click(control);
+      await wait(q('#walk-excerpt blockquote')+'?.textContent==='+JSON.stringify(basis.quote),'selected contract or receipt field');
+      await click(q('#walk-close'));await evaluate(control+'.focus()');await key('Enter');
+      await wait(q('#page-dialog[open] .located[data-fact="'+basis.fact+'"] blockquote')+'?.textContent==='+JSON.stringify(basis.quote),'original field');
+      await key('Escape');await wait('!'+q('#page-dialog')+'.open','return from the cited field');
+    }
+    const scopeEdits=scope?["delete r.policy.code_sha256['inspection_report_scope.py']",
+      "r.graph.edges=r.graph.edges.filter(e=>e.type!=='inspection_scope_basis')"]:[];
     for (const edit of ["r.graph.edges=r.graph.edges.filter(e=>e.type!=='requires_inspection_report')",
-      "delete r.policy.code_sha256['inspection_reports.py']", "r.calls.expert.input.procedures=[]"]) {
+      "delete r.policy.code_sha256['inspection_reports.py']", "r.calls.expert.input.procedures=[]", ...scopeEdits]) {
       const invalid=await evaluate('(()=>{const r=structuredClone(state.bundle.report);'+edit+
         ';return SignaturePurposes.bind(r,r.findings.find(f=>f.id==='+JSON.stringify(f.id)+'),'+JSON.stringify(row.id)+')})()');
       assert.equal(invalid,null);
@@ -124,7 +145,7 @@ async function checkReportReference(ctx,report,path) {
 export async function checkSignaturePurposes(ctx,cid,requested) {
   const {root,call,evaluate,wait}=ctx,{click,key}=browserInput(ctx);
   const base=root+'/api/cases/'+cid, task=await (await fetch(base)).json();
-  assert.ok(task.title.startsWith('合成演练') && /到货数量|两次签名|签名所引检测报告/u.test(task.title));
+  assert.ok(task.title.startsWith('合成演练') && /到货数量|两次签名|签名所引检测报告|四台逐台测温合同/u.test(task.title));
   const rev=Number(requested || task.rev), {report}=await (await fetch(base+'/reports/'+rev)).json();
   const row=report.graph.signature_purposes?.rows[0];
   const q=s=>'document.querySelector('+JSON.stringify(s)+')';

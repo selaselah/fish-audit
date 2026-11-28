@@ -12,12 +12,14 @@ from run import get, post, submit, wait
 SCENARIOS = {"mixed": ("生效日混用分隔符", "2026/9月1日"), "conflict": ("同份合同列明两个生效日", "2026年9月1日")}
 
 
-def read_back(cid, title, originals, report):
+def read_back(cid, title, originals, report, *, only=None):
     """Simulate the auditor only for known columns in these generated materials."""
     columns = {"合同编号":"contract_id", "甲方签章":"buyer_signature", "乙方签章":"seller_signature", "验收签认":"acceptance_signer",
                "遗留事项":"acceptance_exception", "款项用途":"payment_designation", "生效确认日期":"effect_on"}
     endpoint = "/api/cases/" + cid
     for name, (digest, page) in originals.items():
+        if only is not None and name not in only:
+            continue
         for line in page["text"].splitlines():
             label, sep, value = line.partition("：")
             if not sep or label not in columns:
