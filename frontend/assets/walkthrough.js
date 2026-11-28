@@ -33,6 +33,7 @@ const drafts = new Map();
 let selectedElement;
 function markSelection(element) {
   selectedElement?.classList.remove('walk-selected');
+  selectedElement?.closest('#performance-index')?.style.removeProperty('--walk-source-height');
   selectedElement=element;
   selectedElement?.classList.add('walk-selected');
 }
@@ -64,7 +65,7 @@ function showLocation() {
   const signing=context.raw_ref?.startsWith('contract-signing-form/') || context.anchor?.startsWith('form-H') || context.raw_ref?.startsWith('measurement-number/') || context.anchor?.startsWith('number-H') ||
     context.raw_ref?.startsWith('inspection-line/') || context.anchor?.startsWith('serial-H');
   const comparison=context.params?.view==='revision-comparison' && context.params.prior && context.anchor?.startsWith('revision-');
-  const compact=(docked || signing || comparison || context.anchor?.startsWith('party-reading-')) && context.screen==='case' && context.rev && (context.target || context.page_point);
+  const compact=(docked || signing || comparison || /^(?:party-reading-|(?:stage-)?proof-)/.test(context.anchor || '')) && context.screen==='case' && context.rev && (context.target || context.page_point);
   const editions=comparison?'R'+context.params.prior+' / R'+context.rev:'R'+context.rev;
   q('#walk-origin').textContent=compact?'底稿 '+context.case_id.slice(0,8)+' · '+editions:'记录位置';
   place.textContent=compact?[context.target || context.doc,context.doc && '第 '+context.page+' 页',context.line && '第 '+context.line+' 行',
@@ -210,6 +211,21 @@ function markdown() {
 function resetButton() {
   clearTimeout(successTimer); launcher.querySelector('span').textContent=docked?'回到走查':'提意见';
 }
+function revealSelectedSource() {
+  const el=selectedElement;
+  if (!dialog.open || !el?.closest('.revision-approval-sources,[data-proof-target]') || !matchMedia('(max-width:650px)').matches) return;
+  const bottom=dialog.getBoundingClientRect().top-12;
+  if (el.closest('#performance-index[open]') && matchMedia('(max-width:560px)').matches) {
+    const scope=el.closest('#performance-index');
+    scope.style.setProperty('--walk-source-height',Math.max(48,bottom-scope.getBoundingClientRect().top)+'px');
+    el.scrollIntoView({block:'nearest',behavior:'instant'});
+  } else if (!el.closest('dialog')) {
+    const quote=el.getBoundingClientRect();
+    if (quote.bottom>bottom && quote.height<=bottom-(window.visualViewport?.offsetTop || 0))
+      window.scrollBy({top:quote.bottom-bottom,behavior:'instant'});
+  }
+}
+window.visualViewport?.addEventListener('resize',revealSelectedSource);
 function endPick(el, reopen=true, pagePoint=null) {
   if (!pick) return;
   const old=pick; pick=null;
@@ -230,11 +246,7 @@ function endPick(el, reopen=true, pagePoint=null) {
   if (reopen) {
     if (!docked) dialog.showModal();
     updatePoint(); text.focus();
-    if (el?.closest('.revision-approval-sources') && !docked && matchMedia('(max-width:650px)').matches) {
-      const quote=el.getBoundingClientRect(), bottom=dialog.getBoundingClientRect().top-16;
-      if (quote.bottom>bottom && quote.height<=bottom-(window.visualViewport?.offsetTop || 0))
-        window.scrollBy({top:quote.bottom-bottom,behavior:'instant'});
-    }
+    revealSelectedSource();
   }
 }
 q('#walk-point').onclick=()=>{

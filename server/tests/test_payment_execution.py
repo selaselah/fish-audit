@@ -5,6 +5,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from PIL import Image
 
@@ -24,6 +25,7 @@ from test_transfers import receipt_material
 
 NOTE = "回单提示：本单仅为付款申请受理凭证，不代表实际扣款"
 ARRIVAL = "回单提示：本回单不代表收款方已到账"
+RETURNED = "交易附注：本笔交易已全额冲正。"
 APP = [("other","","付款申请单"),("contract_id","合同编号","YL-121"),("payment_designation","款项用途","第二期"),
        ("other","申请状态","审批通过"),("other","申请时间","2026年9月21日 14:00")]
 
@@ -38,6 +40,101 @@ def sample(bank=BANK_DOC, tail=(), extra=()):
 
 
 class ExecutionTests(unittest.TestCase):
+    def test_feedback_pin_resolves_an_issued_payment_line_and_its_finding(self):
+        from graph import link_procedures
+        from test_delivery_register import dated, summary
+        from walkthrough import cited_payment_line
+        paper,_ = dated(more=[(4,RETURNED)])
+        finding = summary(paper)[2]["id"]
+        graph = paper["graph"]
+        status,notice = execution.return_evidence(graph,paper["findings"])
+        doc,page = notice["doc"],notice["page"]
+        boxes = {str(row["line"]):[[0,.1,.9,.2]] for row in (status,notice)}
+        page_call = {"model":"fixture","doc":doc,"page":page,"page_sha256":"page","payment_execution_rects":boxes}
+        paper["calls"] = {"expert":{"model":"fixture"},"pages":[page_call]}
+        link_procedures(graph,paper["findings"],paper["calls"])
+        for row in (status,notice):
+            for target in (finding,None):
+                self.assertTrue(cited_payment_line(paper,doc,page,row["line"],target))
+            self.assertFalse(cited_payment_line(paper,doc,page,row["line"],"H05-81"))
+        with patch.dict(page_call,page_sha256="other-page"):
+            self.assertFalse(cited_payment_line(paper,doc,page,notice["line"],finding))
+        with patch.dict(boxes,{str(notice["line"]):[[.9,.1,.3,.2]]}):
+            self.assertFalse(cited_payment_line(paper,doc,page,notice["line"],None))
+        with patch.dict(boxes,{str(status["line"]):[[.1,.1,.5,.2]]}):
+            self.assertFalse(cited_payment_line(paper,doc,page,status["line"],finding))
+        for edge_type in ("supports_result","payment_execution_source"):
+            kept = [e for e in graph["edges"] if not (e["type"]==edge_type and notice["id"] in (e["from"],e["to"]))]
+            with patch.dict(graph,edges=kept):
+                self.assertFalse(cited_payment_line(paper,doc,page,notice["line"],finding))
+
+    def test_a_posted_then_returned_transfer_does_not_date_the_installment(self):
+        from test_delivery_register import dated, summary
+        from model import audit_graph
+        for note, state in ((RETURNED,"return_noted"),("回单附注：本笔转账已部分退汇。","return_noted"),
+                            ("冲正结果：成功","return_noted"),("备注：本笔交易是否冲正，结果待查。","return_review"),
+                            ("备注：本笔交易已冲正，金额待核。","return_review")):
+            with self.subTest(note=note):
+                paper,read = dated(more=[(4,note)])
+                h02,terms,bank = summary(paper)
+                self.assertEqual([f["substitution_dates"]["days"] for f in (h02,terms[1])],[-2,-2])
+                self.assertEqual((bank["execution_basis"]["state"],bank["status"],bank["stage"]["name"]),(state,"missing","第二期"))
+                self.assertNotIn("实付，请",bank["detail"])
+                self.assertFalse({"delivery_register","substitution_dates","payment_quality"}.intersection(bank))
+                rows = execution.return_evidence(paper["graph"],paper["findings"])
+                self.assertEqual([r["quote"] for r in rows],["交易状态：交易成功",note])
+                self.assertTrue(all(r["line"] and r["id"] in bank["evidence"] for r in rows))
+                self.assertFalse(rows[-1]["facts"])  # The native line still counts when no model fact transcribes it.
+                with patch("model.structured",return_value=({"followups":[]},{})):
+                    _,expert = audit_graph(paper["graph"],paper["findings"])
+                self.assertEqual(expert["input"]["payment_return_sources"],rows)
+                self.assertEqual(next(f["execution_basis"] for f in expert["input"]["procedures"] if f["rule"]=="H05"),bank["execution_basis"])
+                execution.verify(paper,read,signing=True)
+        for text in ("如本笔交易已全额冲正，请联系银行。","本笔交易未发生退汇。","上一笔交易已全额冲正。","请保管回单。"):
+            paper,_ = dated(more=[(4,"交易附注："+text)])
+            self.assertEqual(summary(paper)[2]["substitution_dates"]["days"],-1)
+        paper,_=dated(more=[(3,RETURNED)])
+        self.assertFalse(execution.return_evidence(paper["graph"],paper["findings"]))
+        self.assertEqual(summary(paper)[2]["substitution_dates"]["days"],-1)
+
+    def test_an_indeterminate_scan_scope_and_a_separate_transfer_keep_their_own_results(self):
+        docs,pages=receipt_material(bank_photo=True,photo_note=("other",RETURNED))
+        g=build_graph(docs,pages,{})
+        self.assertEqual(g[execution.KEY]["units"][0]["state"],"return_review")
+        checks=execute(g,BANK)
+        self.assertEqual({f["rule"]:f["status"] for f in checks if f["rule"] in ("B04","B05")},{"B04":"missing","B05":"missing"})
+        self.assertFalse(payment_record(g,checks)["reference"])
+        g,_=sample(tail=[RETURNED],extra=[BANK_DOC])
+        transfers=[f for f in compute(g) if f["rule"]=="H05"]
+        self.assertEqual([(f.get("execution_basis") or {}).get("unit") for f in transfers],["d04",None])
+        g,read=sample(tail=[RETURNED])
+        next(n for n in g["nodes"] if n["id"]=="d04/p1")["clause_text_only"]=False
+        self.assertEqual(execution.sources(g,read)["units"][0]["state"],"return_review")
+
+    def test_prior_return_records_replay_under_the_issued_policy_and_are_held_out_of_new_history(self):
+        from test_delivery_register import dated,summary
+        for note,held in ((RETURNED,True),("交易附注：该笔交易未退汇。",False)):
+            with self.subTest(note=note):
+                report,read=dated(more=[(4,note)])
+                graph=report["graph"]
+                graph["nodes"]=[n for n in graph["nodes"] if n["type"]!="payment_execution_line"]
+                graph["edges"]=[e for e in graph["edges"] if e["type"]!="payment_execution_source"]
+                ledger=graph[execution.KEY]=execution.sources(graph,read,version=execution.FIRST_FORMAT)
+                self.assertFalse(ledger["rows"])
+                report["policy"].update(version="2026.11.28.19",payment_execution=execution.FIRST_FORMAT)
+                report["findings"]=execute(graph,PERFORMANCE)
+                self.assertEqual(summary(report)[2]["substitution_dates"]["days"],-1)
+                execution.verify(report,read)
+                if held:
+                    with self.assertRaisesRegex(ValueError,"冲正或退汇.*重审"): execution.verify(report,read,signing=True)
+                else: execution.verify(report,read,signing=True)
+                with sqlite3.connect(":memory:") as db:
+                    db.executescript("CREATE TABLE pages(case_id,doc,number,text); CREATE TABLE payment_execution_holds(case_id PRIMARY KEY,rev);")
+                    db.execute("INSERT INTO pages VALUES('archived','d04',1,?)",(read("d04",1),))
+                    sync_execution(db,"archived",1,report)
+                    sync_execution(db,"archived",1,report)
+                    self.assertEqual(bool(db.execute("SELECT 1 FROM payment_execution_holds").fetchone()),held)
+
     def test_only_application_checks_original_and_page_again_at_approval(self):
         with tempfile.TemporaryDirectory() as tmp:
             store=Store(Path(tmp))

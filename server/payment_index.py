@@ -36,12 +36,12 @@ def install(db, *, new_column):
             changes = " ".join(f"INSERT OR IGNORE INTO payment_index_pending VALUES({source}.case_id);" for source in sources)
             db.execute(f"CREATE TRIGGER IF NOT EXISTS {name} AFTER {operation} ON {table} BEGIN {changes} END")
     version = db.execute("PRAGMA user_version").fetchone()[0]
-    if version < 9 or new_column or required - existing:
+    if version < 10 or new_column or required - existing:
         if version < 9:
             db.execute("UPDATE payment_index SET reference_eligible=NULL WHERE reference_eligible IS NOT NULL")
         db.execute("INSERT OR IGNORE INTO payment_index_pending SELECT id FROM cases WHERE profile=? AND rev>0", (BANK,))
-        if version < 9:
-            db.execute("PRAGMA user_version=9")
+        if version < 10:
+            db.execute("PRAGMA user_version=10")
 
 
 def sync_execution(db, case_id, revision, paper):
@@ -51,9 +51,12 @@ def sync_execution(db, case_id, revision, paper):
         saved = db.execute("SELECT text FROM pages WHERE case_id=? AND doc=? AND number=?", (case_id, doc, page)).fetchone()
         return saved[0] if saved else None
     try:
-        held = payment_execution.sources(graph, text, banks_only=True)["units"]
-        if paper["policy"].get("payment_execution") and held != [u for u in graph[payment_execution.KEY]["units"] if u["bank"]]:
-            raise ValueError("受理限定与当时的原件记载不符")
+        marker = paper["policy"].get("payment_execution")
+        held = payment_execution.sources(graph,text,banks_only=True,version=marker or payment_execution.FORMAT)["units"]
+        if marker and held != [u for u in graph[payment_execution.KEY]["units"] if u["bank"]]:
+            raise ValueError("付款凭证与当时的原件记载不符")
+        if not held and marker==payment_execution.FIRST_FORMAT:
+            held = payment_execution.sources(graph,text,banks_only=True)["units"]
     except (KeyError, ValueError, TypeError) as exc:
         raise CaseError("核对归档付款凭证的证明范围失败。", 409) from exc
     if held:

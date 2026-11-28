@@ -18,7 +18,8 @@ export async function checkPaymentProof(ctx,id) {
   const expected=f?.execution_basis.state || sample.state;
   const path=id?'/workpaper/'+id+'?rev='+rev+'&view=payment-proof&receipt='+f.id:'/?scene=payment-proof#workflow';
   const source=f?report.graph.payment_execution_sources.rows.filter(r=>r.unit===f.execution_basis.unit):sample.document.lines;
-  const desired=source.filter(r=>expected==='conflict'?['status','limit'].includes(r.kind):['request','pending_status'].includes(r.kind));
+  const returned=expected==='return_noted';
+  const desired=source.filter(r=>(returned?['status','return_notice']:expected==='conflict'?['status','limit']:['request','pending_status']).includes(r.kind));
   assert.equal(desired.length,2);
   if (sample) {
     for (const [url,digest] of [[sample.document.pdf,sample.document.source_sha256],[sample.document.image,sample.document.page_sha256]]) {
@@ -34,13 +35,23 @@ export async function checkPaymentProof(ctx,id) {
     const phaseRef=await evaluate(q(panel)+'.dataset.clause');
     assert.equal(phaseRef,f.stage?.clause_ref || '');
     assert.ok(await evaluate('!document.querySelector("#signer-timing")'));
+    if (returned) {
+      const row=desired.find(r=>r.kind==='return_notice'), ref=JSON.stringify(row.id);
+      const quote=await evaluate('(()=>{const report=state.bundle.report,f=report.findings.find(x=>x.id==='+JSON.stringify(f.id)+');'+
+        'const link=citation('+ref+',f);link.click();return link.textContent})()');
+      assert.equal(quote,row.quote);
+      await wait(q('#page-dialog')+'.open && '+q('.evidence-row.located')+'?.dataset.sourceRef==='+ref,'finding links directly to its bank note');
+      await evaluate(q('#page-dialog [data-close]')+'.click()');
+      assert.equal(await evaluate('PaymentProof.citation(state.bundle.report,'+ref+',state.bundle.report.findings.find(x=>x.rule==="H02"))===null'),true);
+    }
     for (const mutation of [
       "r.graph.edges=r.graph.edges.filter(e=>!(e.type==='payment_execution_source' && e.to===row.id))",
       "r.graph.edges=r.graph.edges.filter(e=>!(e.type==='supports_result' && e.from===row.id))",
       "r.graph.gaps.push({doc:row.doc,page:row.page,quality:'partial'})",
-      "delete r.calls.pages.find(c=>c.doc===row.doc && c.page===row.page).payment_execution_rects[row.line]"
+      "delete r.calls.pages.find(c=>c.doc===row.doc && c.page===row.page).payment_execution_rects[row.line]",
+      ...(returned?["r.calls.expert.input.payment_return_sources=r.calls.expert.input.payment_return_sources.filter(s=>s.id!==row.id)"]:[])
     ]) {
-      const role=expected==='conflict'?'limit':'request';
+      const role=returned?'return_notice':expected==='conflict'?'limit':'request';
       const changed=await evaluate('(()=>{const r=structuredClone(state.bundle.report),row=r.graph.payment_execution_sources.rows.find(s=>s.kind==='+JSON.stringify(role)+');'+mutation+';return PaymentProof.panel(r).dataset.state})()');
       assert.equal(changed,'unverified');
     }
@@ -59,6 +70,18 @@ export async function checkPaymentProof(ctx,id) {
   const pairs=panel+' .debit-pair', toggle=panel+' .debit-modes button';
   for (const w of [320,360,390,768,1024,1440]) {
     await size(ctx,w);
+    if (id && w<650) {
+      const tools=panel+' .debit-controls';
+      await evaluate('scrollTo({top:0,behavior:"instant"})');
+      await wait(q(tools+' > #walk-launch')+'===null','other sections keep their own feedback button');
+      await evaluate(q(panel)+'.scrollIntoView({block:"center",behavior:"instant"})');
+      await wait(q(tools+' > #walk-launch')+'!=null','mobile feedback toolbar');
+      const edges=await evaluate('(()=>{const bar='+q(tools)+'.getBoundingClientRect();return [bar.left,bar.right-innerWidth,bar.bottom-innerHeight]})()');
+      assert.ok(edges.every(value=>Math.abs(value)<=1),'mobile toolbar offsets at '+w+'px: '+edges.join(', '));
+      for (const selector of [tools+' > #walk-launch',toggle,toggle+':last-child']) {
+        assert.ok(await evaluate('(()=>{const el='+q(selector)+',r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))})()'));
+      }
+    }
     await wait(all(pairs+' .debit-strip :is(img,canvas)')+'.length===2','two original crops');
     await wait(q(panel+' .debit-map img')+'?.naturalWidth>0','genuine page miniature');
     assert.equal(await evaluate(all(panel+' .debit-map .debit-mark')+'.length'),2);
@@ -78,6 +101,7 @@ export async function checkPaymentProof(ctx,id) {
       if (id) {
         await wait(q('#page-dialog')+'.open && '+q('.evidence-row.located')+'?.textContent.includes('+JSON.stringify(row.quote)+')','correct source text');
         assert.equal(await evaluate(q('.evidence-row.located')+'.dataset.gapLine'),String(row.line));
+        assert.equal(await evaluate(q('.evidence-row.located')+'.dataset.sourceRef'),row.id);
         await wait(q('.source-plane svg rect')+'!=null','physical page highlight');
         assert.ok(await evaluate(q('.source-tools a')+'.href.endsWith("?rev='+rev+'")'));
         await evaluate(q('#page-dialog [data-close]')+'.click()');
@@ -104,6 +128,7 @@ export async function checkPaymentProof(ctx,id) {
       await evaluate(chooser+'.value='+JSON.stringify(other.id)+';'+chooser+'.dispatchEvent(new Event("change"))');
       assert.equal(await evaluate(q(panel)+'.dataset.state'),other.execution_basis.state);
       const own=report.graph.payment_execution_sources.rows.filter(r=>r.unit===other.execution_basis.unit);
+      assert.equal(await evaluate('import("/assets/walkthrough-context.js").then(m=>m.captureContext(null).params.receipt)'),other.id);
       const quotes=await evaluate(all(pairs+' blockquote')+'.map(q=>q.textContent)');
       assert.ok(quotes.length>0 && quotes.every(s=>own.some(row=>row.quote===s)));
       assert.equal(await evaluate(q(panel)+'.dataset.clause'),other.stage?.clause_ref || '');

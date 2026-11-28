@@ -12,7 +12,7 @@ const identifier = /^[a-zA-Z][a-zA-Z0-9_-]{0,95}$/;
 const factID = /^d\d{2}\/p[1-9]\d*\/(?:[ft][1-9]\d*|h[a-f0-9]{12})$/;
 function printedRef(context, ref) {
   const address=context.doc+'/p'+context.page+'/l'+context.line;
-  return context.rev && ['inspection-use/','payment-approval/','payment-clock/','contract-approver/','approval-change/','installment-count/','measurement-note/','contract-signing-form/','measurement-number/','inspection-line/'].some(prefix=>ref===prefix+address);
+  return context.rev && ['inspection-use/','payment-approval/','payment-clock/','contract-approver/','approval-change/','installment-count/','measurement-note/','contract-signing-form/','measurement-number/','inspection-line/','execution/'].some(prefix=>ref===prefix+address);
 }
 function knownParams(search, keys) {
   const out = {};
@@ -95,6 +95,23 @@ export function captureContext(owner, element, pagePoint) {
           if (!element) {context.anchor=receiptCard.id;context.target=receiptCard.getAttribute('aria-label') || receiptCard.dataset.originalLabel;}
         }
         if (element?.closest('[data-form-finding^="H01-"]')) context.params={view:'contract-signing-form'};
+        const activeProof=element?element.closest('#payment-proof'):owner?null:
+          (view==='payment-proof'?document.getElementById('payment-proof'):document.getElementById('walk-launch')?.closest('#payment-proof'));
+        if (activeProof?.dataset.caseId===cid && activeProof.dataset.rev===String(context.rev) &&
+            activeProof.dataset.outOfStage==='false' && activeProof.getClientRects().length && /^H05-[1-9]\d*$/.test(activeProof.dataset.selected)) {
+          context.params={view:'payment-proof',receipt:activeProof.dataset.selected};
+        }
+        const proof=element?.closest('[data-proof-target]');
+        if (proof) {
+          const link=document.getElementById(proof.dataset.proofTarget);
+          const pin=/^(stage-)?proof-(H05-[1-9]\d*)-/.exec(link?.id || '');
+          const place=pin?.[1]?link:link?.closest('#payment-proof[data-out-of-stage="false"]');
+          if (place?.dataset.caseId===cid && place.dataset.rev===String(context.rev) &&
+              (pin?.[1]?link.closest('#performance-index[open]'):place.dataset.selected===pin?.[2])) {
+            context.params=pin[1]?{view:'payment-checks',stage:pin[2]}:{view:'payment-proof',receipt:pin[2]};
+            context.anchor=link.id;
+          }
+        }
       }
       if (owner?.id === 'page-dialog') {
         const page = document.querySelector('#page-content .page-view');
@@ -156,7 +173,7 @@ export function captureContext(owner, element, pagePoint) {
     context.target = target && target.length <= 96 ? target : '所选位置';
     const precisionSource=element.closest('.quality-payment .quality-draft')?.getAttribute('aria-describedby');
     const named = precisionSource ? document.getElementById(precisionSource) : element.closest('[id]');
-    if (named && identifier.test(named.id) && !['content','case-panel','main'].includes(named.id)) context.anchor = named.id;
+    if (!element.closest('[data-proof-target]') && named && identifier.test(named.id) && !['content','case-panel','main'].includes(named.id)) context.anchor = named.id;
   }
   return context;
 }
@@ -167,7 +184,8 @@ export function describeContext(c) {
   const register=c.raw_ref?.startsWith('inspection-line/')?'设备编号原行':
     c.anchor?.startsWith('serial-H') && (c.anchor.endsWith('-order')?'设备代用批准日期':'设备编号清单');
   const signing=register || (c.raw_ref?.startsWith('measurement-number/')?'验收数值原行':c.anchor?.startsWith('number-H02-')?'验收数值核对':c.raw_ref?.startsWith('contract-signing-form/') ? '合同签署原行' : c.anchor?.startsWith('form-H02-') ? '验收签署条件' : c.params?.view==='contract-signing-form' && '合同签署条件');
-  const receipt=c.params?.view==='payment-checks' && (c.anchor?.startsWith('payment-approval-')?'付款审批单 '+c.params.stage:
+  const receipt=c.params?.view==='payment-proof' && c.params.receipt?'扣款凭证 '+c.params.receipt:
+    c.params?.view==='payment-checks' && (c.anchor?.startsWith('stage-proof-')?'扣款凭证 '+c.params.stage:c.anchor?.startsWith('payment-approval-')?'付款审批单 '+c.params.stage:
     c.anchor?.startsWith('form-H04-')?'期款条件 '+c.params.stage:
     c.anchor?.startsWith('form-H05-')?'实付回单 '+c.params.stage:
     c.anchor?.startsWith('contract-approver-')?'合同签批人 '+c.params.stage:

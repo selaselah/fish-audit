@@ -33,7 +33,8 @@ APPROVAL_DATES = {
     "decision_draft": ("一份待签草案上所记的设备代用决定", 22, "FA-0109", "FA-0104", "待双方签署"),
 }
 DATED_FORMS = {**APPROVAL_DATES, "disputed_seal": (
-    "第二期验收款所引补充协议的采购方签章待核", *APPROVAL_DATES["decision_after"][1:])}
+    "第二期验收款所引补充协议的采购方签章待核", *APPROVAL_DATES["decision_after"][1:]),
+    "returned_transfer": ("第二期验收款的成功回单另载全额冲正", *APPROVAL_DATES["decision_after"][1:])}
 
 
 def build(folder, key):
@@ -49,6 +50,8 @@ def build(folder, key):
     records = documents(code, "complete")
     records["采购合同"].extend([("约定设备型号", "YL-C4"), ("约定设备序列号", "、".join(ORDERED))])
     records["验收报告"].extend([("实收设备型号", "YL-C4"), ("实收设备序列号", "、".join(received))])
+    if key == "returned_transfer":
+        records["银行付款回单"].append(("交易附注", "本笔交易已全额冲正。"))
     if key in DATED_FORMS:
         contract = records["采购合同"]
         contract.append(("供货约定","经采购方事先书面批准，可用FA-0109代替FA-0104。"))

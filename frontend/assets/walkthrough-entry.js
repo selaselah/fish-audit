@@ -11,13 +11,23 @@ let owner;
 const openModals = [];
 const narrow = matchMedia('(max-width:650px)');
 const comparison = document.getElementById('revision-comparison');
+let watchedProof;
+const proofVisibility = new IntersectionObserver(placeLauncher);
 function placeLauncher() {
   for (let i=openModals.length-1;i>=0;i--) {
     if (!openModals[i].open || !openModals[i].isConnected) openModals.splice(i,1);
   }
   const top = openModals.at(-1);
   const bar = !top && narrow.matches && comparison && !comparison.closest('[hidden]') && comparison.querySelector('.revision-actions');
-  const host = top || bar || document.body;
+  const proof = narrow.matches ? document.getElementById('payment-proof') : null;
+  if (proof !== watchedProof) {
+    proofVisibility.disconnect();
+    if (proof) proofVisibility.observe(proof);
+    watchedProof=proof;
+  }
+  const bounds = !top && proof?.dataset.outOfStage==='false' && proof.getBoundingClientRect();
+  const tools = bounds && bounds.height>0 && bounds.bottom>0 && bounds.top<innerHeight && proof.querySelector('.debit-controls');
+  const host = top || bar || tools || document.body;
   if (top === owner && launcher.isConnected && (top ? top.contains(launcher) : launcher.parentElement === host)) return;
   owner = top;
   if (!top) host.append(launcher);
@@ -41,11 +51,11 @@ placeLauncher();
 // Navigation can remove an open workpaper dialog without dispatching its close or toggle event.
 const placement = new MutationObserver(records => {
   if (!launcher.isConnected || owner && !owner.isConnected ||
-      narrow.matches && records.some(r=>r.target===comparison || r.type==='attributes')) placeLauncher();
+      narrow.matches && (document.getElementById('payment-proof') || records.some(r=>r.target===comparison || r.type==='attributes'))) placeLauncher();
 });
 placement.observe(document.body,{childList:true,subtree:true});
 if (comparison) {
-  placement.observe(comparison.closest('#case'),{attributes:true,attributeFilter:['hidden']});
+  placement.observe(comparison.closest('#case'),{childList:true,subtree:true,attributes:true,attributeFilter:['hidden','data-out-of-stage']});
   narrow.addEventListener('change',placeLauncher);
 }
 
@@ -79,6 +89,7 @@ function returnToControl() {
   const board=params.get('view')==='board-decision' && anchor.startsWith('board-');
   const receipt=params.get('view')==='payment-checks' && /^(?:quality|retest|inspection-use|payment-approval|payment-clock|contract-approver|approver-change|installment-count)-/.test(anchor);
   const party=anchor.startsWith('party-reading-');
+  const proof=/^(stage-)?proof-(H05-[1-9]\d*)-d\d+-p[1-9]\d*-l[1-9]\d*$/.exec(anchor);
   const limits=params.get('view')==='acceptance-limits' && anchor.startsWith('limits-H02-');
   const form=/^(?:form|number|serial)-(H0[1245]-[1-9][0-9]*)-d[0-9]+-p[1-9][0-9]*-l[1-9][0-9]*$/.exec(anchor) ||
     /^serial-(H0[245]-[1-9][0-9]*)-(?:order|dispute-d[0-9]+-p1-[a-zA-Z0-9_-]+)$/.exec(anchor);
@@ -103,6 +114,14 @@ function returnToControl() {
         comparison.dataset.rev!==params.get('rev') || comparison.dataset.prior!==params.get('prior') ||
         (params.has('entry') && comparison.dataset.entry!==params.get('entry')))) return false;
     const el = document.getElementById(anchor);
+    if (proof) {
+      const area=proof[1]?el:el?.closest('#payment-proof[data-out-of-stage="false"]');
+      if (!area || url.hash!==location.hash || area.dataset.caseId!==path.split('/').at(-1) || area.dataset.rev!==params.get('rev') ||
+          (proof[1]?params.get('view')!=='payment-checks' || params.get('stage')!==proof[2] || !el.closest('#performance-index[open]'):
+            params.get('view')!=='payment-proof' || params.get('receipt')!==proof[2] || area.dataset.selected!==proof[2])) return false;
+      const details=el.closest('details');
+      if (details && !details.open) details.open=true;
+    }
     if (form && (!el || url.hash!==location.hash || (el.dataset.formFinding || el.dataset.numberFinding || el.dataset.serialFinding)!==form[1] ||
         el.dataset.caseId!==path.split('/').at(-1) || el.dataset.rev!==params.get('rev') ||
         params.get('view')!==formView || formView!=='contract-signing-form' && !el.closest('#performance-index[open]') ||
@@ -142,7 +161,7 @@ function returnToControl() {
     return true;
   }
   observer.observe(document.body, {subtree:true, childList:true, attributes:true, attributeFilter:['hidden','open']});
-  if (!locate() && !comparison && !board && !receipt && !party && !limits && !form)
+  if (!locate() && !comparison && !board && !receipt && !party && !limits && !form && !proof)
     fallbackTimer = setTimeout(release,6000);
 }
 addEventListener('hashchange', returnToControl);

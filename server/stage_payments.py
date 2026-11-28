@@ -168,8 +168,9 @@ def bank_record(graph,contract,bank,checks):
     v={k:r["value"] if r else "" for k,r in values.items()}
     paid=amount(values,"transfer_amount")
     reasons=[]
-    if payment_execution.entry(graph, bank.unit):
-        reasons.append("该单有付款申请或受理限定，实际扣款金额待核")
+    if basis := payment_execution.entry(graph, bank.unit):
+        reasons.append("该单有冲正或退汇记录待核，实际支付金额待核对流水" if basis["state"] in payment_execution.RETURN_STATES
+                       else "该单有付款申请或受理限定，实际扣款金额待核")
     if any(not contract.get(a) or contract[a]["value"]!=v[b] for a,b in (("buyer","payer"),("seller","payee"),("contract_id","contract_id"))):
         reasons.append("合同号或收付主体缺少完整对应的原文")
     account=contract.get("contract_account")

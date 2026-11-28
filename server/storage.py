@@ -833,6 +833,10 @@ class Store:
             except (KeyError, TypeError, ValueError) as error:
                 raise CaseError(f"签收前核对回单所据验收原件失败。{error}", 409) from error
             try:
+                payment_execution.verify_return_originals(paper,read_original)
+            except (ValueError, OSError, KeyError, TypeError, CaseError) as error:
+                raise CaseError(f"签收前核对冲正或退汇凭证失败。{error}",409) from error
+            try:
                 payment_quality.verify(paper,read_text,read_original=read_original,signing=True)
                 measurement_spacing.verify(paper,read_text,read_original=read_original,signing=True)
                 if paper["graph"].get("inspection_coverage_sources",{}).get("purpose")=="delivery_register":

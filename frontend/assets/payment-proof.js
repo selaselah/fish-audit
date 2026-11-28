@@ -1,9 +1,9 @@
 // Resolve the selected finding against its issued graph and the same revision's page geometry.
 const PaymentProof = (() => {
-  const format='payment-execution-basis-v1';
+  const formats=new Set(['payment-execution-basis-v1','payment-execution-basis-v2']);
   function sources(graph) {
     const ledger=graph?.payment_execution_sources;
-    if (ledger?.format!==format) return [];
+    if (!formats.has(ledger?.format)) return [];
     const index=graphIndex(graph);
     const links=new Map(graph.edges.filter(e=>e.type==='payment_execution_source').map(e=>[e.to,e]));
     const units=new Map(graph.audit_documents?.filter(d=>d.source).map(d=>[d.source+'/p'+d.page,d.id]));
@@ -33,8 +33,20 @@ const PaymentProof = (() => {
     }
     return rects;
   }
+  function openRow(row) {
+    return row.line?openPage(row.doc,row.page,undefined,row.line,undefined,row.id):openPage(row.doc,row.page,row.facts[0]);
+  }
+  function citation(report,ref,finding) {
+    const graph=report.graph;
+    if (report.policy.payment_execution!==graph.payment_execution_sources?.format) return null;
+    const row=sources(graph).find(r=>r.id===ref);
+    const checks=finding && typeof finding==='object'?[finding]:report.findings;
+    if (!row || !checks.some(f=>f.scope?.includes(row.unit) && f.evidence?.includes(ref) && traceReferences(graph,f).includes(ref))) return null;
+    if (row.line && !rectangles(graph,report.calls.pages,row).length) return null;
+    return action(row.quote,()=>openRow(row),'ref');
+  }
   function entries(report,findings=report?.findings || []) {
-    if (report?.policy.payment_execution!==format || report.graph.payment_execution_sources?.format!==format) return [];
+    if (!formats.has(report?.policy.payment_execution) || report.graph.payment_execution_sources?.format!==report.policy.payment_execution) return [];
     const graph=report.graph, index=graphIndex(graph), ledger=graph.payment_execution_sources, all=sources(graph);
     const items=[];
     for (const finding of findings) {
@@ -52,9 +64,10 @@ const PaymentProof = (() => {
           !graph.gaps.some(g=>g.doc===r.doc && g.page===r.page && ['partial','unreadable','section_unresolved'].includes(g.quality)) &&
           !Object.entries(graph.documents_by_kind).some(([kind,units])=>kind!=='bank_receipt' && units.includes(r.unit)));
         const explicit=clear && ['request','limit'].includes(r.kind) && !/如遇|如果|若|当状态为|当交易|如交易|如为|如显示|示例/u.test(r.quote);
-        return {...r,file,rects,clear,explicit,pageImage:workpaperSource(r.doc,'pages/'+r.page),place:'第 '+r.page+' 页'+(r.line?' · 第 '+r.line+' 行':' · 行号待核'),
+        const pin=rects.length && r.id==='execution/'+r.doc+'/p'+r.page+'/l'+r.line ? 'proof-'+finding.id+'-'+r.id.slice(10).replaceAll('/','-') : '';
+        return {...r,file,rects,clear,explicit,pin,pageImage:workpaperSource(r.doc,'pages/'+r.page),place:'第 '+r.page+' 页'+(r.line?' · 第 '+r.line+' 行':' · 行号待核'),
           excerpt:rects.length?()=>EvidenceCompare.lineExcerpt({doc:r.doc,page:r.page,source_line:{rects}},index):null,
-          open:()=>r.line?openPage(r.doc,r.page,undefined,r.line,undefined,'execution-line/'+r.line):openPage(r.doc,r.page,r.facts[0])};
+          open:()=>openRow(r)};
       });
       let state='unverified';
       const node=index.nodes.get('finding/'+finding.id);
@@ -64,6 +77,14 @@ const PaymentProof = (() => {
             (basis.state==='limited' && rows.some(r=>r.explicit && r.kind==='limit'))) state=basis.state;
         if (basis.state==='conflict' && basis.bank && rows.some(s=>s.clear && s.kind==='status' && PaymentProofCard.success(s.quote) &&
             rows.some(r=>r.explicit && r.doc===s.doc && r.page===s.page))) state='conflict';
+        if (['return_noted','return_review'].includes(basis.state) && ledger.format==='payment-execution-basis-v2') {
+          const provided=report.calls.expert?.input?.payment_return_sources || [];
+          const backed=rows.filter(r=>provided.some(s=>['id','kind','unit','doc','page','line','quote','disputed'].every(k=>s[k]===r[k])));
+          const notices=backed.filter(r=>['return_notice','return_pending'].includes(r.kind));
+          if (notices.length && basis.state==='return_review') state='return_review';
+          if (basis.bank && basis.state==='return_noted' && notices.length===1 && notices[0].kind==='return_notice' && notices[0].clear &&
+              backed.some(s=>s.clear && s.kind==='status' && PaymentProofCard.success(s.quote) && s.doc===notices[0].doc && s.page===notices[0].page)) state='return_noted';
+        }
       }
       const stage=finding.stage, clause=stage?.clause_ref;
       const picked=clause && refs.has(clause) && index.facts.get(clause)?.field==='payment_stage' ? stage : null;
@@ -75,7 +96,11 @@ const PaymentProof = (() => {
   }
   function panel(report) {
     const items=entries(report);
-    return items.length?PaymentProofCard.render(items,'payment-proof'):null;
+    if (!items.length) return null;
+    const panel=PaymentProofCard.render(items,'payment-proof');
+    panel.dataset.caseId=report.case_id;
+    if (state.bundle?.report===report) panel.dataset.rev=String(state.bundle.rev);
+    return panel;
   }
   function jump(finding,label='核对扣款凭证') {
     const button=action(label,()=>{
@@ -85,5 +110,5 @@ const PaymentProof = (() => {
     button.setAttribute('aria-controls','payment-proof');
     return button;
   }
-  return {panel,jump,sources,rectangles,entries};
+  return {panel,jump,sources,rectangles,entries,citation};
 })();

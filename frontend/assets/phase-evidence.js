@@ -49,7 +49,7 @@ const PhaseEvidence = (() => {
     }
     for (const row of PaymentProof.sources(graph)) {
       const title=PaymentProofCard.labels[row.kind];
-      add(row,title,'payment_execution_source','execution-line/',
+      add(row,title,'payment_execution_source','execution/'+row.doc+'/p'+row.page+'/l',
         row.line!==lineHint && facts.some(f=>row.facts.includes(f.id) && f.quote===row.quote),PaymentProof.rectangles(graph,calls,row));
     }
     for (const row of PaymentAcceptance.sources(graph)) {

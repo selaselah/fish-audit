@@ -160,11 +160,13 @@ class WarrantyRegisterTests(unittest.TestCase):
                     terms.verify(bad,read,read_layout=layout)
 
     def test_actual_approval_rechecks_omitted_difference_and_physical_coordinates(self):
+        import payment_execution
         g,text=sample(order())
         read=lambda doc,p:text[doc,p]
         old=copy.deepcopy(g)
         old["warranty_sources"]=terms.sources(old,read,terms.IMAGE_FORMAT)
-        legacy=issue(old);legacy["policy"].update(version="2026.11.27.06",warranty_checks=terms.IMAGE_FORMAT)
+        old[payment_execution.KEY]=payment_execution.sources(old,read,version=payment_execution.FIRST_FORMAT)
+        legacy=issue(old);legacy["policy"].update(version="2026.11.27.06",warranty_checks=terms.IMAGE_FORMAT,payment_execution=payment_execution.FIRST_FORMAT)
         del old["inspection_use_sources"], legacy["policy"]["inspection_use"]
         terms.verify(legacy,read)
         current=issue(g)

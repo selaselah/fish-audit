@@ -618,6 +618,13 @@ class EnterpriseFlow(unittest.TestCase):
         self.assertEqual(save(target,anchor="payment-approval-H05-9-d07-p1-l10").status_code,400)
         self.assertEqual(save({},anchor="page-dialog",doc="d07",page=1,line=10,raw_ref="payment-approval/d07/p1/l10").status_code,404)
         self.assertEqual(save({},anchor="page-dialog",doc="d07",page=1,line=9,raw_ref="payment-approval/d07/p1/l10").status_code,400)
+        proof={"view":"payment-proof","receipt":"H05-8"}
+        for scope,pin in ((proof,"proof-H05-8-d01-p1-l10"),(target,"stage-proof-H05-8-d01-p1-l10")):
+            self.assertEqual(save(scope,anchor=pin).status_code,404)
+            self.assertEqual(save(scope,anchor=pin,doc="d01",page=1).status_code,400)
+        self.assertEqual(save(proof,anchor="stage-proof-H05-8-d01-p1-l10").status_code,400)
+        self.assertEqual(save(proof,anchor="payment-proof").status_code,404)
+        self.assertEqual(save({},dialog="page-dialog",anchor="page-dialog",doc="d01",page=1,line=10,raw_ref="execution/d01/p1/l10").status_code,404)
         party={"anchor":"party-reading-d01-p1-f3","dialog":"page-dialog","doc":"d01","page":1,"line":5}
         self.assertEqual(save({"fact":"d01/p1/f3"},**party).status_code,404)
         for changes in ({"page":2},{"dialog":"review-dialog"},{"anchor":"party-reading-d02-p1-f3"}):

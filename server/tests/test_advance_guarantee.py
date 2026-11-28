@@ -231,13 +231,15 @@ class AdvanceGuaranteeTests(unittest.TestCase):
                     guarantee.verify(bad,read)
 
     def test_actual_legacy_approval_gate_with_and_without_rider(self):
+        import payment_execution
         g,texts=specimen(rider="首款条件：买方须先收到保函",letter=None,receipt=None)
+        g[payment_execution.KEY]=payment_execution.sources(g,lambda d,n:texts[d,n],version=payment_execution.FIRST_FORMAT)
         del g[guarantee.KEY]
         del g["inspection_use_sources"]
         g["nodes"]=[n for n in g["nodes"] if n["type"]!="advance_guarantee_line"]
         g["edges"]=[e for e in g["edges"] if e["type"]!="advance_guarantee_source"]
         paper={"graph":g,"findings":[{"rule":"H04","status":"ok","stage":{"name":"第一期"}}],
-               "policy":{"version":"2026.11.27.04","profile":PERFORMANCE,"payment_execution":VERSION["payment_execution"]}}
+               "policy":{"version":"2026.11.27.04","profile":PERFORMANCE,"payment_execution":payment_execution.FIRST_FORMAT}}
         guarantee.verify(paper,lambda d,n:texts[d,n])
         raw=encode(paper)
         with tempfile.TemporaryDirectory() as tmp,sqlite3.connect(":memory:") as db:

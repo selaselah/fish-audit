@@ -730,7 +730,7 @@ const PerformanceIndex = (() => {
     }
     if (item.execution_basis) {
       const [entry]=PaymentProof.entries(report,[item]);
-      if (!entry || !['conflict','limited','application'].includes(entry.state)) return null;
+      if (!entry || !['conflict','limited','application','return_noted','return_review'].includes(entry.state)) return null;
       const rows=[[entry.leftLabel,entry.left],[entry.rightLabel,entry.right]].flatMap(([label,group])=>
         group.filter(r=>r.clear && r.rects.length).map(r=>({...r,label})));
       return rows.length?{title:rows[0].file,rows}:null;
@@ -766,6 +766,12 @@ const PerformanceIndex = (() => {
       const open=action('',row.open,'scope-original-line'), crop=box('scope-source-crop'), quote=el('q',row.quote);
       open.setAttribute('aria-haspopup','dialog'); open.setAttribute('aria-controls','page-dialog');
       open.dataset.sourceLine=String(row.line);
+      if (row.pin) {
+        open.id='stage-'+row.pin;
+        open.dataset.proofTarget=open.id;
+        open.dataset.originalLabel=row.file+' · '+row.place+' · '+row.quote;
+        open.dataset.caseId=report.case_id; open.dataset.rev=String(state.bundle.rev);
+      }
       open.append(box('scope-row-head',el('strong',row.label),el('span',row.place),glyph('arrows-angle-expand')),crop,quote);
       section.append(open); clips.push({crop,quote});
       row.excerpt?.().then(canvas=>{if (canvas && crop.isConnected) {crop.replaceChildren(canvas);draw();}}).catch(()=>{});

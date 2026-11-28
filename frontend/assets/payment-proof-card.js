@@ -1,9 +1,9 @@
 // One payment document at a time. The workpaper and the public specimen supply their own original-page openers.
 const PaymentProofCard = (() => {
   const outcomes = {conflict:'状态与受理说明冲突', application:'仅见付款申请', limited:'回单载有限定',
-    review:'凭证范围待核', unverified:'原行依据待核'};
+    review:'凭证范围待核', return_noted:'实付结果待核', return_review:'交易说明待核', unverified:'原行依据待核'};
   const labels = {title:'凭证名称', request:'申请单据', status:'交易状态', pending_status:'办理状态',
-    limit:'凭证说明', wrapped_limit:'凭证说明', request_time:'申请时间', purpose:'款项用途'};
+    limit:'凭证说明', wrapped_limit:'凭证说明', request_time:'申请时间', purpose:'款项用途',return_notice:'冲正或退汇记录',return_pending:'交易说明'};
   const success=quote=>/^(交易|转账)状态\s*:\s*(交易成功|转账成功|付款成功|支付成功|成功|已完成|已记账|已入账)$/u.test(quote.normalize('NFKC').trim());
   function make(tag, cls, text) {
     const e=document.createElement(tag);
@@ -17,6 +17,10 @@ const PaymentProofCard = (() => {
     else button.type='button';
     button.setAttribute('aria-haspopup','dialog');
     button.setAttribute('aria-label',label+'，'+row.file+'，'+row.place);
+    if (row.pin) {
+      button.dataset.proofTarget=row.pin;
+      button.dataset.originalLabel=row.file+' · '+row.place+' · '+row.quote;
+    }
     button.addEventListener('click',e=>{
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
       if (row.open(button)!==false) e.preventDefault();
@@ -73,6 +77,11 @@ const PaymentProofCard = (() => {
       for (const row of rows) {
         const line=make('div','debit-line'), quote=make('blockquote','debit-quote',row.quote);
         const location=openButton(row,row.place+' ↗');
+        if (row.pin) {
+          location.id=row.pin;
+          line.dataset.proofTarget=row.pin;
+          line.dataset.originalLabel=location.dataset.originalLabel;
+        }
         location.addEventListener('focus',()=>locate(row));
         location.addEventListener('pointerenter',()=>locate(row));
         line.append(quote);section.append(line,location);
@@ -97,7 +106,11 @@ const PaymentProofCard = (() => {
       extra.hidden=!remaining.length;extra.open=false;extra.replaceChildren();
       if (remaining.length) {
         extra.append(make('summary','','其他原行（'+remaining.length+'）'));
-        for (const row of remaining) extra.append(openButton(row,row.quote));
+        for (const row of remaining) {
+          const open=openButton(row,row.quote);
+          if (row.pin) open.id=row.pin;
+          extra.append(open);
+        }
       }
       locate(item.right.find(r=>r.rects?.length) || item.left.find(r=>r.rects?.length));
       display(mode);
@@ -136,6 +149,12 @@ const PaymentProofCard = (() => {
     const statuses=ordered.filter(r=>r.kind==='status' || r.kind==='pending_status');
     const request=ordered.find(r=>r.kind==='request');
     const restrictions=ordered.filter(r=>['limit','wrapped_limit'].includes(r.kind));
+    const returned=ordered.find(r=>['return_notice','return_pending'].includes(r.kind));
+    if (returned && (state==='return_noted' || state==='return_review' || state==='unverified')) {
+      const status=statuses.find(r=>samePage(r,returned));
+      const label=state==='return_noted'?(returned.quote.includes('退汇')?'退汇记录':'冲正记录'):'交易说明';
+      return {leftLabel:'状态栏',left:status?[status]:[],rightLabel:label,right:[returned]};
+    }
     if (state==='conflict') {
       const positive=preferred.filter(r=>r.clear && r.kind==='status' && success(r.quote));
       const restriction=preferred.find(r=>r.explicit && positive.some(s=>samePage(s,r)));

@@ -71,9 +71,10 @@
 #walk-rail #walk-text { min-height:9rem; max-height:42dvh; }
 #walk-rail #walk-history ol { max-height:calc(100dvh - 245px); }
 @media(max-width:560px) {
-  body:has(#walk-dialog[open]) #performance-index:has([data-filing-objection].walk-selected) {
+  body:has(#walk-dialog[open]) #performance-index:has(:is([data-filing-objection],[data-proof-target]).walk-selected) {
     inset-block:max(8px,env(safe-area-inset-top)) auto; margin-block:0;
   }
+  body:has(#walk-dialog[open]) #performance-index:has([data-proof-target].walk-selected) { max-height:var(--walk-source-height,45dvh); }
   #walk-dialog { inset:auto 6px max(6px,env(safe-area-inset-bottom)); width:auto; max-height:84dvh; }
   #walk-text { font-size:16px; }
 }

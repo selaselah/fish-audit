@@ -2,6 +2,8 @@
 
 首次使用可在产品首页切换一笔采购的合同、验收单和回单，或直接到工作台提交资料。[产品首页](http://127.0.0.1:8000/) · [本机审计工作台](http://127.0.0.1:8000/app)
 
+想试站内走查，可以在这笔第二期付款的「交易成功」与「全额冲正」两行之间切换，直接对原件留意见。[打开 6 万元水印回单](http://127.0.0.1:8000/workpaper/4739beb64dc24961827a7824559a61d6?rev=2&view=payment-proof&receipt=H05-8) · [查看验收记录](acceptance.md#第二期回单写着交易成功附注另载全额冲正)
+
 周末走查时，直接点网站上的「提意见」。桌面可选「并排走查」，左边操作、右边写。手机对照两版底稿时，入口在底部。打开上传窗口或原件后，入口在关闭按钮旁。点「点选控件」可以指明按钮、读数或结论，点「标记原图」可以指出扫描合同上的几个字。写完点「保存意见」。走完后在这台机器的 Codex 里说「读取本机走查意见，按清单修改」即可。「已记录」也支持回到原处和复制给 Codex。[试走查同一笔付款的两版依据](http://127.0.0.1:8000/workpaper/f90afd53772c43028d74e6f831d1d4e0?rev=3&view=revision-comparison&prior=2&entry=new-H05-8) · [试标记合同用印名称](http://127.0.0.1:8000/app#case/30025f7db2dd44b195724079387031cd?rev=5&walktab=evidence&walkdoc=d01&walkpage=2&walkpoint=6342.2203.2c270bf7c0f1633ddb9a85f684aa7fa4074c9f878ffa6459abfef61ff6a60f5f) · [走查交互说明](interaction-design/README.md#在页面上记录走查意见)
 
 试走查这笔第二期验收款。回单引用的复验单写了「合格」，第 21 行同时写明本单不得作为该期付款依据。点这行就能核对原件，也能现场写修改意见。[打开付款用途原行](http://127.0.0.1:8000/workpaper/66fa88c60aed4799a64ab73c0eb92495?rev=11&view=payment-checks&stage=H05-8) · [对照引用初验单的另一笔回单](http://127.0.0.1:8000/workpaper/e4cc7a317fe34db4a3df9acc0a165b99?rev=7&view=payment-checks&stage=H05-8)

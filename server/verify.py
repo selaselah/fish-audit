@@ -206,7 +206,8 @@ def verify_payment_history(bundle, hashes, report, journal, *, issued_at=None):
                 and previous["graph"]["profile"] == graph["profile"], "历史签收归属或核查范围不符")
         old_graph = previous["graph"]
         if report["policy"].get("payment_execution"):
-            held = payment_execution.sources(old_graph, lambda d,n: bundle.read(f"{root}/{d}/{n}.txt").decode(), banks_only=True)
+            held = payment_execution.sources(old_graph, lambda d,n: bundle.read(f"{root}/{d}/{n}.txt").decode(),
+                                             banks_only=True, version=report["policy"]["payment_execution"])
             require(not held["units"], "所引历史付款凭证的受理或扣款限定尚未核实")
         old = payment_record(old_graph, previous["findings"])
         marked = None
@@ -303,6 +304,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
     verify_inspection(report,page_text,read_original=read_original)
     verify_payment_acceptance(report,page_text)
     payment_execution.verify(report,page_text)
+    payment_execution.verify_return_originals(report,read_original)
     advance_guarantee.verify(report,page_text)
     verify_prior_installment(report,page_text,submitted=submitted,signed=signed)
     verify_payment_releases(report,page_text,submitted=submitted,signed=signed)

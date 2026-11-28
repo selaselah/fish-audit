@@ -3,6 +3,8 @@
 import json
 import re
 
+import payment_execution
+from advance_guarantee import rectangles
 from config import CaseError
 from payment_quality import FORMAT as QUALITY_FORMAT, OPEN_FORMAT
 from storage import encode, stamp
@@ -27,6 +29,7 @@ CHANGE_PIN = re.compile(r"approver-change-(H0[45]-[1-9][0-9]{0,7})(?:-(approval-
 PARTY_PIN = re.compile(r"party-reading-(d[0-9]{2,8})-p1-(f[1-9][0-9]{0,7})")
 COUNT_PIN = re.compile(r"installment-count-(H0[3456]-[1-9][0-9]{0,7})")
 COMPARISON_DATE_PIN = re.compile(r"revision-((?:old|new)-H0[245]-[1-9][0-9]{0,7})-(earlier|later)-date-(condition|decision|event|check)")
+PAYMENT_PROOF_PIN = re.compile(r"(stage-)?proof-(H05-[1-9][0-9]{0,7})-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7})")
 
 
 def check_context(value):
@@ -40,7 +43,7 @@ def check_context(value):
         patterns["intake"] = r"contract|purchase|travel|payment"
     if screen == "case":
         patterns.update(case_id=r"[a-f0-9]{32}", tab=r"report|evidence|graph|activity", doc=r"d[0-9]{2,8}",
-                        raw_ref=r"(?:inspection-use|payment-approval|payment-clock|contract-approver|approval-change|installment-count|measurement-note|contract-signing-form|measurement-number|inspection-line)/d[0-9]{2,8}/p[1-9][0-9]{0,7}/l[1-9][0-9]{0,7}")
+                        raw_ref=r"(?:inspection-use|payment-approval|payment-clock|contract-approver|approval-change|installment-count|measurement-note|contract-signing-form|measurement-number|inspection-line|execution)/d[0-9]{2,8}/p[1-9][0-9]{0,7}/l[1-9][0-9]{0,7}")
         if "case_id" not in value:
             raise CaseError("走查底稿编号缺失。", 400)
     result = {"screen": screen}
@@ -99,8 +102,16 @@ def check_context(value):
             raise CaseError("请选择该版原页中的主体核字位置。",400)
     if raw := result.get("raw_ref"):
         if (not result.get("rev") or raw.partition("/")[2] != f"{result.get('doc')}/p{result.get('page')}/l{result.get('line')}" or params
-                or raw.startswith(("contract-signing-form/","measurement-number/","inspection-line/")) and result.get("dialog")!="page-dialog"):
+                or raw.startswith(("contract-signing-form/","measurement-number/","inspection-line/","execution/")) and result.get("dialog")!="page-dialog"):
             raise CaseError("请选择该版底稿所引的原件页和行。",400)
+    if anchor.startswith(("proof-H","stage-proof-H")):
+        pin = PAYMENT_PROOF_PIN.fullmatch(anchor)
+        if (not pin or screen!="case" or not result.get("rev") or result.get("doc") or
+                params!=({"view":"payment-checks","stage":pin[2]} if pin[1] else {"view":"payment-proof","receipt":pin[2]})):
+            raise CaseError("请选择该版付款检查所引的扣款凭证。",400)
+    if screen=="case" and params.get("view")=="payment-proof" and (not result.get("rev") or set(params)-{"view","receipt"} or
+            "receipt" in params and not re.fullmatch(r"H05-[1-9][0-9]{0,7}",params["receipt"])):
+        raise CaseError("请选择该版底稿的扣款凭证。",400)
     if screen == "case" and anchor.startswith(("quality-H","retest-H","inspection-use-","payment-approval-","payment-clock-","contract-approver-","approver-change-","installment-count-")):
         pin = QUALITY_PIN.fullmatch(anchor) or RETEST_PIN.fullmatch(anchor) or USE_PIN.fullmatch(anchor) or CHANGE_PIN.fullmatch(anchor) or COUNT_PIN.fullmatch(anchor)
         if not pin or not result.get("rev") or params != {"view":"payment-checks", "stage":pin[1]}:
@@ -116,6 +127,47 @@ def check_context(value):
                 or "entry" in params and not re.fullmatch(r"(?:old|new)-H0[1-7]-[1-9][0-9]{0,7}",params["entry"])):
             raise CaseError("请记录同一底稿中可定位的两版履约发现。",400)
     return result
+
+
+def cited_payment_line(paper, doc, page, line, finding_id):
+    graph = paper["graph"]
+    ledger = graph.get(payment_execution.KEY,{})
+    marker = paper["policy"].get("payment_execution")
+    if marker not in (payment_execution.FIRST_FORMAT,payment_execution.FORMAT) or marker!=ledger.get("format"):
+        return False
+    page_id = f"{doc}/p{page}"
+    ref = f"execution/{page_id}/l{line}"
+    row = next((r for r in ledger["rows"] if r["id"]==ref and (r["doc"],r["page"],r["line"])==(doc,page,line)),None)
+    if not row:
+        return False
+    call = next((p for p in paper.get("calls",{}).get("pages",()) if (p["doc"],p["page"])==(doc,page)),{})
+    nodes = {n["id"]:n for n in graph["nodes"] if n["id"] in (ref,page_id)}
+    boxes = call.get("payment_execution_rects",{}).get(str(line))
+    source = nodes.get(ref,{})
+    if (not rectangles(boxes) or not call.get("page_sha256") or call["page_sha256"]!=nodes.get(page_id,{}).get("sha256") or
+            (source.get("type"),source.get("doc"),source.get("page"),source.get("line"),source.get("label")) !=
+            ("payment_execution_line",doc,page,line,row["quote"]) or
+            {"from":page_id,"to":ref,"type":"payment_execution_source","evidence":[page_id,*row["facts"]]} not in graph["edges"]):
+        return False
+    if row["facts"]:
+        facts = {f["id"]:f for f in graph["facts"] if f["id"] in row["facts"]}
+        for fact_id in row["facts"]:
+            fact = facts.get(fact_id,{})
+            if (fact.get("doc"),fact.get("page"),fact.get("page_sha256"))!=(doc,page,call["page_sha256"]):
+                return False
+            loc = fact.get("source_line")
+            if loc and (loc.get("number"),loc.get("text"),loc.get("rects"))!=(line,row["quote"],boxes):
+                return False
+    for finding in paper["findings"]:
+        if (finding_id and finding["id"]!=finding_id) or row["unit"] not in finding["scope"] or ref not in finding["evidence"]:
+            continue
+        basis = finding.get("execution_basis") or {}
+        installment = finding["rule"]=="H05" and basis.get("unit")==row["unit"] and ref in basis.get("rows",())
+        transfer = not finding_id and finding["rule"] in ("B04","B05") and payment_execution.entry(graph,row["unit"])
+        if installment or transfer:
+            if {"from":ref,"to":"finding/"+finding["id"],"type":"supports_result","evidence":[ref]} in graph["edges"]:
+                return True
+    return False
 
 
 def note_row(row):
@@ -177,7 +229,19 @@ def save_note(store, workspace, author, role, data):
         change_pin=CHANGE_PIN.fullmatch(anchor)
         count_pin=COUNT_PIN.fullmatch(anchor)
         count_raw=context.get("raw_ref","").startswith("installment-count/")
-        if context["screen"]=="case" and (count_pin or count_raw):
+        proof_pin = PAYMENT_PROOF_PIN.fullmatch(anchor)
+        if context["screen"]=="case" and (proof_pin or context.get("raw_ref","").startswith("execution/")):
+            doc,page,line = proof_pin.groups()[2:] if proof_pin else (context["doc"],context["page"],context["line"])
+            row = db.execute("SELECT content FROM reports WHERE case_id=? AND rev=?",(context["case_id"],context["rev"])).fetchone()
+            if not row or not cited_payment_line(json.loads(row[0]),doc,int(page),int(line),proof_pin[2] if proof_pin else None):
+                raise CaseError("这版付款检查未引用所选扣款凭证原行。",404)
+        elif context["screen"]=="case" and position.get("view")=="payment-proof" and "receipt" in position:
+            linked = db.execute("""SELECT 1 FROM reports,json_each(content,'$.findings') f WHERE case_id=? AND rev=?
+                AND json_extract(f.value,'$.id')=? AND json_extract(f.value,'$.rule')='H05'
+                AND json_type(f.value,'$.execution_basis')='object'""",(context["case_id"],context["rev"],position["receipt"])).fetchone()
+            if not linked:
+                raise CaseError("这版底稿未收录所选扣款凭证。",404)
+        elif context["screen"]=="case" and (count_pin or count_raw):
             finding=count_pin[1] if count_pin else None
             raw=context.get("raw_ref")
             linked=db.execute("""SELECT 1 FROM reports,json_each(content,'$.findings') f,json_each(content,'$.graph.installment_count_sources.rows') r

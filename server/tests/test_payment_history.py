@@ -455,7 +455,7 @@ class PaymentHistoryTests(unittest.TestCase):
         with self.store.connect() as db:
             self.assertIsNone(db.execute("SELECT 1 FROM contract_payments WHERE case_id='other'").fetchone())
             self.assertIsNotNone(db.execute("SELECT 1 FROM payment_index_pending WHERE case_id='other'").fetchone())
-            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 9)
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 10)
 
     def test_damaged_signed_payment_archive_cannot_silently_disappear(self):
         self.installment("signed")
