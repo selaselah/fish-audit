@@ -28,7 +28,7 @@
 .delivery-register-lines > summary::marker { color:var(--secondary); }
 .delivery-register-lines > summary:focus-visible { outline:2px solid var(--focus); outline-offset:1px; }
 .delivery-register-lines strong { font-variant-numeric:tabular-nums; }
-.delivery-register-lines .register-code { display:inline-block; max-width:100%; vertical-align:bottom; overflow-wrap:anywhere; }
+.register-code { display:inline-block; max-width:100%; vertical-align:bottom; overflow-wrap:anywhere; }
 .delivery-register-lines mark { background:var(--attention-soft); color:var(--ink); font-weight:700; text-decoration:underline dotted; text-underline-offset:3px; }
 .delivery-register-lines.register-approval mark { background:var(--accent-soft); text-decoration-color:var(--accent); }
 .inspection-metric { display: flex; flex-wrap: wrap; align-items: baseline; gap: 5px; color: var(--secondary); font-size: .82rem; }

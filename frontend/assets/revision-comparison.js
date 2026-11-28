@@ -32,6 +32,26 @@ const RevisionComparison = (() => {
     if (other && next && !there.has(next.trim()) && (here[start]+next).length<=150) return (here[start]+next).trim();
     return here[start]?.trim() || detail;
   }
+  function approvalSources(cid,rev,item,cardId) {
+    const rows=el('ul','','revision-sources revision-approval-sources');
+    const labels={condition:'事先批准条款',decision:'协议决定',event:item.rule==='H05'?'回单付款日':'终验日期'};
+    for (const slot of ['condition','decision','event']) {
+      const s=item.approval_dates.sources[slot], place=s.name+' · '+s.page+' 页 '+s.line+' 行';
+      let original;
+      if (slot==='event') original=Team.paperLink('',cid,'',new URLSearchParams({rev,fact:s.ref}));
+      else {
+        const query=new URLSearchParams({rev,walktab:'evidence',walkdoc:s.doc,walkpage:s.page,walkline:s.line,walkraw:s.ref});
+        original=link('','/app'+Team.hash('case/'+cid+'?'+query));
+      }
+      original.id=cardId+'-date-'+slot;
+      original.dataset.originalLabel=place+' · '+labels[slot];
+      const quote=el('q');
+      appendEquipmentCodes(quote,s.text);
+      original.append(el('small',labels[slot]+' · '+place),quote,glyph('arrows-angle-expand'));
+      const li=el('li');li.append(original);rows.append(li);
+    }
+    return rows;
+  }
   function column(cid,meta,item,other,rowId,side) {
     const card=el('section','','revision-side');
     card.dataset.side=side; card.id='revision-'+rowId+'-'+side;
@@ -53,6 +73,12 @@ const RevisionComparison = (() => {
       }
       card.append(full);
     }
+    let citations=card;
+    if (item.approval_dates) {
+      citations=fold('核对三处原文',approvalSources(cid,meta.rev,item,card.id));
+      citations.className='revision-approval-fold';
+      citations.firstChild.id=card.id+'-approval-sources';card.append(citations);
+    }
     if (item.sources.length) {
       const list=el('ul','','revision-sources');
       for (const s of item.sources) {
@@ -66,13 +92,18 @@ const RevisionComparison = (() => {
         list.append(li);
       }
       const cited=fold('原件引文 · '+item.sources.length+(item.source_count>item.sources.length?' / '+item.source_count:''),list);
-      cited.firstChild.id=card.id+'-sources';card.append(cited);
+      cited.firstChild.id=card.id+'-sources';citations.append(cited);
     }
     const links=box('revision-links',Team.paperLink('查看本版发现',cid,'text-button',new URLSearchParams({rev:meta.rev,finding:item.id})));
     if (item.certificate) links.append(Team.paperLink('期满单原件',cid,'text-button',
       new URLSearchParams({rev:meta.rev,view:'warranty-certificate',stage:item.id})));
     links.firstChild.id=card.id+'-finding';
     if (item.certificate) links.lastChild.id=card.id+'-certificate';
+    if (item.approval_dates?.recorded) {
+      const view=item.rule==='H02'?{view:'acceptance-checks'}:{view:'payment-checks',stage:item.id};
+      const check=Team.paperLink('查看日期核对',cid,'text-button',new URLSearchParams({rev:meta.rev,...view}));
+      check.id=card.id+'-date-check';links.append(check);
+    }
     if (item.board_decision) {
       const board=Team.paperLink('董事会审批原件',cid,'text-button',new URLSearchParams({rev:meta.rev,view:'board-decision'}));
       board.id=card.id+'-board';links.append(board);
@@ -97,7 +128,8 @@ const RevisionComparison = (() => {
     const priorLabel=el('label','对照版本');priorLabel.htmlFor=previous.id;priorLabel.append(previous);
     const close=Team.paperLink('收起对照',cid,'text-button',new URLSearchParams({rev:later.rev}));
     const title=el('h2','履约版本对照'); title.id='revision-heading';
-    const top=box('revision-head',title,close);
+    const actions=el('nav','','revision-actions');actions.setAttribute('aria-label','版本对照操作');actions.append(close);
+    const top=box('revision-head',title,actions);
     const pick=el('select');pick.id='revision-entry';
     const ordered=groups.flatMap((_,i)=>rows.filter(r=>group(r)===i));
     for (const [i,label] of groups.entries()) {
@@ -109,6 +141,12 @@ const RevisionComparison = (() => {
     }
     const pickLabel=el('label','履约发现');pickLabel.htmlFor=pick.id;pickLabel.append(pick);
     const body=box('revision-body');body.setAttribute('aria-live','polite');
+    const paired=matchMedia('(min-width:651px)');
+    paired.addEventListener('change',()=>{
+      if (!paired.matches) return;
+      const evidence=body.querySelectorAll('.revision-shared-lines .revision-approval-fold');
+      if ([...evidence].some(d=>d.open)) for (const d of evidence) d.open=true;
+    },{signal:job.controller.signal});
     function show(id) {
       const current=ordered.find(r=>r.id===id || (r.earlier && 'old-'+r.earlier.id===id));
       if (!current) {
@@ -117,9 +155,22 @@ const RevisionComparison = (() => {
         return;
       }
       root.dataset.entry=id;pick.value=current.id;
-      const label=current.changes.length?current.changes.map(s=>changes[s]).join('、')+'有变':groups[group(current)];
-      body.replaceChildren(el('p',label,'revision-change'),box('revision-columns',
-        column(cid,earlier,current.earlier,current.later,current.id,'earlier'),column(cid,later,current.later,current.earlier,current.id,'later')));
+      let label=current.changes.length?current.changes.map(s=>changes[s]).join('、')+'有变':groups[group(current)];
+      const recorded=current.shared_approval_lines?.recorded_in;
+      if (recorded?.length===1) {
+        label=(recorded[0]==='later'?'本版新增日期核对':'仅前版记录日期核对')+' · 三处所引原文一致'+
+          (current.changes.includes('status')?' · 状态有变':'');
+      }
+      const columns=box('revision-columns',column(cid,earlier,current.earlier,current.later,current.id,'earlier'),
+        column(cid,later,current.later,current.earlier,current.id,'later'));
+      if (recorded?.length) {
+        columns.classList.add('revision-shared-lines');
+        const folds=[...columns.querySelectorAll('.revision-approval-fold')];
+        for (const fold of folds) fold.addEventListener('toggle',()=>{
+          if (paired.matches) for (const other of folds) if (other.open!==fold.open) other.open=fold.open;
+        });
+      }
+      body.replaceChildren(el('p',label,'revision-change'),columns);
     }
     pick.addEventListener('change',()=>{
       show(pick.value);

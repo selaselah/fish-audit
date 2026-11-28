@@ -63,8 +63,10 @@ function showLocation() {
   const place=q('#walk-location'), full=describeContext(context);
   const signing=context.raw_ref?.startsWith('contract-signing-form/') || context.anchor?.startsWith('form-H') || context.raw_ref?.startsWith('measurement-number/') || context.anchor?.startsWith('number-H') ||
     context.raw_ref?.startsWith('inspection-line/') || context.anchor?.startsWith('serial-H');
-  const compact=(docked || signing || context.anchor?.startsWith('party-reading-')) && context.screen==='case' && context.rev && (context.target || context.page_point);
-  q('#walk-origin').textContent=compact?'底稿 '+context.case_id.slice(0,8)+' · R'+context.rev:'记录位置';
+  const comparison=context.params?.view==='revision-comparison' && context.params.prior && context.anchor?.startsWith('revision-');
+  const compact=(docked || signing || comparison || context.anchor?.startsWith('party-reading-')) && context.screen==='case' && context.rev && (context.target || context.page_point);
+  const editions=comparison?'R'+context.params.prior+' / R'+context.rev:'R'+context.rev;
+  q('#walk-origin').textContent=compact?'底稿 '+context.case_id.slice(0,8)+' · '+editions:'记录位置';
   place.textContent=compact?[context.target || context.doc,context.doc && '第 '+context.page+' 页',context.line && '第 '+context.line+' 行',
     context.page_point && pointLabel(context.page_point)].filter(Boolean).join(' · '):full;
   place.title=full;
@@ -225,7 +227,15 @@ function endPick(el, reopen=true, pagePoint=null) {
       context=captureContext(owner,el,pagePoint); markSelection(el); showLocation(); draft();
     } else status('底稿正在打开，请稍后再点选。');
   }
-  if (reopen) { if (!docked) dialog.showModal(); updatePoint(); text.focus(); }
+  if (reopen) {
+    if (!docked) dialog.showModal();
+    updatePoint(); text.focus();
+    if (el?.closest('.revision-approval-sources') && !docked && matchMedia('(max-width:650px)').matches) {
+      const quote=el.getBoundingClientRect(), bottom=dialog.getBoundingClientRect().top-16;
+      if (quote.bottom>bottom && quote.height<=bottom-(window.visualViewport?.offsetTop || 0))
+        window.scrollBy({top:quote.bottom-bottom,behavior:'instant'});
+    }
+  }
 }
 q('#walk-point').onclick=()=>{
   if (pick) {endPick(null);return;}

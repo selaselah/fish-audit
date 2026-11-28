@@ -178,7 +178,11 @@ H05 还列有对应的成功回单、款项用途、交易状态及日期字段�
 
 每行保留两版已有的状态、发现原文和核对依据。`changes` 列出状态 `status`、发现原文 `detail`、核对依据 `basis`、可定位引文字段 `citations`、其余程序记录 `records` 的差异。每侧的 `sources` 预览最多 3 个字段，包含当版字段编号、取值、引文、转录状态、文件、物理页、原行号与原文，`source_count` 为可定位字段总数。完整记录可通过该版底稿接口读取。对照请求只读。
 
+设备代用涉及验收或付款时，行内的 `earlier` 或 `later` 可带 `approval_dates`。`sources.condition`、`sources.decision`、`sources.event` 分别指向当版所引的事先批准条款、代用决定和业务日期。前两项按原行编号定位，后一项按终验日或实付日的事实编号定位。每项均给出文件名、物理页、行号和原文。`recorded` 表示当版归档中已有这项日期核对。两版所引文件和页图摘要、原行、文字及行框均相同，且至少一版留有日期核对时，行上才有 `shared_approval_lines.recorded_in`，取值为记录该程序的侧名列表。[水印验收款对照](http://127.0.0.1:8000/workpaper/f90afd53772c43028d74e6f831d1d4e0?rev=3&view=revision-comparison&prior=2&entry=new-H05-8)
+
 固定入口为 `/workpaper/<case_id>?rev=<rev>&view=revision-comparison&prior=<prior>`，企业模式在前面加 `/w/<wid>`。可加 `entry` 精确到一项，值为 `new-` 或 `old-` 加该侧已出具的发现编号。保存走查意见时 `context.rev` 指后版，`context.params` 保留视图、前版及所选项，`context.anchor` 可进一步标到前版或后版的一条原件链接。[水印案固定位置](http://127.0.0.1:8000/workpaper/fd51542fc29c401196842a0a207f1e8b?rev=6&view=revision-comparison&prior=5&entry=new-H05-8)
+
+例如 `revision-new-H05-8-earlier-date-decision` 指向这笔实付在前版引用的协议决定。结尾可为 `condition`、`decision`、`event` 或 `check`。保存时服务端核对所选发现、版次和该侧归档依据。`check` 只接受当版实际记录过的日期核对。[走查记录校验](../server/walkthrough.py)
 
 ## 质保金两单所列日期
 

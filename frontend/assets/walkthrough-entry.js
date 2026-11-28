@@ -9,14 +9,18 @@ document.body.append(launcher);
 
 let owner;
 const openModals = [];
+const narrow = matchMedia('(max-width:650px)');
+const comparison = document.getElementById('revision-comparison');
 function placeLauncher() {
   for (let i=openModals.length-1;i>=0;i--) {
     if (!openModals[i].open || !openModals[i].isConnected) openModals.splice(i,1);
   }
   const top = openModals.at(-1);
-  if (top === owner && launcher.isConnected && (top ? top.contains(launcher) : launcher.parentElement === document.body)) return;
+  const bar = !top && narrow.matches && comparison && !comparison.closest('[hidden]') && comparison.querySelector('.revision-actions');
+  const host = top || bar || document.body;
+  if (top === owner && launcher.isConnected && (top ? top.contains(launcher) : launcher.parentElement === host)) return;
   owner = top;
-  if (!top) document.body.append(launcher);
+  if (!top) host.append(launcher);
   else {
     const close = top.querySelector('[data-close], button[aria-label^="关闭"], button[value="close"]');
     if (close) (close.closest('form[method="dialog"]') || close).before(launcher);
@@ -35,9 +39,15 @@ document.addEventListener('toggle', event => {
 for (const panel of document.querySelectorAll('dialog[open]')) openModals.push(panel);
 placeLauncher();
 // Navigation can remove an open workpaper dialog without dispatching its close or toggle event.
-new MutationObserver(() => {
-  if (!launcher.isConnected || owner && !owner.isConnected) placeLauncher();
-}).observe(document.body,{childList:true,subtree:true});
+const placement = new MutationObserver(records => {
+  if (!launcher.isConnected || owner && !owner.isConnected ||
+      narrow.matches && records.some(r=>r.target===comparison || r.type==='attributes')) placeLauncher();
+});
+placement.observe(document.body,{childList:true,subtree:true});
+if (comparison) {
+  placement.observe(comparison.closest('#case'),{attributes:true,attributeFilter:['hidden']});
+  narrow.addEventListener('change',placeLauncher);
+}
 
 let loading = false;
 launcher.addEventListener('click', async () => {

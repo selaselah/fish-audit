@@ -655,6 +655,10 @@ class EnterpriseFlow(unittest.TestCase):
         self.assertEqual(note_at(prior="2").status_code,400)
         self.assertEqual(note_at(entry="new-H05-9999").status_code,404)
         self.assertEqual(note_at(entry="old-H05-9999").status_code,404)
+        pin="revision-new-H05-8-later-date-decision"
+        self.assertEqual(owner.post(notes,headers=headers,json={**body,"context":{**context,"anchor":pin}}).status_code,400)
+        self.assertEqual(owner.post(notes,headers=headers,json={**body,"context":{**context,"anchor":pin,
+                         "params":{**params,"entry":"new-H05-8"}}}).status_code,404)
         self.assertEqual(employee.post(notes,headers=eh,json=body).status_code,403)
         self.assertEqual(note_at().status_code,201)
         self.assertEqual(note_at().status_code,200)

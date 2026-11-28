@@ -6,6 +6,9 @@ from config import CaseError, PERFORMANCE
 from controls import execute
 from graph import link_procedures
 from report_comparison import compare
+import inspection_coverage as inspection
+import substitution_dates
+from test_delivery_register import dated
 from test_performance import BANK_DOC, CONTRACT, RECEIPT, WARRANTY, material
 from test_receipt_packets import packet
 
@@ -38,6 +41,23 @@ def replace_refs(value, names):
     if isinstance(value, dict):
         return {k: replace_refs(v, names) for k, v in value.items()}
     return names.get(value, value) if isinstance(value, str) else value
+
+
+def approval_bundle(revision, edition):
+    paper, read = dated()
+    g = paper["graph"]
+    ledger = g["inspection_coverage_sources"] = inspection.sources(g, read, version=edition)
+    findings = execute(g, PERFORMANCE)
+    g["edges"].extend(substitution_dates.edges(findings))
+    result = bundle(g, findings, revision)
+    report = result["report"]
+    report["policy"].update(inspection_coverage=edition,code_sha256={
+        name:digest(name) for name in ("inspection_coverage.py","substitution_dates.py")})
+    report["calls"] = {"pages":[{"doc":d["id"],"page":1,"page_sha256":digest(d["id"]+"/p1"),
+        "response_id":"first","check":{"response_id":"second"},
+        "delivery_register_rects":{str(r["line"]):[[0,.1,.9,.2]] for r in ledger["rows"] if r["doc"]==d["id"] and r["line"]}}
+        for d in g["documents"]]}
+    return result
 
 
 class ContractRevisionComparison(unittest.TestCase):
@@ -161,3 +181,42 @@ class ContractRevisionComparison(unittest.TestCase):
         new["report"]["case_id"] = "d"*32
         with self.assertRaises(CaseError):
             self.compare(new)
+
+    def test_new_dated_check_keeps_the_three_earlier_citations_without_backdating_a_conclusion(self):
+        old=approval_bundle(2,inspection.SUBSTITUTION_FORMAT)
+        new=approval_bundle(3,substitution_dates.FORMAT)
+        def payment(a,b):
+            return next(r for r in compare(CID,a,b)["rows"] if r["id"]=="new-H05-8")
+        r=payment(old,new)
+        self.assertEqual(r["shared_approval_lines"],{"recorded_in":["later"]})
+        self.assertFalse(r["earlier"]["approval_dates"]["recorded"])
+        self.assertTrue(r["later"]["approval_dates"]["recorded"])
+        for slot in ("condition","decision","event"):
+            self.assertEqual(r["earlier"]["approval_dates"]["sources"][slot],r["later"]["approval_dates"]["sources"][slot])
+        date_ref=r["later"]["approval_dates"]["sources"]["event"]["ref"]
+        renamed=replace_refs(old,{date_ref:"d04/p1/f990"})
+        self.assertEqual(payment(renamed,new)["shared_approval_lines"],{"recorded_in":["later"]})
+        same=payment(new,{**new,"rev":4})
+        self.assertEqual(same["shared_approval_lines"],{"recorded_in":["earlier","later"]})
+        self.assertEqual(same["changes"],[])
+        for fault in ("call","box","physical_page","support"):
+            earlier=deepcopy(old);report=earlier["report"]; g=report["graph"]
+            call=next(c for c in report["calls"]["pages"] if c["doc"]=="d05")
+            s=r["earlier"]["approval_dates"]["sources"]["decision"]
+            if fault=="call":call["check"]["response_id"]=""
+            if fault=="box":call["delivery_register_rects"][str(s["line"])]=[[.1,.15,.9,.25]]
+            if fault=="physical_page":call["page_sha256"]=digest("different page")
+            if fault=="support":g["edges"]=[e for e in g["edges"] if (e["from"],e["to"])!=(s["ref"],"finding/H05-8")]
+            changed=payment(earlier,new)
+            self.assertNotIn("shared_approval_lines",changed,fault)
+            self.assertNotIn("approval_dates",changed["earlier"],fault)
+            self.assertTrue(changed["later"]["approval_dates"]["recorded"])
+        for fault in ("direction","day","edge"):
+            later=deepcopy(new); report=later["report"]
+            c=next(f["substitution_dates"] for f in report["findings"] if f["rule"]=="H05")
+            if fault=="direction":c["replacement"]=c["original"]
+            if fault=="day":c["days"]+=1
+            if fault=="edge":report["graph"]["edges"]=[e for e in report["graph"]["edges"] if e["type"]!=substitution_dates.RELATION]
+            changed=payment(old,later)
+            self.assertNotIn("shared_approval_lines",changed,fault)
+            self.assertNotIn("approval_dates",changed["later"],fault)

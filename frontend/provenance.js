@@ -766,6 +766,18 @@ function measurementNumberSources(report, finding=report?.findings.find(f=>f.rul
   return cited;
 }
 
+function appendEquipmentCodes(parent,text,marks=[]) {
+  let end=0;
+  for (const match of text.matchAll(/([A-Za-z0-9._*＊?-]+)([、，。；：！？）】,;:!?]*)/gu)) {
+    const [,code,punctuation]=match;
+    const token=el('span','','register-code');
+    token.append(marks.includes(code)?el('mark',code):code,punctuation);
+    parent.append(text.slice(end,match.index),token);
+    end=match.index+match[0].length;
+  }
+  parent.append(text.slice(end));
+}
+
 function workpaperLineButton(source,finding,pin=true) {
   const {doc,page,rawLine,ref,label}=source;
   const number=source.quality==='measurement_number_source', register=source.quality==='delivery_register_source';
@@ -781,19 +793,9 @@ function workpaperLineButton(source,finding,pin=true) {
   Object.assign(button.dataset,{caseId:state.bundle.report.case_id,rev:String(state.bundle.rev)});
   button.dataset.originalLabel=label+' · '+place;
   button.setAttribute('aria-haspopup','dialog'); button.setAttribute('aria-controls','page-dialog');
-  const quote=el('strong',source.quote);
-  if (register) {
-    quote.replaceChildren();
-    let end=0;
-    for (const match of source.quote.matchAll(/([A-Za-z0-9._*＊?-]+)([、，。；：！？）】,;:!?]*)/gu)) {
-      const [,code,punctuation]=match;
-      const token=el('span','','register-code');
-      token.append(source.marks.includes(code)?el('mark',code):code,punctuation);
-      quote.append(source.quote.slice(end,match.index),token);
-      end=match.index+match[0].length;
-    }
-    quote.append(source.quote.slice(end));
-  }
+  const quote=el('strong');
+  if (register) appendEquipmentCodes(quote,source.quote,source.marks);
+  else quote.textContent=source.quote;
   button.append(el('small',number || source.substitution?label+' · '+place:place),quote,glyph('arrows-angle-expand'));
   if (number && source.copy) button.append(el('small',source.copy.label+' · '+source.copy.value,'number-copy'));
   return button;

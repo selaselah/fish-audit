@@ -25,6 +25,7 @@ USE_PIN = re.compile(r"(?:inspection-use|payment-approval|payment-clock|contract
 CHANGE_PIN = re.compile(r"approver-change-(H0[45]-[1-9][0-9]{0,7})(?:-(approval-change|contract-approver|payment-approval|payment-clock|inspection-use)-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7}))?")
 PARTY_PIN = re.compile(r"party-reading-(d[0-9]{2,8})-p1-(f[1-9][0-9]{0,7})")
 COUNT_PIN = re.compile(r"installment-count-(H0[3456]-[1-9][0-9]{0,7})")
+COMPARISON_DATE_PIN = re.compile(r"revision-((?:old|new)-H0[245]-[1-9][0-9]{0,7})-(earlier|later)-date-(condition|decision|event|check)")
 
 
 def check_context(value):
@@ -68,6 +69,11 @@ def check_context(value):
         raise CaseError("走查原页位置不完整。", 400)
     params = result.get("params", {})
     anchor = result.get("anchor", "")
+    if anchor.startswith("revision-") and "-date-" in anchor:
+        if (not COMPARISON_DATE_PIN.fullmatch(anchor) or screen!="case" or not result.get("rev")
+                or result.get("tab","report")!="report" or {"doc","dialog"}.intersection(result)
+                or params.get("view")!="revision-comparison" or not params.get("entry")):
+            raise CaseError("请选择两版履约对照中对应一侧的日期依据。",400)
     if params.get("view")=="contract-signing-form" and (not result.get("rev") or set(params)!={"view"}):
         raise CaseError("请选择一版合同签署底稿。",400)
     if anchor.startswith(("form-H","number-H","serial-H")):
@@ -358,6 +364,16 @@ def save_note(store, workspace, author, role, data):
                 if not db.execute("""SELECT 1 FROM reports, json_each(reports.content,'$.findings') AS f
                              WHERE case_id=? AND rev=? AND json_extract(f.value,'$.id')=?""",(context["case_id"],rev,fid)).fetchone():
                     raise CaseError("所选版本没有这项履约发现。",404)
+            if pin := COMPARISON_DATE_PIN.fullmatch(anchor):
+                from report_comparison import compare
+                cid = context["case_id"]
+                compared = compare(cid, store.report(cid,prior), store.report(cid,context["rev"]))
+                row = next((r for r in compared["rows"] if r["id"]==pin[1] and (r["id"]==position["entry"] or
+                           r["earlier"] and "old-"+r["earlier"]["id"]==position["entry"])), None)
+                proof = row and row[pin[2]] and row[pin[2]].get("approval_dates")
+                available = proof and (proof["recorded"] if pin[3]=="check" else pin[3] in proof["sources"])
+                if not available:
+                    raise CaseError("所选一侧没有引用这项日期依据。",404)
         if "doc" in context and not db.execute("SELECT 1 FROM pages WHERE case_id=? AND doc=? AND number=?",
                                                (context["case_id"], context["doc"], context["page"])).fetchone():
             raise CaseError("未找到记录时的资料原页。", 404)

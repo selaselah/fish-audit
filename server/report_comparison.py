@@ -1,14 +1,21 @@
 """Compare what two issued workpapers say about the same contract, inspection or payment."""
 
-from collections import Counter
+from collections import Counter, defaultdict
+from datetime import date
 import re
 
 from config import CaseError
 from advance_guarantee import rectangles
+from inspection_coverage import split
+from installment_approval import printed_date
+from performance import DATE_LABELS
+from substitution_dates import CLAUSES, DECISIONS, INDICATION, PRIOR, RELATION
+from warranty_dates import RECEIPT, read_date
 
 
 RULES = {"H01", "H02", "H03", "H04", "H05", "H06", "H07"}
 SHA256 = re.compile(r"[a-f0-9]{64}")
+DATED_REGISTER = "inspection-coverage-v5"
 PRIORITY = {
     "H01": ("effect_clause", "buyer_signature", "seller_signature", "effect_on"),
     "H02": ("acceptance_result", "measured_result", "acceptance_signer", "accepted_on"),
@@ -31,6 +38,13 @@ class IssuedFindings:
         self.nodes = {n["id"]: n for n in graph["nodes"]}
         self.facts = {f["id"]: f for f in graph["facts"]}
         self.kinds = graph["documents_by_kind"]
+        self.policy = report["policy"]
+        self.register = graph.get("inspection_coverage_sources", {})
+        self.calls = defaultdict(list)
+        for page in (report.get("calls") or {}).get("pages", []):
+            self.calls[page.get("doc"), page.get("page")].append(page)
+        self.register_edges = {(e["type"], e["from"], e["to"], tuple(e["evidence"])) for e in graph["edges"]
+                               if e["type"] in ("inspection_coverage_source", RELATION)}
         self.section_parents = {(e["from"], e["to"], e["evidence"][0]) for e in graph["edges"]
                                 if e["type"] == "contains_section" and len(e["evidence"]) == 1}
         self.links = {(e["type"], e["from"], e["to"]) for e in graph["edges"]
@@ -82,6 +96,89 @@ class IssuedFindings:
         return reading, {"ref": ref, "doc": doc, "name": self.docs[doc]["name"], "page": page, "line": line["number"],
                          "text": line["text"], "label": fact["label"], "field": fact["field"],
                          "value": fact["value"], "quote": fact["quote"], "status": fact["status"]}
+
+    def checked_page(self, doc, page):
+        page_id = f"{doc}/p{page}"
+        node = self.nodes.get(page_id, {})
+        calls = self.calls[doc, page]
+        if (len(calls) == 1 and node.get("type") == "page" and node.get("layer") == "text"
+                and ("contains", doc, page_id) in self.links and SHA256.fullmatch(node.get("sha256") or "")
+                and calls[0].get("page_sha256") == node["sha256"] and calls[0].get("response_id")
+                and (calls[0].get("check") or {}).get("response_id") not in (None, "", calls[0]["response_id"])):
+            return calls[0]
+
+    def register_line(self, finding, row, role):
+        ref, doc, page, line = row["id"], row["doc"], row["page"], row["line"]
+        page_id = f"{doc}/p{page}"
+        source, call = self.document(row["unit"]), self.checked_page(doc, page)
+        boxes = (call or {}).get("delivery_register_rects", {}).get(str(line))
+        node = self.nodes.get(ref, {})
+        refs = [page_id, *row["facts"]]
+        if (row["unit"] != doc or doc not in self.kinds.get(role, ()) or doc not in finding["scope"]
+                or not source or type(line) is not int or line < 1 or row["disputed"] or not rectangles(boxes)
+                or ref != f"inspection-line/{page_id}/l{line}"
+                or node != {"id":ref,"type":"inspection_line","doc":doc,"page":page,"line":line,"label":row["quote"]}
+                or ("inspection_coverage_source", page_id, ref, tuple(refs)) not in self.register_edges
+                or any(r not in finding["evidence"] or ("supports_result", r, "finding/"+finding["id"]) not in self.links
+                       for r in [ref, *refs])):
+            return None
+        return (source, call["page_sha256"], page, line, row["quote"], boxes), {
+            "ref":ref, "doc":doc, "name":self.docs[doc]["name"], "page":page, "line":line, "text":row["quote"]}
+
+    def approval_evidence(self, finding, originals):
+        edition = self.policy.get("inspection_coverage")
+        methods = self.policy.get("code_sha256") or {}
+        if (finding["rule"] not in ("H02", "H04", "H05") or not finding.get("delivery_register")
+                or edition not in ("inspection-coverage-v4", DATED_REGISTER) or self.register.get("format") != edition
+                or self.register.get("purpose") != "delivery_register" or not SHA256.fullmatch(methods.get("inspection_coverage.py") or "")):
+            return None
+        lines, keys = {}, {}
+        event = "payment" if finding["rule"] == "H05" else "acceptance"
+        field, role = ("paid_on", "bank_receipt") if event == "payment" else ("accepted_on", "acceptance")
+        for row in self.register["rows"]:
+            if row["kind"] != "substitution" or row["id"] not in finding["delivery_register"]:
+                continue
+            slot = "condition" if row["doc"] in self.kinds.get("contract", ()) else "decision"
+            kind = "contract" if slot == "condition" else "contract_addendum"
+            source = self.register_line(finding, row, kind)
+            if slot in lines or not source:
+                return None
+            keys[slot], lines[slot] = source
+        if lines.keys() != {"condition","decision"}:
+            return None
+        units = set(finding["scope"]).intersection(self.kinds.get(role, ()))
+        dates = [f for ref in dict.fromkeys(finding["evidence"]) if (f := self.facts.get(ref)) and f["field"] == field
+                 and f.get("unit", f["doc"]) in units]
+        if len(dates) != 1 or dates[0]["id"] not in originals:
+            return None
+        fact = dates[0]
+        call = self.checked_page(fact["doc"], fact["page"])
+        business_day = read_date(fact, DATE_LABELS[field], RECEIPT)
+        if not call or not business_day:
+            return None
+        _, row = originals[fact["id"]]
+        lines["event"] = {k:row[k] for k in ("ref","doc","name","page","line","text")}
+        keys["event"] = (self.document(fact.get("unit",fact["doc"])), call["page_sha256"], row["page"], row["line"],
+                         row["text"], fact["source_line"]["rects"])
+        record = finding.get("substitution_dates")
+        if record is not None:
+            label, condition = split(lines["condition"]["text"])
+            heading, decision = split(lines["decision"]["text"])
+            prior, stated = PRIOR.fullmatch(condition), INDICATION.fullmatch(decision)
+            refs = tuple(lines[k]["ref"] for k in ("condition","decision","event"))
+            if (edition != DATED_REGISTER or not SHA256.fullmatch(methods.get("substitution_dates.py") or "") or not prior or not stated
+                    or label not in CLAUSES or heading not in DECISIONS
+                    or record.get("event") != event or record.get("event_on") != business_day["iso"]
+                    or (record.get("condition"),record.get("decision"),record.get("date_ref")) != refs
+                    or record.get("unit") != lines["decision"]["doc"] or record.get("issuer") != stated[1]
+                    or (record.get("replacement"),record.get("original")) != prior.groups() or prior.groups() != stated.groups()[2:]
+                    or not (day := printed_date(stated[2])) or record.get("stated_on") != day
+                    or (RELATION, refs[1], refs[2], refs) not in self.register_edges):
+                return None
+            days = (date.fromisoformat(business_day["iso"]) - date.fromisoformat(day)).days
+            if record.get("days") != days or record.get("order") != ("before" if days < 0 else "after" if days > 0 else "same_day"):
+                return None
+        return {"keys":keys, "lines":lines, "dated":record is not None}
 
     def match_key(self, f, originals):
         def scoped(role):
@@ -155,7 +252,7 @@ class IssuedFindings:
             doc, _, page = identity
             instrument = {"name": self.docs[doc]["name"], "doc": doc, "page": page or None}
         return {"finding": f, "key": self.match_key(f, originals) if valid else None, "originals": originals,
-                "recorded": recorded, "instrument": instrument}
+                "recorded": recorded, "instrument": instrument, "approval": self.approval_evidence(f, originals) if valid else None}
 
 
 def stable_references(value, originals):
@@ -222,7 +319,16 @@ def pair(older, newer):
             changes.append("citations")
         if older["recorded"] != newer["recorded"]:
             changes.append("records")
-    return {"id": "new-"+new["id"] if new else "old-"+old["id"], "earlier": old, "later": new, "changes": changes}
+    row = {"id": "new-"+new["id"] if new else "old-"+old["id"], "earlier": old, "later": new, "changes": changes}
+    previous = older and older["approval"]
+    current = newer and newer["approval"]
+    same = bool(previous and current and previous["keys"] == current["keys"])
+    for column, proof, other in ((old,previous,current),(new,current,previous)):
+        if proof and (proof["dated"] or same and other["dated"]):
+            column["approval_dates"] = {"recorded":proof["dated"], "sources":proof["lines"]}
+    if same and (previous["dated"] or current["dated"]):
+        row["shared_approval_lines"] = {"recorded_in": [s for s,p in (("earlier",previous),("later",current)) if p["dated"]]}
+    return row
 
 
 def compare(case_id, earlier, later):
