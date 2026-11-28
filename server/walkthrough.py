@@ -12,7 +12,7 @@ SCREENS = {"home", "desk", "case", "rules", "library", "team", "account"}
 HOME_PARAMS = {"scene", "slip", "copy", "edition", "batch", "record", "pdf", "carrier", "term", "agreement"}
 CASE_PARAMS = {"view", "stage", "instrument", "receipt", "ticket", "call", "agreement", "acceptance", "finding", "fact", "prior", "entry", "filing", "part"}
 READING_LOCATION = r"reading-d[0-9]{2,8}-p[1-9][0-9]{0,7}-l[1-9][0-9]{0,7}"
-FORM_PIN = re.compile(r"form-(H0[145]-[1-9][0-9]{0,7})-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7})")
+FORM_PIN = re.compile(r"form-(H0[1245]-[1-9][0-9]{0,7})-(d[0-9]{2,8})-p([1-9][0-9]{0,7})-l([1-9][0-9]{0,7})")
 QUALITY_PIN = re.compile(r"quality-(H0[45]-[1-9][0-9]{0,7})(?:-(clause|acceptance_criteria|inspection_basis|measured_result|"
                          r"acceptance_scope|acceptance_result|accepted_on|payment_designation|transfer_status|paid_on|terms|order|"+READING_LOCATION+r"))?")
 LIMIT_PIN = re.compile(r"limits-(H02-[1-9][0-9]{0,7})(?:-(acceptance_criteria|inspection_basis|measured_result|acceptance_result|"+READING_LOCATION+r"))?")
@@ -70,9 +70,10 @@ def check_context(value):
         raise CaseError("请选择一版合同签署底稿。",400)
     if anchor.startswith("form-H"):
         pin = FORM_PIN.fullmatch(anchor)
+        view = pin and {"H01":"contract-signing-form","H02":"acceptance-checks"}.get(pin[1][:3])
         if (not pin or screen!="case" or not result.get("rev") or result.get("tab","report")!="report"
                 or {"doc","dialog"}.intersection(result) or params != (
-                    {"view":"contract-signing-form"} if pin[1].startswith("H01-") else {"view":"payment-checks","stage":pin[1]})):
+                    {"view":view} if view else {"view":"payment-checks","stage":pin[1]})):
             raise CaseError("请选择该版底稿中所引的合同签署要求。",400)
     if anchor.startswith("limits-H"):
         pin = LIMIT_PIN.fullmatch(anchor)
@@ -184,9 +185,12 @@ def save_note(store, workspace, author, role, data):
             linked = db.execute("""SELECT 1 FROM reports,json_each(content,'$.findings') f,
                 json_each(f.value,'$.evidence') e,json_each(content,'$.graph.contract_effect_sources.conditions') r,
                 json_each(content,'$.calls.pages') p WHERE case_id=? AND rev=?
-                AND json_extract(content,'$.policy.contract_effect')='contract-effect-sources-v8'
+                AND json_extract(content,'$.policy.contract_effect') IN ('contract-effect-sources-v8','contract-effect-sources-v9')
                 AND e.value=? AND json_extract(r.value,'$.id')=e.value AND json_extract(r.value,'$.kind')='signing_form'
-                AND json_extract(f.value,'$.rule') IN ('H01','H04','H05')
+                AND (json_extract(f.value,'$.rule') IN ('H01','H04','H05') OR (
+                    json_extract(f.value,'$.rule')='H02' AND json_extract(content,'$.policy.contract_effect')='contract-effect-sources-v9'
+                    AND json_extract(r.value,'$.applies_to')=json_array('contract','acceptance')
+                    AND EXISTS (SELECT 1 FROM json_each(f.value,'$.acceptance_signing_requirements') a WHERE a.value=e.value)))
                 AND ((? IS NULL AND json_extract(f.value,'$.rule')='H01') OR json_extract(f.value,'$.id')=?)
                 AND json_extract(p.value,'$.doc')=? AND json_extract(p.value,'$.page')=? AND json_array_length(p.value,?)>0""",
                 (context["case_id"],context["rev"],ref,form[1] if form else None,form[1] if form else None,

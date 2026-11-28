@@ -81,7 +81,7 @@ TRANSIENT_WRITER_CODES = {getattr(sqlite3,k) for k in ("SQLITE_BUSY","SQLITE_BUS
 
 
 FULL_PAGE_EVIDENCE = (
-    "quality_change", "quality_comparison", "reading_caveats", "acceptance_authority", "acceptance_execution", "signer_timing", "date_checks", "batch_acceptance",
+    "quality_change", "quality_comparison", "reading_caveats", "acceptance_authority", "acceptance_execution", "acceptance_signing_requirements", "signer_timing", "date_checks", "batch_acceptance",
     "effect_review", "warranty_check", "warranty_difference", "payment_window", "acceptance_reservations", "acceptance_comments",
     "contract_comments", "stage_payments", "invoice_receipt", "payment_change", "payment_opinion",
     "equipment_models", "inspection_coverage", "payment_acceptance", "execution_basis", "contract_folios",

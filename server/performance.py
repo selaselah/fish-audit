@@ -1384,6 +1384,10 @@ def verify_findings(report, *, signing=False):
     for entry, saved in zip(expected, found):
         rule = saved["rule"]
         position = report["findings"].index(saved) + 1
+        if "acceptance_signing_requirements" in entry and contract_effect.omitted_acceptance_refs(policy):
+            if signing:
+                raise ValueError("旧版验收发现缺少签署条款定位清单，请重审后签收。")
+            entry = {key:value for key,value in entry.items() if key!="acceptance_signing_requirements"}
         if legacy_receipts and "acceptance_execution" in entry:
             entry = {key: value for key, value in entry.items() if key != "acceptance_execution"}
         if (any(saved.get(key) != val for key, val in entry.items()) or saved.get("stage") != entry.get("stage")

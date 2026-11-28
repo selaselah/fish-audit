@@ -164,7 +164,7 @@ def execute(graph, profile=PROFILE, payment_lookup=None):
     def with_performance():
         for item in performance:
             record(item["rule"],item["status"],item["detail"],item["evidence"],item["scope"])
-            for key in ("stage","stage_approvers","approval_change","approval_change_scope","reinspection","delegations","quality_change","acceptance_authority","acceptance_execution","acceptance_originals",
+            for key in ("stage","stage_approvers","approval_change","approval_change_scope","reinspection","delegations","quality_change","acceptance_authority","acceptance_execution","acceptance_originals","acceptance_signing_requirements",
                         "signer_timing","date_checks","batch_acceptance","effect_review","warranty_check","warranty_payment","warranty_difference",
                         "payment_window","payment_quality","quality_comparison","reading_caveats","retest_reference","inspection_use","party_readings","installment_count","invoice_receipt","payment_change","payment_opinion","acceptance_reservations",
                         "acceptance_comments","contract_comments","stage_payments","payment_acceptance","execution_basis",

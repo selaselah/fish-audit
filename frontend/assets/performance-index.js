@@ -820,7 +820,7 @@ const PerformanceIndex = (() => {
       detail.dataset.guarantee=String(Boolean(guarantee));
       detail.dataset.quality=String(Boolean(quality));
       detail.replaceChildren(box('scope-check-state',el('span',item.id,'mono'),tag(item.status)),heading);
-      if (item.stage && ['H04','H05'].includes(item.rule)) {
+      if (item.acceptance_signing_requirements || item.stage && ['H04','H05'].includes(item.rule)) {
         for (const row of contractSigningSources(state.bundle.report,item)) detail.append(contractSigningButton(row,item));
       }
       for (const ref of item.party_readings || []) detail.append(PartyReadings.citation(state.bundle.report,ref,item));

@@ -1,8 +1,10 @@
 import copy
 import unittest
+from unittest.mock import patch
 
 from contract_effect import FORM_RECTS, LEGACY, SEAL_FORMAT, form_rows, shared_form, signing_form, sources, verify
 from controls import VERSION, execute
+from model import audit_graph
 from performance import BATCH_FORMAT, compute, verify_findings
 from test_performance import APPROVAL, BANK_DOC, CONTRACT, RECEIPT, WARRANTY, material
 from signing_parties import CALENDAR_FORMAT, FORM_FORMAT
@@ -75,6 +77,15 @@ class ContractEffectTests(unittest.TestCase):
             changed=copy.deepcopy(paper)
             changed["findings"][1][field]=value
             with self.assertRaisesRegex(ValueError,"共同签署"): verify(changed,read)
+        intermediate=copy.deepcopy(paper)
+        intermediate["policy"].update(version="2026.11.28.13",code_sha256={
+            "controls.py":"7f9631a8b143b7ecb0b57a3d59588f033a43db54256e9364047e377041fc8358",
+            "contract_effect.py":"dfe7a6a73600ea69fd4078e2c4ad1d2d5d49a25898cc7e3fa3a4ef4696b500c8"})
+        del intermediate["findings"][1]["acceptance_signing_requirements"]
+        verify(intermediate,read)
+        with self.assertRaisesRegex(ValueError,"重审"): verify(intermediate,read,signing=True)
+        intermediate["policy"]["code_sha256"]["controls.py"]="another issuer"
+        with self.assertRaisesRegex(ValueError,"共同签署"): verify(intermediate,read)
         old=copy.deepcopy(graph)
         old["contract_effect_sources"]=sources(old,read,FORM_FORMAT)
         old["nodes"]=[n for n in old["nodes"] if n["type"]!="contract_signing_requirement"]
@@ -83,6 +94,33 @@ class ContractEffectTests(unittest.TestCase):
         self.assertEqual(previous["findings"][0]["status"],"ok")
         verify(previous,read)
         with self.assertRaisesRegex(ValueError,"重审"): verify(previous,read,signing=True)
+
+    def test_issued_acceptance_and_expert_receive_the_same_shared_original(self):
+        raw="签署要求：本合同及验收报告均须签字并盖章"
+        graph=material([CONTRACT,RECEIPT,BANK_DOC],omissions=[(1,raw)])
+        row,=form_rows(graph["contract_effect_sources"])
+        findings=execute(graph,graph["profile"])
+        acceptance=next(f for f in findings if f["rule"]=="H02")
+        self.assertEqual(acceptance["acceptance_signing_requirements"],[row["id"]])
+        with patch("model.structured",return_value=({"followups":[]},{"request_format":"responses-json-v1"})):
+            _,expert=audit_graph(graph,findings)
+        cited,=expert["input"]["contract_signing_requirements"]
+        self.assertEqual(cited,{k:row[k] for k in ("id","doc","unit","quote","form","page","line","applies_to")})
+        procedure=next(p for p in expert["input"]["procedures"] if p["rule"]=="H02")
+        self.assertEqual(procedure["acceptance_signing_requirements"],[row["id"]])
+        def read(doc,page):
+            lines=[f["quote"] for f in graph["facts"] if f["doc"]==doc]
+            return "\n".join([*lines,raw] if doc=="d01" else lines)
+        paper={"graph":graph,"policy":VERSION,"findings":findings,"calls":{"expert":expert,
+               "pages":[{"doc":row["doc"],"page":row["page"],"page_sha256":"page",FORM_RECTS:{str(row["line"]):[[0,.1,.9,.2]]}}]}}
+        verify(paper,read)
+        for change in ("scope","procedure","input"):
+            altered=copy.deepcopy(paper)
+            payload=altered["calls"]["expert"]["input"]
+            if change=="scope":payload["contract_signing_requirements"][0]["applies_to"]=["contract"]
+            elif change=="procedure":next(p for p in payload["procedures"] if p["rule"]=="H02").pop("acceptance_signing_requirements")
+            else:altered["calls"]["expert"].pop("input")
+            with self.assertRaisesRegex(ValueError,"专家输入"): verify(altered,read)
 
     def test_separate_contract_signature_and_seal_requirement_reaches_the_advance(self):
         rider="合同签署要求：本合同须经双方法定代表人签字并加盖公章"

@@ -67,7 +67,8 @@ function returnToControl() {
   const receipt=params.get('view')==='payment-checks' && /^(?:quality|retest|inspection-use|payment-approval|payment-clock|contract-approver|approver-change|installment-count)-/.test(anchor);
   const party=anchor.startsWith('party-reading-');
   const limits=params.get('view')==='acceptance-limits' && anchor.startsWith('limits-H02-');
-  const form=/^form-(H0[145]-[1-9][0-9]*)-d[0-9]+-p[1-9][0-9]*-l[1-9][0-9]*$/.exec(anchor);
+  const form=/^form-(H0[1245]-[1-9][0-9]*)-d[0-9]+-p[1-9][0-9]*-l[1-9][0-9]*$/.exec(anchor);
+  const formView=form && ({H01:'contract-signing-form',H02:'acceptance-checks'}[form[1].slice(0,3)] || 'payment-checks');
   url.searchParams.delete('walkat');
   history.replaceState(history.state,'',url);
   function locate() {
@@ -77,8 +78,8 @@ function returnToControl() {
     const el = document.getElementById(anchor);
     if (form && (!el || url.hash!==location.hash || el.dataset.formFinding!==form[1] ||
         el.dataset.caseId!==path.split('/').at(-1) || el.dataset.rev!==params.get('rev') ||
-        (form[1].startsWith('H01-') ? params.get('view')!=='contract-signing-form' :
-          !el.closest('#performance-index[open]') || params.get('view')!=='payment-checks' || params.get('stage')!==form[1]))) return false;
+        params.get('view')!==formView || formView!=='contract-signing-form' && !el.closest('#performance-index[open]') ||
+        formView==='payment-checks' && params.get('stage')!==form[1])) return false;
     if (limits) {
       const card=el?.closest('[data-limit-finding]');
       if (!card || url.hash!==location.hash || card.dataset.caseId!==path.split('/').at(-1) ||

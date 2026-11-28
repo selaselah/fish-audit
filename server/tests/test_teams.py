@@ -553,13 +553,19 @@ class EnterpriseFlow(unittest.TestCase):
                 "context":{**place,"params":params,**target}})
         form={"view":"contract-signing-form"}
         payment={"view":"payment-checks","stage":"H05-8"}
+        acceptance={"view":"acceptance-checks"}
         primary="form-H01-2-d01-p1-l19"
         paid="form-H05-8-d01-p1-l19"
-        for params,pin in ((form,primary),(payment,paid)):
+        accepted="form-H02-3-d01-p1-l19"
+        for params,pin in ((form,primary),(payment,paid),(acceptance,accepted)):
             self.assertEqual(save(params,anchor=pin).status_code,404)
             self.assertEqual(save(params,anchor=pin,doc="d01",page=1).status_code,400)
         self.assertEqual(save(form,anchor=paid).status_code,400)
         self.assertEqual(save(payment,anchor=primary).status_code,400)
+        self.assertEqual(save(form,anchor=accepted).status_code,400)
+        self.assertEqual(save(payment,anchor=accepted).status_code,400)
+        self.assertEqual(save(acceptance,anchor=primary).status_code,400)
+        self.assertEqual(save(acceptance,anchor=accepted,rev=2).status_code,404)
         self.assertEqual(save({**form,"stage":"H05-8"}).status_code,400)
         original=dict(doc="d01",page=1,line=19,raw_ref="contract-signing-form/d01/p1/l19")
         self.assertEqual(save({},**original).status_code,400)

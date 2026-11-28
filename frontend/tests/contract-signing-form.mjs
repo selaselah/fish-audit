@@ -16,11 +16,16 @@ export async function checkContractSigningForm(ctx,cid) {
   assert.match(task.title,/^合成演练 · /u);
   const {report,rev}=await get(base+'/reports/'+(process.env.AUDIT_FORM_REV || task.rev));
   const signed=report.findings.find(f=>f.rule==='H01');
-  const phases=report.findings.filter(f=>['H04','H05'].includes(f.rule) && f.stage?.name==='第一期');
-  assert.equal(phases.length,2);
+  const accepted=report.findings.find(f=>f.rule==='H02'), pay=report.findings.find(f=>f.rule==='H05');
+  const terms=report.findings.find(f=>f.rule==='H04' && f.stage?.name===pay.stage.name);
+  assert.ok(terms);
   const rows=signed.effect_review.conditions.filter(r=>r.kind==='signing_form');
-  const expected=report.policy.contract_effect==='contract-effect-sources-v8' && /合同另须|董事会已列/u.test(task.title);
+  const format=report.policy.contract_effect;
+  const sharedClause=format==='contract-effect-sources-v9' && /合同与验收报告均须|验收报告与合同均须/u.test(task.title);
+  const shared=sharedClause && report.policy.version!=='2026.11.28.13';
+  const expected=sharedClause || ['contract-effect-sources-v8','contract-effect-sources-v9'].includes(format) && /合同另须|董事会已列/u.test(task.title);
   assert.equal(rows.length,expected?1:0);
+  assert.deepEqual(accepted.acceptance_signing_requirements || [],shared?[rows[0].id]:[]);
   const [row]=rows, fixed=root+'/workpaper/'+cid+'?rev='+rev;
   const go=url=>call('Page.navigate',{url});
   const q=s=>'document.querySelector('+JSON.stringify(s)+')';
@@ -32,6 +37,10 @@ export async function checkContractSigningForm(ctx,cid) {
     await go(fixed+'&view=payment-checks&stage='+f.id);
     await wait(q('#performance-index')+'?.open && '+q('.scope-check-select')+'?.value==='+JSON.stringify(f.id),'open original installment '+f.id);
   }
+  async function acceptance() {
+    await go(fixed+'&view=acceptance-checks');
+    await wait(q('#performance-index')+'?.open && '+q('.scope-check-select')+'?.value==='+JSON.stringify(accepted.id),'open delivery acceptance');
+  }
   async function checkOriginal() {
     await wait(q('#page-dialog')+'?.open && '+q('#page-content .located')+'?.dataset.sourceRef==='+JSON.stringify(row.id)+' && '+q('#page-content img')+'?.naturalWidth>0','cited contract line');
     assert.equal(await evaluate(q('#reader-revision')+'.textContent'),'R'+rev);
@@ -41,7 +50,7 @@ export async function checkContractSigningForm(ctx,cid) {
     assert.ok(filed.length);
     assert.deepEqual(marks,filed.map(([l,t,r,b])=>[l,t,r-l,b-t].map(v=>1000*v)));
   }
-  async function save(text,target,{docked=false,mobile=false}={}) {
+  async function save(text,target,{docked=false,mobile=false,acceptancePin=false}={}) {
     await click('#walk-launch');
     await wait(q('#walk-dialog')+'?.open && !'+q('#walk-save')+'.disabled','open recorder');
     if (docked) {
@@ -58,6 +67,7 @@ export async function checkContractSigningForm(ctx,cid) {
       assert.equal(await evaluate(q('#walk-location')+'.textContent'),'采购合同.pdf · 第 '+row.page+' 页 · 第 '+row.line+' 行');
       await inspect(ctx,390,'#walk-dialog','signing-form-feedback');
     }
+    if (acceptancePin) await inspect(ctx,390,'#walk-dialog','shared-signing-feedback');
     if (docked) await inspect(ctx,1440,'#walk-rail','signing-form-sidebar');
     await click('#walk-save');
     if (docked) {
@@ -87,16 +97,25 @@ export async function checkContractSigningForm(ctx,cid) {
     }
     await input.click(link);
   }
-  const pay=phases.find(f=>f.rule==='H05');
   for (const width of [320,390,768,820,1024,1440]) {
-    await size(ctx,width); await phase(pay);
+    await size(ctx,width); await acceptance();
+    if (shared) {
+      const id=selector(accepted);
+      await wait(active(id),'common clause cited by acceptance');
+      assert.equal(await evaluate(q(id+' strong')+'.textContent'),row.quote);
+      await inspect(ctx,width,id,'shared-signing-acceptance');
+      await input.click(q(id)); await checkOriginal();
+    } else {
+      assert.equal(await evaluate(q('#performance-index [data-form-finding]')+'===null'),true);
+    }
+    await phase(pay);
     assert.equal(await evaluate(q('#scope-source-field-'+pay.id)+'.labels[0].textContent'),'字段引文');
     if (!expected) {
       assert.equal(await evaluate(q('#performance-index [data-form-finding]')+'===null'),true);
       continue;
     }
     const id=selector(pay);
-    await wait(active(id),'printed execution condition on the first payment');
+    await wait(active(id),'printed execution condition on the selected payment');
     assert.equal(await evaluate(q(id+' strong')+'.textContent'),row.quote);
     assert.ok(await evaluate(q(id)+'.getBoundingClientRect().height>=44'));
     await inspect(ctx,width,id,'signing-form-payment');
@@ -105,8 +124,8 @@ export async function checkContractSigningForm(ctx,cid) {
     await evaluate(q('#page-dialog')+'.close()');
   }
   if (expected) {
-    await phase(phases.find(f=>f.rule==='H04'));
-    await click(selector(phases.find(f=>f.rule==='H04'))); await checkOriginal();
+    await phase(terms);
+    await click(selector(terms)); await checkOriginal();
     await go(fixed+'&view=contract-signing-form');
     await wait(active(selector(signed)),'signature clause in the full workpaper');
     await evaluate(q(selector(signed))+'.focus()'); await input.key('Enter'); await checkOriginal();
@@ -116,6 +135,28 @@ export async function checkContractSigningForm(ctx,cid) {
       const original=await save(originalNote,null,{mobile:true});
       assert.equal(original.raw_ref,row.id); assert.equal(original.line,row.line);
       await reopenNote(originalNote,'合同签署原行'); await checkOriginal();
+      if (shared) {
+        await acceptance();
+        const note='在验收签署条件旁也要能核对实际签认材料。';
+        const pinned=await save(note,selector(accepted),{acceptancePin:true});
+        assert.equal(pinned.anchor,selector(accepted).slice(1));
+        assert.deepEqual(pinned.params,{view:'acceptance-checks'});
+        await reopenNote(note,'验收签署条件',true);
+        await wait(q('#performance-index')+'?.open && '+q(selector(accepted))+'?.classList.contains("walk-mark")','restore the acceptance clause');
+        const bindings=await evaluate(`(()=>{
+          const results=[];
+          for(const change of ['node','ledger','accepted','evidence']) {
+            const p=structuredClone(state.bundle.report), h=p.findings.find(f=>f.rule==='H02');
+            const ref=h.acceptance_signing_requirements[0];
+            if(change==='node') delete p.graph.nodes.find(n=>n.id===ref).applies_to;
+            if(change==='ledger') delete p.graph.contract_effect_sources.conditions.find(r=>r.id===ref).applies_to;
+            if(change==='accepted') h.acceptance_signing_requirements=[];
+            if(change==='evidence') h.evidence=h.evidence.filter(s=>s!==ref);
+            results.push(contractSigningSources(p,h).length);
+          } return results;
+        })()`);
+        assert.deepEqual(bindings,[0,0,0,0]);
+      }
       await size(ctx,1440);
       await go(fixed+'&view=contract-signing-form'); await wait(active(selector(signed)),'open the contract original control');
       const contractNote='请在合同签署条件旁保留页行。';
@@ -124,7 +165,7 @@ export async function checkContractSigningForm(ctx,cid) {
       await reopenNote(contractNote,'合同签署条件');
       await wait(q(selector(signed))+'?.classList.contains("walk-mark") && '+active(selector(signed)),'restore the original contract control');
       await phase(pay);
-      const paymentNote='希望在首期付款这里看到签署人的授权范围。';
+      const paymentNote='希望在'+pay.stage.name+'付款这里看到签署人的授权范围。';
       const control=await save(paymentNote,selector(pay),{docked:true});
       assert.equal(control.anchor,selector(pay).slice(1));
       assert.deepEqual(control.params,{view:'payment-checks',stage:pay.id});
@@ -139,5 +180,5 @@ export async function checkContractSigningForm(ctx,cid) {
   }
   const after=await get(base);
   assert.deepEqual([after.rev,after.status,after.decisions],[task.rev,task.status,task.decisions]);
-  console.log('PASS · R'+rev+' · '+(expected?'contract and advance trace to signed-form original':'no cumulative contract citation')+' · six widths');
+  console.log('PASS · R'+rev+' · '+(shared?'contract, acceptance and payment cite the same issued line':expected?'contract and payment trace to signed-form original':'no cumulative contract citation')+' · six widths');
 }

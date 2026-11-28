@@ -1,5 +1,11 @@
 # 本机审计接口
 
+## 验收与期款共引的签署条款
+
+规则 `2026.11.28.14` 使用 `contract-effect-sources-v9`。原件条款明确共同约束合同和验收文件时，H01 的条款行和相应图谱节点均带 `applies_to=["contract","acceptance"]`。H02 在 `acceptance_signing_requirements` 和 `evidence` 中保存所引的同一编号。专家收到的 `calls.expert.input.contract_signing_requirements` 同时保留文件、页、行、引文和适用范围，具体 H02 保留引用编号。单一主合同的签署约定仍由 H01 及对应期款核查。
+
+产品意见可指向 `view=acceptance-checks` 下的 `form-H02-3-d02-p1-l19`。后端会查该版 H02 是否实际引用此条款。保存原页意见时使用 `raw_ref=contract-signing-form/d02/p1/l19`。中间规则 `2026.11.28.13` 曾将 H02 的引文写入证据列表，却漏存专门的定位清单。归档版本可按原源码复算，受影响的底稿在签收通过前需要重审。[固定版本验收检查](http://127.0.0.1:8000/workpaper/eb8396ed0fe34732935e25645f6ad430?rev=7&view=acceptance-checks)
+
 ## 合同另列的签署条件
 
 规则 `2026.11.28.12` 使用 `policy.contract_effect = contract-effect-sources-v8`。H01 的 `effect_review.conditions[]` 在可核原页上记录 `kind=signing_form`。每行包含 `unit`、`doc`、`page`、`line`、`quote`、`facts` 和 `id`。明确同时要求签字和盖章时 `form=joint`，含例外、特定签字人等仍待解释的行使用 `form=review`。模型漏提取某行时，原文取自该版原页，`facts` 可为空。

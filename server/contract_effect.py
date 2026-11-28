@@ -28,6 +28,7 @@ WORD_SINCE = "2026.11.26.12"
 CALENDAR_SINCE = "2026.11.26.13"
 FORM_SINCE = (2026, 11, 28, 12)
 SHARED_SINCE = (2026, 11, 28, 13)
+EXPERT_SINCE = (2026, 11, 28, 14)
 FORM_RECTS = "contract_signing_form_rects"
 APPROVAL_FIELDS = {"contract_approval","contract_id","buyer","seller","approval_authority",
                    "approval_result","approved_on","approval_signer"}
@@ -124,6 +125,20 @@ def signing_form(raw):
 
 def form_rows(ledger):
     return [row for row in ledger.get("conditions", ()) if row.get("kind") == "signing_form"]
+
+
+def omitted_acceptance_refs(policy):
+    # This issuer saved the H02 observation and graph edges, but omitted its list of shared clause IDs.
+    hashes = policy.get("code_sha256",{})
+    return (policy.get("version")=="2026.11.28.13" and policy.get("contract_effect")==FORMAT and
+            hashes.get("controls.py")=="7f9631a8b143b7ecb0b57a3d59588f033a43db54256e9364047e377041fc8358" and
+            hashes.get("contract_effect.py")=="dfe7a6a73600ea69fd4078e2c4ad1d2d5d49a25898cc7e3fa3a4ef4696b500c8")
+
+
+def expert_rows(graph, findings):
+    refs = {ref for f in findings for ref in f["evidence"] if ref.startswith("contract-signing-form/")}
+    return [{k:r[k] for k in ("id","unit","doc","page","line","quote","form","applies_to") if k in r}
+            for r in form_rows(graph.get("contract_effect_sources",{})) if r["id"] in refs]
 
 
 def review_acceptance(finding, rows):
@@ -496,9 +511,22 @@ def verify(report,read_text,*,signing=False,read_layout=None,read_original=None)
         for finding in (f for f in report["findings"] if f["rule"]=="H02"):
             shared = [r["id"] for r in rows if r.get("applies_to")==list(SHARED_DOCUMENTS) and
                       len(contracts)==1 and r["unit"]==contracts[0]]
-            if finding.get("acceptance_signing_requirements") != (shared or None) or (shared and
+            omitted = omitted_acceptance_refs(policy)
+            if signing and shared and omitted:
+                raise ValueError("旧版验收发现尚未列出共用签署条款的定位清单，请重审后签收。")
+            if finding.get("acceptance_signing_requirements") != (None if omitted else shared or None) or (shared and
                     (finding["status"]=="ok" or not set(shared).issubset(finding["evidence"]))):
                 raise ValueError("验收发现所引的共同签署要求与原件适用范围不符")
+        expert = report.get("calls",{}).get("expert",{})
+        if tuple(map(int,version.split(".")))>=EXPERT_SINCE and ("input" in expert or expert.get("request_format")):
+            packet = expert.get("input")
+            if not isinstance(packet, dict):
+                raise ValueError("专家输入缺少出具底稿时的审计资料")
+            input_rows = expert_rows(graph,report["findings"])
+            issued = [f["acceptance_signing_requirements"] for f in report["findings"] if "acceptance_signing_requirements" in f and f["rule"]=="H02"]
+            sent = [p["acceptance_signing_requirements"] for p in packet.get("procedures",()) if "acceptance_signing_requirements" in p and p["rule"]=="H02"]
+            if packet.get("contract_signing_requirements") != (input_rows or None) or sent != issued:
+                raise ValueError("专家输入的签署条款、适用范围或验收引文与已出具的原行不符")
         if calls or policy.get("archived_methods"):
             from contract_folios import line_numbers, verify_page_geometry
             verify_page_geometry(calls.values(),line_numbers(rows),{},FORM_RECTS,"合同签署要求",read_layout)

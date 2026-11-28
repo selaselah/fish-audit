@@ -702,7 +702,7 @@ function repairPageReferences(graph, doc, page, facts) {
 
 function contractSigningSources(report, finding) {
   const ledger=report?.graph.contract_effect_sources, signed=report?.findings.find(f=>f.rule==='H01');
-  if (ledger?.format!=='contract-effect-sources-v8' || report.policy.contract_effect!==ledger.format ||
+  if (!['contract-effect-sources-v8','contract-effect-sources-v9'].includes(ledger?.format) || report.policy.contract_effect!==ledger.format ||
       !signed?.effect_review || signed.status==='ok') return [];
   const {nodes,documents}=graphIndex(report.graph);
   const accepted=[];
@@ -711,16 +711,20 @@ function contractSigningSources(report, finding) {
     const doc=documents.get(row.doc), source=nodes.get(ref), pg=nodes.get(page);
     const call=report.calls.pages.find(c=>c.doc===row.doc && c.page===row.page);
     const rects=call?.contract_signing_form_rects?.[row.line];
+    const scope=JSON.stringify(row.applies_to);
+    const shared=ledger.format==='contract-effect-sources-v9' && scope==='["contract","acceptance"]';
+    if ((scope!==undefined && !shared) || (finding?.rule==='H02' && (!shared || finding.status==='ok' ||
+        !finding.acceptance_signing_requirements?.includes(ref)))) continue;
     if (!doc || !['joint','review'].includes(row.form) || row.id!==ref || !Number.isInteger(row.line) || row.line<1 ||
         !signed.scope.includes(row.unit) || !report.graph.documents_by_kind.contract?.includes(row.unit) ||
         !signed.evidence.includes(ref) || !signed.evidence.includes(page) || finding && !finding.evidence.includes(ref) ||
         source?.type!=='contract_signing_requirement' || source.label!==row.quote || source.doc!==row.doc ||
-        source.page!==row.page || source.line!==row.line || pg?.type!=='page' || pg.layer!=='text' ||
+        source.page!==row.page || source.line!==row.line || JSON.stringify(source.applies_to)!==scope || pg?.type!=='page' || pg.layer!=='text' ||
         call?.page_sha256!==pg.sha256 || !rects?.length ||
-        !ledger.conditions.some(r=>r.id===ref && r.unit===row.unit && r.form===row.form && r.quote===row.quote) ||
+        !ledger.conditions.some(r=>r.id===ref && r.unit===row.unit && r.form===row.form && r.quote===row.quote && JSON.stringify(r.applies_to)===scope) ||
         !report.graph.edges.some(e=>e.type==='contract_signing_requirement_source' && e.from===page && e.to===ref &&
           e.evidence.length===row.facts.length+1 && e.evidence[0]===page && row.facts.every((f,i)=>e.evidence[i+1]===f))) continue;
-    const label=row.form==='joint'?'合同签字及盖章要求':'合同签署要求';
+    const label=shared?'合同与验收文件签署要求':row.form==='joint'?'合同签字及盖章要求':'合同签署要求';
     accepted.push({ref,label,doc,page:row.page,rawLine:row.line,rects,quote:row.quote,
       quality:'contract_form_source',option:label+' · 第 '+row.line+' 行'});
   }
