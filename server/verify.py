@@ -58,6 +58,7 @@ import retest_reference
 import inspection_use
 import party_readings
 import receipt_parties
+import signature_purposes
 import installment_counts
 import board_execution
 from invoice_conditions import verify as verify_invoice_conditions
@@ -292,6 +293,7 @@ def verify_workpaper_sources(bundle, hashes, report, page_dir, originals=None,*,
         verify_addendum_pdf(report, read_original)
         verify_mandate_pdf(report, read_original)
         verify_supplier_pages(report, read_original)
+        signature_purposes.verify(report,read_original)
     except ModuleNotFoundError as error:
         raise ValueError("重验 PDF 签署凭证需要安装 server/requirements.txt 中的依赖，请使用服务端虚拟环境运行校验。") from error
     verify_addendum_originals(report, read_original, page_text)

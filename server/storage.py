@@ -62,6 +62,7 @@ import retest_reference
 import inspection_use
 import party_readings
 import receipt_parties
+import signature_purposes
 import measurement_spacing
 import installment_counts
 import board_execution
@@ -88,7 +89,7 @@ FULL_PAGE_EVIDENCE = (
     "contract_comments", "stage_payments", "invoice_receipt", "payment_change", "payment_opinion",
     "equipment_models", "inspection_coverage", "payment_acceptance", "execution_basis", "contract_folios",
     "prior_installment", "advance_guarantee", "payment_quality", "retest_reference", "inspection_use", "party_readings","approval_change","approval_change_scope","installment_count",
-    receipt_parties.KEY,
+    receipt_parties.KEY, signature_purposes.KEY,
 )
 
 
@@ -789,6 +790,7 @@ class Store:
                 verify_mandate_pdf(paper, read_original, signing=True)
                 verify_addendum_pdf(paper, read_original, signing=True)
                 verify_supplier_pages(paper, read_original, signing=True)
+                signature_purposes.verify(paper,read_original,signing=True)
             except (ValueError, OSError, KeyError, TypeError) as error:
                 raise CaseError(f"签收前核对 PDF 签署凭证失败。{error}", 409) from error
             def read_text(doc, page):
@@ -1099,6 +1101,7 @@ class Store:
         windows_checked = any(f.get("payment_window") for f in paper["findings"])
         warranty_checked = any(f.get("warranty_check") for f in paper["findings"])
         effect_checked = any(f.get("effect_review") for f in paper["findings"])
+        purpose_checked = any(f.get(signature_purposes.KEY) for f in paper["findings"])
         chronology = any(f.get("date_checks") for f in paper["findings"])
         invoice_terms_checked = any(f.get("invoice_receipt") for f in paper["findings"])
         guarantee_checked = any(f.get("advance_guarantee") for f in paper["findings"])
@@ -1110,13 +1113,15 @@ class Store:
         folios_checked = any(f.get("contract_folios") or f.get("installment_count") for f in paper["findings"])
         multi_transfers = any(f.get("stage_payments") for f in paper["findings"])
         packets_checked = bool(graph.get("receipt_packet_sources",{}).get("packets")) and any(f["rule"]=="H02" for f in paper["findings"])
-        if graph.get("profile")!=BANK and (contract_comments_checked or comments_checked or folios_checked or changed or named_acceptance or chronology or batches or packets_checked or multi_transfers or invoice_terms_checked or guarantee_checked or model_checked or inspection_checked or bank_sources_checked or execution_checked or effect_checked or warranty_checked or windows_checked or reservations_checked or any(f.get("delegations") for f in paper["findings"])):
+        if graph.get("profile")!=BANK and (contract_comments_checked or comments_checked or folios_checked or changed or named_acceptance or chronology or batches or packets_checked or multi_transfers or invoice_terms_checked or guarantee_checked or model_checked or inspection_checked or bank_sources_checked or purpose_checked or execution_checked or effect_checked or warranty_checked or windows_checked or reservations_checked or any(f.get("delegations") for f in paper["findings"])):
             if not payment_sources or len(payment_sources)!=1:
                 raise CaseError("签收前需重新核对合同及所据履约附件原件。",409)
             source = payment_sources[0][0]
             if (source.case_id,source.revision,source.report_hash)!=(case_id,revision,row["hash"]):
                 raise CaseError("履约原件所据的签收版已变化。",409)
             source.guard(db)
+            if purpose_checked:
+                event(db,case_id,"signature_purpose_sources",f"签收前核对 R{revision} 签名原因所据的 PDF 原件和签署范围。")
             if bank_roles:
                 event(db,case_id,"bank_party_sources",f"签收前核对 R{revision} 的回单户名、模型字段分类及所引原件和页图。")
             if execution_checked:

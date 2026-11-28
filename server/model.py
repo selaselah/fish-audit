@@ -392,6 +392,8 @@ def audit_graph(graph, controls):
             procedure["approval_change_lines"]=[{k:r[k] for k in ("id","quote","field","doc","page","line")}
                 for key in ("approver_terms","approver_changes","approvals") for p in graph["inspection_use_sources"].get(key,())
                 for r in p["rows"] if r["id"] in proof]
+        if purposes := finding.get("signature_purposes"):
+            procedure["signature_purposes"] = [r for r in graph["signature_purposes"]["rows"] if r["id"] in purposes]
         if bank_roles := finding.get("bank_party_readings"):
             procedure["bank_party_readings"] = [r for r in graph["bank_party_readings"]["rows"] if r["id"] in bank_roles]
         if cited_parties := finding.get("party_readings"):

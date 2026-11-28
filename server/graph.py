@@ -23,6 +23,7 @@ import stage_payments
 import payment_acceptance
 import payment_execution
 import receipt_parties
+import signature_purposes
 import advance_guarantee
 import contract_effect
 import pdf_execution
@@ -437,6 +438,12 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     nodes, edges = acceptance_execution.source_graph(graph["acceptance_pdf_sources"])
     graph["nodes"].extend(nodes)
     graph["edges"].extend(edges)
+    purposes = signature_purposes.sources(graph,read_original)
+    if purposes:
+        graph[signature_purposes.KEY] = {"format":signature_purposes.FORMAT,"rows":purposes}
+        nodes, edges = signature_purposes.source_graph(purposes)
+        graph["nodes"].extend(nodes)
+        graph["edges"].extend(edges)
     graph[addendum_execution.KEY] = addendum_execution.sources(graph, read_original)
     nodes, edges = addendum_execution.source_graph(graph[addendum_execution.KEY])
     graph["nodes"].extend(nodes)

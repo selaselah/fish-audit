@@ -13,7 +13,7 @@ NOTE = "实际供货单位另附送货单，请核对与合同供应方的关系
 THIRD = "山岚演练交付中心"
 REASON = "仅确认到货数量，实际供货单位及终验质量仍待核对。"
 CASES = {"comment": "签后批注要求核对实际供货方", "different": "签名控件与不同的终验供货方",
-         "reason": "电子签名原因仅确认到货数量"}
+         "reason": "电子签名原因仅确认到货数量", "receipt_reason": "验收报告电子签名仅确认到货数量"}
 
 
 def with_comment(raw, page=0):
@@ -62,12 +62,16 @@ def run(seed, upload, modes):
         for name, fields in records.items():
             path = folder / (name + ".pdf")
             if name == "采购合同":
-                content = signed_copy(raw.read_bytes(), reason=REASON) if mode == "reason" else signed
+                content = raw.read_bytes() if mode == "receipt_reason" else signed
+                if mode == "reason":
+                    content = signed_copy(raw.read_bytes(), reason=REASON)
                 path.write_bytes(with_comment(content) if mode == "comment" else content)
             else:
                 if mode == "different" and name == "验收报告":
                     fields = [(k, THIRD if k == "供应方" else v) for k, v in fields]
                 pdf(path, name, fields, font=font)
+                if mode == "receipt_reason" and name == "验收报告":
+                    path.write_bytes(signed_copy(path.read_bytes(), reason=REASON))
             page, = prepare(path, 1, save_images=False)
             lines = page["text"].splitlines()
             assert lines[0] == WATERMARK and all(k + "：" + v in lines for k, v in fields)
@@ -87,8 +91,9 @@ def run(seed, upload, modes):
         if mode == "comment":
             assert page["state"] == "annotations" and NOTE in [n["note"] for n in page["annotations"]]
             assert supplier["status"] == "missing"
-        elif mode == "reason":
+        elif mode in ("reason", "receipt_reason"):
             assert page["state"] == "annotations" and REASON in [n.get("signing_reason") for n in page["annotations"]]
+            assert page["role"] == ("receipt" if mode == "receipt_reason" else "contract")
             assert supplier["status"] == "missing"
         else:
             assert page["state"] == "same_print" and THIRD in supplier["names"].values() and supplier["status"] == "risk"

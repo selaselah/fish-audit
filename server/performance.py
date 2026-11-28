@@ -15,6 +15,7 @@ import advance_guarantee
 import payment_acceptance
 import payment_execution
 import receipt_parties
+import signature_purposes
 import signer_timing
 import signer_clock
 import equipment_models
@@ -791,6 +792,7 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True, recheck_
         delivery_batches.link_warranty_signing(graph,results)
         for count in graph.get(installment_counts.KEY,{}).get("rows",()):
             installment_counts.attach(results,count)
+        signature_purposes.apply(graph,results)
     return results
 
 
@@ -1436,6 +1438,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("acceptance_execution") != entry.get("acceptance_execution")
                 or saved.get("acceptance_originals") != entry.get("acceptance_originals")
                 or saved.get("acceptance_authority") != entry.get("acceptance_authority")
+                or saved.get(signature_purposes.KEY) != entry.get(signature_purposes.KEY)
                 or saved.get(receipt_parties.KEY) != entry.get(receipt_parties.KEY)
                 or saved.get("acceptance_signing_requirements") != entry.get("acceptance_signing_requirements")
                 or saved.get("date_checks") != entry.get("date_checks")
