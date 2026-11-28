@@ -783,8 +783,16 @@ function workpaperLineButton(source,finding,pin=true) {
   button.setAttribute('aria-haspopup','dialog'); button.setAttribute('aria-controls','page-dialog');
   const quote=el('strong',source.quote);
   if (register) {
-    quote.replaceChildren(...source.quote.split(/([A-Za-z0-9._*＊?-]+)/u).map((word,i)=>
-      i%2===1?el(source.marks.includes(word)?'mark':'span',word,'register-code'):word));
+    quote.replaceChildren();
+    let end=0;
+    for (const match of source.quote.matchAll(/([A-Za-z0-9._*＊?-]+)([、，。；：！？）】,;:!?]*)/gu)) {
+      const [,code,punctuation]=match;
+      const token=el('span','','register-code');
+      token.append(source.marks.includes(code)?el('mark',code):code,punctuation);
+      quote.append(source.quote.slice(end,match.index),token);
+      end=match.index+match[0].length;
+    }
+    quote.append(source.quote.slice(end));
   }
   button.append(el('small',number || source.substitution?label+' · '+place:place),quote,glyph('arrows-angle-expand'));
   if (number && source.copy) button.append(el('small',source.copy.label+' · '+source.copy.value,'number-copy'));

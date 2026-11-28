@@ -2,7 +2,7 @@
 
 首次使用可在产品首页切换一笔采购的合同、验收单和回单，或直接到工作台提交资料。[产品首页](http://127.0.0.1:8000/) · [本机审计工作台](http://127.0.0.1:8000/app)
 
-周末走查时，点页面右下角的「提意见」。原件、付款检查或上传窗口的入口在关闭按钮旁。要说某个按钮或读数，选「点选控件」。要指出扫描合同上的几个字，选「标记原图」后点中它们。写完点「保存意见」，或按 ⌘ + Enter / Ctrl + Enter。「已记录」可重开当时的页面，也能复制给 Codex。在本机可以直接告诉 Codex「读取本机走查意见，按清单修改」。[试走查合同用印名称](http://127.0.0.1:8000/app#case/30025f7db2dd44b195724079387031cd?rev=5&walktab=evidence&walkdoc=d01&walkpage=2&walkpoint=6342.2203.2c270bf7c0f1633ddb9a85f684aa7fa4074c9f878ffa6459abfef61ff6a60f5f) · [走查交互说明](interaction-design/README.md#在页面上记录走查意见)
+周末走查时，点页面右下角的「提意见」。原件、付款检查或上传窗口的入口在关闭按钮旁。桌面宽窗可选「并排走查」，继续操作左边的页面。要说某个按钮、读数或结论，选「点选控件」。要指出扫描合同上的几个字，选「标记原图」后点中它们。写完点「保存意见」，或按 ⌘ + Enter / Ctrl + Enter。「已记录」可重开当时的页面，也能复制给 Codex。在本机可以直接告诉 Codex「读取本机走查意见，按清单修改」。[试走查实付早于批准记载日的结论](http://127.0.0.1:8000/workpaper/f90afd53772c43028d74e6f831d1d4e0?rev=3&view=payment-checks&stage=H05-8) · [试标记合同用印名称](http://127.0.0.1:8000/app#case/30025f7db2dd44b195724079387031cd?rev=5&walktab=evidence&walkdoc=d01&walkpage=2&walkpoint=6342.2203.2c270bf7c0f1633ddb9a85f684aa7fa4074c9f878ffa6459abfef61ff6a60f5f) · [走查交互说明](interaction-design/README.md#在页面上记录走查意见)
 
 试走查这笔第二期验收款。回单引用的复验单写了「合格」，第 21 行同时写明本单不得作为该期付款依据。点这行就能核对原件，也能现场写修改意见。[打开付款用途原行](http://127.0.0.1:8000/workpaper/66fa88c60aed4799a64ab73c0eb92495?rev=11&view=payment-checks&stage=H05-8) · [对照引用初验单的另一笔回单](http://127.0.0.1:8000/workpaper/e4cc7a317fe34db4a3df9acc0a165b99?rev=7&view=payment-checks&stage=H05-8)
 

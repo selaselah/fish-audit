@@ -25,10 +25,20 @@ SUBSTITUTIONS = {
     "prohibited": ("冷藏柜合同点名禁止末台设备代用", "采购合同", "供货约定", "不得以FA-0109代替FA-0104。"),
     "maintenance": ("冷藏柜保养条款只要求更换滤芯", "采购合同", "维护说明", "每六个月更换空气滤芯。"),
 }
+APPROVAL_DATES = {
+    "decision_before": ("终验前所记的设备代用决定", 19, "FA-0109", "FA-0104", "已签署"),
+    "decision_same": ("验收款付款当天所记的设备代用决定", 21, "FA-0109", "FA-0104", "已签署"),
+    "decision_after": ("验收款付款后所记的设备代用决定", 22, "FA-0109", "FA-0104", "已签署"),
+    "decision_other": ("补充协议批准的是另一台冷藏柜", 22, "FA-0199", "FA-0101", "已签署"),
+    "decision_draft": ("一份待签草案上所记的设备代用决定", 22, "FA-0109", "FA-0104", "待双方签署"),
+}
 
 
 def build(folder, key):
-    if key in SUBSTITUTIONS:
+    if key in APPROVAL_DATES:
+        title, day, replacement, original, state = APPROVAL_DATES[key]
+        received = (*ORDERED[:3], "FA-0109")
+    elif key in SUBSTITUTIONS:
         title, file, label, wording = SUBSTITUTIONS[key]
         received = (*ORDERED[:3], "FA-0109")
     else:
@@ -37,6 +47,15 @@ def build(folder, key):
     records = documents(code, "complete")
     records["采购合同"].extend([("约定设备型号", "YL-C4"), ("约定设备序列号", "、".join(ORDERED))])
     records["验收报告"].extend([("实收设备型号", "YL-C4"), ("实收设备序列号", "、".join(received))])
+    if key in APPROVAL_DATES:
+        contract = records["采购合同"]
+        contract.append(("供货约定","经采购方事先书面批准，可用FA-0109代替FA-0104。"))
+        parties = dict(contract)
+        records["采购合同补充协议"] = [
+            ("补充协议编号","YL-BG-"+code),("原合同编号",parties["合同编号"]),*contract[1:4],("补充协议状态",state),
+            *((k,parties[k] if state=="已签署" else "待签署") for k in ("甲方签章","乙方签章")),
+            ("代用决定",f"{parties['采购方']}于2026年9月{day}日同意以{replacement}代替{original}。"),
+        ]
     if key in SUBSTITUTIONS:
         if file == "采购合同补充协议":
             contract = records["采购合同"]
@@ -97,15 +116,16 @@ def check_fields(cid, title, files):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("folder", type=Path)
-    parser.add_argument("--case", choices=[*CASES,*SUBSTITUTIONS])
+    parser.add_argument("--case", choices=[*CASES,*SUBSTITUTIONS,*APPROVAL_DATES])
     parser.add_argument("--substitution", action="store_true", help="生成含代用条件、申请、补充协议、明文禁止或保养条款的五组演练")
+    parser.add_argument("--approval-dates", action="store_true", help="生成代用决定日期、设备方向与验收款的五组演练")
     parser.add_argument("--run", action="store_true")
     parser.add_argument("--check-fields", action="store_true", help="按水印原页逐项核对归属及回单字段")
     args = parser.parse_args()
     if args.check_fields and not args.run:
         parser.error("--check-fields 需要 --run")
     submitted = []
-    for case in ([args.case] if args.case else SUBSTITUTIONS if args.substitution else CASES):
+    for case in ([args.case] if args.case else APPROVAL_DATES if args.approval_dates else SUBSTITUTIONS if args.substitution else CASES):
         title, paths = build(args.folder / case, case)
         if args.run:
             token = sha256(b"".join(sha256(p.read_bytes()).digest() for p in paths)).hexdigest()

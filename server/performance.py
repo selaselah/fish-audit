@@ -29,6 +29,7 @@ import addendum_execution
 import contract_calendar
 import signing_parties
 import inspection_coverage
+import substitution_dates
 import contract_folios
 import prior_installment
 import warranty_terms
@@ -784,6 +785,7 @@ def compute(graph, version=FORMAT, *, include_unassigned_receipts=True, recheck_
         party_readings.attach(graph,results)
         approval_names.apply_conditions(graph,results)
         approval_changes.apply(graph,results)
+        substitution_dates.apply(graph,results)
         for count in graph.get(installment_counts.KEY,{}).get("rows",()):
             installment_counts.attach(results,count)
     return results
@@ -1453,6 +1455,7 @@ def verify_findings(report, *, signing=False):
                 or saved.get("execution_basis") != entry.get("execution_basis")
                 or saved.get("inspection_coverage") != entry.get("inspection_coverage")
                 or saved.get("delivery_register") != entry.get("delivery_register")
+                or saved.get("substitution_dates") != entry.get("substitution_dates")
                 or saved.get("equipment_models") != entry.get("equipment_models")
                 or saved.get("stage_payments") != entry.get("stage_payments")
                 or saved.get("payment_change") != entry.get("payment_change")

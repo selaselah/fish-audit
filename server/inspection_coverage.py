@@ -5,15 +5,19 @@ import re
 from collections import Counter, defaultdict
 from decimal import Decimal
 
+import substitution_dates
 LEGACY = "inspection-coverage-v1"
 NAMED_FORMAT = "inspection-coverage-v2"
 REGISTER_FORMAT = "inspection-coverage-v3"
-FORMAT = "inspection-coverage-v4"
-REGISTER_FORMATS = (REGISTER_FORMAT, FORMAT)
+SUBSTITUTION_FORMAT = "inspection-coverage-v4"
+FORMAT = substitution_dates.FORMAT
+QUALIFIED_FORMATS = (SUBSTITUTION_FORMAT, FORMAT)
+REGISTER_FORMATS = (REGISTER_FORMAT, *QUALIFIED_FORMATS)
 SINCE = "2026.11.26.04"
 NAMED_SINCE = "2026.11.26.19"
 REGISTER_SINCE = "2026.11.28.16"
 SUBSTITUTION_SINCE = "2026.11.28.17"
+DECISION_SINCE = "2026.11.28.18"
 REGISTER = "delivery_register"
 RECTS = "delivery_register_rects"
 NAMED = "inspection_required_serials"
@@ -69,7 +73,7 @@ def classify(quote, field=None, *, version=FORMAT):
         return "note"
     if version != LEGACY and (field == NAMED or NAMED_HINT.search(quote)):
         return "note"
-    if version == FORMAT and SUBSTITUTION.search(quote):
+    if version in QUALIFIED_FORMATS and SUBSTITUTION.search(quote):
         if len({s for s in SERIAL_TOKEN.findall(body or quote) if serial(s)}) >= 2:
             return "substitution"
         if re.search(r"(?:整机|设备|冷藏柜).{0,12}(?:代替|顶替|置换|更换成|更换为)|(?:代替|顶替|置换).{0,12}(?:整机|设备|冷藏柜)",quote):
@@ -78,12 +82,23 @@ def classify(quote, field=None, *, version=FORMAT):
         from equipment_models import ALTERNATIVE
         if SERIAL_NOTE.search(quote) or ALTERNATIVE.search(quote):
             return "serial_note"
-    if version == FORMAT and (re.search(r"例外|但书|除外|除非",quote) or label in ("特别约定","补充约定")):
+    if version in QUALIFIED_FORMATS and (re.search(r"例外|但书|除外|除非",quote) or label in ("特别约定","补充约定")):
         return "exception"
 
 
 def equivalent_quote(text):
     return text.replace("℃","°C").replace("，",",").replace("：",":")
+
+
+def same_serial_list(raw, quote):
+    label,original=split(raw)
+    copied_label,copied=split(quote)
+    if label!=copied_label:
+        return False
+    def tokens(s):
+        return [code.strip(" \t") for code in re.split("[、，,]",s)]
+    filed=tokens(original)
+    return bool(filed and all(serial(s) for s in filed) and filed==tokens(copied))
 
 
 def sources(graph, read_text, *, version=FORMAT):
@@ -111,6 +126,10 @@ def sources(graph, read_text, *, version=FORMAT):
             if not isinstance(text,str) or hashlib.sha256(text.encode()).hexdigest()!=node.get("text_sha256"):
                 raise ValueError("逐台检验所据的原页文字摘要不符")
             lines = text.splitlines()
+            if version==FORMAT and roles[unit]=="contract_addendum" and (filed:=substitution_dates.form(lines)):
+                pages[-1]["substitution_decision"] = filed
+            if version==FORMAT and any(re.search(r"追溯|追认|豁免|免予|事后补批|撤销|无需.{0,8}批准",s) for s in lines):
+                pages[-1]["substitution_qualification"] = True
         printed = set(lines)
         located = defaultdict(list)
         for fact in observed[doc,page]:
@@ -121,7 +140,8 @@ def sources(graph, read_text, *, version=FORMAT):
             if same_line:
                 located[source["number"],source["text"]].append(fact)
             kind = classify(fact["quote"],fact["field"],version=version)
-            rendered = same_line and equivalent_quote(raw_source)==equivalent_quote(fact["quote"])
+            rendered = same_line and (equivalent_quote(raw_source)==equivalent_quote(fact["quote"]) or
+                                      version==FORMAT and kind in ("ordered_serials","population") and same_serial_list(raw_source,fact["quote"]))
             if kind and ((fact["quote"] not in printed and not rendered) or not classify(fact["quote"],version=version) or
                          (fact["status"]=="disputed" and not same_line)):
                 rows.append({**place,"id":"inspection-line/"+fact["id"],"line":None,"kind":kind,
@@ -141,7 +161,7 @@ def sources(graph, read_text, *, version=FORMAT):
                 facts = located[number,raw]
                 rows.append({**place,"id":f"inspection-line/{doc}/p{page}/l{number}","line":number,"kind":kind,
                              "quote":raw,"facts":[f["id"] for f in facts],"disputed":any(f["status"]=="disputed" for f in facts)})
-    if version == FORMAT:
+    if version in QUALIFIED_FORMATS:
         roster_codes = {code for r in rows if r["kind"] in ("ordered_serials","population")
                         for code in SERIAL_TOKEN.findall(split(r["quote"])[1]) if serial(code)}
         rows = [r for r in rows if r["kind"]!="substitution" or not re.search(r"账号|账户|开户行|开票信息|收款信息|付款日期",r["quote"])
@@ -152,7 +172,10 @@ def sources(graph, read_text, *, version=FORMAT):
     triggered = any(r["kind"] in (*LABELS,"note") for r in rows)
     assigned = any(r["kind"]=="ordered_serials" and roles[r["unit"]]=="contract" for r in rows)
     if not triggered and version in REGISTER_FORMATS and assigned:
-        return {"format":version,"purpose":REGISTER,"rows":[r for r in rows if r["kind"] in REGISTER_KINDS],"pages":pages}
+        result = {"format":version,"purpose":REGISTER,"rows":[r for r in rows if r["kind"] in REGISTER_KINDS],"pages":pages}
+        if any(p.get("substitution_decision") for p in pages):
+            result["decision_fields"] = substitution_dates.fields(graph,read_text)
+        return result
     if version in REGISTER_FORMATS and not assigned:
         rows = [r for r in rows if r["kind"] not in ("serial_note","substitution")]
     return {"format":version,"rows":rows if triggered else [],"pages":pages if triggered else []}
@@ -457,34 +480,46 @@ def verify(report,read_text,*,signing=False,read_original=None,read_layout=None)
     edges = [e for e in graph["edges"] if e["type"]=="inspection_coverage_source"]
     if not marker:
         if (policy.get("version","")>=SINCE or "inspection_coverage.py" in policy.get("code_sha256",{}) or
-                "inspection_coverage_sources" in graph or nodes or edges or any("inspection_coverage" in f for f in report["findings"])):
+                "inspection_coverage_sources" in graph or nodes or edges or any(
+                    "inspection_coverage" in f or "substitution_dates" in f for f in report["findings"])):
             raise ValueError("逐台检验依据的程序标记缺失")
         if signing:
             check_legacy_approval(report,read_text)
         return
     version = policy.get("version","")
-    expected = FORMAT if version >= SUBSTITUTION_SINCE else REGISTER_FORMAT if version >= REGISTER_SINCE else NAMED_FORMAT if version >= NAMED_SINCE else LEGACY
+    expected = FORMAT if version >= DECISION_SINCE else SUBSTITUTION_FORMAT if version >= SUBSTITUTION_SINCE else REGISTER_FORMAT if version >= REGISTER_SINCE else NAMED_FORMAT if version >= NAMED_SINCE else LEGACY
     if marker != expected:
         raise ValueError("逐台检验的程序版本标记与出具版本不符")
+    if ("code_sha256" in policy and marker==FORMAT and "substitution_dates.py" not in policy["code_sha256"] or
+            marker!=FORMAT and any(f.get("substitution_dates") for f in report["findings"])):
+        raise ValueError("代用批准日期程序与出具版本不符")
     ledger = sources(graph,read_text,version=marker)
     if graph.get("inspection_coverage_sources")!=ledger or (nodes,edges)!=source_graph(ledger):
         raise ValueError("逐台检验或抽检所据的原页、设备记录与归档不符")
+    if [e for e in graph["edges"] if e["type"]==substitution_dates.RELATION]!=substitution_dates.edges(report["findings"]):
+        raise ValueError("代用决定与验收、回单日期的引证关系不符")
     if signing and marker == LEGACY:
         check_legacy_approval(report,read_text,ledger)
     if signing and marker != FORMAT and any(f["rule"]=="H02" for f in report["findings"]):
         current = sources(graph,read_text)
-        changed = marker!=REGISTER_FORMAT or current.get("rows")!=ledger["rows"]
+        changed = (current["rows"]!=ledger["rows"] or current["pages"]!=ledger["pages"] or marker not in REGISTER_FORMATS)
         if current.get("purpose")==REGISTER and changed:
             from performance import compute
             rebuilt = compute({**graph,"inspection_coverage_sources":current})
             review = next((f["inspection_coverage"] for f in rebuilt if f.get("inspection_coverage")),None)
             saved = next(f for f in report["findings"] if f["rule"]=="H02").get("inspection_coverage") or {}
-            if marker==REGISTER_FORMAT:
+            if any(f.get("substitution_dates") for f in rebuilt):
+                raise ValueError("旧版未比对本次设备代用决定与验收、付款日期，请重审后签收。")
+            if marker in (REGISTER_FORMAT,SUBSTITUTION_FORMAT):
                 if review and (review["state"]!=saved.get("state") or review.get("register")!=saved.get("register")):
                     raise ValueError("旧版设备清单未核对本次代用的约定或批准依据，请重审后签收。")
             elif review and review["status"]!="ok":
                 raise ValueError("旧版验收未核实合同指定设备与终验编号清单，请重审后签收。")
     rows = register_rows(graph)
+    dated = [f for f in report["findings"] if f.get("substitution_dates")]
+    if dated and read_layout:
+        from retest_reference import verify_positions
+        verify_positions(graph,[{"evidence":[f["substitution_dates"]["date_ref"]]} for f in dated],read_layout,"设备代用决定与日期")
     if marker in REGISTER_FORMATS:
         expert = report.get("calls",{}).get("expert",{})
         if "input" in expert or expert.get("request_format"):
@@ -493,12 +528,24 @@ def verify(report,read_text,*,signing=False,read_original=None,read_layout=None)
             if (not isinstance(packet,dict) or packet.get("delivery_register_sources") != (rows or None) or
                     [(f["rule"],f[REGISTER]) for f in packet.get("procedures",()) if REGISTER in f] != issued):
                 raise ValueError("专家输入未保留出具底稿所据的合同与验收设备清单")
+            if [(f["rule"],f["substitution_dates"]) for f in packet.get("procedures",()) if "substitution_dates" in f] != [
+                    (f["rule"],f["substitution_dates"]) for f in report["findings"] if "substitution_dates" in f]:
+                raise ValueError("专家输入未保留所记代用批准日与验收或回单日期的依据")
     calls = report.get("calls",{}).get("pages",())
     if calls or policy.get("archived_methods"):
         from contract_folios import line_numbers, verify_page_geometry
         verify_page_geometry(calls,line_numbers(rows),{},RECTS,"合同与验收设备清单",read_layout)
+        for f in dated:
+            ref=f["substitution_dates"]["date_ref"]
+            fact=next((v for v in graph["facts"] if v["id"]==ref),None)
+            page=next((p for p in calls if fact and p["doc"]==fact["doc"] and p["page"]==fact["page"]),None)
+            if (not page or not page.get("response_id") or not page.get("check",{}).get("response_id") or
+                    page["page_sha256"]!=fact["page_sha256"] or ref not in f["evidence"]):
+                raise ValueError("所据验收或付款日期缺少本版原页及独立核读记录")
     if rows and read_original:
         from payment_quality import verify_units
         pages = {(p["doc"],p["page"]):p for p in calls}
         located = [{**r,"rects":pages[r["doc"],r["page"]][RECTS][str(r["line"])]} for r in rows if r["line"]]
-        verify_units(graph,{p["unit"] for p in ledger["pages"]},read_original,"设备清单原件",extra_lines=located)
+        dates = {f["substitution_dates"]["date_ref"] for f in dated}
+        units = {p["unit"] for p in ledger["pages"]} | {f.get("unit",f["doc"]) for f in graph["facts"] if f["id"] in dates}
+        verify_units(graph,units,read_original,"设备清单原件",extra_lines=located)

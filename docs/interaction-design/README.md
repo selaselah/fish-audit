@@ -6,7 +6,9 @@
 2. 要指出某个按钮或数字，点「点选控件」再选它。要指出原件上的字或印迹，打开已出具底稿的原页，点「标记原图」后点击相应位置。用键盘时，方向键可移动标记，Enter 确认，Esc 取消。[试走第二期会签案例](http://127.0.0.1:8000/workpaper/8debfd4a45424070a4fbedb915de1667?rev=10&view=payment-checks&stage=H05-8) · [窄屏上的两处姓名](approval-names-joint-mobile.webp)
 3. 写下希望怎么改，点「保存意见」。「已记录」可回到当时的底稿版本、控件、原行或图上标记。点回控件后，蓝框会保留到你再次点击或按键。走完后在同机 Codex 说「按本机走查清单修改」，或点「复制给 Codex」贴进指定对话。[在合同原行旁写意见](approval-names-walkthrough.webp)
 
-如果现场想说「这笔验收款旁应该能看到代用批准人」，打开下方付款底稿，点「提意见 → 点选控件」，再选写有「须双方签字后生效」的补充协议第 9 行。要核实是否已签，可以从同一笔付款打开「补充协议签署」。[打开这笔 6 万元验收款](http://127.0.0.1:8000/workpaper/8184e581520747078afb38e74edf5f41?rev=2&view=payment-checks&stage=H05-8) · [手机走查](substitution-feedback-mobile.webp)
+周末可以从一笔第二期验收款开始。点「提意见 → 点选控件」，选中「实付比协议所记批准日早 1 天」，写下希望怎么改。例如「希望在这里看到当时收到批准文件的时间」。保存后从「已记录」回到 R3，可继续核对这条结论。如果想指出批准书的具体字句，打开补充协议第 11 行，再点原页上的「提意见」。[打开这笔 6 万元验收款](http://127.0.0.1:8000/workpaper/f90afd53772c43028d74e6f831d1d4e0?rev=3&view=payment-checks&stage=H05-8) · [手机上给结论提意见](substitution-approval-date-mobile.webp)
+
+如果现场想说「这笔验收款旁应该能看到代用批准人」，可在待签案例里选中写有「须双方签字后生效」的补充协议第 9 行。要核实是否已签，可以从同一笔付款打开「补充协议签署」。[待签案例](http://127.0.0.1:8000/workpaper/8184e581520747078afb38e74edf5f41?rev=2&view=payment-checks&stage=H05-8) · [手机走查](substitution-feedback-mobile.webp)
 
 周末可以先走一笔已付的 6 万元验收款。合同列的是 `FA-0104`，验收报告列的是 `FA-0109`。如果希望付款页能直接打开对应的设备铭牌，点「提意见 → 点选控件」，选中「实收设备序列号」后写下建议。若想标出验收报告上的具体位置，先点这行打开原件，再提意见。[从第二期实付开始](http://127.0.0.1:8000/workpaper/59291d68a1c34501a886c1cb063f063e?rev=3&view=payment-checks&stage=H05-8) · [手机走查](delivery-register-feedback-mobile.webp)
 

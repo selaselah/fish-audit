@@ -164,7 +164,8 @@ export function describeContext(c) {
   const screen = c.screen==='case' ? screens.case+' '+c.case_id.slice(0,8) : screens[c.screen];
   const edition=c.params?.view==='revision-comparison' ? '履约对照 R'+c.params.prior+' / R'+c.rev : c.rev && 'R'+c.rev;
   const board=c.params?.view==='board-decision' && ({decision:'董事会决议原文',signing:'董事会签发版本',payments:'董事会决议关联期款'}[c.params.part] || '董事会审批原件');
-  const register=c.raw_ref?.startsWith('inspection-line/')?'设备编号原行':c.anchor?.startsWith('serial-H') && '设备编号清单';
+  const register=c.raw_ref?.startsWith('inspection-line/')?'设备编号原行':
+    c.anchor?.startsWith('serial-H') && (c.anchor.endsWith('-order')?'设备代用批准日期':'设备编号清单');
   const signing=register || (c.raw_ref?.startsWith('measurement-number/')?'验收数值原行':c.anchor?.startsWith('number-H02-')?'验收数值核对':c.raw_ref?.startsWith('contract-signing-form/') ? '合同签署原行' : c.anchor?.startsWith('form-H02-') ? '验收签署条件' : c.params?.view==='contract-signing-form' && '合同签署条件');
   const receipt=c.params?.view==='payment-checks' && (c.anchor?.startsWith('payment-approval-')?'付款审批单 '+c.params.stage:
     c.anchor?.startsWith('form-H04-')?'期款条件 '+c.params.stage:

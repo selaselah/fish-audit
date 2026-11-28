@@ -1,7 +1,8 @@
 // Each selectable device and its readings belong to the originals cited by one H02 finding.
 const InspectionCoverage = (() => {
-  const legacy = 'inspection-coverage-v1', current = 'inspection-coverage-v4';
-  const registerFormats = new Set(['inspection-coverage-v3',current]);
+  const legacy = 'inspection-coverage-v1', current = 'inspection-coverage-v5';
+  const qualifiedFormats = new Set(['inspection-coverage-v4',current]);
+  const registerFormats = new Set(['inspection-coverage-v3',...qualifiedFormats]);
   const formats = new Set([legacy,'inspection-coverage-v2',...registerFormats]);
   const registerStates={register_match:'两份清单的编号逐一相符',register_difference:'合同与终验编号不一致',
     register_duplicate:'编号重复',register_spelling:'编码口径待核',register_incomplete:'完整编号待核',
@@ -15,7 +16,7 @@ const InspectionCoverage = (() => {
   };
   const statuses = {covered:'ok',short:'risk',records:'missing',named_records:'missing',repeated:'risk',count_conflict:'risk',out_of_limit:'issue'};
   const compareText = s => s.replaceAll('℃','°C').replaceAll('，',',').replaceAll('：',':');
-  const value = row => row?.quote.split(/[:：]/u).slice(1).join('：').trim() || '';
+  const value = row => typeof row?.quote==='string' ? row.quote.split(/[:：]/u).slice(1).join('：').trim() : '';
   const unique = (rows,kind) => {
     const selected = rows.filter(r => r.kind===kind);
     return selected.length===1 ? selected[0] : null;
@@ -334,7 +335,7 @@ const InspectionCoverage = (() => {
     const index=graphIndex(graph), all=sources(graph);
     const rowById=new Map(all.map(r=>[r.id,r]));
     const checked=check.register.rows.map(id=>rowById.get(id)).filter(r=>r &&
-      (['ordered_serials','population'].includes(r.kind) || ledger.format===current && r.kind==='substitution') &&
+      (['ordered_serials','population'].includes(r.kind) || qualifiedFormats.has(ledger.format) && r.kind==='substitution') &&
       check.scope.includes(r.unit) && [accepted,finding].every(f=>f.scope.includes(r.unit) &&
         [r.id,r.doc+'/p'+r.page,...r.facts].every(ref=>check.evidence.includes(ref) && f.evidence.includes(ref) &&
           index.supports.get('finding/'+f.id)?.has(ref))));
@@ -386,17 +387,74 @@ const InspectionCoverage = (() => {
     });
     return result.includes(null)?[]:result;
   }
+  function datedDecision(report,finding,lines) {
+    const c=finding.substitution_dates, graph=report.graph, ledger=graph.inspection_coverage_sources;
+    if (!c || ledger?.format!==current || !/^[a-f0-9]{64}$/u.test(report.policy.code_sha256?.['substitution_dates.py']) ||
+        !Array.isArray(ledger.decision_fields) || lines.length!==4 || !c.original || !c.replacement) return null;
+    const payment=finding.rule==='H05', event=payment?'payment':'acceptance', field=payment?'paid_on':'accepted_on';
+    const kind=payment?'bank_receipt':'acceptance', units=graph.documents_by_kind[kind]?.filter(u=>finding.scope.includes(u));
+    const condition=lines.find(s=>s.ref===c.condition), decision=lines.find(s=>s.ref===c.decision);
+    if (units?.length!==1 || c.event!==event || !condition?.substitution || !decision?.substitution || !decision.rawLine ||
+        !graph.documents_by_kind.contract?.includes(condition.doc.id) || decision.doc.id!==c.unit || ledger.pages.length!==3 ||
+        !ledger.pages.every(p=>p.native && p.text_only && !p.substitution_qualification)) return null;
+    const page=ledger.pages.find(p=>p.unit===c.unit && p.doc===decision.doc.id && p.page===decision.page && p.role==='contract_addendum');
+    const filed=page?.substitution_decision;
+    if (filed?.decision?.line!==decision.rawLine || filed.decision.quote!==decision.quote ||
+        value(filed.change_state)!=='已签署') return null;
+    for (const side of ['buyer','seller']) {
+      const names=ledger.decision_fields.filter(r=>r.unit===condition.doc.id && r.field===side);
+      const name=names.length===1 && value(names[0]), signature=value(filed[side+'_signature']);
+      if (!name || side==='buyer' && name!==c.issuer || ![name+'（已盖章）',name+'(已盖章)'].includes(signature)) return null;
+    }
+    const code='([A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*)';
+    const prior=condition.quote.match(new RegExp('^(?:供货约定|设备代用约定|交付约定)[:：]\\s*经采购方事先书面批准[，,]\\s*可(?:以)?(?:用|以)\\s*'+code+'\\s*(?:代替|替代)\\s*'+code+'[。.]?\\s*$','u'));
+    const note=decision.quote.match(new RegExp('^(?:代用决定|设备代用决定|设备代用批准决定)[:：]\\s*(.+?)于(.+?)同意(?:以|用)\\s*'+code+'\\s*(?:代替|替代)\\s*'+code+'[。.]?\\s*$','u'));
+    if (!prior || !note || prior[1]!==c.replacement || prior[2]!==c.original || note[1]!==c.issuer ||
+        WarrantyDates.printedDay(note[2])!==c.stated_on || note[3]!==prior[1] || note[4]!==prior[2]) return null;
+    const ids=side=>value(lines.find(s=>!s.substitution && graph.documents_by_kind[side]?.includes(s.doc.id))).split(/[、，,]/u).map(s=>s.trim());
+    const ordered=ids('contract'), received=ids('acceptance');
+    const differing=(left,right,one)=>{
+      const extra=left.filter(s=>!right.includes(s));
+      return extra.length===1 && extra[0]===one && new Set(left).size===left.length;
+    };
+    if (!differing(ordered,received,c.original) || !differing(received,ordered,c.replacement)) return null;
+    const graphLink=graph.edges.find(e=>e.type==='dates_equipment_substitution' && e.from===c.decision && e.to===c.date_ref);
+    const refs=[c.condition,c.decision,c.date_ref], supports=graphIndex(graph).supports.get('finding/'+finding.id);
+    if (graphLink?.evidence?.length!==refs.length || !refs.every((ref,i)=>graphLink.evidence[i]===ref &&
+        finding.evidence.includes(ref) && supports?.has(ref))) return null;
+    const source=PerformanceIndex.originals(finding,graph).find(s=>s.fact.id===c.date_ref);
+    if (!PerformanceIndex.matchesPrintedField(source,report,ledger.decision_fields,units[0],field)) return null;
+    const parsed=WarrantyDates.parse(source.fact);
+    if (!parsed || parsed.iso!==c.event_on) return null;
+    const delta=parsed.days-Date.parse(c.stated_on+'T00:00:00Z')/86400000;
+    const order=delta<0?'before':delta>0?'after':'same_day';
+    if (!Number.isInteger(delta) || c.days!==delta || c.order!==order || delta<0 && !['risk','issue'].includes(finding.status)) return null;
+    const subject=payment?'实付':'终验', eventLabel=payment?'回单付款日':'终验日期';
+    return {ref:c.date_ref,day:parsed.iso,eventLabel,decision:c.decision,statedOn:c.stated_on,order,
+      title:delta?subject+'比协议所记批准日'+(delta<0?'早 ':'晚 ')+Math.abs(delta)+' 天':subject+'与所记批准同日，时刻待核'};
+  }
   function registerControls(report,finding,pin=true) {
     const lines=registerSources(report,finding);
     if (!lines.length) return null;
-    const group=element('div',null,'delivery-register-lines');
     const check=report.findings.find(f=>f.rule==='H02').inspection_coverage;
-    if (check.state==='register_substitution') group.classList.add('register-approval');
+    const dated=datedDecision(report,finding,lines);
+    const disclosure=Boolean(dated && pin);
+    const group=element(disclosure?'details':'div',null,'delivery-register-lines');
+    const originals=disclosure?element('div',null,'register-originals'):group;
+    if (check.state==='register_substitution' && dated?.order!=='before') group.classList.add('register-approval');
+    if (dated) Object.assign(group.dataset,{dateRef:dated.ref,eventDay:dated.day,eventLabel:dated.eventLabel});
     group.setAttribute('role','group');group.setAttribute('aria-label',lines.some(s=>s.substitution)?'设备编号及代用原文':'合同与终验设备编号');
-    if (pin) {
-      group.append(element('strong',registerStates[check.state] || '设备清单待核','register-outcome'));
+    if (disclosure) {
+      group.open=true;
+      const summary=element('summary',dated.title,'register-outcome');
+      summary.id='serial-'+finding.id+'-order';
+      Object.assign(summary.dataset,{serialFinding:finding.id,caseId:report.case_id,rev:String(state.bundle.rev),originalLabel:dated.title});
+      group.append(summary,originals);
+    } else if (pin) group.append(element('strong',registerStates[check.state] || '设备清单待核','register-outcome'));
+    for (const line of lines) {
+      const label=dated?.decision===line.ref?'协议所记批准日 '+dated.statedOn:line.label;
+      originals.append(workpaperLineButton({...line,label},finding,pin));
     }
-    for (const line of lines) group.append(workpaperLineButton(line,finding,pin));
     return group;
   }
   function panel(finding,graph,findings=[]) {

@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import patch
 
 import inspection_coverage as inspection
+import substitution_dates
 from config import PERFORMANCE
 from controls import VERSION, execute
 from model import audit_graph
@@ -48,7 +49,67 @@ def summary(paper):
     return acceptance,phases,next(f for f in findings if f["rule"]=="H05")
 
 
+def dated(day=22, *, decision=None, state="已签署", more=(), edit=None, order="QC-002、QC-009", contract_note=None):
+    permit=contract_note or "供货约定：经采购方事先书面批准，可用QC-009代替QC-001。"
+    filed=decision or f"演练甲于2026年9月{day}日同意以QC-009代替QC-001。"
+    change=[("contract_addendum","","采购合同补充协议"),("base_contract_ref","原合同编号","YL-121"),
+            ("addendum_number","补充协议编号","BC-121"),*CONTRACT[2:5],("change_state","补充协议状态",state),
+            *CONTRACT[8:10],("other","代用决定",filed)]
+    return example(order,extra=[(1,permit),*more],supplement=change,edit=edit)
+
+
 class DeliveryRegisterTests(unittest.TestCase):
+    def test_filed_decision_dates_attach_to_the_actual_acceptance_installment(self):
+        for day,days in ((19,(1,2)),(20,(0,1)),(21,(-1,0)),(22,(-2,-1))):
+            paper,read=dated(day)
+            h,phases,bank=summary(paper)
+            for f,delta in [(h,days[0]),(phases[1],days[0]),(bank,days[1])]:
+                c=f["substitution_dates"]
+                self.assertEqual((c["original"],c["replacement"],c["issuer"],c["days"]),("QC-001","QC-009","演练甲",delta))
+                self.assertEqual(f["status"],"risk" if delta<0 else "missing")
+                self.assertTrue({c["condition"],c["decision"],c["date_ref"]}<=set(f["evidence"]))
+            self.assertTrue(all("substitution_dates" not in f for f in (phases[0],phases[2])))
+            edges=substitution_dates.edges(paper["findings"])
+            self.assertEqual(len(edges),2)
+            paper["graph"]["edges"].extend(edges)
+            inspection.verify(paper,read)
+            verify_findings(paper)
+            paper["graph"]["edges"].remove(edges[0])
+            with self.assertRaisesRegex(ValueError,"引证关系"):
+                inspection.verify(paper,read)
+
+    def test_unsigned_conditional_crossed_or_unrelated_decisions_do_not_date_payment(self):
+        for args in ({"state":"待双方签署"},{"more":[(5,"附注：自复验合格后适用")]},
+                     {"more":[(1,"特别约定：采购方可追认")]},{"decision":"演练甲于2026年2月30日同意以QC-009代替QC-001。"},
+                     {"decision":"演练甲于2026年9月22日同意以QC-001代替QC-009。"},
+                     {"decision":"演练乙于2026年9月22日同意以QC-009代替QC-001。"},
+                     {"decision":"演练甲于2026年9月22日拟同意以QC-009代替QC-001。"},
+                     {"decision":"演练甲于2026年9月22日同意以QC-099代替QC-002。"},
+                     {"contract_note":"供货约定：若日后补交手续，可用QC-009代替QC-001。"},
+                     {"edit":lambda i,k,l,v:"不同合同" if k=="base_contract_ref" else v},
+                     {"order":"QC-001、QC-002"},{"order":"QC-002、QC-00*"}):
+            with self.subTest(args=args):
+                paper,_=dated(**args)
+                self.assertFalse(any("substitution_dates" in f for f in paper["findings"]))
+        paper,_=dated(edit=lambda i,k,l,v:"交易失败" if k=="transfer_status" else v)
+        self.assertIn("substitution_dates",summary(paper)[0])
+        self.assertNotIn("substitution_dates",summary(paper)[2])
+        paper,_=dated(edit=lambda i,k,l,v:None if k=="measured_result" else v)
+        self.assertIn("substitution_dates",summary(paper)[2])
+
+    def test_dated_decision_preserves_old_edition_and_requires_rerun_before_approval(self):
+        paper,read=dated()
+        graph=paper["graph"];ledger=inspection.sources(graph,read,version=inspection.SUBSTITUTION_FORMAT)
+        graph["inspection_coverage_sources"]=ledger
+        paper["policy"].update(version="2026.11.28.17",inspection_coverage=inspection.SUBSTITUTION_FORMAT)
+        paper["findings"]=execute(graph,PERFORMANCE)
+        self.assertFalse(any("substitution_dates" in f for f in paper["findings"]))
+        inspection.verify(paper,read)
+        with self.assertRaisesRegex(ValueError,"日期.*重审"):
+            inspection.verify(paper,read,signing=True)
+        self.assertTrue(inspection.same_serial_list("清单：QC-001、QC-002","清单：QC-001、 QC-002"))
+        self.assertFalse(inspection.same_serial_list("清单：QC-001、QC-002","清单：QC-00 1、QC-002"))
+
     def test_substitution_conditions_applications_and_an_express_prohibition(self):
         cases = [
             ([(1,"供货约定：经采购方书面批准，可用QC-009代替QC-001。")],"substitution","missing","missing"),

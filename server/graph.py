@@ -34,6 +34,7 @@ import supplier_pages
 import contract_calendar
 import signing_parties
 import inspection_coverage
+import substitution_dates
 import contract_folios
 import prior_installment
 import warranty_terms
@@ -369,11 +370,6 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     nodes, edges = contract_comments.source_graph(contract_reviews)
     graph["nodes"].extend(nodes)
     graph["edges"].extend(edges)
-    inspection = inspection_coverage.sources(graph,lambda doc,number:texts[doc,number])
-    graph["inspection_coverage_sources"] = inspection
-    lines,links = inspection_coverage.source_graph(inspection)
-    graph["nodes"].extend(lines)
-    graph["edges"].extend(links)
     cash=payment_releases.sources(graph,lambda doc,number:texts[doc,number])
     graph["payment_release_sources"]=cash
     if len(release_comparison.units(cash)) > 1:
@@ -396,6 +392,11 @@ def build_graph(docs, pages, attestations, amendments=(), *, read_original=None)
     graph["nodes"].extend(nodes)
     graph["edges"].extend(edges)
     graph["payment_window_sources"]=payment_windows.sources(graph,lambda doc,number:texts[doc,number])
+    inspection = inspection_coverage.sources(graph,lambda doc,number:texts[doc,number])
+    graph["inspection_coverage_sources"] = inspection
+    lines,links = inspection_coverage.source_graph(inspection)
+    graph["nodes"].extend(lines)
+    graph["edges"].extend(links)
     layouts = {(p["doc"], p["number"]):p.get("layer") or {} for p in pages}
     calls = {(p["doc"],p["number"]):p["extraction"] for p in pages}
     counts = installment_counts.sources(graph, lambda d,n:texts[d,n], lambda d,n:layouts[d,n], calls)
@@ -588,6 +589,7 @@ def link_procedures(graph, findings, calls):
     edges.extend(payment_quality.edges(findings))
     edges.extend(retest_reference.edges(findings))
     edges.extend(inspection_use.edges(findings))
+    edges.extend(substitution_dates.edges(findings))
     edges.extend(signing_parties.comparisons(findings))
     edges.extend(payment_windows.edges(findings))
     expert_id = "model/expert"

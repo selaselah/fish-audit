@@ -12,6 +12,8 @@ server/.venv/bin/python docs/samples/delivery_register.py /tmp/fish-delivery-reg
 
 要复现设备代用的五个案例，在同一命令后加 `--substitution`。也可以直接加 `--case agreement` 只生成带待签补充协议的一案。五组共 21 份水印 PDF，分别核对合同允许书面批准、终验注明申请待批、待签补充协议、合同明文禁止和保养条款。重建的 21 份文件已逐份核对摘要。[原件与付款结论对照](../acceptance.md#设备代用约定与第二期验收款)
 
+加 `--approval-dates` 生成五组各 5 份水印 PDF，分别模拟终验前、付款当天、付款后所记的批准决定，以及决定点名其他设备、决定写在待签草案上的情形。若只需走查付款早于所记批准日的一组，用 `--case decision_after`。[五案结果和本机入口](../acceptance.md#设备代用批准记载日与验收款)
+
 ## 重建验收数字间距用例
 
 先下载水印母本，再从仓库根目录运行下列命令。生成四组各 4 份 PDF 和 1 份 Word 合同审批单。四组分别改变实测值、合同上限、验收单所引上限或数字与单位间的空白。[母本证据包](http://127.0.0.1:8000/api/cases/64cd9e64345841bab358728a6730f3d8/reports/7/bundle)

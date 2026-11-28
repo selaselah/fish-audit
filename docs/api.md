@@ -1,5 +1,13 @@
 # 本机审计接口
 
+## 设备代用决定与履约日期
+
+规则 `2026.11.28.18` 使用 `inspection-coverage-v5`。有原件支持时，H02、相关 H04 与 H05 的 `substitution_dates` 记录原约定和决定行引用 `condition`、`decision`，批准文件 `unit`、具名方 `issuer`、设备 `original` 与 `replacement`、决定记载日 `stated_on`。被比较的事件为 `event=acceptance|payment`，所据字段为 `date_ref`，其日期为 `event_on`。`days` 等于事件日减记载日，`order` 为 `before|same_day|after`。由核字记录归类的回单用途另有 `designation_refs`，保留原摘录及人工字段两处引用。
+
+`graph.inspection_coverage_sources.pages[].substitution_decision` 保存决定、文件状态与双方签章栏的原行，`decision_fields` 保存合同、终验及回单的相关字段原行。图谱边 `dates_equipment_substitution` 从决定行指向终验或实付日期字段，证据依次为合同前提、决定、日期字段。专家输入保留同组比较和原行。签收复验原件、文字、坐标及读图记录。
+
+本版第二期实付的走查意见可定位到日期结论 `anchor=serial-H05-8-order`、支持它的协议控件 `anchor=serial-H05-8-d05-p1-l11`，或原页 `raw_ref=inspection-line/d05/p1/l11`。服务端校对案件、版次及相应检查项，原始意见存入个人走查清单。[本机 R3 底稿](http://127.0.0.1:8000/workpaper/f90afd53772c43028d74e6f831d1d4e0?rev=3&view=payment-checks&stage=H05-8)
+
 ## 设备代用约定、终验附注及补充协议
 
 规则 `2026.11.28.17` 使用 `inspection-coverage-v4`。设备清单比对中，`graph.inspection_coverage_sources.rows[].kind=substitution` 保存提到具体编号的代用原文。与本次材料相联的说明排在 `H02.inspection_coverage.register.rows` 两份清单之后。H02、相关期款及实际付款的 `delivery_register` 共引原行。专家输入和归档页行框沿用 `delivery_register_sources`、`delivery_register_rects`。

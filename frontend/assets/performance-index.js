@@ -833,9 +833,11 @@ const PerformanceIndex = (() => {
       if (register) detail.append(register);
       const substitution=register && item.rule==='H05' && ['register_substitution','register_prohibited'].includes(
         findings.find(f=>f.rule==='H02')?.inspection_coverage?.state);
-      const bankDate=!paired && substitution && WarrantyDates.receiptDate(item,state.bundle.report);
-      const sources=()=>sourceView(item,graph,[...receipts,...mandates.flatMap(m=>m.proofs)],bankDate?.ref);
-      if (bankDate) detail.append(lazyFold('回单付款日 '+bankDate.day,()=>[sources()]));
+      const pins=register?.dataset;
+      const eventDate=!paired && (pins?.dateRef?{ref:pins.dateRef,day:pins.eventDay,label:pins.eventLabel}:
+        substitution && WarrantyDates.receiptDate(item,state.bundle.report));
+      const sources=()=>sourceView(item,graph,[...receipts,...mandates.flatMap(m=>m.proofs)],eventDate?.ref);
+      if (eventDate) detail.append(lazyFold((eventDate.label || '回单付款日')+' '+eventDate.day,()=>[sources()]));
       for (const ref of item.party_readings || []) detail.append(PartyReadings.citation(state.bundle.report,ref,item));
       if (item.installment_count) detail.append(InstallmentCount.citation(state.bundle.report,item.installment_count,item,true));
       if (item.approval_change) detail.append(ApprovalChange.panel(item,state.bundle.report,rev));
@@ -901,7 +903,7 @@ const PerformanceIndex = (() => {
         const reason=el('p',detailText,'scope-reason');
         detail.append(detailText.length<=100 && !receipts.length && !batch && !guarantee && !quality && !retest?reason:fold('阅读本项结论',reason));
       }
-      if (!paired && !bankDate) {
+      if (!paired && !eventDate) {
         detail.append(register || roster || batch || guarantee || quality || retest || mandates.length || receipts.some(p=>p.record.kind)?lazyFold('其他字段引文',()=>[sources()]):sources());
       }
       detail.append(actions);

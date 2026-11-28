@@ -341,7 +341,7 @@ def audit_graph(graph, controls):
     procedures = [{"rule": item["rule"], "status": item["status"], "observation": item["detail"],
                    "evidence": item["evidence"], "methods": MAPPING[item["rule"]]} for item in controls]
     for procedure, finding in zip(procedures, controls):
-        for key in ("stage","reinspection","delegations","quality_change","acceptance_authority","acceptance_signing_requirements","equipment_models","delivery_register","date_checks","batch_acceptance","invoice_receipt","payment_change"):
+        for key in ("stage","reinspection","delegations","quality_change","acceptance_authority","acceptance_signing_requirements","equipment_models","delivery_register","substitution_dates","date_checks","batch_acceptance","invoice_receipt","payment_change"):
             if key in finding:
                 procedure[key] = finding[key]
         reservations = finding.get("acceptance_reservations")
